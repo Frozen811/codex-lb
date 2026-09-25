@@ -11,7 +11,7 @@ python oauth sqlalchemy dashboard load-balancer openai rate-limit api-proxy code
 ![codex-lb](docs/screenshots/banner.jpg)
 
 <p align="left">
-  <a href="https://github.com/Frozen811/codex-lb/releases/latest"><img src="https://img.shields.io/github/v/release/Frozen811/codex-lb?color=blue&label=Hardened%20Release" alt="Release" /></a>
+  <a href="https://github.com/Frozen811/codex-lb/releases/tag/v1.25.0"><img src="https://img.shields.io/badge/Hardened%20Release-v1.25.0-blue" alt="Release" /></a>
   <a href="https://github.com/Frozen811/codex-lb/tree/main/openspec"><img src="https://img.shields.io/badge/OpenSpec-67%2F67%20Passed-success" alt="OpenSpec" /></a>
   <a href="https://github.com/Frozen811/codex-lb/blob/main/ISSUES.md"><img src="https://img.shields.io/badge/Tracked%20Issues-132%2F132%20Resolved-brightgreen" alt="Issues" /></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License" /></a>

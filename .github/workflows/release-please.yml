@@ -16,6 +16,7 @@ permissions:
 
 jobs:
   release-please:
+    if: github.repository == 'Soju06/codex-lb'
     runs-on: ubuntu-24.04
     steps:
       - name: Run release-please
