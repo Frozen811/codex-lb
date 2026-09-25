@@ -5,8 +5,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "20260917_000000_add_request_log_generation_evidence"
-down_revision = "20260916_000000_add_subagent_account_preference"
+revision = "20260918_020000_add_request_log_generation_evidence"
+down_revision = "20260918_010000_add_subagent_account_preference"
 branch_labels = None
 depends_on = None
 

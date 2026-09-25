@@ -1,7 +1,7 @@
 """Add the optional estimated subscription usage-share cap to API keys.
 
-Revision ID: 20260918_000000_add_api_key_usage_share_percent
-Revises: 20260914_000002_merge_overflow_retirement_heads
+Revision ID: 20260918_030000_add_api_key_usage_share_percent
+Revises: 20260918_020000_add_request_log_generation_evidence
 Create Date: 2026-09-18
 """
 
@@ -10,8 +10,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "20260918_000000_add_api_key_usage_share_percent"
-down_revision = "20260917_000000_add_request_log_generation_evidence"
+revision = "20260918_030000_add_api_key_usage_share_percent"
+down_revision = "20260918_020000_add_request_log_generation_evidence"
 branch_labels = None
 depends_on = None
 

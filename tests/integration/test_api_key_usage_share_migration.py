@@ -12,8 +12,8 @@ from app.db.migrate import _build_alembic_config, check_schema_drift, run_upgrad
 
 pytestmark = pytest.mark.integration
 
-_BASE = "20260917_000000_add_request_log_generation_evidence"
-_REVISION = "20260918_000000_add_api_key_usage_share_percent"
+_BASE = "20260918_020000_add_request_log_generation_evidence"
+_REVISION = "20260918_030000_add_api_key_usage_share_percent"
 _COLUMN = "usage_share_percent"
 _CONSTRAINT = "ck_api_keys_usage_share_percent"
 _ROLLUP_TABLE = "request_demand_quarter_rollups"
@@ -86,9 +86,10 @@ def test_usage_share_migration_is_reversible_and_preserves_keys(tmp_path: Path) 
             ).one()
         assert tuple(row) == ("existing-key", "Existing key", "existing-hash", "sk-existing", 1)
 
-        assert run_upgrade(url, "head", bootstrap_legacy=False).current_revision == _REVISION
+        assert run_upgrade(url, _REVISION, bootstrap_legacy=False).current_revision == _REVISION
         indexes = {index["name"]: index for index in inspect(engine).get_indexes(_ROLLUP_TABLE)}
         assert indexes[_ROLLUP_INDEX]["column_names"] == ["account_id", "slot_epoch"]
+        run_upgrade(url, "head", bootstrap_legacy=False)
         assert check_schema_drift(url) == ()
     finally:
         engine.dispose()

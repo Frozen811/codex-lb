@@ -1,7 +1,7 @@
 """Add the SCIM bearer-token table and the identity's pushed user name.
 
-Revision ID: 20260914_010000_add_scim_tokens
-Revises: 20260914_000000_drop_subscription_overflow_schema
+Revision ID: 20260914_000000_add_scim_tokens
+Revises: 20260913_000000_add_oidc_provider_flow
 Create Date: 2026-09-14
 
 ``dashboard_scim_tokens`` holds only the SHA-256 digest of each secret, in a
@@ -21,8 +21,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "20260914_010000_add_scim_tokens"
-down_revision = "20260914_000000_drop_subscription_overflow_schema"
+revision = "20260914_000000_add_scim_tokens"
+down_revision = "20260913_000000_add_oidc_provider_flow"
 branch_labels = None
 depends_on = None
 

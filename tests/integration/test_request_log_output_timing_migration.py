@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from app.db.migrate import _build_alembic_config, check_schema_drift, run_upgrade
 
 pytestmark = pytest.mark.integration
-PARENT = "20260916_000000_add_subagent_account_preference"
+PARENT = "20260918_010000_add_subagent_account_preference"
 FIELDS = {"latency_first_output_ms", "output_delta_count", "latency_upstream_terminal_ms"}
 
 

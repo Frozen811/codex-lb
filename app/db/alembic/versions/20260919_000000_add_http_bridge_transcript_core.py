@@ -12,7 +12,7 @@ from alembic import op
 from sqlalchemy.engine import Connection
 
 revision = "20260919_000000_add_http_bridge_transcript_core"
-down_revision = "20260918_000000_add_api_key_usage_share_percent"
+down_revision = "20260918_030000_add_api_key_usage_share_percent"
 branch_labels = None
 depends_on = None
 
