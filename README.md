@@ -33,22 +33,54 @@ Load balancer for ChatGPT accounts. Pool multiple accounts, track usage, manage 
 > - Removes unsupported `max_output_tokens` from Force Probe to prevent upstream HTTP 400 errors ([PR #2496](https://github.com/Soju06/codex-lb/pull/2496))
 > - Adds dashboard single & bulk API key usage reset ([#2492](https://github.com/Soju06/codex-lb/issues/2492))
 > 
-> Detailed release notes: [COMMUNITY_RELEASE.md](COMMUNITY_RELEASE.md)
+> Detailed release notes: [COMMUNITY_RELEASE.md](COMMUNITY_RELEASE.md) | Official release: [v1.25.0](https://github.com/Frozen811/codex-lb/releases/tag/v1.25.0)
 > 
-> ### Install / Run:
+> ### 🚀 Quick Install & Run:
+> 
+> **Option 1: Pre-built Docker Image (instant run, zero build)**
 > ```bash
-> # Quick start via git clone & uv:
-> git clone https://github.com/Frozen811/codex-lb.git
-> cd codex-lb
-> uv run codex-lb
+> docker run -d --name codex-lb \
+>   -p 2455:2455 -p 1455:1455 \
+>   -v codex-lb-data:/var/lib/codex-lb \
+>   ghcr.io/frozen811/codex-lb:latest
+> ```
 > 
-> # Or run directly via uvx:
+> **Option 2: Direct installation with uvx or pip**
+> ```bash
+> # Run via uvx:
 > uvx --from git+https://github.com/Frozen811/codex-lb.git codex-lb
 > 
-> # Or with Docker:
-> docker build -t codex-lb:hardened .
-> docker run -d -p 2455:2455 -p 1455:1455 -v codex-lb-data:/var/lib/codex-lb codex-lb:hardened
+> # Or install pre-built wheel directly:
+> pip install https://github.com/Frozen811/codex-lb/releases/download/v1.25.0/codex_lb-1.25.0-py3-none-any.whl
+> codex-lb
 > ```
+> 
+> **Option 3: Local Clone with 1-Click Launchers**
+> ```bash
+> git clone https://github.com/Frozen811/codex-lb.git
+> cd codex-lb
+> 
+> # Windows: double-click start.bat or run:
+> .\run.ps1
+> 
+> # Linux / macOS:
+> ./run.sh
+> ```
+
+## ⚖️ Upstream vs. Hardened Edition Comparison
+
+| Feature / Defect Area | Upstream (`Soju06/codex-lb`) | Hardened Edition (`Frozen811/codex-lb`) |
+| :--- | :---: | :---: |
+| **HTTP/2 Stream Cascade Failure ([#2471](https://github.com/Soju06/codex-lb/issues/2471), [#2470](https://github.com/Soju06/codex-lb/issues/2470))** | ❌ Network drop drops all concurrent streams | ✅ Per-stream isolation; clean `aclose()` |
+| **Account Stream Cap Lease Leak** | ❌ Leaks concurrency lease on disconnect | ✅ Guaranteed release in `finally` blocks |
+| **Upstream 400 on `max_output_tokens` ([PR #2496](https://github.com/Soju06/codex-lb/pull/2496))** | ❌ Force probe fails with HTTP 400 | ✅ Unsupported field omitted; returns 200 |
+| **Warmup Compaction 404 Fallback ([#1895](https://github.com/Soju06/codex-lb/issues/1895))** | ❌ Upstream 404 halts quota initialization | ✅ Transparent plain Responses API fallback |
+| **Dashboard API Key Limit Usage Reset ([#2492](https://github.com/Soju06/codex-lb/issues/2492))** | ❌ Missing; requires key regeneration | ✅ Single & bulk usage counter reset |
+| **Dead Client Continuation Anchor ([#2493](https://github.com/Soju06/codex-lb/issues/2493))** | ❌ Client hangs without terminal frame | ✅ Clean terminal `response.failed` event |
+| **Replay Relocation Engine ([PR #2428](https://github.com/Soju06/codex-lb/pull/2428))** | ❌ Unmerged open PR | ✅ Fully integrated & regression-tested |
+| **Log Credential Redaction ([#2028](https://github.com/Soju06/codex-lb/issues/2028))** | ❌ Unhandled loop errors leak credentials | ✅ Sanitized with `_RedactedRepr` |
+| **Pre-built Docker Image** | ⚠️ Outdated | ✅ `ghcr.io/frozen811/codex-lb:latest` |
+| **OpenSpec Validation** | ⚠️ Partial / Untracked PRs | ✅ 67/67 Specifications strictly validated |
 
 ## Features
 
