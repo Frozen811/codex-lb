@@ -10,6 +10,14 @@ python oauth sqlalchemy dashboard load-balancer openai rate-limit api-proxy code
 
 ![codex-lb](docs/screenshots/banner.jpg)
 
+<p align="left">
+  <a href="https://github.com/Frozen811/codex-lb/releases/latest"><img src="https://img.shields.io/github/v/release/Frozen811/codex-lb?color=blue&label=Hardened%20Release" alt="Release" /></a>
+  <a href="https://github.com/Frozen811/codex-lb/tree/main/openspec"><img src="https://img.shields.io/badge/OpenSpec-67%2F67%20Passed-success" alt="OpenSpec" /></a>
+  <a href="https://github.com/Frozen811/codex-lb/blob/main/ISSUES.md"><img src="https://img.shields.io/badge/Tracked%20Issues-132%2F132%20Resolved-brightgreen" alt="Issues" /></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License" /></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-%3E%3D3.13-blue.svg" alt="Python" /></a>
+</p>
+
 **English** | [简体中文](./README.zh-CN.md)
 
 Load balancer for ChatGPT accounts. Pool multiple accounts, track usage, manage API keys, view everything in a dashboard.
@@ -18,23 +26,26 @@ Load balancer for ChatGPT accounts. Pool multiple accounts, track usage, manage 
 
 > [!NOTE]
 > ### 🛡️ Hardened Community Edition (by [@Frozen811](https://github.com/Frozen811))
-> This fork includes **100% verified in-code fixes for all 132 tracked issues and 85 community PRs**:
+> This production-ready fork includes **100% verified in-code fixes for all 132 tracked issues and 85 community PRs**:
 > - Fixes HTTP/2 Native Egress cascade stream drops and stream-cap exhaustion ([#2471](https://github.com/Soju06/codex-lb/issues/2471), [#2470](https://github.com/Soju06/codex-lb/issues/2470))
 > - Delivers terminal error frames on injected anchor rejection ([#2493](https://github.com/Soju06/codex-lb/issues/2493))
 > - Integrates Replay Relocation engine and account-neutral transcript rebuilding ([PR #2428](https://github.com/Soju06/codex-lb/pull/2428))
 > - Removes unsupported `max_output_tokens` from Force Probe to prevent upstream HTTP 400 errors ([PR #2496](https://github.com/Soju06/codex-lb/pull/2496))
 > - Adds dashboard single & bulk API key usage reset ([#2492](https://github.com/Soju06/codex-lb/issues/2492))
 > 
-> Detailed release documentation: [COMMUNITY_RELEASE.md](COMMUNITY_RELEASE.md)
+> Detailed release notes: [COMMUNITY_RELEASE.md](COMMUNITY_RELEASE.md)
 > 
-> **Quick clone & run:**
+> ### Install / Run:
 > ```bash
+> # Quick start via git clone & uv:
 > git clone https://github.com/Frozen811/codex-lb.git
 > cd codex-lb
 > uv run codex-lb
-> ```
-> Or with Docker:
-> ```bash
+> 
+> # Or run directly via uvx:
+> uvx --from git+https://github.com/Frozen811/codex-lb.git codex-lb
+> 
+> # Or with Docker:
 > docker build -t codex-lb:hardened .
 > docker run -d -p 2455:2455 -p 1455:1455 -v codex-lb-data:/var/lib/codex-lb codex-lb:hardened
 > ```
