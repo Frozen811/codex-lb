@@ -350,7 +350,7 @@ async def test_proxy_compact_strips_tool_fields_before_upstream(async_client, mo
     assert seen_payloads[0]["input"] == []
     assert "tools" not in seen_payloads[0]
     assert "tool_choice" not in seen_payloads[0]
-    assert seen_payloads[0]["parallel_tool_calls"] is False
+    assert "parallel_tool_calls" not in seen_payloads[0]
     assert "text" not in seen_payloads[0]
 
 
@@ -2361,3 +2361,49 @@ async def test_proxy_compact_pinned_owner_with_additional_turn_state_pin_records
     assert calls == []
     assert "blocked_reason=additional_owner_pins" in caplog.text
     assert "continuity_fail_closed surface=compact reason=owner_account_unavailable" in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("compact_path", ["/backend-api/codex/responses/compact", "/v1/responses/compact"])
+async def test_proxy_compact_refuses_model_source_with_compaction_unsupported(async_client, monkeypatch, compact_path):
+    model = f"external-compact-model-{compact_path.replace('/', '_').strip('_')}"
+    response = await async_client.post(
+        "/api/model-sources/",
+        json={
+            "name": f"compact-source-{model}",
+            "baseUrl": "https://source.example.com/v1",
+            "apiKey": "source-key",
+            "supportsResponses": True,
+            "models": [
+                {
+                    "model": model,
+                    "displayName": model,
+                    "contextWindow": 8192,
+                    "maxOutputTokens": 1024,
+                    "supportsStreaming": True,
+                    "supportsTools": True,
+                }
+            ],
+        },
+    )
+    assert response.status_code == 200
+
+    async def fail_compact(*args, **kwargs):
+        del args, kwargs
+        pytest.fail("a model source must never enter the subscription compact flow")
+
+    monkeypatch.setattr(proxy_module, "core_compact_responses", fail_compact)
+
+    compact_response = await async_client.post(
+        compact_path,
+        json={
+            "model": model,
+            "instructions": "compact this conversation",
+            "input": [{"type": "message", "role": "user", "content": "hello"}],
+        },
+    )
+    assert compact_response.status_code == 400
+    error = compact_response.json()["error"]
+    assert error["code"] == "compaction_unsupported"
+    assert error["type"] == "invalid_request_error"
+

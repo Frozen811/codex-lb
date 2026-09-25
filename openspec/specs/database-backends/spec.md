@@ -922,3 +922,27 @@ The startup writes that insert-if-absent into `runtime_sentinels` — the encryp
 - **THEN** the report names the write, the driver's `sqlite_errorname` (or its absence), and the elapsed time
 - **AND** the report contains none of the values the write was stamping
 
+### Requirement: SQLite watchdog diagnostics preserve invalidated transaction cleanup
+SQLite watchdog callbacks MUST NOT access connection metadata in a way that reconnects an invalidated or closed connection. An invalidated transaction MUST be able to complete rollback without watchdog diagnostics raising PendingRollbackError.
+
+#### Scenario: Rollback after connection invalidation
+- **GIVEN** a SQLite connection with an active transaction and the write watchdog installed
+- **WHEN** its driver connection is invalidated and the transaction is rolled back
+- **THEN** rollback completes without a diagnostic callback reconnecting the invalidated transaction
+- **AND** a subsequent query on the SQLAlchemy connection succeeds
+
+### Requirement: Verified SQLite-to-PostgreSQL migration path gate
+
+Before deprecating or removing SQLite backend support, the project MUST provide and maintain a verified SQLite-to-PostgreSQL migration path.
+A verification utility (`scripts/verify_sqlite_to_postgres_migration.py`) SHALL verify that:
+1. Every table and column present in the SQLite schema maps cleanly to the PostgreSQL schema.
+2. Data dump and translation preserve data types, foreign keys, timestamps, and JSON fields without loss or corruption.
+3. The migration verification script exits with code 0 on a valid migration path and non-zero on schema or data inconsistencies.
+
+#### Scenario: Verification script validates migration path
+- **WHEN** `python scripts/verify_sqlite_to_postgres_migration.py` is executed
+- **THEN** SQLite and PostgreSQL schema definitions and dump/load mechanisms are verified
+- **AND** the check exits with code 0
+
+
+

@@ -50,6 +50,8 @@ export function TotpDialog({ open }: TotpDialogProps) {
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleCancel()}>
       <DialogContent
         className="sm:max-w-sm"
+        onPointerDownOutside={(event) => event.preventDefault()}
+        onFocusOutside={(event) => event.preventDefault()}
         onInteractOutside={(event) => event.preventDefault()}
       >
         <DialogHeader>
@@ -67,11 +69,16 @@ export function TotpDialog({ open }: TotpDialogProps) {
                   <FormLabel className="sr-only">{t("auth.totp.codeLabel")}</FormLabel>
                   <FormControl>
                     <InputOTP
+                      id="totp-code"
+                      name={field.name}
+                      autoComplete="one-time-code"
+                      inputMode="numeric"
                       maxLength={6}
                       autoFocus
                       value={field.value}
                       onChange={field.onChange}
                       onComplete={() => form.handleSubmit(handleSubmit)()}
+                      pasteTransformer={(pasted) => pasted.replace(/\D/g, "")}
                     >
                       <InputOTPGroup>
                         <InputOTPSlot index={0} />

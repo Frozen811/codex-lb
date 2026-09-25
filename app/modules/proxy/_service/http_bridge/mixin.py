@@ -73,6 +73,8 @@ from app.modules.proxy._service.http_bridge.helpers import (
     _alias_fallback_key,
     _durable_bridge_lookup_active_owner,
     _durable_bridge_lookup_allows_local_reuse,
+    _evict_http_bridge_inflight_waiter_helper,
+    _fail_http_bridge_inflight_session_creation_helper,
     _forwarded_http_bridge_session_key,
     _http_bridge_alias_target_is_stale,
     _http_bridge_allow_durable_takeover,
@@ -294,44 +296,14 @@ class _HTTPBridgeMixin(
         inflight_future: asyncio.Future["_HTTPBridgeSession"] | None,
         exc: BaseException,
     ) -> bool:
-        if inflight_future is None:
-            return False
-        async with self._http_bridge_lock:
-            current_future = self._http_bridge_inflight_sessions.get(key)
-            if current_future is not inflight_future:
-                return False
-            if getattr(inflight_future, "_http_bridge_handoff", False):
-                return False
-            self._http_bridge_inflight_sessions.pop(key, None)
-            if inflight_future.done():
-                return True
-            if isinstance(exc, asyncio.CancelledError):
-                inflight_future.cancel()
-            else:
-                inflight_future.set_exception(exc)
-                inflight_future.exception()
-            return True
+        return await _fail_http_bridge_inflight_session_creation_helper(self, key, inflight_future, exc)
 
     async def _evict_http_bridge_inflight_waiter(
         self,
         inflight_future: asyncio.Future["_HTTPBridgeSession"],
         exc: BaseException,
     ) -> "_HTTPBridgeSessionKey | None":
-        async with self._http_bridge_lock:
-            stale_key = None
-            for candidate_key, candidate_future in self._http_bridge_inflight_sessions.items():
-                if candidate_future is inflight_future:
-                    stale_key = candidate_key
-                    break
-            if stale_key is None:
-                return None
-            if getattr(inflight_future, "_http_bridge_handoff", False):
-                return None
-            self._http_bridge_inflight_sessions.pop(stale_key, None)
-            if not inflight_future.done():
-                inflight_future.set_exception(exc)
-                inflight_future.exception()
-            return stale_key
+        return await _evict_http_bridge_inflight_waiter_helper(self, inflight_future, exc)
 
     @overload
     async def _get_or_create_http_bridge_session(
@@ -570,7 +542,7 @@ class _HTTPBridgeMixin(
                                 key=alias_key.affinity_key,
                             ):
                                 if alias_session is None:
-                                    raise ProxyResponseError(502, _http_bridge_continuity_lost_error_envelope())
+                                    raise ProxyResponseError(502, _http_bridge_continuity_lost_error_envelope(), local_pre_dispatch_refusal=True)  # noqa: E501
                                 bind_account_neutral_recovery_owner(alias_session)
                                 continue
                             self._http_bridge_turn_state_index.pop(alias_index_key, None)
@@ -601,7 +573,7 @@ class _HTTPBridgeMixin(
                             preferred_account_id=preferred_account_id,
                             require_preferred_account=require_preferred_account,
                         ):
-                            raise ProxyResponseError(502, _http_bridge_continuity_lost_error_envelope())
+                            raise ProxyResponseError(502, _http_bridge_continuity_lost_error_envelope(), local_pre_dispatch_refusal=True)  # noqa: E501
                         else:
                             self._promote_http_bridge_session_to_codex_affinity(
                                 alias_session,
@@ -668,7 +640,7 @@ class _HTTPBridgeMixin(
                                 not _http_bridge_alias_target_is_stale(previous_session)
                                 and not previous_session.handoff_in_progress
                             ):
-                                raise ProxyResponseError(502, _http_bridge_continuity_lost_error_envelope())
+                                raise ProxyResponseError(502, _http_bridge_continuity_lost_error_envelope(), local_pre_dispatch_refusal=True)  # noqa: E501
                             elif previous_key is not None:
                                 self._http_bridge_previous_response_index.pop(previous_alias_key, None)
                         if model_transition_rebind:
@@ -1242,7 +1214,7 @@ class _HTTPBridgeMixin(
                             previous_response_id=previous_response_id,
                             session_id=incoming_turn_state or incoming_session_key,
                         )
-                        continuity_error = ProxyResponseError(502, _http_bridge_continuity_lost_error_envelope())
+                        continuity_error = ProxyResponseError(502, _http_bridge_continuity_lost_error_envelope(), local_pre_dispatch_refusal=True)  # noqa: E501
                     elif missing_turn_state_alias and inflight_future is None and durable_lookup is None:
                         turn_state_scope_conflict = incoming_turn_state is not None and any(
                             alias == incoming_turn_state and alias_api_key != api_key_id
@@ -1337,6 +1309,7 @@ class _HTTPBridgeMixin(
                                 _HTTP_BRIDGE_INFLIGHT_STARTED_AT_ATTR,
                                 clock_for(self).monotonic(),
                             )
+                            setattr(inflight_future, "_creator_task", asyncio.current_task())
                             self._http_bridge_inflight_sessions[key] = inflight_future
                             owns_creation = True
             try:

@@ -176,30 +176,40 @@ export function ModelSourceFormFields({
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2">
-	        {CAPABILITY_TOGGLES.map(([key, labelKey]) => (
-          <label key={key} className="flex items-center gap-2 rounded-md border p-2 text-sm">
-            <Checkbox
-              checked={draft[key]}
-              onCheckedChange={(checked) =>
-                updateDraft({
-                  [key]: checked === true,
-                  ...(key === "supportsReasoning" && checked === true
-                    ? {
-                        reasoningEffortsInput:
-                          draft.reasoningEffortsInput || DEFAULT_REASONING_EFFORTS.join(", "),
-                        reasoningEfforts:
-                          draft.reasoningEfforts.length > 0
-                            ? draft.reasoningEfforts
-                            : DEFAULT_REASONING_EFFORTS,
-                        defaultReasoningEffort: draft.defaultReasoningEffort || "medium",
-                      }
-                    : {}),
-                })
-              }
-            />
-	            {t(labelKey)}
-          </label>
-        ))}
+        {CAPABILITY_TOGGLES.map(([key, labelKey]) => {
+          const id = `model-source-capability-${key}`;
+          const label = t(labelKey);
+          return (
+            <label
+              key={key}
+              htmlFor={id}
+              className="flex items-center gap-2 rounded-md border p-2 text-sm cursor-pointer"
+            >
+              <Checkbox
+                id={id}
+                aria-label={label}
+                checked={draft[key]}
+                onCheckedChange={(checked) =>
+                  updateDraft({
+                    [key]: checked === true,
+                    ...(key === "supportsReasoning" && checked === true
+                      ? {
+                          reasoningEffortsInput:
+                            draft.reasoningEffortsInput || DEFAULT_REASONING_EFFORTS.join(", "),
+                          reasoningEfforts:
+                            draft.reasoningEfforts.length > 0
+                              ? draft.reasoningEfforts
+                              : DEFAULT_REASONING_EFFORTS,
+                          defaultReasoningEffort: draft.defaultReasoningEffort || "medium",
+                        }
+                      : {}),
+                  })
+                }
+              />
+              {label}
+            </label>
+          );
+        })}
       </div>
 
       {draft.supportsReasoning ? (

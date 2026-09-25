@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Body, Depends, Request, Response
+from fastapi import APIRouter, Body, Depends, Query, Request, Response
 
 from app.core.audit.service import AuditActor, AuditService, AuditTarget
 from app.core.auth.dashboard_access import DashboardPrincipal, Permission
@@ -21,6 +21,7 @@ from app.modules.api_keys.schemas import (
     ApiKeyTrendsResponse,
     ApiKeyUpdateRequest,
     ApiKeyUsage7DayResponse,
+    ApiKeyUsageResponse,
     ApiKeyUsageSummaryResponse,
     LimitRuleResponse,
 )
@@ -61,6 +62,7 @@ def _to_response(row: ApiKeyData) -> ApiKeyResponse:
         transport_policy_override=row.transport_policy_override,
         thread_cache_identity_override=row.thread_cache_identity_override,
         usage_sections=row.usage_sections,
+        usage_share_percent=row.usage_share_percent,
         expires_at=row.expires_at,
         is_active=row.is_active,
         account_assignment_scope_enabled=row.account_assignment_scope_enabled,
@@ -158,6 +160,7 @@ async def create_api_key(
                     if payload.usage_sections is not None
                     else "upstream_limits,account_pool_usage"
                 ),
+                usage_share_percent=payload.usage_share_percent,
                 expires_at=payload.expires_at,
                 assigned_account_ids=payload.assigned_account_ids,
                 assigned_source_ids=payload.assigned_source_ids,
@@ -228,6 +231,8 @@ async def update_api_key(
         thread_cache_identity_override_set="thread_cache_identity_override" in fields,
         usage_sections=payload.usage_sections,
         usage_sections_set="usage_sections" in fields,
+        usage_share_percent=payload.usage_share_percent,
+        usage_share_percent_set="usage_share_percent" in fields,
         expires_at=payload.expires_at,
         expires_at_set="expires_at" in fields,
         is_active=payload.is_active,
@@ -304,17 +309,46 @@ async def regenerate_api_key(
 @router.get("/{key_id}/trends", response_model=ApiKeyTrendsResponse)
 async def get_api_key_trends(
     key_id: str,
+    days: int = Query(default=7, ge=1, le=90, description="Observation window in days (1-90)"),
     context: ApiKeysContext = Depends(get_api_keys_context),
 ) -> ApiKeyTrendsResponse:
     from app.modules.api_keys.schemas import ApiKeyTrendPoint
 
-    result = await context.service.get_key_trends(key_id)
+    result = await context.service.get_key_trends(key_id, days=days)
     if result is None:
         raise DashboardNotFoundError(f"API key not found: {key_id}")
     return ApiKeyTrendsResponse(
         key_id=result.key_id,
         cost=[ApiKeyTrendPoint(t=p.t, v=p.v) for p in result.cost],
         tokens=[ApiKeyTrendPoint(t=p.t, v=p.v) for p in result.tokens],
+    )
+
+
+@router.get("/{key_id}/usage", response_model=ApiKeyUsageResponse)
+async def get_api_key_usage(
+    key_id: str,
+    days: int = Query(default=7, ge=1, le=90, description="Observation window in days (1-90)"),
+    context: ApiKeysContext = Depends(get_api_keys_context),
+) -> ApiKeyUsageResponse:
+    result = await context.service.get_key_usage(key_id, days=days)
+    if result is None:
+        raise DashboardNotFoundError(f"API key not found: {key_id}")
+    return ApiKeyUsageResponse(
+        key_id=result.key_id,
+        days=result.days,
+        total_tokens=result.total_tokens,
+        total_cost_usd=result.total_cost_usd,
+        total_requests=result.total_requests,
+        cached_input_tokens=result.cached_input_tokens,
+        account_costs=[
+            ApiKeyAccountCostResponse(
+                account_id=ac.account_id,
+                email=ac.email,
+                cost_usd=ac.cost_usd,
+                is_deleted=ac.is_deleted,
+            )
+            for ac in result.account_costs
+        ],
     )
 
 

@@ -3344,6 +3344,75 @@ async def test_durable_bridge_retry_circuit_generation_claim_is_compare_and_set(
     assert after_delayed_failure.admission_generation == 1
 
 
+@pytest.mark.asyncio
+async def test_durable_bridge_release_retry_circuit_claim(
+    coordinator: DurableBridgeSessionCoordinator,
+) -> None:
+    await coordinator.persist_retry_circuit(
+        session_key_kind="session_header",
+        session_key_value="sid-release-claim",
+        api_key_id="key-release",
+        consecutive_failures=2,
+        cooldown_until_epoch=1300.0,
+        last_detail="stream_incomplete",
+        updated_at_epoch=1200.0,
+    )
+
+    claimed = await coordinator.claim_retry_circuit_generation(
+        session_key_kind="session_header",
+        session_key_value="sid-release-claim",
+        api_key_id="key-release",
+        expected_updated_at_epoch=1200.0,
+        expected_admission_generation=0,
+        expected_consecutive_failures=2,
+        expected_cooldown_until_epoch=1300.0,
+    )
+    assert claimed is not None
+    assert claimed.admission_generation == 1
+
+    # Stale epoch or wrong generation fails release
+    stale_released = await coordinator.release_retry_circuit_claim(
+        session_key_kind="session_header",
+        session_key_value="sid-release-claim",
+        api_key_id="key-release",
+        expected_updated_at_epoch=9999.0,
+        expected_admission_generation=1,
+    )
+    assert stale_released is False
+
+    # Exact match releases claim
+    released = await coordinator.release_retry_circuit_claim(
+        session_key_kind="session_header",
+        session_key_value="sid-release-claim",
+        api_key_id="key-release",
+        expected_updated_at_epoch=1200.0,
+        expected_admission_generation=1,
+    )
+    assert released is True
+
+    snapshot = await coordinator.lookup_retry_circuit(
+        session_key_kind="session_header",
+        session_key_value="sid-release-claim",
+        api_key_id="key-release",
+    )
+    assert snapshot is not None
+    assert snapshot.admission_generation == 0
+
+    # Next claim can now succeed
+    reclaimed = await coordinator.claim_retry_circuit_generation(
+        session_key_kind="session_header",
+        session_key_value="sid-release-claim",
+        api_key_id="key-release",
+        expected_updated_at_epoch=1200.0,
+        expected_admission_generation=0,
+        expected_consecutive_failures=2,
+        expected_cooldown_until_epoch=1300.0,
+    )
+    assert reclaimed is not None
+    assert reclaimed.admission_generation == 1
+
+
+
 def _lookup_with_lease(lease_expires_at):
     from app.db.models import HttpBridgeSessionState
     from app.modules.proxy.durable_bridge_coordinator import DurableBridgeLookup

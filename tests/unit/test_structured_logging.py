@@ -1033,3 +1033,58 @@ def test_json_formatter_never_raises_on_random_nested_extras(json_formatter, lev
         parsed = json.loads(output)
         assert parsed["message"] == f"fuzz {seed}"
         assert "details" in parsed and "leaf" in parsed
+
+
+def test_issue_2028_quoted_keys_redaction():
+    cases = [
+        ('"api_key"="secret123"', '"api_key"=[REDACTED]'),
+        ("'api_key'='secret123'", "'api_key'=[REDACTED]"),
+        ('"password"="secret123"', '"password"=[REDACTED]'),
+        ("'token'='secret123'", "'token'=[REDACTED]"),
+        ('api_key="secret with spaces, and commas"', "api_key=[REDACTED]"),
+        ("password='secret with spaces, and commas'", "password=[REDACTED]"),
+    ]
+    for raw, expected in cases:
+        result = runtime_logging.redact_rendered_log_text(raw)
+        assert result == expected, f"Failed for {raw}: got {result}"
+
+
+def test_issue_2028_header_tuples_repr_redaction():
+    cases = [
+        ("[('api_key', 'secret123')]", "[('api_key', '[REDACTED]')]"),
+        ('[("api_key", "secret123")]', '[("api_key", "[REDACTED]")]'),
+        ("[('Authorization', 'Digest username=\"a\", realm=\"b\"')]", "[('Authorization', '[REDACTED]')]"),
+        ("[('Authorization', 'Bearer token123')]", "[('Authorization', 'Bearer [REDACTED]')]"),
+    ]
+    for raw, expected in cases:
+        result = runtime_logging.redact_rendered_log_text(raw)
+        assert result == expected, f"Failed for {raw}: got {result}"
+
+
+def test_issue_2028_auth_param_lists_and_whitespace_tokens():
+    digest = (
+        'Authorization: Digest username="Mufasa", realm="http-auth@example.org", '
+        'nonce="dcd98b7102dd2f0e8b11d0f600bfb0c093", uri="/dir/index.html", qop=auth, '
+        'nc=00000001, cnonce="0a4f113b", response="6629fae49393a05397450978507c4ef1", '
+        'opaque="5ccc069c403ebaf9f0171e9517f40e41"'
+    )
+    res_digest = runtime_logging.redact_rendered_log_text(digest)
+    assert res_digest == "Authorization: [REDACTED]"
+    assert "Mufasa" not in res_digest
+
+    digest_status = 'Authorization: Digest username="admin", realm="test", status=502'
+    res_status = runtime_logging.redact_rendered_log_text(digest_status)
+    assert res_status == "Authorization: [REDACTED], status=502"
+
+    bearer_tokens = "Bearer token1 token2"
+    assert runtime_logging.redact_rendered_log_text(bearer_tokens) == "Bearer [REDACTED]"
+
+    bearer_status = "Bearer token1 token2, status=502"
+    assert runtime_logging.redact_rendered_log_text(bearer_status) == "Bearer [REDACTED], status=502"
+
+    token_tokens = "Authorization: Token token1 token2"
+    assert runtime_logging.redact_rendered_log_text(token_tokens) == "Authorization: [REDACTED]"
+
+    basic_tokens = "Basic user password"
+    assert runtime_logging.redact_rendered_log_text(basic_tokens) == "Basic [REDACTED]"
+

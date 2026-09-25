@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List
+from typing import Any, List
 
 from pydantic import Field, PrivateAttr, field_validator
 
@@ -74,7 +74,7 @@ class AccountAdditionalQuota(DashboardModel):
     limit_name: str
     metered_feature: str
     display_label: str | None = None
-    routing_policy: str = Field(default="inherit", pattern=r"^(inherit|normal|burn_first|preserve)$")
+    routing_policy: str = Field(default="inherit", pattern=r"^(inherit|normal|burn_first|preserve|disabled)$")
     primary_window: AccountAdditionalWindow | None = None
     secondary_window: AccountAdditionalWindow | None = None
 
@@ -147,7 +147,7 @@ class AccountImportResponse(DashboardModel):
 
 class OpenCodeOAuthAuth(DashboardModel):
     type: str = "oauth"
-    refresh: str
+    refresh: str = ""
     access: str
     expires: int = Field(ge=0)
     account_id: str | None = None
@@ -263,9 +263,11 @@ class AccountTrendsResponse(DashboardModel):
 
 
 class CodexAuthTokens(DashboardModel):
-    id_token: str = Field(serialization_alias="id_token", validation_alias="id_token")
+    id_token: str | None = Field(default=None, serialization_alias="id_token", validation_alias="id_token")
     access_token: str = Field(serialization_alias="access_token", validation_alias="access_token")
-    refresh_token: str = Field(serialization_alias="refresh_token", validation_alias="refresh_token")
+    refresh_token: str | None = Field(
+        default=None, serialization_alias="refresh_token", validation_alias="refresh_token"
+    )
     account_id: str | None = Field(
         default=None,
         serialization_alias="account_id",
@@ -285,9 +287,9 @@ class CodexAuthJson(DashboardModel):
 
 
 class AccountAuthExportTokens(DashboardModel):
-    id_token: str
+    id_token: str | None = None
     access_token: str
-    refresh_token: str
+    refresh_token: str | None = None
     expires_at_ms: int = Field(ge=0)
 
 
@@ -306,3 +308,48 @@ class AccountAliasRequest(DashboardModel):
 class AccountAliasResponse(DashboardModel):
     account_id: str
     alias: str | None = None
+
+
+class AccountBackupItem(DashboardModel):
+    id: str
+    email: str | None = None
+    alias: str | None = None
+    plan_type: str | None = None
+    status: str = "active"
+    routing_policy: str = "normal"
+    limit_warmup: bool = False
+    tokens: CodexAuthTokens | None = None
+    created_at: datetime | None = None
+
+
+class AccountBackupExportResponse(DashboardModel):
+    version: str = "1.0"
+    exported_at: datetime
+    account_count: int
+    accounts: list[AccountBackupItem]
+    settings_overrides: dict[str, Any] = Field(default_factory=dict)
+
+
+class AccountBackupRestoreRequest(DashboardModel):
+    version: str = "1.0"
+    accounts: list[AccountBackupItem] = Field(default_factory=list)
+    settings_overrides: dict[str, Any] | None = None
+    overwrite: bool = False
+
+
+class AccountBackupRestoreResponse(DashboardModel):
+    success: bool = True
+    restored_count: int = 0
+    skipped_count: int = 0
+    failed_count: int = 0
+    errors: list[str] = Field(default_factory=list)
+
+
+class AccountQuotaLimitUpdateRequest(DashboardModel):
+    limit_percent: float | None = Field(default=None, ge=0.0, le=100.0)
+
+
+class AccountQuotaLimitUpdateResponse(DashboardModel):
+    account_id: str
+    limit_percent: float | None = None
+

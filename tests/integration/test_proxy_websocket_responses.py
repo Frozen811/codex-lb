@@ -505,10 +505,14 @@ def test_responses_websocket_route_drain_preserves_terminal_ownership_and_reject
                 terminal_release.set()
                 assert settlement_started.wait(timeout=1)
 
-                with pytest.raises(WebSocketDisconnect) as late_disconnect:
+                with pytest.raises(WebSocketDenialResponse) as late_denial:
                     with client.websocket_connect("/backend-api/codex/responses"):
                         pytest.fail("late websocket admission unexpectedly succeeded")
-                assert late_disconnect.value.code == 1013
+                # The upgrade is denied with a retryable 503, not a pre-handshake
+                # close that ASGI servers would surface as an opaque 403.
+                assert late_denial.value.status_code == 503
+                assert late_denial.value.headers["retry-after"] == "5"
+                assert late_denial.value.json()["error"]["code"] == "proxy_unavailable"
                 assert shutdown_state.get_in_flight() == 1
 
                 settlement_release.set()
@@ -762,6 +766,66 @@ def test_backend_responses_websocket_preserves_recorded_previous_response_accoun
     assert owner_lookups
     assert json.loads(upstream.sent_text[0])["previous_response_id"] == previous_response_id
     assert not any("model_source_requires_http_transport" in event for event in upstream.sent_text)
+
+
+def test_backend_responses_websocket_owner_bound_model_not_found_surfaces_original_404(app_instance, monkeypatch):
+    """A continuation owner cannot be excluded and replaced after its own rejection."""
+    account = SimpleNamespace(id="acct_ws_model_not_found_owner", security_work_authorized=False)
+    selection_calls: list[str | None] = []
+
+    async def recorded_owner(self, **kwargs):
+        del self, kwargs
+        return account.id
+
+    async def select_owner(self, *args, preferred_account_id=None, **kwargs):
+        del self, args, kwargs
+        selection_calls.append(preferred_account_id)
+        if len(selection_calls) > 1:
+            pytest.fail("owner-bound model rejection must not select a replacement account")
+        return account
+
+    async def reject_owner(self, selected_account, headers, **kwargs):
+        del self, headers, kwargs
+        assert selected_account.id == account.id
+        raise proxy_module.ProxyResponseError(
+            404,
+            proxy_module.openai_error(
+                "model_not_found",
+                "The model `gpt-5.5` does not exist or you do not have access to it.",
+                error_type="invalid_request_error",
+            ),
+            failure_phase="connect",
+        )
+
+    async def classify_connect_error(self, selected_account, exc):
+        del self, selected_account, exc
+        return {"failure_class": "retryable_transient"}
+
+    async def allow_firewall(_websocket):
+        return None
+
+    async def allow_proxy_api_key(_authorization: str | None, *, request: object | None = None):
+        return None
+
+    monkeypatch.setattr(proxy_api_module, "_websocket_firewall_denial_response", allow_firewall)
+    monkeypatch.setattr(proxy_api_module, "validate_proxy_api_key_authorization", allow_proxy_api_key)
+    monkeypatch.setattr(proxy_module.ProxyService, "_resolve_websocket_previous_response_owner", recorded_owner)
+    monkeypatch.setattr(proxy_module.ProxyService, "_select_websocket_connect_account", select_owner)
+    monkeypatch.setattr(proxy_module.ProxyService, "_try_open_websocket_connect_attempt", reject_owner)
+    monkeypatch.setattr(proxy_module.ProxyService, "_handle_websocket_connect_error", classify_connect_error)
+
+    response_create = _websocket_response_create("continue the owner-bound turn")
+    response_create.update({"model": "gpt-5.5", "previous_response_id": "resp_ws_model_not_found_owner"})
+
+    with TestClient(app_instance) as client:
+        with client.websocket_connect("/backend-api/codex/responses") as websocket:
+            websocket.send_text(json.dumps(response_create))
+            event = json.loads(websocket.receive_text())
+
+    assert selection_calls == [account.id]
+    assert event["type"] == "error"
+    assert event["status"] == 404
+    assert event["error"]["code"] == "model_not_found"
 
 
 def test_backend_responses_websocket_canonical_source_previous_response_requires_http(
@@ -10267,6 +10331,236 @@ def test_backend_responses_websocket_retries_stale_account_model_route_on_anothe
     )
 
 
+def test_backend_responses_websocket_retries_precreated_model_not_found_on_another_account(app_instance, monkeypatch):
+    """The public WebSocket route retries only an unaccepted model rejection."""
+    first_upstream = _FakeUpstreamWebSocket(
+        [
+            _FakeUpstreamMessage(
+                "text",
+                text=json.dumps(
+                    {
+                        "type": "error",
+                        "status": 404,
+                        "error": {
+                            "type": "invalid_request_error",
+                            "code": "model_not_found",
+                            "message": "The model `gpt-5.5` does not exist or you do not have access to it.",
+                        },
+                    },
+                    separators=(",", ":"),
+                ),
+            )
+        ]
+    )
+    second_upstream = _FakeUpstreamWebSocket(_websocket_response_batch("resp_ws_model_not_found_retried"))
+    upstreams = [first_upstream, second_upstream]
+    account_ids = ["acct_ws_model_not_found_a", "acct_ws_model_not_found_b"]
+    selected_accounts: list[str] = []
+    excluded_snapshots: list[set[str]] = []
+
+    class _FakeSettingsCache:
+        async def get(self):
+            return _websocket_settings()
+
+    async def allow_firewall(_websocket):
+        return None
+
+    async def allow_proxy_api_key(_authorization: str | None, *, request: object | None = None):
+        return None
+
+    async def fake_connect_proxy_websocket(
+        self, headers, *, request_state, model, api_key, client_send_lock, websocket, **kwargs
+    ):
+        del self, headers, model, api_key, client_send_lock, websocket, kwargs
+        index = len(selected_accounts)
+        selected_accounts.append(account_ids[index])
+        excluded_snapshots.append(set(request_state.excluded_account_ids))
+        return SimpleNamespace(id=account_ids[index]), upstreams[index]
+
+    async def fake_handle_stream_error(self, account, error, code):
+        del self, account, error
+        assert code == "model_not_found"
+
+    async def fake_write_request_log(self, **kwargs):
+        del self, kwargs
+
+    monkeypatch.setattr(proxy_api_module, "_websocket_firewall_denial_response", allow_firewall)
+    monkeypatch.setattr(proxy_api_module, "validate_proxy_api_key_authorization", allow_proxy_api_key)
+    monkeypatch.setattr(proxy_module, "get_settings_cache", lambda: _FakeSettingsCache())
+    monkeypatch.setattr(proxy_module.ProxyService, "_connect_proxy_websocket", fake_connect_proxy_websocket)
+    monkeypatch.setattr(proxy_module.ProxyService, "_handle_stream_error", fake_handle_stream_error)
+    monkeypatch.setattr(proxy_module.ProxyService, "_write_request_log", fake_write_request_log)
+
+    with TestClient(app_instance) as client:
+        with client.websocket_connect("/backend-api/codex/responses") as websocket:
+            websocket.send_text(json.dumps(_websocket_response_create("retry model rejection")))
+            created = json.loads(websocket.receive_text())
+            completed = json.loads(websocket.receive_text())
+
+    assert created["type"] == "response.created"
+    assert completed["type"] == "response.completed"
+    assert selected_accounts == account_ids
+    assert excluded_snapshots == [set(), {account_ids[0]}]
+
+
+def test_backend_responses_websocket_retries_model_not_found_after_temporary_preference(
+    app_instance,
+    monkeypatch,
+):
+    """A completed forced refresh leaves a preference, not an owner pin."""
+    model_rejection = _FakeUpstreamWebSocket(
+        [
+            _FakeUpstreamMessage(
+                "text",
+                text=json.dumps(
+                    {
+                        "type": "error",
+                        "status": 404,
+                        "error": {
+                            "type": "invalid_request_error",
+                            "code": "model_not_found",
+                            "message": "The model `gpt-5.5` does not exist or you do not have access to it.",
+                        },
+                    },
+                    separators=(",", ":"),
+                ),
+            )
+        ]
+    )
+    recovered = _FakeUpstreamWebSocket(_websocket_response_batch("resp_ws_model_not_found_after_refresh"))
+    upstreams = [model_rejection, recovered]
+    account_ids = ["acct_ws_refresh_a", "acct_ws_refresh_b"]
+    selected_accounts: list[str] = []
+    excluded_snapshots: list[set[str]] = []
+
+    class _FakeSettingsCache:
+        async def get(self):
+            return _websocket_settings()
+
+    async def allow_firewall(_websocket):
+        return None
+
+    async def allow_proxy_api_key(_authorization: str | None, *, request: object | None = None):
+        return None
+
+    async def fake_connect_proxy_websocket(
+        self, headers, *, request_state, model, api_key, client_send_lock, websocket, **kwargs
+    ):
+        del self, headers, model, api_key, client_send_lock, websocket, kwargs
+        index = len(selected_accounts)
+        selected_accounts.append(account_ids[index])
+        excluded_snapshots.append(set(request_state.excluded_account_ids))
+        if index == 0:
+            request_state.preferred_account_id = account_ids[index]
+        else:
+            assert request_state.force_refresh_account_id is None
+            assert request_state.preferred_account_id == account_ids[0]
+        return SimpleNamespace(id=account_ids[index]), upstreams[index]
+
+    monkeypatch.setattr(proxy_api_module, "_websocket_firewall_denial_response", allow_firewall)
+    monkeypatch.setattr(proxy_api_module, "validate_proxy_api_key_authorization", allow_proxy_api_key)
+    monkeypatch.setattr(proxy_module, "get_settings_cache", lambda: _FakeSettingsCache())
+    monkeypatch.setattr(proxy_module.ProxyService, "_connect_proxy_websocket", fake_connect_proxy_websocket)
+
+    with TestClient(app_instance) as client:
+        with client.websocket_connect("/backend-api/codex/responses") as websocket:
+            websocket.send_text(json.dumps(_websocket_response_create("retry after refresh")))
+            created = json.loads(websocket.receive_text())
+            completed = json.loads(websocket.receive_text())
+
+    assert created["type"] == "response.created"
+    assert completed["type"] == "response.completed"
+    assert selected_accounts == account_ids
+    assert excluded_snapshots == [set(), {account_ids[0]}]
+
+
+def test_backend_responses_websocket_exhausted_model_not_found_preserves_original_envelope(
+    app_instance,
+    monkeypatch,
+):
+    """A movable pre-created retry must not replace its 404 with no_accounts."""
+    rejected_account = "acct_ws_model_not_found_only"
+    message = "The model `gpt-5.5` does not exist or you do not have access to it."
+    rejected = _FakeUpstreamWebSocket(
+        [
+            _FakeUpstreamMessage(
+                "text",
+                text=json.dumps(
+                    {
+                        "type": "error",
+                        "status": 404,
+                        "error": {
+                            "type": "invalid_request_error",
+                            "code": "model_not_found",
+                            "message": message,
+                            "param": "model",
+                        },
+                    },
+                    separators=(",", ":"),
+                ),
+            )
+        ]
+    )
+    connect_attempts = 0
+
+    class _FakeSettingsCache:
+        async def get(self):
+            return _websocket_settings()
+
+    async def allow_firewall(_websocket):
+        return None
+
+    async def allow_proxy_api_key(_authorization: str | None, *, request: object | None = None):
+        return None
+
+    async def fake_connect_proxy_websocket(
+        self, headers, *, request_state, model, api_key, client_send_lock, websocket, **kwargs
+    ):
+        nonlocal connect_attempts
+        del headers, model, kwargs
+        connect_attempts += 1
+        if connect_attempts == 1:
+            return SimpleNamespace(id=rejected_account), rejected
+        await self._emit_websocket_connect_failure(
+            websocket,
+            client_send_lock=client_send_lock,
+            account_id=None,
+            api_key=api_key,
+            request_state=request_state,
+            status_code=503,
+            payload=proxy_module.openai_error("no_accounts", "No active accounts available", error_type="server_error"),
+            error_code="no_accounts",
+            error_message="No active accounts available",
+        )
+        return None, None
+
+    async def fake_write_request_log(self, **kwargs):
+        del self, kwargs
+
+    monkeypatch.setattr(proxy_api_module, "_websocket_firewall_denial_response", allow_firewall)
+    monkeypatch.setattr(proxy_api_module, "validate_proxy_api_key_authorization", allow_proxy_api_key)
+    monkeypatch.setattr(proxy_module, "get_settings_cache", lambda: _FakeSettingsCache())
+    monkeypatch.setattr(proxy_module.ProxyService, "_connect_proxy_websocket", fake_connect_proxy_websocket)
+    monkeypatch.setattr(proxy_module.ProxyService, "_write_request_log", fake_write_request_log)
+
+    with TestClient(app_instance) as client:
+        with client.websocket_connect("/backend-api/codex/responses") as websocket:
+            websocket.send_text(json.dumps(_websocket_response_create("retry only account")))
+            event = json.loads(websocket.receive_text())
+
+    assert connect_attempts == 2
+    assert event == {
+        "type": "error",
+        "status": 404,
+        "error": {
+            "type": "invalid_request_error",
+            "code": "model_not_found",
+            "message": message,
+            "param": "model",
+        },
+    }
+
+
 def test_backend_responses_websocket_previous_response_usage_limit_returns_upstream_unavailable(
     app_instance,
     monkeypatch,
@@ -10379,9 +10673,9 @@ def test_backend_responses_websocket_previous_response_usage_limit_returns_upstr
             websocket.send_text(json.dumps(request_payload))
             event = json.loads(websocket.receive_text())
 
-    assert event["type"] == "response.failed"
-    assert event["response"]["error"]["code"] == "upstream_unavailable"
-    assert event["response"]["error"]["message"] == "Previous response owner account is unavailable; retry later."
+    assert event["type"] == "error"
+    assert event["error"]["code"] == "usage_limit_reached"
+    assert event["error"]["message"] == "The usage limit has been reached"
     assert connect_models == ["gpt-5.1"]
     assert captured_preferred_accounts == ["acct_ws_proxy_owner"]
     assert handled_error_codes == ["usage_limit_reached"]
@@ -13794,9 +14088,9 @@ class _TwoAccountWebSocketFailover:
             failover.connect_accounts.append(selected_account_id)
             return SimpleNamespace(id=selected_account_id), failover.upstreams_by_account[selected_account_id].popleft()
 
-        async def spy_handle_stream_error(self, account, error, code, http_status=None):
+        async def spy_handle_stream_error(self, account, error, code, http_status=None, **kwargs):
             failover.stream_errors.append((account.id, code))
-            return await real_handle_stream_error(self, account, error, code, http_status)
+            return await real_handle_stream_error(self, account, error, code, http_status, **kwargs)
 
         async def fake_write_request_log(self, **kwargs):
             del self
@@ -13942,6 +14236,184 @@ def _assert_ws_single_response_lifecycle_completed(
     assert types[-1] == "response.completed", types
     assert events[-1]["response"]["id"] == created_ids[0]
     return created_ids[0]
+
+
+@pytest.mark.parametrize(
+    "resend_kind",
+    [
+        "complete",
+        "lite",
+        "keyed",
+        "settlement_failure",
+        "missing_reply",
+        "item_reference",
+        "client_anchor",
+        "visible_output",
+        "same_account_capacity",
+        "same_account_close",
+        "stale_anchor",
+    ],
+)
+def test_backend_responses_websocket_quota_replay_projects_verified_full_resend(
+    app_instance,
+    monkeypatch,
+    resend_kind,
+):
+    """Replay only a complete portable transcript after a pre-output quota failure."""
+    monkeypatch.setattr(proxy_module.LoadBalancer, "mark_rate_limit", AsyncMock())
+    monkeypatch.setattr(proxy_module.LoadBalancer, "record_error", AsyncMock())
+    reasoning = {"type": "reasoning", "id": "rs_prior", "summary": [], "encrypted_content": "owner-ciphertext"}
+    assistant = {
+        "type": "message",
+        "id": "msg_prior",
+        "role": "assistant",
+        "status": "completed",
+        "content": [{"type": "output_text", "text": "hi"}],
+    }
+    first_turn = _completed_first_turn_upstream_batch("resp_quota_anchor")
+    completed = json.loads(cast(str, first_turn[-1].text))
+    completed["response"]["output"] = [reasoning, assistant]
+    first_turn[-1] = _ws_event(completed)
+    failure = [_ws_event({"type": "error", "error": {"code": "usage_limit_reached", "message": "Quota exhausted"}})]
+    if resend_kind == "visible_output":
+        failure = [
+            _ws_event({"type": "response.created", "response": {"id": "resp_partial", "status": "in_progress"}}),
+            _ws_event({"type": "response.output_text.delta", "response_id": "resp_partial", "delta": "partial"}),
+            *failure,
+        ]
+    elif resend_kind == "same_account_close":
+        failure = [*_accepted_output_free_prelude("resp_accepted"), _FakeUpstreamMessage("close", close_code=1011)]
+    elif resend_kind == "same_account_capacity":
+        failure = [
+            *_accepted_output_free_prelude("resp_accepted"),
+            _ws_event({"type": "error", "error": {"code": "server_is_overloaded", "message": "Overloaded"}}),
+        ]
+    elif resend_kind == "stale_anchor":
+        failure = [
+            _ws_event(
+                {
+                    "type": "error",
+                    "error": {
+                        "code": "previous_response_not_found",
+                        "param": "previous_response_id",
+                        "message": "Previous response not found",
+                    },
+                }
+            )
+        ]
+    first_upstream = _SequencedUpstreamWebSocket(
+        [],
+        deferred_message_batches=[first_turn, failure],
+    )
+    recovered_upstream = _SequencedUpstreamWebSocket(
+        [],
+        deferred_message_batches=[
+            _completed_first_turn_upstream_batch("resp_quota_recovered"),
+            _completed_first_turn_upstream_batch("resp_next_turn"),
+        ],
+    )
+    failover = _TwoAccountWebSocketFailover(first_upstream, recovered_upstream)
+    if resend_kind in {"same_account_capacity", "same_account_close", "stale_anchor"}:
+        failover.upstreams_by_account[failover.FIRST_ACCOUNT_ID].append(recovered_upstream)
+    if resend_kind == "same_account_capacity":
+        monkeypatch.setattr(
+            proxy_module.ProxyService,
+            "_resolve_file_account_for_responses",
+            AsyncMock(return_value=failover.FIRST_ACCOUNT_ID),
+        )
+    failover.install(monkeypatch)
+    settlement_attempts = []
+    if resend_kind in {"keyed", "settlement_failure"}:
+        reservation = proxy_module.ApiKeyUsageReservationData(
+            reservation_id="resv_quota_projection", key_id="key_quota_projection", model="gpt-5.4"
+        )
+        monkeypatch.setattr(
+            proxy_module.ProxyService, "_reserve_websocket_api_key_usage", AsyncMock(return_value=reservation)
+        )
+
+        async def settle_usage(self, *args, **kwargs):
+            assert failover.stream_errors == []
+            settlement_attempts.append(kwargs.get("wait_for_settlement"))
+            return resend_kind != "settlement_failure"
+
+        monkeypatch.setattr(proxy_module.ProxyService, "_settle_stream_api_key_usage", settle_usage)
+    suffix = [reasoning, assistant, failover.FOLLOW_UP_INPUT]
+    if resend_kind == "missing_reply":
+        suffix.remove(assistant)
+    elif resend_kind == "item_reference":
+        suffix.insert(1, {"type": "item_reference", "id": "msg_elsewhere"})
+    follow_up = failover.response_create([failover.HISTORICAL_INPUT, *suffix])
+    if resend_kind == "client_anchor":
+        follow_up["previous_response_id"] = "resp_quota_anchor"
+    requests = [failover.response_create([failover.HISTORICAL_INPUT]), follow_up]
+    if resend_kind == "lite":
+        for request in requests:
+            request["input"].insert(0, {"type": "additional_tools", "role": "developer", "tools": []})
+    next_suffix = [{**assistant, "id": "msg_recovered"}, {"role": "user", "content": "next turn"}]
+    if resend_kind == "complete":
+        requests.append(failover.response_create([failover.HISTORICAL_INPUT, *suffix, *next_suffix]))
+
+    events, disconnect = failover.run(
+        app_instance,
+        requests=requests,
+        headers={"Authorization": "Bearer external-token"},
+    )
+
+    assert disconnect is None
+    assert len(first_upstream.sent_text) == 2
+    anchored_payload = json.loads(first_upstream.sent_text[1])
+    assert anchored_payload["previous_response_id"] == "resp_quota_anchor"
+    if resend_kind != "client_anchor":
+        assert anchored_payload["input"] == suffix
+    if resend_kind in {"same_account_capacity", "same_account_close", "stale_anchor"}:
+        _assert_ws_single_response_lifecycle_completed(events, disconnect)
+        assert failover.connect_accounts == [failover.FIRST_ACCOUNT_ID, failover.FIRST_ACCOUNT_ID]
+        replay = json.loads(recovered_upstream.sent_text[0])
+        if resend_kind == "same_account_capacity":
+            assert replay["previous_response_id"] == "resp_quota_anchor"
+            assert replay["input"] == suffix
+            return
+        assert "previous_response_id" not in replay
+        assert replay["input"] == [failover.HISTORICAL_INPUT, *suffix]
+        return
+    if resend_kind not in {"complete", "lite", "keyed", "settlement_failure"}:
+        if resend_kind == "visible_output":
+            assert [event["type"] for event in events] == ["response.created", "response.output_text.delta", "error"]
+            assert events[-1]["error"]["code"] == "usage_limit_reached"
+        else:
+            assert events[-1]["response"]["error"]["code"] == "upstream_unavailable"
+        assert failover.connect_accounts == [failover.FIRST_ACCOUNT_ID]
+        assert recovered_upstream.sent_text == []
+        return
+
+    assert _assert_ws_single_response_lifecycle_completed(failover.turn_events[1], None) == "resp_quota_recovered"
+    if resend_kind in {"lite", "keyed", "settlement_failure"}:
+        failover.assert_retried_on_another_account()
+        replay = json.loads(recovered_upstream.sent_text[0])
+        assert "previous_response_id" not in replay
+        assert all(item.get("type") != "reasoning" for item in replay["input"])
+        if resend_kind == "lite":
+            assert replay["reasoning"] == {"context": "all_turns"}
+        else:
+            assert settlement_attempts and all(settlement_attempts)
+            assert failover.stream_errors == (
+                [] if resend_kind == "settlement_failure" else [(failover.FIRST_ACCOUNT_ID, "usage_limit_reached")]
+            )
+        return
+    assert _assert_ws_single_response_lifecycle_completed(events, disconnect) == "resp_next_turn"
+    failover.assert_retried_on_another_account()
+    assert len(recovered_upstream.sent_text) == 2
+    replay = json.loads(recovered_upstream.sent_text[0])
+    assert "previous_response_id" not in replay
+    assert replay["input"] == [
+        failover.HISTORICAL_INPUT,
+        {key: value for key, value in assistant.items() if key != "id"},
+        failover.FOLLOW_UP_INPUT,
+    ]
+    next_payload = json.loads(recovered_upstream.sent_text[1])
+    assert next_payload["previous_response_id"] == "resp_quota_recovered"
+    assert next_payload["input"] == next_suffix
+    assert (failover.FIRST_ACCOUNT_ID, "usage_limit_reached") in failover.stream_errors
 
 
 @pytest.mark.parametrize(
@@ -14401,6 +14873,142 @@ def test_backend_responses_websocket_retries_anchored_accepted_capacity_error_wi
         anchor_response_id="resp_ws_anchor_capacity_turn_1",
     )
     assert (failover.FIRST_ACCOUNT_ID, "server_is_overloaded") in failover.stream_errors
+
+
+_PRECREATED_MODEL_REJECTIONS = [
+    pytest.param(
+        400,
+        {
+            "type": "invalid_request_error",
+            "code": "invalid_request_error",
+            "message": "The 'gpt-5.4' model is not supported when using Codex with a ChatGPT account.",
+        },
+        id="account_model_unsupported",
+    ),
+    pytest.param(
+        404,
+        {
+            "type": "invalid_request_error",
+            "code": "model_not_found",
+            "message": "The model `gpt-5.4` does not exist or you do not have access to it.",
+        },
+        id="model_not_found",
+    ),
+]
+
+
+@pytest.mark.parametrize(("status", "error"), _PRECREATED_MODEL_REJECTIONS)
+def test_backend_responses_websocket_retries_anchored_precreated_model_rejection_with_the_fresh_body(
+    app_instance,
+    monkeypatch,
+    status,
+    error,
+):
+    """A follow-up turn goes upstream anchored on the proxy-injected
+    ``previous_response_id`` and is therefore pinned to the anchor's owner at
+    dispatch. When that owner rejects the model before ``response.created``,
+    the pre-created replay must still swap in the retained full resend, release
+    the pin with the anchor and land on the other account: the owner decision
+    belongs after the body prep, once the pin is reconciled with the body that
+    is actually sent. Gating on the pre-replay pin surfaced the rejection on
+    every continuation turn, for the legacy entitlement message and for
+    ``model_not_found`` alike."""
+    first_upstream = _SequencedUpstreamWebSocket(
+        [],
+        deferred_message_batches=[
+            _completed_first_turn_upstream_batch("resp_ws_anchor_model_turn_1"),
+            [_ws_event({"type": "error", "status": status, "error": error})],
+        ],
+    )
+    recovered_upstream = _recovered_upstream("resp_ws_anchored_model_recovered")
+    failover = _TwoAccountWebSocketFailover(first_upstream, recovered_upstream)
+    failover.install(monkeypatch)
+
+    events, disconnect = failover.run_anchored_follow_up(app_instance)
+
+    created_id = _assert_ws_single_response_lifecycle_completed(events, disconnect)
+    assert created_id == "resp_ws_anchored_model_recovered"
+    _assert_anchored_follow_up_replayed_with_fresh_body(
+        failover,
+        first_upstream=first_upstream,
+        recovered_upstream=recovered_upstream,
+        anchor_response_id="resp_ws_anchor_model_turn_1",
+    )
+
+
+@pytest.mark.parametrize(("status", "error"), _PRECREATED_MODEL_REJECTIONS)
+def test_backend_responses_websocket_preserves_exhausted_precreated_model_rejection(
+    app_instance,
+    monkeypatch,
+    status,
+    error,
+):
+    """Exhausted movable model replay returns the rejected account's envelope.
+
+    The first rejection may move to one sibling account, but when that account
+    rejects the same model too, the client must see the original upstream
+    status/code/message instead of the synthetic no-owner connection failure.
+    """
+    first_upstream = _SequencedUpstreamWebSocket(
+        [],
+        deferred_message_batches=[[_ws_event({"type": "error", "status": status, "error": error})]],
+    )
+    second_upstream = _SequencedUpstreamWebSocket(
+        [],
+        deferred_message_batches=[[_ws_event({"type": "error", "status": status, "error": error})]],
+    )
+    failover = _TwoAccountWebSocketFailover(first_upstream, second_upstream)
+    failover.install(monkeypatch)
+
+    events, disconnect = failover.run(app_instance)
+
+    assert disconnect is None
+    assert events == [{"type": "error", "status": status, "error": error}]
+    assert failover.connect_accounts == [failover.FIRST_ACCOUNT_ID, failover.SECOND_ACCOUNT_ID]
+    assert len(first_upstream.sent_text) == 1
+    assert len(second_upstream.sent_text) == 1
+
+
+@pytest.mark.parametrize(("status", "error"), _PRECREATED_MODEL_REJECTIONS)
+def test_backend_responses_websocket_surfaces_a_turn_state_owner_precreated_model_rejection(
+    app_instance,
+    monkeypatch,
+    status,
+    error,
+):
+    """Negative control: in a native ``x-codex-turn-state`` session the
+    follow-up is owner-bound by the turn state, which the fresh-body prep
+    cannot release. Re-sending the same model to the same owner would only be
+    rejected again, so the original rejection is surfaced as-is: no account is
+    excluded and no replacement connect is attempted."""
+    first_turn_upstream = _SequencedUpstreamWebSocket(
+        [],
+        deferred_message_batches=[_completed_first_turn_upstream_batch("resp_ws_turn_state_model_turn_1")],
+    )
+    rejecting_upstream = _SequencedUpstreamWebSocket(
+        [],
+        deferred_message_batches=[[_ws_event({"type": "error", "status": status, "error": error})]],
+    )
+    owner_unused_upstream = _recovered_upstream("resp_ws_turn_state_model_owner_unused")
+    other_account_upstream = _recovered_upstream("resp_ws_turn_state_model_other_account")
+    failover = _TwoAccountWebSocketFailover(first_turn_upstream, other_account_upstream)
+    failover.upstreams_by_account[failover.FIRST_ACCOUNT_ID].extend([rejecting_upstream, owner_unused_upstream])
+    failover.install(monkeypatch)
+
+    events, disconnect = failover.run_turn_state_follow_up(app_instance)
+
+    assert disconnect is None
+    assert [event["type"] for event in failover.turn_events[0]] == ["response.created", "response.completed"]
+    assert [event["type"] for event in events] == ["error"]
+    assert events[0]["status"] == status
+    assert events[0]["error"]["code"] == error["code"]
+    assert events[0]["error"]["message"] == error["message"]
+    assert not failover.refused_connects, failover.refused_connects
+    assert failover.connect_accounts == [failover.FIRST_ACCOUNT_ID, failover.FIRST_ACCOUNT_ID], (
+        failover.connect_accounts
+    )
+    assert owner_unused_upstream.sent_text == []
+    assert other_account_upstream.sent_text == []
 
 
 def test_backend_responses_websocket_replays_a_client_anchored_accepted_capacity_error_on_its_owner(

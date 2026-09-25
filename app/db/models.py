@@ -410,6 +410,7 @@ class RequestDemandQuarterRollup(Base):
     """
 
     __tablename__ = "request_demand_quarter_rollups"
+    __table_args__ = (Index("idx_request_demand_account_slot", "account_id", "slot_epoch"),)
 
     slot_epoch: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     account_id: Mapped[str] = mapped_column(String, primary_key=True)
@@ -526,6 +527,10 @@ class RequestLog(Base):
     reasoning_effort: Mapped[str | None] = mapped_column(String, nullable=True)
     latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     latency_first_token_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Nullable for historical rows and sources without observed output timing.
+    latency_first_output_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    output_delta_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    latency_upstream_terminal_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Pre-attempt wait (account selection, admission waits, failed failover
     # attempts) — kept out of latency_ms/latency_first_token_ms so those two
     # always share the successful attempt's anchor.
@@ -1400,6 +1405,12 @@ class DashboardSettings(Base):
         server_default=text("'capacity_weighted'"),
         nullable=False,
     )
+    subagent_account_preference: Mapped[str] = mapped_column(
+        String,
+        default="off",
+        server_default=text("'off'"),
+        nullable=False,
+    )
     relative_availability_power: Mapped[float] = mapped_column(
         Float,
         default=2.0,
@@ -1734,6 +1745,10 @@ class ApiKey(Base):
             "allowed_reasoning_efforts IS NULL OR enforced_reasoning_effort IS NULL",
             name="ck_api_keys_reasoning_policy_exclusive",
         ),
+        CheckConstraint(
+            "usage_share_percent IS NULL OR (usage_share_percent >= 1 AND usage_share_percent <= 100)",
+            name="ck_api_keys_usage_share_percent",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
@@ -1778,6 +1793,7 @@ class ApiKey(Base):
         default="upstream_limits,account_pool_usage",
         server_default="upstream_limits,account_pool_usage",
     )
+    usage_share_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # Ownership (per-user accounts). NULL owner = shared/service key. Populated
@@ -2639,6 +2655,15 @@ class HttpBridgeOperationRecord(Base):
         default=HTTP_BRIDGE_SPOOL_FORMAT_ROWS_V1,
         server_default=text("'rows_v1'"),
     )
+    # Versioned, account-neutral transcript material retained for a later
+    # recovery reader.  This release only expands the durable schema; capture
+    # and replay remain unwired until their gated follow-up releases land.
+    transcript_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    response_output_items_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    response_output_items_complete: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    response_replay_input_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    response_replay_input_complete: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    response_replay_input_turn_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=func.now(), server_default=func.now()
     )
@@ -2659,6 +2684,8 @@ class HttpBridgeOperationRecord(Base):
         ),
         Index("idx_http_bridge_operations_session_parent_state", "session_id", "parent_response_id", "state"),
         Index("idx_http_bridge_operations_parent_state", "parent_response_id", "state", "updated_at"),
+        Index("idx_http_bridge_operations_session_state_created", "session_id", "state", "created_at"),
+        Index("idx_http_bridge_operations_response_state", "response_id", "state"),
         Index("idx_http_bridge_operations_state_updated", "state", "updated_at"),
     )
 

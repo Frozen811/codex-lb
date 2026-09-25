@@ -1044,7 +1044,13 @@ class RequestLogsRepository:
         sticky_key_source: str | None = None,
         sticky_kind: str | None = None,
         sticky_key_hash: str | None = None,
+        latency_upstream_terminal_ms: int | None = None,
+        output_delta_count: int | None = None,
+        latency_first_output_ms: int | None = None,
     ) -> RequestLog:
+        if account_id is not None and model_source_id is not None:
+            raise ValueError("request log cannot belong to both an account and a model source")
+
         async with sqlite_writer_section():
             # Telemetry write: this transaction only appends one request-log
             # row, so its commit may skip the synchronous WAL flush.
@@ -1093,6 +1099,9 @@ class RequestLogsRepository:
                 reasoning_effort=reasoning_effort,
                 latency_ms=latency_ms,
                 latency_first_token_ms=latency_first_token_ms,
+                latency_first_output_ms=latency_first_output_ms,
+                output_delta_count=output_delta_count,
+                latency_upstream_terminal_ms=latency_upstream_terminal_ms,
                 latency_queue_ms=latency_queue_ms,
                 latency_response_created_ms=latency_response_created_ms,
                 latency_first_upstream_event_ms=latency_first_upstream_event_ms,

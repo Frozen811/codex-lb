@@ -141,6 +141,7 @@ from app.modules.proxy._service.support import (
     _HTTPBridgeRetryCircuitAttemptSelection,
     _HTTPBridgeSession,
     _HTTPBridgeSessionKey,
+    _responses_input_items_are_self_contained,
     _WebSocketRequestState,
 )
 from app.modules.proxy._service.support import (
@@ -177,7 +178,7 @@ from app.modules.proxy._service.warmup import (
     _WarmupUsageSnapshot as _WarmupUsageSnapshot,
 )
 from app.modules.proxy.account_cache import is_account_routing_unavailable
-from app.modules.proxy.account_eligibility import reauth_access_token_is_expired
+from app.modules.proxy.account_eligibility import reauth_account_is_routing_blocked
 from app.modules.proxy.affinity import (
     _AffinityPolicy,
     _codex_backend_identity,
@@ -1553,6 +1554,56 @@ async def _settle_failed_http_bridge_creation(
         return superseded
 
 
+async def _fail_http_bridge_inflight_session_creation_helper(
+    service: Any,
+    key: "_HTTPBridgeSessionKey",
+    inflight_future: asyncio.Future["_HTTPBridgeSession"] | None,
+    exc: BaseException,
+) -> bool:
+    if inflight_future is None:
+        return False
+    async with service._http_bridge_lock:
+        current_future = service._http_bridge_inflight_sessions.get(key)
+        if current_future is not inflight_future:
+            return False
+        if getattr(inflight_future, "_http_bridge_handoff", False):
+            return False
+        service._http_bridge_inflight_sessions.pop(key, None)
+        if inflight_future.done():
+            return True
+        if isinstance(exc, asyncio.CancelledError):
+            inflight_future.cancel()
+        else:
+            inflight_future.set_exception(exc)
+            inflight_future.exception()
+        return True
+
+
+async def _evict_http_bridge_inflight_waiter_helper(
+    service: Any,
+    inflight_future: asyncio.Future["_HTTPBridgeSession"],
+    exc: BaseException,
+) -> "_HTTPBridgeSessionKey | None":
+    async with service._http_bridge_lock:
+        stale_key = None
+        for candidate_key, candidate_future in service._http_bridge_inflight_sessions.items():
+            if candidate_future is inflight_future:
+                stale_key = candidate_key
+                break
+        if stale_key is None:
+            return None
+        if getattr(inflight_future, "_http_bridge_handoff", False):
+            return None
+        service._http_bridge_inflight_sessions.pop(stale_key, None)
+        creator_task = getattr(inflight_future, "_creator_task", None)
+        if creator_task is not None and not creator_task.done() and creator_task is not asyncio.current_task():
+            creator_task.cancel()
+        if not inflight_future.done():
+            inflight_future.set_exception(exc)
+            inflight_future.exception()
+        return stale_key
+
+
 async def _close_http_bridge_session_resources(
     service: Any,
     session: "_HTTPBridgeSession",
@@ -2083,15 +2134,11 @@ def _http_bridge_session_retiring_with_visible_requests(session: "_HTTPBridgeSes
 def _http_bridge_payload_looks_like_full_resend(payload: ResponsesRequest) -> bool:
     input_value = payload.input
     if isinstance(input_value, str):
-        return len(input_value) >= 4096
+        return False
     if isinstance(input_value, Sequence) and not isinstance(input_value, (str, bytes, bytearray)):
-        if len(input_value) > 1:
-            return True
-        if len(input_value) == 1:
-            try:
-                return len(json.dumps(input_value[0], ensure_ascii=True, separators=(",", ":"))) >= 4096
-            except TypeError:
-                return False
+        if len(input_value) <= 1:
+            return False
+        return _responses_input_items_are_self_contained(input_value)
     return False
 
 
@@ -2191,8 +2238,9 @@ def _http_bridge_session_account_active(session: "_HTTPBridgeSession") -> bool:
     # availability snapshot behind is_account_routing_unavailable().
     return (
         session.account.status in (AccountStatus.ACTIVE, AccountStatus.REAUTH_REQUIRED)
-        and not reauth_access_token_is_expired(
+        and not reauth_account_is_routing_blocked(
             session.account.status,
+            getattr(session.account, "deactivation_reason", None),
             session.access_token_expires_at,
         )
         and not is_account_routing_unavailable(session.account.id)
@@ -3807,6 +3855,25 @@ def _record_http_bridge_unmatched_upstream_liveness(
         return session.unmatched_upstream_liveness_count
     session.unmatched_upstream_liveness_count += 1
     return session.unmatched_upstream_liveness_count
+
+
+def _http_bridge_event_incomplete_reason(
+    event_type: str | None,
+    payload: dict[str, JsonValue] | None,
+) -> str | None:
+    if event_type != "response.incomplete" or not isinstance(payload, dict):
+        return None
+    response = payload.get("response")
+    if not isinstance(response, dict):
+        return None
+    incomplete_details = response.get("incomplete_details")
+    if not isinstance(incomplete_details, dict):
+        return None
+    reason = incomplete_details.get("reason")
+    if not isinstance(reason, str):
+        return None
+    stripped = reason.strip()
+    return stripped or None
 
 
 def _log_http_bridge_event(

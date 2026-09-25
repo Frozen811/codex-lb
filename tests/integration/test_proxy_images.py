@@ -400,6 +400,85 @@ async def test_images_generations_returns_envelope_on_success(async_client, monk
     )
 
 
+@pytest.mark.parametrize("image_model", ["gpt-image-2.5-flare", "gpt-image-2.5-sunburst"])
+@pytest.mark.asyncio
+async def test_images_generations_accepts_and_forwards_gpt_image_2_5_models(
+    async_client, monkeypatch, caplog, image_model
+):
+    await _import_account(async_client, f"acc_images_{image_model.replace('.', '_')}", f"{image_model}@example.com")
+
+    captured: dict[str, Any] = {}
+
+    async def fake_stream(payload, headers, access_token, account_id, base_url=None, raise_for_status=False, **kwargs):
+        del headers, access_token, account_id, base_url, raise_for_status, kwargs
+        captured["model"] = payload.model
+        captured["tools"] = payload.tools
+        yield _sse(
+            {
+                "type": "response.output_item.done",
+                "output_index": 0,
+                "item": {
+                    "type": "image_generation_call",
+                    "id": f"ig_{image_model}",
+                    "status": "completed",
+                    "result": "b64-image-bytes-2-5",
+                    "revised_prompt": f"a clean {image_model} generation",
+                    "size": "1024x1024",
+                    "quality": "medium",
+                    "background": "auto",
+                    "output_format": "png",
+                },
+            }
+        )
+        yield _sse(
+            {
+                "type": "response.completed",
+                "response": {
+                    "id": "resp_test_image_2_5",
+                    "object": "response",
+                    "status": "completed",
+                    "tool_usage": {"image_gen": {"input_tokens": 10, "output_tokens": 20}},
+                },
+            }
+        )
+
+    async def fake_ensure_fresh(self, account, **kwargs):
+        del self, kwargs
+        return account
+
+    monkeypatch.setattr(proxy_module, "core_stream_responses", fake_stream)
+    monkeypatch.setattr(proxy_module.ProxyService, "_ensure_fresh_with_budget", fake_ensure_fresh)
+
+    with caplog.at_level(logging.INFO, logger="app.modules.proxy.api"):
+        response = await async_client.post(
+            "/v1/images/generations",
+            json={
+                "model": image_model,
+                "prompt": f"test generation for {image_model}",
+                "n": 1,
+                "size": "1024x1024",
+                "quality": "medium",
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert "created" in body
+    assert body["data"] == [{"b64_json": "b64-image-bytes-2-5", "revised_prompt": f"a clean {image_model} generation"}]
+    assert body["usage"] == {"input_tokens": 10, "output_tokens": 20, "total_tokens": 30}
+
+    tools = cast(list[Any], captured["tools"])
+    image_tool = cast(dict[str, Any], tools[0])
+    assert image_tool["type"] == "image_generation"
+    assert image_tool["model"] == image_model
+    assert image_tool["size"] == "1024x1024"
+    assert image_tool["quality"] == "medium"
+    assert (
+        f"images_route_complete route=generations model={image_model} stream=false status=200 outcome=success"
+        in caplog.text
+    )
+
+
 @pytest.mark.asyncio
 async def test_images_generations_streaming_emits_canonical_events(async_client, monkeypatch):
     await _import_account(async_client, "acc_images_stream", "img-stream@example.com")
@@ -1373,12 +1452,21 @@ async def test_images_generations_falls_back_to_default_model_when_omitted(async
 async def test_images_generations_rejects_n_greater_than_one(async_client):
     response = await async_client.post(
         "/v1/images/generations",
-        json={"model": "gpt-image-2", "prompt": "x", "n": 2},
+        json={"model": "gpt-image-2", "prompt": "x", "n": 11},
     )
     assert response.status_code == 400
     body = response.json()
     assert body["error"]["param"] == "n"
     assert body["error"]["code"] == "invalid_request_error"
+
+    response_stream = await async_client.post(
+        "/v1/images/generations",
+        json={"model": "gpt-image-2", "prompt": "x", "n": 2, "stream": True},
+    )
+    assert response_stream.status_code == 400
+    body_stream = response_stream.json()
+    assert body_stream["error"]["param"] == "n"
+    assert body_stream["error"]["code"] == "invalid_request_error"
 
 
 @pytest.mark.asyncio

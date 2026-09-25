@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.crypto import TokenEncryptor
 from app.core.utils.time import naive_utc_to_epoch, to_utc_naive, utcnow
 from app.db.models import DashboardOidcLoginFlow
+from app.db.session import sqlite_writer_section
 
 #: Short-lived, path-scoped, and ``SameSite=Lax`` rather than ``Strict``: the
 #: callback is a top-level cross-site navigation, and ``Strict`` would drop the
@@ -135,8 +136,9 @@ class OidcFlowRepository:
             created_at=now,
             expires_at=now + timedelta(seconds=ttl_seconds),
         )
-        self._session.add(row)
-        await self._session.commit()
+        async with sqlite_writer_section():
+            self._session.add(row)
+            await self._session.commit()
         return OidcFlowRecord(
             state_hash=state_hash,
             provider_id=provider_id,
@@ -160,22 +162,23 @@ class OidcFlowRepository:
         """
 
         statement = delete(DashboardOidcLoginFlow).where(DashboardOidcLoginFlow.state_hash == state_hash)
-        result = await self._session.execute(
-            statement.returning(
-                DashboardOidcLoginFlow.state_hash,
-                DashboardOidcLoginFlow.provider_id,
-                DashboardOidcLoginFlow.nonce_hash,
-                DashboardOidcLoginFlow.code_verifier_encrypted,
-                DashboardOidcLoginFlow.purpose,
-                DashboardOidcLoginFlow.acting_user_id,
-                DashboardOidcLoginFlow.redirect_uri,
-                DashboardOidcLoginFlow.config_fingerprint,
-                DashboardOidcLoginFlow.created_at,
-                DashboardOidcLoginFlow.expires_at,
-            ).execution_options(synchronize_session=False)
-        )
-        row = result.first()
-        await self._session.commit()
+        async with sqlite_writer_section():
+            result = await self._session.execute(
+                statement.returning(
+                    DashboardOidcLoginFlow.state_hash,
+                    DashboardOidcLoginFlow.provider_id,
+                    DashboardOidcLoginFlow.nonce_hash,
+                    DashboardOidcLoginFlow.code_verifier_encrypted,
+                    DashboardOidcLoginFlow.purpose,
+                    DashboardOidcLoginFlow.acting_user_id,
+                    DashboardOidcLoginFlow.redirect_uri,
+                    DashboardOidcLoginFlow.config_fingerprint,
+                    DashboardOidcLoginFlow.created_at,
+                    DashboardOidcLoginFlow.expires_at,
+                ).execution_options(synchronize_session=False)
+            )
+            row = result.first()
+            await self._session.commit()
         if row is None:
             return None
         record = OidcFlowRecord(
@@ -195,8 +198,11 @@ class OidcFlowRepository:
     async def purge_expired(self) -> None:
         """Opportunistic: an abandoned flow is one row and expires on its own."""
 
-        await self._session.execute(delete(DashboardOidcLoginFlow).where(DashboardOidcLoginFlow.expires_at <= utcnow()))
-        await self._session.commit()
+        async with sqlite_writer_section():
+            await self._session.execute(
+                delete(DashboardOidcLoginFlow).where(DashboardOidcLoginFlow.expires_at <= utcnow())
+            )
+            await self._session.commit()
 
 
 class _SealedCookieStore:

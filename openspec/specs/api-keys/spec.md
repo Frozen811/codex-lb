@@ -3,7 +3,9 @@
 ## Purpose
 
 Define API key lifecycle, enforcement, accounting, and dashboard management contracts for downstream clients.
+
 ## Requirements
+
 ### Requirement: API Key creation
 
 The system SHALL allow the admin to create API keys via `POST /api/api-keys` with a `name` (required), `allowedModels` (optional list), `weeklyTokenLimit` (optional integer), `expiresAt` (optional ISO 8601 datetime), `assignedAccountIds` (optional list), and `usageSections` (optional comma-separated string, defaults to `"upstream_limits,account_pool_usage"`). The system MUST generate a key in the format `sk-clb-{48 hex chars}`, store only the `sha256` hash in the database, and return the plain key exactly once in the creation response. The system MUST accept timezone-aware ISO 8601 datetimes for `expiresAt`, normalize them to UTC naive for persistence, and return the expiration as UTC in API responses.
@@ -1942,4 +1944,47 @@ The database SHALL provide an index that supports filtering request logs by API 
 - **WHEN** database migrations are applied
 - **THEN** the `request_logs` table includes an index whose leading key columns are `api_key_id` and descending `requested_at`
 - **AND** the 7-day account-cost breakdown query for an API key is satisfiable by that index for its filter phase
+
+### Requirement: API keys may cap their estimated share of subscription quota
+
+An API key MAY store `usage_share_percent` (`usageSharePercent` in dashboard API payloads) as an integer from 1 through 100 inclusive. `null` or omission SHALL disable this policy. Create, update, list, detail, regenerate, and authentication-cache projection SHALL preserve the field. Existing keys SHALL remain unrestricted after migration.
+
+The percentages of different keys SHALL be independent caps and SHALL NOT be required to sum to 100, because keys may have different account scopes and operators may intentionally overcommit capacity.
+
+#### Scenario: Create a key with an estimated usage share
+
+- **WHEN** an operator creates an API key with `usageSharePercent: 20`
+- **THEN** the response reports `usageSharePercent: 20`
+- **AND** later authenticated requests carry the policy in their `ApiKeyData`
+
+#### Scenario: Clear an estimated usage share
+
+- **GIVEN** a key has `usageSharePercent: 20`
+- **WHEN** an operator updates it with `usageSharePercent: null`
+- **THEN** subsequent responses report `null`
+- **AND** share admission is disabled for that key
+
+#### Scenario: Reject an invalid estimated usage share
+
+- **WHEN** create or update supplies `0`, `101`, or a non-integer value
+- **THEN** the API rejects the request as invalid
+
+#### Scenario: Existing and unrelated edits preserve policy
+
+- **GIVEN** a migrated key has no usage-share policy, or a configured key has one
+- **WHEN** the migration runs or an unrelated field is edited without supplying `usageSharePercent`
+- **THEN** the existing null or configured value is preserved
+
+### Requirement: Configurable observation windows for API key usage
+
+The system SHALL allow querying API key usage across configurable observation windows via `GET /api/api-keys/{key_id}/usage`. The endpoint MUST accept a `days` query parameter bounded between 1 and 90 (inclusive, default 7). The response MUST return `key_id`, `days`, `total_tokens`, `total_cost_usd`, `total_requests`, `cached_input_tokens`, and `account_costs[]`. The `GET /api/api-keys/{key_id}/trends` endpoint SHALL also accept an optional `days` query parameter (1-90, default 7). The legacy `GET /api/api-keys/{key_id}/usage-7d` endpoint MUST remain functional as a backward-compatible alias.
+
+#### Scenario: Query API key usage with custom observation window
+- **WHEN** a client requests `GET /api/api-keys/{key_id}/usage?days=30`
+- **THEN** the system returns aggregated usage totals and account costs for the past 30 days
+- **AND** the response contains `days = 30`
+
+#### Scenario: Query API key usage with invalid observation window is rejected
+- **WHEN** a client requests `GET /api/api-keys/{key_id}/usage?days=0` or `GET /api/api-keys/{key_id}/usage?days=91`
+- **THEN** the system returns HTTP 422 Unprocessable Entity
 

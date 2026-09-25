@@ -2264,3 +2264,111 @@ async def test_scope_cancellation_while_waiting_for_reconnect_reader_preserves_a
 async def _release_after(event: asyncio.Event, delay_seconds: float) -> None:
     await asyncio.sleep(delay_seconds)
     event.set()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("close_code,expected_penalize", [(None, False), (1006, False), (1008, True), (1011, True)])
+async def test_handle_terminal_upstream_websocket_receive_frameless_drop_neutrality(
+    close_code: int | None,
+    expected_penalize: bool,
+) -> None:
+    account = Account(id="acc_terminal_test", email="test@example.com")
+    request_state = _request_state("req_terminal_test", response_create_sent_at=1.0)
+    pending_requests = deque([request_state])
+    pending_lock = anyio.Lock()
+    upstream = AsyncMock()
+    message = SimpleNamespace(
+        kind="close",
+        text=None,
+        data=None,
+        close_code=close_code,
+        error=None,
+        error_code=None,
+    )
+    upstream_control = SimpleNamespace(replay_request_state=None)
+    proxy = SimpleNamespace(
+        _fail_pending_websocket_requests=AsyncMock(),
+    )
+
+    result = await websocket_mixin._process_upstream_websocket_transport_end(
+        proxy=cast(Any, proxy),
+        websocket=cast(WebSocket, AsyncMock()),
+        upstream=upstream,
+        message=message,
+        account=account,
+        account_id_value=account.id,
+        pending_requests=pending_requests,
+        pending_lock=pending_lock,
+        client_send_lock=anyio.Lock(),
+        api_key=None,
+        upstream_control=cast(Any, upstream_control),
+        response_create_gate=asyncio.Semaphore(1),
+        downstream_activity=cast(Any, SimpleNamespace()),
+    )
+
+    assert result is True
+    proxy._fail_pending_websocket_requests.assert_awaited_once()
+    call_kwargs = proxy._fail_pending_websocket_requests.await_args.kwargs
+    assert call_kwargs["penalize_account"] is expected_penalize
+
+
+@pytest.mark.asyncio
+async def test_process_upstream_websocket_text_preserves_authentic_owner_terminal_error() -> None:
+    account = Account(id="acc_owner", email="owner@example.com")
+    request_state = _request_state("req_continuity_test", response_create_sent_at=1.0)
+    request_state.previous_response_id = "resp_previous"
+    request_state.preferred_account_id = "acc_owner"
+    request_state.fresh_upstream_request_is_retry_safe = False
+    request_state.fresh_upstream_request_text = "prompt"
+    request_state.request_text = "prompt"
+    request_state.awaiting_response_created = True
+
+    pending_requests = deque([request_state])
+    pending_lock = anyio.Lock()
+    upstream_control = SimpleNamespace(
+        reconnect_requested=False,
+        suppress_downstream_event=False,
+        replay_request_state=None,
+    )
+    handle_stream_error = AsyncMock()
+
+    upstream_text = json.dumps({
+        "type": "response.failed",
+        "response": {
+            "id": "resp_test",
+            "status": "failed",
+            "error": {
+                "code": "rate_limit_exceeded",
+                "message": "Rate limit reached. Try again in 20s.",
+                "type": "requests",
+            },
+        },
+    })
+
+    @asynccontextmanager
+    async def repo_factory() -> AsyncIterator[SimpleNamespace]:
+        yield SimpleNamespace(request_logs=_RequestLogsRecorder(), api_keys=object())
+
+    service = proxy_service.ProxyService(cast(proxy_service.ProxyRepoFactory, repo_factory))
+    service._handle_stream_error = handle_stream_error
+    service._maybe_touch_request_state_api_key_reservation = AsyncMock()
+
+    result = await service._process_upstream_websocket_text(
+        upstream_text,
+        account=account,
+        account_id_value=account.id,
+        pending_requests=pending_requests,
+        pending_lock=pending_lock,
+        api_key=None,
+        upstream_control=cast(Any, upstream_control),
+        response_create_gate=asyncio.Semaphore(1),
+    )
+
+    parsed_result = json.loads(result)
+    assert parsed_result["type"] == "response.failed"
+    assert parsed_result["response"]["error"]["code"] == "rate_limit_exceeded"
+    assert parsed_result["response"]["error"]["message"] == "Rate limit reached. Try again in 20s."
+    assert "previous_response_owner_unavailable" not in result
+    handle_stream_error.assert_awaited_once()
+
+

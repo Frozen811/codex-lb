@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 import sys
 from pathlib import Path
 
-from scripts.traffic_analysis import canary_runner
+import pytest
+
+fcntl = pytest.importorskip("fcntl")
+
+from scripts.traffic_analysis import canary_runner  # noqa: E402
 
 SUCCESS_COMMAND = """
 import json

@@ -8,6 +8,7 @@ import logging
 import math
 import os
 import shutil
+import sys
 from collections.abc import AsyncGenerator, AsyncIterator, Mapping
 from dataclasses import dataclass
 from functools import lru_cache
@@ -177,6 +178,7 @@ class NativeEgressRequest:
     connect_timeout_seconds: float | None = None
     response_head_timeout_seconds: float | None = None
     proxy_url: str | None = None
+    pool_key: str | None = None
     sse: NativeSseOptions | None = None
 
 
@@ -793,6 +795,7 @@ class SubprocessNativeEgressClient:
                 else None
             ),
             "proxy_url": request.proxy_url,
+            "pool_key": request.pool_key,
             "sse": (
                 {
                     "idle_timeout_ms": max(1, round(request.sse.idle_timeout_seconds * 1000)),
@@ -980,8 +983,11 @@ class SubprocessNativeEgressClient:
             if self._process is not None and self._process.returncode is None:
                 return self._process, self._generation
             try:
+                cmd = [str(self.executable)]
+                if os.name == "nt" and not str(self.executable).lower().endswith((".exe", ".cmd", ".bat")):
+                    cmd = [sys.executable, str(self.executable)]
                 process = await asyncio.create_subprocess_exec(
-                    str(self.executable),
+                    *cmd,
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.DEVNULL,

@@ -8828,6 +8828,158 @@ async def test_v1_responses_http_bridge_resumes_a_thread_whose_owner_was_retired
 
 
 @pytest.mark.asyncio
+async def test_v1_responses_http_bridge_reports_a_client_anchor_on_a_dead_owner_as_not_found(
+    async_client,
+    app_instance,
+    monkeypatch,
+    caplog,
+):
+    """The tail #1707 leaves behind: a client-supplied anchor on a dead owner.
+
+    The proxy can drop an anchor it injected itself and rebind. It cannot drop
+    one the client sent — that names upstream state on the unavailable account.
+    Production answered this with 502 "retry later", which is untrue for an
+    owner that is not coming back, and clients answered *that* with a retry
+    burst. Report the anchor as not found instead, which is true and which
+    clients already recover from by re-sending without it.
+    """
+    _install_bridge_settings(monkeypatch, enabled=True)
+    owner_account_id = await _import_account(
+        async_client,
+        "acc_http_bridge_dead_anchor_owner",
+        "http-bridge-dead-anchor-owner@example.com",
+    )
+    healthy_account_id = await _import_account(
+        async_client,
+        "acc_http_bridge_dead_anchor_other",
+        "http-bridge-dead-anchor-other@example.com",
+    )
+    owner_account = await _get_account(owner_account_id)
+    healthy_account = await _get_account(healthy_account_id)
+    served: list[str] = []
+
+    async def fake_select_account_with_budget(self, deadline, **kwargs):
+        del self, deadline
+        preferred_account_id = cast(str | None, kwargs.get("preferred_account_id"))
+        if preferred_account_id == owner_account.id:
+            return AccountSelection(
+                account=None,
+                error_message="No available accounts",
+                error_code=CONTINUITY_OWNER_UNAVAILABLE,
+            )
+        account = owner_account if not served else healthy_account
+        served.append(account.id)
+        return AccountSelection(account=account, error_message=None, error_code=None)
+
+    async def fake_ensure_fresh_with_budget(self, target, *, force=False, timeout_seconds):
+        del self, force, timeout_seconds
+        return target
+
+    async def fake_connect_responses_websocket(
+        headers, access_token, account_id_header, *, base_url=None, session=None
+    ):
+        del headers, access_token, account_id_header, base_url, session
+        # A fresh socket per connect: a shared one is already closed by the
+        # time a later turn connects, and its reader failure would mask the
+        # error this test is about.
+        return _ClosingBridgeUpstreamWebSocket()
+
+    monkeypatch.setattr(proxy_module.ProxyService, "_select_account_with_budget", fake_select_account_with_budget)
+    monkeypatch.setattr(proxy_module.ProxyService, "_ensure_fresh_with_budget", fake_ensure_fresh_with_budget)
+    monkeypatch.setattr(proxy_module, "connect_responses_websocket", fake_connect_responses_websocket)
+
+    thread_headers = {"session_id": "session-dead-anchor", "thread-id": "thread-dead-anchor"}
+    first_events = await asyncio.wait_for(
+        _collect_sse_events(
+            async_client,
+            "/backend-api/codex/responses",
+            headers=thread_headers,
+            json_body={
+                "model": "gpt-5.1",
+                "instructions": "Return exactly OK.",
+                "input": "hello",
+                "prompt_cache_key": "http-bridge-dead-anchor",
+                "stream": True,
+            },
+        ),
+        timeout=_TEST_SYNC_TIMEOUT_SECONDS,
+    )
+    first_anchor = next(event["response"]["id"] for event in first_events if event.get("type") == "response.created")
+
+    deadline = time.monotonic() + _TEST_SYNC_TIMEOUT_SECONDS
+    owned: list[HttpBridgeSessionRecord] = []
+    while time.monotonic() < deadline:
+        async with SessionLocal() as session:
+            owned = list(
+                (
+                    await session.execute(
+                        select(HttpBridgeSessionRecord).where(HttpBridgeSessionRecord.account_id == owner_account.id)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        if owned:
+            break
+        await asyncio.sleep(0.05)
+    assert owned, "the first turn did not persist a durable bridge row"
+
+    service = get_proxy_service_for_app(app_instance)
+    async with service._http_bridge_lock:
+        service._http_bridge_sessions.clear()
+    async with SessionLocal() as session:
+        await session.execute(update(Account).where(Account.id == owner_account.id).values(status=AccountStatus.PAUSED))
+        await session.commit()
+
+    caplog.set_level(logging.INFO, logger="app.modules.proxy.service")
+    second = await asyncio.wait_for(
+        async_client.post(
+            "/backend-api/codex/responses",
+            headers=thread_headers,
+            json={
+                "model": "gpt-5.1",
+                "instructions": "Return exactly OK.",
+                "input": "continue",
+                "prompt_cache_key": "http-bridge-dead-anchor",
+                # The client's own anchor: the proxy may not silently drop it.
+                "previous_response_id": first_anchor,
+            },
+        ),
+        timeout=_TEST_SYNC_TIMEOUT_SECONDS,
+    )
+
+    # Actionable and terminal, not "retry later". The bare
+    # ``previous_response_not_found`` is deliberately masked by the API layer
+    # into a retryable ``stream_incomplete``; the explicit rejection code is
+    # the one that reaches the client unmasked.
+    assert second.status_code == 404, f"body={second.text[:600]}"
+    error = second.json()["error"]
+    assert error["code"] == "bridge_previous_response_not_found"
+    assert "no longer available" in error["message"]
+    assert "resend the full conversation history" in error["message"]
+
+    retired = [r.getMessage() for r in caplog.records if "dead_anchor_owner_retired" in r.getMessage()]
+    assert len(retired) == 1
+
+    # The owner is retired, so the client's anchor-free retry binds elsewhere.
+    third = await asyncio.wait_for(
+        async_client.post(
+            "/backend-api/codex/responses",
+            headers=thread_headers,
+            json={
+                "model": "gpt-5.1",
+                "instructions": "Return exactly OK.",
+                "input": "continue without the anchor",
+                "prompt_cache_key": "http-bridge-dead-anchor",
+            },
+        ),
+        timeout=_TEST_SYNC_TIMEOUT_SECONDS,
+    )
+    assert third.status_code == 200
+    assert served[-1] == healthy_account.id
+
+
+@pytest.mark.asyncio
 async def test_v1_responses_http_bridge_rebinds_immediately_when_the_owner_cannot_return(
     async_client,
     app_instance,
@@ -8959,6 +9111,108 @@ async def test_v1_responses_http_bridge_rebinds_immediately_when_the_owner_canno
     assert any(row.account_id == healthy_account.id for row in rows)
     assert all(row.continuity_abandoned_at is None for row in rows)
     assert all(row.continuity_abandonment_scope is None for row in rows)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["/v1/responses", "/backend-api/codex/responses"])
+@pytest.mark.parametrize("reset_field", ["resets_at", "resets_in_seconds"])
+async def test_http_bridge_usage_limit_preserves_reset_and_retires_unavailable_owner(
+    async_client, app_instance, monkeypatch, path, reset_field
+):
+    """Persist a long quota reset so an eligible follow-up can change owners.
+
+    The explicit client anchor must still fail closed before the unanchored
+    follow-up uses the existing retirement path and a healthy replacement.
+    """
+    _install_bridge_settings(monkeypatch, enabled=True)
+    now = 2_000_000_000.0
+    reset_at = 2_000_432_000
+    monkeypatch.setattr("time.time", lambda: now)
+    owner_id = await _import_account(async_client, "acc_reset_owner", "reset-owner@example.com")
+    owner = await _get_account(owner_id)
+
+    class LimitedOwnerWebSocket(_FakeBridgeUpstreamWebSocket):
+        async def send_text(self, text: str) -> None:
+            """Complete the first turn, then reject its owner with a long reset."""
+            if not self.sent_text:
+                await super().send_text(text)
+                return
+            self.sent_text.append(text)
+            await self._messages.put(
+                _FakeUpstreamMessage(
+                    "text",
+                    text=json.dumps(
+                        {
+                            "type": "error",
+                            "status": 429,
+                            "error": {
+                                "type": "usage_limit_reached",
+                                "message": "The usage limit has been reached",
+                                reset_field: reset_at if reset_field == "resets_at" else 432_000,
+                            },
+                        }
+                    ),
+                )
+            )
+
+    owner_upstream = LimitedOwnerWebSocket("resp_reset_owner")
+    replacement_upstream = _FakeBridgeUpstreamWebSocket("resp_reset_replacement")
+    connected_accounts: list[str] = []
+
+    async def fresh_account(self, target, *, force=False, timeout_seconds):
+        """Keep fixture accounts usable without invoking an external refresh."""
+        return target
+
+    async def connect(headers, access_token, account_id_header, *, base_url=None, session=None):
+        """Record account selection and return that account's upstream socket."""
+        connected_accounts.append(account_id_header)
+        return owner_upstream if account_id_header == owner.chatgpt_account_id else replacement_upstream
+
+    monkeypatch.setattr(proxy_module.ProxyService, "_ensure_fresh_with_budget", fresh_account)
+    monkeypatch.setattr(proxy_module, "connect_responses_websocket", connect)
+    headers = {"session_id": "reset-session", "thread-id": "reset-thread"}
+    body = {"model": "gpt-5.1", "instructions": "Return exactly OK.", "input": "hello", "stream": True}
+    first, first_headers = await _collect_sse_events_with_headers(async_client, path, json_body=body, headers=headers)
+    assert first[-1]["response"]["id"] == "resp_reset_owner_1"
+    headers["x-codex-turn-state"] = first_headers["x-codex-turn-state"]
+
+    replacement_id = await _import_account(async_client, "acc_reset_replacement", "reset-replacement@example.com")
+    replacement = await _get_account(replacement_id)
+    if path == "/v1/responses":
+        failed = await async_client.post(path, json={**body, "input": "continue"}, headers=headers)
+        assert failed.status_code == 429
+        assert failed.json()["error"]["code"] == "usage_limit_reached"
+    else:
+        failed_events = await _collect_sse_events(
+            async_client, path, json_body={**body, "input": "continue"}, headers=headers
+        )
+        assert failed_events[-1]["type"] == "error"
+        assert failed_events[-1]["error"]["type"] == "usage_limit_reached"
+    limited = await _get_account(owner_id)
+    assert limited.status == AccountStatus.RATE_LIMITED
+    assert limited.reset_at == reset_at
+
+    explicit = await async_client.post(
+        path,
+        json={**body, "input": "continue", "previous_response_id": "resp_reset_owner_1"},
+        headers=headers,
+    )
+    assert explicit.status_code == 502
+    assert explicit.json()["error"]["code"] == "previous_response_owner_unavailable"
+    assert replacement_upstream.sent_text == []
+
+    resumed = await _collect_sse_events(async_client, path, json_body={**body, "input": "continue"}, headers=headers)
+    assert resumed[-1]["response"]["id"] == "resp_reset_replacement_1"
+    assert connected_accounts[-1] == replacement.chatgpt_account_id
+    assert len(owner_upstream.sent_text) == 2
+    assert json.loads(replacement_upstream.sent_text[0])["input"] == [
+        {"role": "user", "content": [{"type": "input_text", "text": "continue"}]}
+    ]
+    assert "previous_response_id" not in json.loads(replacement_upstream.sent_text[0])
+    async with SessionLocal() as session:
+        rows = (await session.execute(select(HttpBridgeSessionRecord))).scalars().all()
+    assert any(row.account_id == replacement_id for row in rows)
+    assert all(row.account_id != owner_id for row in rows)
 
 
 @pytest.mark.asyncio
@@ -13860,6 +14114,93 @@ async def test_v1_responses_http_bridge_preserves_rate_limit_metadata_in_429(asy
     assert body["error"]["plan_type"] == "team"
     assert body["error"]["resets_at"] == 1700000000
     assert body["error"]["resets_in_seconds"] == 3600
+
+
+@pytest.mark.asyncio
+async def test_v1_responses_http_bridge_preserves_rate_limit_after_failed_precreated_retry(
+    async_client,
+    monkeypatch,
+):
+    """A failed native retry must not turn the original upstream 429 into 502."""
+    _install_proxy_settings(
+        monkeypatch,
+        app_settings=_make_app_settings(enabled=True).model_copy(
+            update={"http_responses_session_bridge_request_budget_seconds": 1.0}
+        ),
+        dashboard_settings=_make_dashboard_settings(),
+    )
+    first_account_id = await _import_account(
+        async_client,
+        "acc_http_bridge_failed_retry_rate_limit",
+        "http-bridge-failed-retry-rate-limit@example.com",
+    )
+    second_account_id = await _import_account(
+        async_client,
+        "acc_http_bridge_failed_retry_replacement",
+        "http-bridge-failed-retry-replacement@example.com",
+    )
+    first_account = await _get_account(first_account_id)
+    connect_calls: list[str | None] = []
+    first_upstream = _RateLimitErrorUpstreamWebSocket()
+
+    async def fake_select_account_with_budget(self, deadline, **kwargs):
+        del self, deadline
+        excluded = set(cast(set[str], kwargs.get("exclude_account_ids") or set()))
+        account = second_account if first_account.id in excluded else first_account
+        return AccountSelection(account=account, error_message=None, error_code=None)
+
+    async def fake_ensure_fresh_with_budget(self, target, *, force=False, timeout_seconds):
+        del self, force, timeout_seconds
+        return target
+
+    async def fake_connect_responses_websocket(
+        headers,
+        access_token,
+        account_id_header,
+        *,
+        base_url=None,
+        session=None,
+    ):
+        del headers, access_token, base_url, session
+        connect_calls.append(account_id_header)
+        if len(connect_calls) == 1:
+            return first_upstream
+        raise proxy_module.ProxyResponseError(
+            503,
+            proxy_module.openai_error(
+                "replacement_unavailable",
+                "Selected replacement connection failed",
+                error_type="server_error",
+            ),
+        )
+
+    second_account = await _get_account(second_account_id)
+    monkeypatch.setattr(proxy_module.ProxyService, "_select_account_with_budget", fake_select_account_with_budget)
+    monkeypatch.setattr(proxy_module.ProxyService, "_ensure_fresh_with_budget", fake_ensure_fresh_with_budget)
+    monkeypatch.setattr(proxy_module, "connect_responses_websocket", fake_connect_responses_websocket)
+
+    events = await _collect_sse_events(
+        async_client,
+        "/backend-api/codex/responses",
+        json_body={
+            "model": "gpt-4o",
+            "instructions": "Return exactly OK.",
+            "input": "hello",
+            "prompt_cache_key": "http-bridge-failed-retry-rate-limit-key",
+            "stream": True,
+        },
+    )
+
+    assert events[-1]["type"] == "error"
+    assert events[-1]["error"] == {
+        "message": "Rate limit reached for gpt-4o on tokens per day",
+        "type": "rate_limit_error",
+        "code": "rate_limit_exceeded",
+        "plan_type": "team",
+        "resets_at": 1700000000,
+        "resets_in_seconds": 3600,
+    }
+    assert len(connect_calls) == 2
 
 
 @pytest.mark.asyncio

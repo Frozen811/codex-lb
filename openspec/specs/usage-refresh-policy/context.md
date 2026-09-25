@@ -86,16 +86,19 @@ behavior can set the threshold to `100.0`.
   rate limiter; codex-lb auto-recovers on the next refresh tick after the
   upstream payload changes.
 - The dashboard Force Probe action fires one minimal `responses.create` against
-  the selected account and immediately refreshes its usage. The probe body uses
-  `max_output_tokens=16` (the current Codex token floor); `1` is rejected
-  upstream with HTTP 400 and never wakes the limiter. An accepted 2xx probe
+  the selected account and immediately refreshes its usage. The probe uses a
+  one-dot prompt and closes the stream after response headers. It omits
+  `max_output_tokens`: the Codex Responses endpoint now rejects that field at
+  any value. For example, a probe with `max_output_tokens=16` returned HTTP 400
+  with `Unsupported parameter: max_output_tokens`, while the same request
+  without the field returned HTTP 200. An accepted 2xx probe
   also contributes to that replica's probing-health recovery streak; non-2xx
   results do not restore routing health. Settlement reloads and normalizes
   weekly/monthly and zero-primary-capacity usage like ordinary routing and is
   discarded when newer replica-local runtime activity arrives during that
-  snapshot load. This floor is the probe half of
-  [#1895](https://github.com/Soju06/codex-lb/issues/1895); warmup/compact-404
-  is a separate path.
+  snapshot load. The earlier `16` floor addressed
+  [#1895](https://github.com/Soju06/codex-lb/issues/1895) when upstream still
+  accepted the field; warmup/compact-404 is a separate path.
 - Do not manually flip the codex-lb account state to `ACTIVE` while
   `/wham/usage` still reports the account as fully used. That only masks the
   upstream state and can route traffic back to an account that the upstream
@@ -126,3 +129,17 @@ does not count as evidence that the account is healthy.
 
 - [#676 - initial bug report on `/wham/usage` vs. Settings UI divergence](https://github.com/Soju06/codex-lb/issues/676)
 - [#677 - dashboard per-account force-probe action](https://github.com/Soju06/codex-lb/issues/677)
+
+## Usage-share evidence freshness
+
+The estimate requires a fresh, complete canonical long-window row for every account contributing capacity. Monthly-capacity plans use the latest authoritative shape: monthly evidence, or a later weekly-duration quota explicitly reported in the primary slot. An ordinary lingering secondary row never substitutes for monthly evidence. Incomplete evidence fails open and reuses `UsageUpdater.request_refresh`, including its debounce and singleflight behavior. Each request wakes at most one account; the staggered scheduler covers the rest of a large pool.
+
+## Reset evidence after live ingestion
+
+[Issue #1975](https://github.com/Soju06/codex-lb/issues/1975) exposed a missed warm-up when live usage recorded a reset before a freshness-skipped poll. The [reset-evidence requirement](spec.md#requirement-persisted-current-reset-evidence-survives-a-skipped-poll) covers that path.
+
+The scheduler locates the first retained observation of the current reset identity and reads that history span plus its predecessor. This survives restart and delayed deadlines without another consumption table. Existing warm-up claims consume pending, succeeded, failed and skipped attempts; a crash after claiming does not authorize another send. Current snapshots govern availability, while the historical pair proves the reset. Other warm-up triggers still require a poll write.
+
+For example, live ingestion can record weekly usage falling from 51% to 0%, then receive more snapshots before the scheduler runs. The earlier pair remains usable even though the latest two rows show the same reset deadline. An expired or superseded identity is not replayed, and a missing predecessor supplies no proof.
+
+The first-reset lookup can scan retained history for the selected account/window, and the following span is not row-capped. Already-claimed windows skip this lookup. This cost avoids discarding evidence at an arbitrary time or row limit; no new setting or migration is required.

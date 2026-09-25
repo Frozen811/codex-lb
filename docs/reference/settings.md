@@ -7,7 +7,7 @@ Regenerate with `uv run python scripts/generate_settings_reference.py`;
 `tests/unit/test_settings_reference.py` fails when this page drifts from
 `app/core/config/settings.py`.
 
-codex-lb currently exposes 96 settings. Every setting is an environment
+codex-lb currently exposes 97 settings. Every setting is an environment
 variable, normally with the `CODEX_LB_` prefix (process environment or `.env` /
 `.env.local` next to the process); aliased settings list every accepted name.
 All defaults work with zero configuration —
@@ -101,6 +101,7 @@ anything else belongs in `app/core/config/settings.py`.
 
 | Environment variable | Tier | Type | Default |
 | --- | --- | --- | --- |
+| `CODEX_LB_ENCRYPTION_KEY` | T0 | `str \| None` | `None` |
 | `CODEX_LB_ENCRYPTION_KEY_FILE` | T0 | `Path` | `<data_dir>/encryption.key` |
 | `CODEX_LB_ENCRYPTION_KEY_FINGERPRINT_MODE` | T0 | `'enforce' \| 'warn' \| 'off'` | `'enforce'` |
 
@@ -117,7 +118,7 @@ anything else belongs in `app/core/config/settings.py`.
 
 | Environment variable | Tier | Type | Default |
 | --- | --- | --- | --- |
-| `CODEX_LB_COMPACT_REQUEST_BUDGET_SECONDS` | T3 (dashboard) | `float` | `180.0` |
+| `CODEX_LB_COMPACT_REQUEST_BUDGET_SECONDS` | T3 (dashboard) | `float` | `900.0` |
 | `CODEX_LB_HTTP_CONNECTOR_LIMIT` | T1 | `int` | `100` |
 | `CODEX_LB_HTTP_CONNECTOR_LIMIT_PER_HOST` | T1 | `int` | `50` |
 | `CODEX_LB_HTTP_RESPONSES_STREAM_REQUEST_BUDGET_SECONDS` | T3 (dashboard) | `float` | `7200.0` |

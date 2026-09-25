@@ -7,7 +7,6 @@ Create Date: 2026-07-22 00:00:00.000000
 
 from __future__ import annotations
 
-import sqlalchemy as sa
 from alembic import op
 
 revision = "20260722_000000_backfill_request_log_useragent_families"
@@ -17,23 +16,26 @@ depends_on = None
 
 
 def upgrade() -> None:
-    dialect_name = op.get_bind().dialect.name
+    bind = op.get_bind()
+    dialect_name = bind.dialect.name
     if dialect_name == "postgresql":
-        op.execute(
-            sa.text(
-                "UPDATE request_logs "
-                "SET useragent_group = substring(useragent from 1 for position('/' in useragent) - 1) "
-                "WHERE useragent IS NOT NULL AND position('/' in useragent) > 0"
-            )
-        )
+        set_expr = "useragent_group = substring(useragent from 1 for position('/' in useragent) - 1)"
+        where_cond = "useragent IS NOT NULL AND position('/' in useragent) > 0 AND useragent_group IS NULL"
     else:
-        op.execute(
-            sa.text(
-                "UPDATE request_logs "
-                "SET useragent_group = substr(useragent, 1, instr(useragent, '/') - 1) "
-                "WHERE useragent IS NOT NULL AND instr(useragent, '/') > 0"
-            )
-        )
+        set_expr = "useragent_group = substr(useragent, 1, instr(useragent, '/') - 1)"
+        where_cond = "useragent IS NOT NULL AND instr(useragent, '/') > 0 AND useragent_group IS NULL"
+
+    from app.db.backfill import execute_batched_backfill
+
+    execute_batched_backfill(
+        bind=bind,
+        table_name="request_logs",
+        update_statement=(
+            f"UPDATE request_logs SET {set_expr} "
+            f"WHERE {where_cond} AND id >= :start_id AND id < :end_id"
+        ),
+        batch_size=5000,
+    )
 
 
 def downgrade() -> None:

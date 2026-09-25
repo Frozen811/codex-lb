@@ -172,9 +172,13 @@ class HttpBridgeOperationEventBatcher:
             except TimeoutError:
                 pass
             self._wake.clear()
-            operation_ids = await self._operation_ids_to_flush()
-            for operation_id in operation_ids:
-                await self._flush_one(operation_id)
+            while True:
+                operation_ids = await self._operation_ids_to_flush()
+                if not operation_ids:
+                    break
+                for operation_id in operation_ids:
+                    await self._flush_one(operation_id)
+                await asyncio.sleep(0)
 
     async def _operation_ids_to_flush(self) -> list[str]:
         async with self._lock:

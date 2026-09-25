@@ -6,7 +6,7 @@ import logging
 import re
 import time
 from collections import deque
-from collections.abc import Awaitable, Callable, Coroutine, Mapping
+from collections.abc import Awaitable, Callable, Coroutine, Mapping, Sequence
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -39,6 +39,14 @@ from app.modules.api_keys.service import (
     ApiKeyData,
     ApiKeyRequestUsageBudget,
     ApiKeyUsageReservationData,
+)
+from app.modules.proxy._service.response_timing import OUTPUT_EVENT_TYPES as OUTPUT_EVENT_TYPES
+from app.modules.proxy._service.response_timing import TERMINAL_EVENT_TYPES as TERMINAL_EVENT_TYPES
+from app.modules.proxy._service.response_timing import ResponseTiming as ResponseTiming
+from app.modules.proxy._service.response_timing import has_non_reasoning_output
+from app.modules.proxy._service.response_timing import observe_output_timing as observe_output_timing
+from app.modules.proxy._service.response_timing import (
+    observe_verbatim_output_timing as observe_verbatim_output_timing,
 )
 from app.modules.proxy.affinity import _AffinityPolicy
 from app.modules.proxy.affinity_observation import AffinityObservation
@@ -78,10 +86,37 @@ _PENDING_TOOL_CALL_OUTPUT_ITEM_TYPE_BY_CALL_TYPE = {
     "function_call": "function_call_output",
     "custom_tool_call": "custom_tool_call_output",
     "apply_patch_call": "apply_patch_call_output",
+    "computer_call": "computer_call_output",
 }
 _PENDING_TOOL_CALL_ITEM_TYPES = frozenset(_PENDING_TOOL_CALL_OUTPUT_ITEM_TYPE_BY_CALL_TYPE)
 _PENDING_TOOL_CALL_OUTPUT_ITEM_TYPES = frozenset(_PENDING_TOOL_CALL_OUTPUT_ITEM_TYPE_BY_CALL_TYPE.values())
+_TOOL_CALL_ITEM_TYPES_BY_OUTPUT_TYPE = {
+    output_type: call_type
+    for call_type, output_type in _PENDING_TOOL_CALL_OUTPUT_ITEM_TYPE_BY_CALL_TYPE.items()
+}
 _TTFT_OUTPUT_ITEM_TYPES = _PENDING_TOOL_CALL_ITEM_TYPES - {"function_call"}
+
+
+def _responses_input_items_are_self_contained(input_items: Sequence[JsonValue]) -> bool:
+    seen_call_ids_by_type: dict[str, set[str]] = {item_type: set() for item_type in _PENDING_TOOL_CALL_ITEM_TYPES}
+    for item in input_items:
+        if not isinstance(item, dict):
+            continue
+        item_type = item.get("type")
+        if not isinstance(item_type, str):
+            continue
+        call_id_value = item.get("call_id")
+        call_id = call_id_value if isinstance(call_id_value, str) and call_id_value else None
+        if item_type in _PENDING_TOOL_CALL_ITEM_TYPES:
+            if call_id is not None:
+                seen_call_ids_by_type[item_type].add(call_id)
+            continue
+        call_item_type = _TOOL_CALL_ITEM_TYPES_BY_OUTPUT_TYPE.get(item_type)
+        if call_item_type is None:
+            continue
+        if call_id is None or call_id not in seen_call_ids_by_type[call_item_type]:
+            return False
+    return True
 # Upstream ``response.*`` events that prove the model already ran for a turn.
 # Both relay surfaces flip ``upstream_model_output_seen`` on them; in the
 # Responses protocol the first one is always ``response.output_item.added``.
@@ -266,6 +301,8 @@ def _ttft_event_visible_at(
     if event_type in _TTFT_EVENT_TYPES:
         delta = payload.get("delta") if payload is not None else None
         return now if isinstance(delta, str) and bool(delta) else None
+    if has_non_reasoning_output(event_type, payload, allow_snapshot=True):
+        return now
     if event_type not in {"response.output_item.added", "response.output_item.done"} or not isinstance(payload, dict):
         return None
     item = payload.get("item")
@@ -276,6 +313,34 @@ def _ttft_event_visible_at(
     else:
         meaningful = any(item.get(key) not in (None, "", {}) for key in ("operation", "patch", "input"))
     return now if meaningful else None
+
+
+@dataclass(slots=True)
+class _StreamResponseTiming(ResponseTiming):
+    latency_first_token_ms: int | None = None
+    ttft_reasoning_deltas: dict[tuple[str | None, int | None, int | None], _TTFTReasoningDeltaState] = field(
+        default_factory=dict
+    )
+    latency_first_upstream_event_ms: int | None = None
+    latency_response_created_ms: int | None = None
+
+
+def _observe_response_output_timing(
+    state: _WebSocketRequestState | _StreamResponseTiming,
+    event_type: str | None,
+    payload: dict[str, JsonValue] | None,
+    *,
+    now: float,
+) -> None:
+    if getattr(state, "latency_first_upstream_event_ms", None) is None:
+        state.latency_first_upstream_event_ms = max(0, int((now - state.started_at) * 1000))
+    if event_type == "response.created" and getattr(state, "latency_response_created_ms", None) is None:
+        state.latency_response_created_ms = max(0, int((now - state.started_at) * 1000))
+    if state.latency_first_token_ms is None:
+        visible_at = _ttft_event_visible_at(event_type, payload, state.ttft_reasoning_deltas, now=now)
+        if visible_at is not None:
+            state.latency_first_token_ms = max(0, int((visible_at - state.started_at) * 1000))
+    observe_output_timing(state, event_type, payload, observed_at=now)
 
 
 def _is_ttft_event(
@@ -1005,6 +1070,8 @@ class _WebSocketRequestState:
     started_at: float
     responses_lite_model: str | None = None
     latency_first_token_ms: int | None = None
+    latency_first_output_ms: int | None = None
+    output_delta_count: int = 0
     ttft_reasoning_deltas: dict[tuple[str | None, int | None, int | None], _TTFTReasoningDeltaState] = field(
         default_factory=dict
     )
@@ -1062,6 +1129,10 @@ class _WebSocketRequestState:
     # references pinned to the uploading subscription account. Previous
     # response ownership is recorded separately after continuity lookup.
     source_route_excluded: bool = False
+    # Set after one fresh direct-WebSocket turn clears usage-share admission.
+    # The same request state survives reconnect/replay, so this monotonic bit
+    # prevents a reuse-to-reconnect race from evaluating the policy twice.
+    usage_share_admitted: bool = False
     request_usage_budget: ApiKeyRequestUsageBudget | None = None
     request_text: str | None = None
     replay_count: int = 0
@@ -1127,6 +1198,8 @@ class _WebSocketRequestState:
     # on, and dropping the anchor there would silently turn a continuation into
     # a context-free fresh turn.
     fresh_upstream_request_is_retry_safe: bool = False
+    # Verified prefix boundary before direct-WebSocket anchor injection.
+    fresh_upstream_request_stored_input_count: int | None = None
     # Memo for the account installation-id stamp applied to ``request_text`` /
     # ``fresh_upstream_request_text`` on the HTTP bridge submit path. The stamp
     # is re-applied at several submit and retry sites; these fields remember the
@@ -1149,10 +1222,13 @@ class _WebSocketRequestState:
     verified_stale_anchor_retry_circuit_key: _HTTPBridgeSessionKey | None = None
     verified_stale_anchor_retry_circuit_generation: tuple[int, float, int, float, int, float, float] | None = None
     verified_stale_anchor_quarantine_generation: int | None = None
+    verified_stale_anchor_quarantine_local_failure_fence: int | None = None
     # The exact half-open lease this request's admission claimed (0.0 when
     # it claimed none); released by the submit finalizer whenever the probe
     # was never dispatched, so no pre-dispatch exit can strand the lease.
     claimed_half_open_until: float = 0.0
+    claimed_durable_circuit_key: _HTTPBridgeSessionKey | None = None
+    claimed_durable_generation: tuple[int, float, int, float, int, float, float] | None = None
     # True while the submit owns an admission-waiter registration taken at
     # submit entry, before the retry-circuit gate, that the dispatch path has
     # not yet taken over. It keeps the turn visible to a concurrent
@@ -1337,7 +1413,7 @@ class _HTTPBridgeOwnerForward:
     key: _HTTPBridgeSessionKey
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, weakref_slot=True)
 class _HTTPBridgeSession:
     key: _HTTPBridgeSessionKey
     headers: dict[str, str]

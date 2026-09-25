@@ -131,7 +131,12 @@ export function StepUpDialog() {
 
   return (
     <Dialog open={pending !== null} onOpenChange={(open) => !open && settle(false)}>
-      <DialogContent className="sm:max-w-sm" onInteractOutside={(event) => event.preventDefault()}>
+      <DialogContent
+        className="sm:max-w-sm"
+        onPointerDownOutside={(event) => event.preventDefault()}
+        onFocusOutside={(event) => event.preventDefault()}
+        onInteractOutside={(event) => event.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>{t("auth.stepUp.title")}</DialogTitle>
           <DialogDescription>
@@ -164,11 +169,15 @@ export function StepUpDialog() {
               <Label htmlFor="step-up-code">{t("auth.stepUp.codeLabel")}</Label>
               <InputOTP
                 id="step-up-code"
+                name="code"
+                autoComplete="one-time-code"
+                inputMode="numeric"
                 maxLength={6}
                 autoFocus={!needsPassword}
                 value={code}
                 onChange={setCode}
                 disabled={busy}
+                pasteTransformer={(pasted) => pasted.replace(/\D/g, "")}
               >
                 <InputOTPGroup>
                   <InputOTPSlot index={0} />

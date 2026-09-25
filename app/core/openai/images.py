@@ -47,7 +47,13 @@ GPT_IMAGE_MODEL_PREFIX: Final[str] = "gpt-image-"
 DEFAULT_PUBLIC_IMAGE_MODEL: Final[str] = "gpt-image-2"
 
 #: Models that take the constrained gpt-image-2 parameter matrix.
-_GPT_IMAGE_2_MODELS: Final[frozenset[str]] = frozenset({"gpt-image-2"})
+_GPT_IMAGE_2_MODELS: Final[frozenset[str]] = frozenset(
+    {
+        "gpt-image-2",
+        "gpt-image-2.5-flare",
+        "gpt-image-2.5-sunburst",
+    }
+)
 
 #: Models that take the legacy fixed-size matrix and allow ``input_fidelity``
 #: (only on edits).
@@ -158,6 +164,9 @@ def _validate_gpt_image_2_size(width: int, height: int) -> None:
         )
 
 
+MAX_IMAGE_FANOUT: Final[int] = 10
+
+
 def validate_image_request_parameters(
     *,
     model: str,
@@ -171,6 +180,7 @@ def validate_image_request_parameters(
     n: int,
     partial_images: int | None,
     output_compression: int,
+    streaming: bool = False,
 ) -> None:
     """Apply the cross-field per-model validation matrix.
 
@@ -183,20 +193,14 @@ def validate_image_request_parameters(
             param="model",
         )
 
-    # ``n`` is unconditionally capped at 1: the upstream
-    # ``image_generation`` tool accepts only a single image per call and
-    # codex-lb does not yet implement client-side fan-out (multiple
-    # internal Responses calls whose ``image_generation_call`` results
-    # are concatenated into one public envelope). The cap will be
-    # relaxed in the same change that introduces fan-out, alongside a
-    # new configuration knob; we deliberately do not expose a
-    # ``images_max_n`` setting today since honoring it without fan-out
-    # would silently return fewer images than requested.
-    if n < 1 or n > 1:
+    if n < 1 or n > MAX_IMAGE_FANOUT:
         raise _images_invalid(
-            "n must be 1; multiple images per request are not supported by the "
-            "upstream image_generation tool yet. Issue the request multiple "
-            "times to get more images.",
+            f"n must be between 1 and {MAX_IMAGE_FANOUT}.",
+            param="n",
+        )
+    if streaming and n > 1:
+        raise _images_invalid(
+            "n must be 1 when stream is true; streaming multi-image responses is not supported.",
             param="n",
         )
 
@@ -402,6 +406,7 @@ class V1ImageResponse(BaseModel):
 
 __all__ = [
     "GPT_IMAGE_MODEL_PREFIX",
+    "MAX_IMAGE_FANOUT",
     "V1ImageData",
     "V1ImageResponse",
     "V1ImageUsage",

@@ -24,6 +24,7 @@ from app.core.clients.proxy import (  # noqa: F401  # noqa: F401
     _as_image_fetch_session,
     _inline_content_images,
     _inline_input_image_urls,
+    _payload_uses_responses_lite,
     _ws_transport_payload_budget_bytes,
     filter_inbound_headers,
     pop_compact_timeout_overrides,
@@ -349,6 +350,7 @@ from app.modules.proxy.helpers import (
     _is_account_model_unsupported_error,
     _normalize_error_code,
     _parse_openai_error,
+    _upstream_error_from_openai,
     is_upstream_model_capacity_error,
     is_upstream_usage_limit_rejection,
 )
@@ -358,7 +360,11 @@ from app.modules.proxy.http_bridge_forwarding import (
 from app.modules.proxy.http_bridge_forwarding import (
     OwnerForwardRelayFailure as OwnerForwardRelayFailure,
 )
-from app.modules.proxy.replay_safety import responses_payload_is_account_neutral_fresh_replay
+from app.modules.proxy.replay_safety import (
+    project_responses_input_for_account_neutral_fresh_replay,
+    responses_input_suffix_retains_prior_output,
+    responses_payload_is_account_neutral_fresh_replay,
+)
 from app.modules.proxy.selection_errors import USAGE_LIMIT_REACHED
 
 
@@ -512,11 +518,24 @@ def _websocket_request_text_is_account_neutral_fresh_replay(request_text: str | 
         return False
     if not isinstance(payload, dict):
         return False
+    return _websocket_payload_is_account_neutral_fresh_replay(payload)
+
+
+def _websocket_payload_is_account_neutral_fresh_replay(payload: dict[str, JsonValue]) -> bool:
+    payload = dict(payload)
     event_type = payload.get("type")
     if event_type is not None and event_type != "response.create":
         return False
     payload.pop("type", None)
-    return responses_payload_is_account_neutral_fresh_replay(cast(dict[str, JsonValue], payload))
+    reasoning = payload.get("reasoning")
+    if (
+        _payload_uses_responses_lite(payload)
+        and isinstance(reasoning, dict)
+        and reasoning.get("context") == "all_turns"
+    ):
+        # Validate portable controls without the canonical transport-injected context.
+        payload["reasoning"] = {key: value for key, value in reasoning.items() if key != "context"}
+    return responses_payload_is_account_neutral_fresh_replay(payload)
 
 
 def _bind_websocket_request_dispatch_owner(
@@ -560,6 +579,7 @@ def _install_fresh_replay_body(
     *,
     account_neutral: bool,
     release_owner_pin: bool = True,
+    preserve_client_prefix: bool = False,
 ) -> str:
     """Swap the retained fresh body in and re-derive the owner requirement from it.
 
@@ -598,7 +618,9 @@ def _install_fresh_replay_body(
     request_state.proxy_injected_previous_response_id = False
     request_state.fresh_upstream_request_is_retry_safe = False
     request_state.responses_lite_model = request_state.fresh_upstream_request_responses_lite_model
-    _refresh_websocket_request_input_fingerprint_from_text(request_state)
+    # The next client resend still contains bookkeeping omitted by projection.
+    if not preserve_client_prefix:
+        _refresh_websocket_request_input_fingerprint_from_text(request_state)
     return fresh_request_text
 
 
@@ -663,10 +685,10 @@ async def _record_or_defer_websocket_accepted_replay_health(
     request_state: "_WebSocketRequestState",
     *,
     account: Account,
-    error_message: str | None,
+    error: UpstreamError,
     error_code: str,
 ) -> None:
-    """Penalize the account an accepted replay leaves, now or after settlement.
+    """Record the original attempt's account penalty, now or after settlement.
 
     The accepted request keeps its API-key reservation open across the
     re-send, and account health must not be written while a reservation is
@@ -679,7 +701,6 @@ async def _record_or_defer_websocket_accepted_replay_health(
     terminal is never finalized on this surface, so a later terminal belongs to
     the replacement attempt and earns its own penalty.
     """
-    error: UpstreamError = {"message": error_message or "Upstream error"}
     if request_state.api_key_reservation is not None:
         request_state.deferred_keyed_stream_health.append(
             _DeferredKeyedStreamHealthPenalty(account=account, error=error, code=error_code)
@@ -696,7 +717,42 @@ def _prepare_websocket_request_state_for_account_switch(
         if not _websocket_request_text_is_account_neutral_fresh_replay(request_state.request_text):
             return None
         return request_state.request_text
-    return _install_verified_fresh_replay(request_state)
+    replay_text = _install_verified_fresh_replay(request_state)
+    if replay_text is not None:
+        return replay_text
+    stored_count = request_state.fresh_upstream_request_stored_input_count
+    if (
+        not (
+            request_state.proxy_injected_previous_response_id
+            and request_state.fresh_upstream_request_is_retry_safe
+            and request_state.fresh_upstream_request_text
+            and stored_count is not None
+        )
+        or request_state.file_required_preferred_account
+        or _websocket_affinity_may_resolve_hard_owner(request_state.affinity_policy)
+    ):
+        return None
+    try:
+        payload = json.loads(request_state.fresh_upstream_request_text)
+    except json.JSONDecodeError:
+        return None
+    # A size-slimmed resend no longer proves the client's complete history.
+    if (
+        not isinstance(payload, dict)
+        or not isinstance(payload.get("input"), list)
+        or len(payload["input"]) != request_state.input_item_count
+        or _facade()._fingerprint_input_items(payload["input"]) != request_state.input_full_fingerprint
+    ):
+        return None
+    projected = _project_websocket_full_resend_for_replay(payload, stored_count=stored_count)
+    if projected is None:
+        return None
+    return _install_fresh_replay_body(
+        request_state,
+        json.dumps(projected, ensure_ascii=True, separators=(",", ":")),
+        account_neutral=True,
+        preserve_client_prefix=True,
+    )
 
 
 def _retire_websocket_continuity_anchor(continuity_state: _WebSocketContinuityState) -> None:
@@ -748,10 +804,38 @@ def _websocket_continuity_anchor_for_payload(
     )
 
 
+def _project_websocket_full_resend_for_replay(
+    payload: dict[str, JsonValue],
+    *,
+    stored_count: int,
+) -> dict[str, JsonValue] | None:
+    """Project a prefix-verified resend only if it retains the prior reply."""
+    if not isinstance(payload.get("input"), list):
+        return None
+    input_items = cast(list[JsonValue], payload["input"])
+    evidence = project_responses_input_for_account_neutral_fresh_replay(
+        input_items, stored_count=stored_count, preserve_developer_message_ids=True
+    )
+    if evidence is None or not responses_input_suffix_retains_prior_output(
+        evidence.input_items,
+        stored_count=evidence.stored_prefix_count,
+        canonical_lite_developer_index=evidence.canonical_lite_developer_index,
+    ):
+        return None
+    projection = project_responses_input_for_account_neutral_fresh_replay(input_items, stored_count=stored_count)
+    if projection is None:
+        return None
+    projected_payload = {**payload, "input": projection.input_items}
+    if not _websocket_payload_is_account_neutral_fresh_replay(projected_payload):
+        return None
+    return projected_payload
+
+
 _WEBSOCKET_TOOL_CALL_ITEM_TYPES_BY_OUTPUT_TYPE = {
     "function_call_output": "function_call",
     "custom_tool_call_output": "custom_tool_call",
     "apply_patch_call_output": "apply_patch_call",
+    "computer_call_output": "computer_call",
 }
 _WEBSOCKET_TOOL_CALL_ITEM_TYPES = frozenset(_WEBSOCKET_TOOL_CALL_ITEM_TYPES_BY_OUTPUT_TYPE.values())
 
@@ -972,6 +1056,14 @@ def _websocket_event_error_message(event_type: str | None, payload: dict[str, Js
     return stripped or None
 
 
+def _websocket_event_upstream_error(event_type: str | None, payload: dict[str, JsonValue] | None) -> UpstreamError:
+    """Preserve reset evidence when a retry records the upstream account's health."""
+    error = _websocket_event_error_payload(event_type, payload)
+    upstream_error = _upstream_error_from_openai(_parse_openai_error({"error": error}))
+    upstream_error["message"] = _websocket_event_error_message(event_type, payload) or "Upstream error"
+    return upstream_error
+
+
 def _websocket_precreated_retry_error_code(
     request_state: _WebSocketRequestState | None,
     *,
@@ -1045,6 +1137,13 @@ def _websocket_precreated_retry_error_code(
         if _websocket_response_id(None, payload) is not None:
             return None
         return _ACCOUNT_MODEL_UNSUPPORTED_ERROR_CODE
+    if error_code == "model_not_found":
+        # The exact code proves the rejection is about the requested model.
+        # The common pre-created gate above has already ruled out acceptance,
+        # output, a second pending turn, and a second replay.
+        if _websocket_response_id(None, payload) is not None:
+            return None
+        return error_code
     if is_upstream_model_capacity_error(error_message):
         if error_code in {
             "rate_limit_exceeded",
@@ -1161,6 +1260,19 @@ def _websocket_auth_request_can_switch_account(request_state: _WebSocketRequestS
     return _websocket_request_text_is_account_neutral_fresh_replay(
         request_state.fresh_upstream_request_text
     ) and not _websocket_fresh_request_blocks_account_switch(request_state)
+
+
+def _websocket_request_requires_preferred_account(request_state: _WebSocketRequestState) -> bool:
+    """Whether continuity or file ownership makes the preferred account mandatory."""
+    return (
+        (request_state.previous_response_id is not None and request_state.preferred_account_id is not None)
+        or request_state.replay_required_account_id is not None
+        or request_state.file_required_preferred_account
+        or (
+            request_state.affinity_policy.codex_session_source == "turn_state"
+            and request_state.preferred_account_id is not None
+        )
+    )
 
 
 def _prepare_websocket_request_state_for_auth_replay(
@@ -2358,3 +2470,29 @@ def _websocket_connect_deadline(request_state: _WebSocketRequestState, budget_se
     # checks that later compare against this deadline.
     started_at = request_state.started_at if request_state.started_at > 0 else now
     return started_at + budget_seconds
+
+
+def _is_account_neutral_transport_drop(
+    close_code: int | None,
+    *,
+    response_events_seen: int = 0,
+) -> bool:
+    """Return whether an upstream websocket ending is account-neutral evidence.
+
+    A missing upstream-authored close frame (None or adapter-synthesized RFC 6455
+    1006) is transport evidence, not account-health evidence. Whether the drop
+    arrived before any application-layer response event or after response
+    events/model output started streaming, authentication, model admission, and
+    application processing worked. Application progress governs replay safety,
+    not account-health attribution (issues #1754, #2074).
+
+    Close code 1006 (abnormal closure) is reserved by RFC 6455 and can never
+    appear in an actual close frame: adapters synthesize it locally when the
+    socket dies without one (aiohttp stores 1006 on ``close_code`` for an
+    abnormal CLOSED), so it counts as frame-less here. Any close frame — even a
+    non-clean one like 1008 or 1011 — is upstream-authored evidence and keeps
+    account penalty semantics.
+    """
+
+    return close_code in (None, 1006)
+

@@ -58,6 +58,9 @@ class _MetricBase:
     def dec(self, amount: float = 1.0) -> None:
         self.root.dec(amount)
 
+    def set(self, value: float) -> None:
+        self.root.set(value)
+
     def observe(self, amount: float) -> None:
         self.root.observe(amount)
 
@@ -134,6 +137,10 @@ def test_prometheus_metrics_defined_when_dependency_available(monkeypatch: pytes
     assert prometheus_module.requests_total.name == "codex_lb_requests_total"
     assert prometheus_module.request_duration_seconds.name == "codex_lb_request_duration_seconds"
     assert prometheus_module.active_connections.name == "codex_lb_active_connections"
+    assert prometheus_module.accounts_total.name == "codex_lb_accounts_total"
+    assert prometheus_module.accounts_total.labelnames == ("status",)
+    assert prometheus_module.accounts_available.name == "codex_lb_accounts_available"
+    assert prometheus_module.accounts_available.labelnames == ()
     assert prometheus_module.bridge_instance_mismatch_total.name == "codex_lb_bridge_instance_mismatch_total"
     assert prometheus_module.bridge_instance_mismatch_total.labelnames == ("outcome",)
     assert prometheus_module.continuity_owner_resolution_total.name == "codex_lb_continuity_owner_resolution_total"

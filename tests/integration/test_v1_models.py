@@ -22,6 +22,7 @@ BOOTSTRAP_MODEL_SLUGS = {
     "gpt-5.3-codex-spark",
     "gpt-5.2",
     "codex-auto-review",
+    "gpt-reserve",
 }
 
 EXPECTED_CORE_MODEL_PLANS = {
@@ -52,6 +53,7 @@ EXPECTED_BOOTSTRAP_MINIMAL_CLIENT_VERSIONS = {
     "gpt-5.3-codex-spark": "0.100.0",
     "gpt-5.2": "0.0.1",
     "codex-auto-review": "0.98.0",
+    "gpt-reserve": "0.0.1",
 }
 
 
@@ -2059,3 +2061,35 @@ async def test_hidden_same_slug_source_does_not_shadow_retained_metadata_for_cod
     assert entries["gpt-5.6-sol"]["base_instructions"] == "retained sol metadata"
     assert entries["gpt-5.6-sol"]["use_responses_lite"] is True
     assert "gpt-5.6-sol" not in {item["id"] for item in resp.json()["data"]}
+
+
+@pytest.mark.asyncio
+async def test_gpt_53_codex_spark_survives_authoritative_refresh_in_v1_models(async_client):
+    """Regression #1467: gpt-5.3-codex-spark is dropped from upstream catalog but stays routable on Pro.
+    It must not be suppressed from /v1/models by an authoritative account refresh.
+    """
+    registry = get_model_registry()
+    luna = _make_upstream_model("gpt-5.6-luna")
+    await registry.update(
+        {"pro": [luna]},
+        per_account_results={"account-pro": ("pro", [luna])},
+        active_account_plans={"account-pro": "pro"},
+    )
+
+    resp = await async_client.get("/v1/models")
+    assert resp.status_code == 200
+    payload = resp.json()
+    model_ids = {item["id"] for item in payload["data"]}
+    assert "gpt-5.3-codex-spark" in model_ids
+    assert "gpt-reserve" in model_ids
+
+    backend_resp = await async_client.get("/backend-api/codex/models")
+    assert backend_resp.status_code == 200
+    backend_payload = backend_resp.json()
+    model_slugs = {item["slug"] for item in backend_payload["models"]}
+    assert "gpt-5.3-codex-spark" in model_slugs
+
+    single = await async_client.get("/v1/models/gpt-5.3-codex-spark")
+    assert single.status_code == 200
+    assert single.json()["id"] == "gpt-5.3-codex-spark"
+

@@ -6,11 +6,12 @@ import logging
 from collections.abc import Callable, Iterator
 
 import pytest
-import uvloop
 
-from app.core import runtime_logging
-from app.core.runtime_logging import install_redacting_loop_exception_handler
-from tests.unit._proxy_test_helpers import runtime_basic_auth_url
+uvloop = pytest.importorskip("uvloop")
+
+from app.core import runtime_logging  # noqa: E402
+from app.core.runtime_logging import install_redacting_loop_exception_handler  # noqa: E402
+from tests.unit._proxy_test_helpers import runtime_basic_auth_url  # noqa: E402
 
 pytestmark = pytest.mark.unit
 

@@ -393,6 +393,25 @@ async def test_normalize_reasoning_summary_stream_flushes_before_typeless_error(
     assert blocks[1] == typeless_error
 
 
+@pytest.mark.asyncio
+async def test_normalize_reasoning_summary_stream_closes_inner_stream_on_aclose() -> None:
+    inner_closed = False
+
+    async def sample_stream() -> AsyncIterator[str]:
+        try:
+            yield "data: {}\n\n"
+            yield "data: {}\n\n"
+        finally:
+            nonlocal inner_closed
+            inner_closed = True
+
+    stream = proxy_api_module._normalize_reasoning_summary_stream(sample_stream())
+    await stream.__anext__()
+    assert inner_closed is False
+    await stream.aclose()
+    assert inner_closed is True
+
+
 def test_normalize_reasoning_summary_part_removes_only_standalone_placeholder() -> None:
     payload, violation = proxy_api_module._normalize_public_stream_payload(
         {

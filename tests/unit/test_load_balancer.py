@@ -14,6 +14,7 @@ from app.core.balancer import (
     HEALTH_TIER_DRAINING,
     HEALTH_TIER_HEALTHY,
     HEALTH_TIER_PROBING,
+    PERMANENT_FAILURE_CODES,
     RATE_LIMIT_RESET_MAX_HORIZON_SECONDS,
     RATE_LIMITED_MIN_COOLDOWN_SECONDS,
     ROUTING_POLICY_PRESERVE,
@@ -27,6 +28,7 @@ from app.core.balancer import (
 )
 from app.core.balancer.logic import DRAIN_PRIMARY_THRESHOLD_PCT, PROBE_QUIET_SECONDS
 from app.core.usage.quota import apply_usage_quota
+from app.core.usage.refresh_policy import usage_freshness_horizon_seconds
 from app.db.models import Account, AccountStatus, UsageHistory
 from app.modules.proxy._load_balancer.tunables import RoutingTunables
 from app.modules.proxy.load_balancer import (
@@ -1701,8 +1703,9 @@ def test_apply_usage_quota_sets_fallback_reset_from_evaluation_time():
 
 def test_usage_recency_uses_injected_evaluation_time() -> None:
     clock = VirtualClock(epoch_value=2_000_000_000.0)
-    recent = datetime.fromtimestamp(clock.time() - 179.0, tz=timezone.utc)
-    stale = datetime.fromtimestamp(clock.time() - 181.0, tz=timezone.utc)
+    recent_window_seconds = usage_freshness_horizon_seconds()
+    recent = datetime.fromtimestamp(clock.time() - recent_window_seconds + 1.0, tz=timezone.utc)
+    stale = datetime.fromtimestamp(clock.time() - recent_window_seconds - 1.0, tz=timezone.utc)
 
     assert _usage_entry_is_recent_enough(recent, now=clock.time())
     assert not _usage_entry_is_recent_enough(stale, now=clock.time())
@@ -1798,6 +1801,43 @@ def test_handle_permanent_failure_sets_reauth_required_for_token_invalidated():
     handle_permanent_failure(state, "token_invalidated")
     assert state.status == AccountStatus.REAUTH_REQUIRED
     assert state.deactivation_reason == "Authentication token invalidated - re-login required"
+
+
+def test_handle_permanent_failure_sets_reauth_required_for_token_revoked():
+    state = AccountState("a", AccountStatus.ACTIVE, used_percent=5.0)
+    handle_permanent_failure(state, "token_revoked")
+    assert state.status == AccountStatus.REAUTH_REQUIRED
+    assert state.deactivation_reason == "Authentication token revoked - re-login required"
+
+
+def test_select_account_skips_reauth_account_with_revoked_access_token():
+    revoked = AccountState(
+        "revoked",
+        AccountStatus.REAUTH_REQUIRED,
+        deactivation_reason="Authentication token revoked - re-login required",
+    )
+    healthy = AccountState("healthy", AccountStatus.ACTIVE)
+
+    no_fallback = select_account([revoked])
+    assert no_fallback.account is None
+
+    result = select_account([revoked, healthy])
+
+    assert result.account is not None
+    assert result.account.account_id == "healthy"
+
+
+def test_select_account_keeps_reauth_account_with_only_revoked_refresh_token():
+    refresh_revoked = AccountState(
+        "refresh-revoked",
+        AccountStatus.REAUTH_REQUIRED,
+        deactivation_reason="Refresh token was revoked - re-login required",
+    )
+
+    result = select_account([refresh_revoked])
+
+    assert result.account is not None
+    assert result.account.account_id == "refresh-revoked"
 
 
 def test_handle_permanent_failure_sets_reason_for_account_deactivated():
@@ -2224,6 +2264,44 @@ def test_bypass_quota_exceeded_keeps_reauth_request_routable():
     result = select_account([paused, reauth, deactivated, quota], now=now, bypass_quota_exceeded=True)
     assert result.account is not None
     assert result.account.account_id == "r"
+
+
+@pytest.mark.parametrize(
+    "error_code",
+    ["token_revoked", "account_auth_invalidated", "token_invalidated"],
+)
+def test_select_account_excludes_reauth_with_terminal_revocation_even_with_future_expiry(error_code: str) -> None:
+    now = 1_700_000_000.0
+    future = now + 3600.0
+    blocked_reauth = AccountState(
+        "blocked",
+        AccountStatus.REAUTH_REQUIRED,
+        used_percent=5.0,
+        deactivation_reason=PERMANENT_FAILURE_CODES[error_code],
+        access_token_expires_at=future,
+    )
+    active = AccountState("active", AccountStatus.ACTIVE, used_percent=50.0)
+
+    result = select_account([blocked_reauth, active], now=now)
+    assert result.account is not None
+    assert result.account.account_id == "active"
+
+    all_blocked_result = select_account([blocked_reauth], now=now)
+    assert all_blocked_result.account is None
+    assert all_blocked_result.error_message == "All accounts require re-authentication"
+
+
+def test_handle_permanent_failure_preserves_routing_blocked_reauth_reason() -> None:
+    state = AccountState("a", AccountStatus.ACTIVE)
+    handle_permanent_failure(state, "token_revoked")
+    assert state.status == AccountStatus.REAUTH_REQUIRED
+    assert state.deactivation_reason == PERMANENT_FAILURE_CODES["token_revoked"]
+
+    # Subsequent permanent failure does not overwrite terminal revocation reason
+    handle_permanent_failure(state, "token_expired")
+    assert state.status == AccountStatus.REAUTH_REQUIRED
+    assert state.deactivation_reason == PERMANENT_FAILURE_CODES["token_revoked"]
+
 
 
 def _make_test_account(
@@ -4388,6 +4466,66 @@ def test_error_backoff_does_not_reset_when_still_active():
     assert state.error_count == 5
 
 
+def test_hard_owner_pool_admits_sole_backed_off_owner():
+    """A hard continuity owner has no sibling to fail over to.
+
+    Both existing fallback clauses ask whether the pool is empty for a reason
+    other than the backoff, and both answer by inspecting the *other*
+    accounts. A pool narrowed to the resolved owner has none, so without
+    ``hard_owner_pool`` the owner's own transient backoff fails the turn.
+    """
+    now = 1_700_000_000.0
+    owner = AccountState(
+        "owner",
+        AccountStatus.ACTIVE,
+        used_percent=5.0,
+        error_count=5,
+        last_error_at=now - 60,
+    )
+
+    result = select_account([owner], now=now, hard_owner_pool=True)
+
+    assert result.account is not None
+    assert result.account.account_id == "owner"
+    # The backoff is honoured rather than cleared: the owner is admitted
+    # because it is the only candidate, and its counters survive for the next
+    # selection.
+    assert owner.error_count == 5
+    assert owner.last_error_at == now - 60
+
+
+def test_hard_owner_pool_still_fails_closed_on_persisted_unavailability():
+    now = 1_700_000_000.0
+    owner = AccountState(
+        "owner",
+        AccountStatus.PAUSED,
+        used_percent=5.0,
+        error_count=5,
+        last_error_at=now - 60,
+    )
+
+    result = select_account([owner], now=now, hard_owner_pool=True)
+
+    assert result.account is None
+
+
+def test_hard_owner_pool_does_not_change_multi_account_selection():
+    now = 1_700_000_000.0
+    backed_off = AccountState(
+        "backed_off",
+        AccountStatus.ACTIVE,
+        used_percent=5.0,
+        error_count=5,
+        last_error_at=now - 60,
+    )
+    healthy = AccountState("healthy", AccountStatus.ACTIVE, used_percent=50.0)
+
+    result = select_account([backed_off, healthy], now=now, hard_owner_pool=True)
+
+    assert result.account is not None
+    assert result.account.account_id == "healthy"
+
+
 def test_error_backoff_expired_account_does_not_immediately_relock():
     now = 1_700_000_000.0
     state = AccountState(
@@ -6340,3 +6478,53 @@ def test_background_recovery_state_from_account_follows_the_dashboard_soft_drain
     assert captured[-1]["routing_tunables"] is dashboard_tunables
     assert captured[0]["soft_drain_enabled"] is None
     assert captured[0]["routing_tunables"] is None
+
+
+@pytest.mark.asyncio
+async def test_record_probe_result_clones_orm_models_safely(monkeypatch: pytest.MonkeyPatch):
+    account = Account(
+        id="acc_clone_test",
+        chatgpt_account_id="chatgpt_clone_test",
+        email="clone@example.com",
+        plan_type="pro",
+        routing_policy="normal",
+        status=AccountStatus.ACTIVE,
+        access_token_encrypted=b"secret",
+        refresh_token_encrypted=b"secret",
+        id_token_encrypted=b"secret",
+        last_refresh=datetime.now(timezone.utc),
+        created_at=datetime.now(timezone.utc),
+    )
+    usage = UsageHistory(
+        id=1,
+        account_id=account.id,
+        window="primary",
+        used_percent=10.0,
+        recorded_at=datetime.now(timezone.utc),
+    )
+
+    accounts_repo = AsyncMock()
+    accounts_repo.get_by_id.return_value = account
+    usage_repo = AsyncMock()
+    usage_repo.latest_entry_for_account.side_effect = lambda acc_id, window: usage if window == "primary" else None
+
+    from contextlib import asynccontextmanager
+
+    from app.modules.proxy.load_balancer import LoadBalancer
+
+    monkeypatch.setattr(
+        "app.modules.proxy.load_balancer.get_settings_cache",
+        lambda: SimpleNamespace(get=AsyncMock(return_value=None)),
+    )
+
+    @asynccontextmanager
+    async def fake_repo_factory():
+        yield SimpleNamespace(accounts=accounts_repo, usage=usage_repo)
+
+    balancer = LoadBalancer(repo_factory=fake_repo_factory)
+    balancer._runtime[account.id] = RuntimeState(blocked_at=12345.0)
+    await balancer.record_probe_result(account_id=account.id, http_status=200)
+
+    runtime = balancer._runtime[account.id]
+    assert runtime.blocked_at is None
+    assert runtime.error_count == 0

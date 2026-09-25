@@ -90,7 +90,14 @@ class TestV1ImageResponse:
 class TestIsSupportedImageModel:
     @pytest.mark.parametrize(
         "model",
-        ["gpt-image-2", "gpt-image-1.5", "gpt-image-1", "gpt-image-1-mini"],
+        [
+            "gpt-image-2",
+            "gpt-image-2.5-flare",
+            "gpt-image-2.5-sunburst",
+            "gpt-image-1.5",
+            "gpt-image-1",
+            "gpt-image-1-mini",
+        ],
     )
     def test_supported_models(self, model: str) -> None:
         assert is_supported_image_model(model) is True
@@ -193,12 +200,12 @@ class TestValidateImageRequestParameters:
             _validate_default(model="gpt-5.2")
         assert excinfo.value.param == "model"
 
-    @pytest.mark.parametrize("n,expect_ok", [(1, True), (0, False), (2, False), (5, False)])
+    @pytest.mark.parametrize(
+        "n,expect_ok",
+        [(1, True), (2, True), (5, True), (10, True), (0, False), (-1, False), (11, False)],
+    )
     def test_n_bounds(self, n: int, expect_ok: bool) -> None:
-        """``n`` is hard-capped at 1 today regardless of ``images_max_n``
-        because client-side fan-out is not implemented yet. The cap is
-        relaxed in the same change that introduces fan-out.
-        """
+        """``n`` is accepted between 1 and MAX_IMAGE_FANOUT (10) for non-streaming."""
         if expect_ok:
             _validate_default(n=n)
         else:
@@ -206,12 +213,10 @@ class TestValidateImageRequestParameters:
                 _validate_default(n=n)
             assert excinfo.value.param == "n"
 
-    def test_n_greater_than_one_is_unconditionally_rejected(self) -> None:
-        """There is no operator-tunable knob that can promote silent drop:
-        ``n > 1`` is hard-rejected as long as fan-out is unimplemented.
-        """
+    def test_streaming_n_greater_than_one_is_rejected(self) -> None:
+        """Streaming multi-image responses is not supported by OpenAI SSE format."""
         with pytest.raises(ClientPayloadError) as excinfo:
-            _validate_default(n=2)
+            _validate_default(n=2, streaming=True)
         assert excinfo.value.param == "n"
 
     @pytest.mark.parametrize(

@@ -828,6 +828,7 @@ class ResponsesCompactRequest(BaseModel):
 _UNSUPPORTED_UPSTREAM_FIELDS = {
     "max_output_tokens",
     "metadata",
+    "parallel_tool_calls",
     "prompt_cache_retention",
     "safety_identifier",
     "temperature",
@@ -1026,7 +1027,7 @@ def _strip_compact_unsupported_fields(payload: MutableJsonObject) -> MutableJson
     payload.pop("tools", None)
     payload.pop("tool_choice", None)
     payload.pop("client_metadata", None)
-    payload["parallel_tool_calls"] = False
+    payload.pop("parallel_tool_calls", None)
     return payload
 
 

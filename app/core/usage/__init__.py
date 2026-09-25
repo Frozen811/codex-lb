@@ -41,6 +41,7 @@ PLAN_CAPACITY_CREDITS_SECONDARY = {
 
 PLAN_CAPACITY_CREDITS_MONTHLY = {
     "free": 1134.0,
+    "team": 7560.0,
 }
 
 # Rows written by the same upstream fetch land within milliseconds of each
@@ -75,14 +76,23 @@ def _normalize_window_key(window: str | None) -> str:
     return normalized
 
 
+def is_monthly_window_minutes(window_minutes: int | float | None) -> bool:
+    return window_minutes is not None and 28 * 24 * 60 <= window_minutes <= 32 * 24 * 60
+
+
 def normalize_rate_limit_windows(
     primary_window: UsageWindow | None,
     secondary_window: UsageWindow | None,
 ) -> NormalizedRateLimitWindows:
+    has_placeholder_secondary = (
+        secondary_window is None
+        or secondary_window.limit_window_seconds == 0
+    )
     if (
         primary_window is not None
-        and primary_window.limit_window_seconds == DEFAULT_WINDOW_MINUTES_MONTHLY * 60
-        and secondary_window is None
+        and primary_window.limit_window_seconds is not None
+        and is_monthly_window_minutes(primary_window.limit_window_seconds / 60)
+        and has_placeholder_secondary
     ):
         return NormalizedRateLimitWindows(primary=None, secondary=None, monthly=primary_window)
     return NormalizedRateLimitWindows(primary=primary_window, secondary=secondary_window, monthly=None)
@@ -181,11 +191,39 @@ def summarize_usage_window(
     )
 
 
+_PLAN_CAPACITY_OVERRIDES: dict[tuple[str, str], float] = {}
+
+
+def set_plan_capacity_override(plan_type: str, window: str, capacity: float) -> None:
+    """Set an in-memory capacity override for a specific plan and window."""
+    normalized_plan = normalize_account_plan_type(plan_type)
+    if not normalized_plan:
+        raise ValueError(f"Invalid plan type: {plan_type}")
+    window_key = _normalize_window_key(window)
+    if window_key not in ("primary", "secondary", "monthly"):
+        raise ValueError(f"Invalid window: {window}")
+    if capacity < 0:
+        raise ValueError(f"Capacity cannot be negative: {capacity}")
+    _PLAN_CAPACITY_OVERRIDES[(normalized_plan, window_key)] = float(capacity)
+
+
+def clear_plan_capacity_overrides() -> None:
+    """Clear all in-memory plan capacity overrides."""
+    _PLAN_CAPACITY_OVERRIDES.clear()
+
+
+def get_plan_capacity_overrides() -> dict[tuple[str, str], float]:
+    """Return a copy of currently registered plan capacity overrides."""
+    return dict(_PLAN_CAPACITY_OVERRIDES)
+
+
 def capacity_for_plan(plan_type: str | None, window: str) -> float | None:
     normalized = normalize_account_plan_type(plan_type)
     if not normalized:
         return None
     window_key = _normalize_window_key(window)
+    if (normalized, window_key) in _PLAN_CAPACITY_OVERRIDES:
+        return _PLAN_CAPACITY_OVERRIDES[(normalized, window_key)]
     if window_key == "primary":
         return PLAN_CAPACITY_CREDITS_PRIMARY.get(normalized)
     if window_key == "secondary":

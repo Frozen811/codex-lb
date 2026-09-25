@@ -28,6 +28,16 @@ _MAX_ATTEMPTS = 2
 SenderContextProvider = Callable[[], Awaitable[tuple[bool, TelemetryIdentity | None]]]
 
 
+_TRANSMISSION_LOCK: asyncio.Lock | None = None
+
+
+def _get_transmission_lock() -> asyncio.Lock:
+    global _TRANSMISSION_LOCK
+    if _TRANSMISSION_LOCK is None:
+        _TRANSMISSION_LOCK = asyncio.Lock()
+    return _TRANSMISSION_LOCK
+
+
 class TelemetryProtocolError(RuntimeError):
     pass
 
@@ -71,7 +81,7 @@ class TelemetrySender:
             event = TelemetryOptOut(
                 app_version=app_version,
                 instance_id=identity.instance_id,
-                occurred_at=f"{utcnow().isoformat()}Z",
+                occurred_at=utcnow(),
             )
             async with asyncio.timeout(_TIMEOUT_SECONDS):
                 timeout = aiohttp.ClientTimeout(total=_TIMEOUT_SECONDS)
@@ -115,20 +125,21 @@ class TelemetrySender:
         )
 
         envelope = build_snapshot_envelope(snapshot)
-        try:
-            active, current_identity = await self._context_provider()
-            identity_matches = (
-                current_identity is not None
-                and current_identity.instance_id == identity.instance_id
-                and current_identity.public_key_hex == identity.public_key_hex
-            )
-        except Exception as exc:
-            logger.debug("Anonymous telemetry consent re-check failed", exc_info=exc)
-            return
-        if not active or not identity_matches:
-            return
+        async with _get_transmission_lock():
+            try:
+                active, current_identity = await self._context_provider()
+                identity_matches = (
+                    current_identity is not None
+                    and current_identity.instance_id == identity.instance_id
+                    and current_identity.public_key_hex == identity.public_key_hex
+                )
+            except Exception as exc:
+                logger.debug("Anonymous telemetry consent re-check failed", exc_info=exc)
+                return
+            if not active or not identity_matches:
+                return
 
-        await self._post_signed(session, "/v1/snapshot", _json_bytes(envelope), identity, accepted={200, 202})
+            await self._post_signed(session, "/v1/snapshot", _json_bytes(envelope), identity, accepted={200, 202})
 
     async def _transmit_opt_out_once(
         self,
@@ -139,14 +150,15 @@ class TelemetrySender:
         deployment_mode: DeploymentMethod,
         os_arch: str,
     ) -> None:
-        await self._ensure_activated(
-            session,
-            identity,
-            app_version=event.app_version,
-            deployment_mode=deployment_mode,
-            os_arch=os_arch,
-        )
-        await self._post_signed(session, "/v1/optout", _json_bytes(event), identity, accepted={200})
+        async with _get_transmission_lock():
+            await self._ensure_activated(
+                session,
+                identity,
+                app_version=event.app_version,
+                deployment_mode=deployment_mode,
+                os_arch=os_arch,
+            )
+            await self._post_signed(session, "/v1/optout", _json_bytes(event), identity, accepted={200})
 
     async def _ensure_activated(
         self,

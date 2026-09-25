@@ -92,6 +92,14 @@ def test_build_routing_costs_penalizes_cold_accounts_outside_work() -> None:
     assert costs["active"].reason == "expiring_active_window"
 
 
+@pytest.mark.parametrize("timezone_name", ["/Europe/Stockholm", "Europe/../Stockholm", "Unknown/Timezone"])
+def test_build_routing_costs_uses_utc_for_legacy_invalid_timezone(timezone_name: str) -> None:
+    now = datetime(2026, 5, 18, 3, 0, tzinfo=timezone.utc)
+    states = [AccountState("cold", AccountStatus.ACTIVE, used_percent=0.0, primary_window_minutes=300)]
+    costs = build_routing_costs(settings=PlannerSettings(timezone=timezone_name), states=states, now=now)
+    assert costs == build_routing_costs(settings=PlannerSettings(timezone="UTC"), states=states, now=now)
+
+
 def test_build_routing_costs_skips_accounts_without_short_windows() -> None:
     settings = PlannerSettings(
         mode="shadow",

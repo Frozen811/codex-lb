@@ -511,3 +511,63 @@ remain for operator recovery.
 - **THEN** recovery MUST fail before deleting sidecars, writing output, or
   moving the source
 
+### Requirement: HTTP bridge operations have additive transcript-core storage
+
+The `http_bridge_operations` table MUST add nullable JSON text columns
+`response_output_items_json` and `response_replay_input_json`, plus non-null
+`transcript_version`, `response_output_items_complete`,
+`response_replay_input_complete`, and `response_replay_input_turn_count`
+columns with defaults of `0`, `false`, `false`, and `0` respectively. The
+revision MUST be additive and safe for existing rows.
+
+#### Scenario: Existing operations survive the schema expansion
+
+- **WHEN** the transcript-core migration runs on an existing operation table
+- **THEN** all existing rows remain readable
+- **AND** the new non-null columns contain their conservative defaults
+- **AND** the JSON columns remain nullable
+
+### Requirement: Transcript-core recovery indexes are present
+
+The migration MUST add an index on
+`http_bridge_operations(session_id, state, created_at)` and an index on
+`http_bridge_operations(response_id, state)`. Re-running the migration MUST
+not fail when either index already exists.
+
+#### Scenario: Upgrade and downgrade manage both indexes
+
+- **WHEN** the migration upgrades an existing operation table
+- **THEN** both named indexes exist
+- **WHEN** the migration downgrades to its parent
+- **THEN** both indexes and all six transcript-core columns are removed
+
+### Requirement: Production-scale migration duration check gate
+
+Database migrations SHALL be validated against a duration check gate to prevent unbatched, table-locking statements that block production deployments.
+A static and benchmark check (`scripts/check_migration_durations.py`) SHALL verify that:
+1. Data-backfill migrations on high-volume tables (`request_logs`, `usage_history`) use bounded batching rather than monolithic unindexed updates.
+2. Migrations do not execute long-running full table scans without indexes or batching.
+3. The check exits with code 0 when all migration operations conform to safe execution duration budgets, and non-zero when unsafe long-running operations are detected.
+
+#### Scenario: Clean migrations pass duration check
+- **WHEN** `python scripts/check_migration_durations.py` is executed
+- **THEN** all migration files are analyzed
+- **AND** the check exits with code 0
+
+### Requirement: Non-blocking, resumable, and observable data-backfill migrations
+
+Data-backfill migrations on high-volume tables (`request_logs`, `usage_history`) MUST be non-blocking, resumable, and observable.
+1. The migration MUST filter target rows by checking that destination columns are unpopulated (e.g. `useragent_group IS NULL`) to support safe resumption without redundant work.
+2. The migration MUST process updates in bounded batches using primary key pagination rather than monolithic table scans.
+3. The migration MUST log batch progress so operators and automated watchdogs observe execution progress.
+
+#### Scenario: Data-backfill executes in bounded resumable batches
+- **GIVEN** a table with unbackfilled rows
+- **WHEN** the backfill migration executes
+- **THEN** rows are updated in bounded batches
+- **AND** execution is idempotent and safely resumes if interrupted
+- **AND** progress is logged per batch
+
+
+
+

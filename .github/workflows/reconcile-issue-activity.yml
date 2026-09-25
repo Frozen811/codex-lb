@@ -1,0 +1,40 @@
+name: Reconcile issue and PR status labels
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Reconcile needs-info status
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        with:
+          script: |
+            const issue = context.payload.issue;
+            if (issue.state !== 'open') return;
+
+            const commenter = context.payload.sender;
+            if (commenter.type === 'Bot') return;
+
+            const labels = (issue.labels || []).map(l => l.name);
+            if (!labels.includes('needs-info')) return;
+
+            const isPr = Boolean(issue.pull_request);
+            const target = { ...context.repo, issue_number: issue.number };
+
+            // Remove needs-info and stale if present
+            await github.rest.issues.removeLabel({ ...target, name: 'needs-info' }).catch(() => {});
+            if (labels.includes('stale')) {
+              await github.rest.issues.removeLabel({ ...target, name: 'stale' }).catch(() => {});
+            }
+
+            const nextLabel = isPr ? 'awaiting-review' : 'triage';
+            if (!labels.includes(nextLabel) && !labels.includes('in-progress')) {
+              await github.rest.issues.addLabels({ ...target, labels: [nextLabel] });
+            }

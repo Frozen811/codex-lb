@@ -3,7 +3,9 @@
 ## Purpose
 
 Define Responses API compatibility contracts so Codex, OpenCode, and OpenAI-style clients preserve expected behavior.
+
 ## Requirements
+
 ### Requirement: Use prompt_cache_key as OpenAI cache affinity
 For OpenAI-style `/v1/responses`, `/v1/responses/compact`, and chat-completions requests mapped onto Responses, the service MUST treat a non-empty `prompt_cache_key` as the bounded upstream account affinity key for prompt-cache correctness even when a `session_id` header is present. OpenAI-style route wiring MUST NOT upgrade those requests to durable `CODEX_SESSION` affinity by default. This affinity MUST apply even when dashboard `sticky_threads_enabled` is disabled, the service MUST continue forwarding the same `prompt_cache_key` upstream unchanged, and the stored affinity MUST expire after the configured freshness window so older keys can rebalance. The freshness window MUST come from dashboard settings so operators can adjust it without restart.
 
@@ -1523,7 +1525,10 @@ closed if owner or ring lookup errors prevent safe pinning. The service MUST NOT
 continue with account selection that bypasses hard owner enforcement. A direct
 WebSocket continuation already attached to its required open owner socket MUST
 NOT be failed solely because a new per-turn selection attempt temporarily
-excludes that owner.
+excludes that owner. When a previous-response continuity owner lookup misses, the
+proxy MUST NOT infer ownership from the number of candidate accounts currently
+supporting the requested model and MUST fail closed immediately with a retryable
+previous-response error across HTTP, compact, and WebSocket transports.
 
 #### Scenario: websocket previous-response owner lookup errors
 
@@ -1556,6 +1561,14 @@ excludes that owner.
 - **WHEN** a direct WebSocket follow-up resolves to the currently open owner
 - **THEN** the service sends it on that socket without a new selector-based
   eligibility check
+
+#### Scenario: previous-response owner lookup miss fails closed even when single account matches model
+
+- **WHEN** a follow-up request carries `previous_response_id`
+- **AND** owner lookup misses for that response id
+- **AND** exactly one account in the pool currently supports the requested model
+- **THEN** the service returns HTTP 502 with `error.code = "previous_response_owner_unavailable"`
+- **AND** it does not dispatch the request to the single model-matching account
 
 ### Requirement: Request logs persist requested, actual, and billable service tiers separately
 For Responses proxy traffic, the system MUST persist the operator-requested tier, the upstream-reported actual tier when available, and the effective billable tier used for pricing as separate request-log fields.
@@ -4938,9 +4951,9 @@ those paths.
 
 ### Requirement: Previous-response source routing follows proven ownership
 
-When a Responses request targets a configured Responses-compatible model source and carries `previous_response_id`, the proxy MUST use recorded subscription-account ownership as the veto for model-source routing. The proxy MUST NOT infer ownership from the response identifier's syntax. A recorded subscription owner MUST keep the request on subscription routing. When no subscription owner is recorded, the configured model source MUST remain authoritative, including when the identifier uses the canonical OpenAI `resp_` hexadecimal shape.
+When a Responses request targets a configured Responses-compatible model source and carries `previous_response_id` or a turn-state header, the proxy MUST use recorded subscription-account ownership as the veto for model-source routing. The proxy MUST NOT infer ownership from the response identifier's syntax. A recorded subscription owner proven by `previous_response_id` or turn-state MUST keep the request on subscription routing. When no subscription owner is recorded, the configured model source MUST remain authoritative, including when the identifier uses the canonical OpenAI `resp_` hexadecimal shape.
 
-For the direct Responses WebSocket transport, a recorded subscription owner MUST keep the request on the owner-bound subscription path. A configured source model without a recorded subscription owner MUST retain the existing `model_source_requires_http_transport` fallback behavior.
+For the direct Responses WebSocket transport, a recorded subscription owner or established preferred owner account MUST keep the request on the owner-bound subscription path. A configured source model without a recorded subscription owner MUST retain the existing `model_source_requires_http_transport` fallback behavior.
 
 #### Scenario: Recorded subscription owner overrides an HTTP model source
 
@@ -4974,6 +4987,22 @@ For the direct Responses WebSocket transport, a recorded subscription owner MUST
 - **WHEN** a direct Responses WebSocket client submits the follow-up
 - **THEN** the proxy emits `model_source_requires_http_transport`
 - **AND** the request is not sent to a subscription upstream
+
+#### Scenario: Turn-state subscription owner overrides an HTTP model source
+
+- **GIVEN** a Responses-compatible source is configured for the requested model
+- **AND** an ongoing HTTP bridge session associates `x-codex-turn-state` with a subscription account
+- **WHEN** the client calls `/v1/responses` or `/v1/responses/compact`
+- **THEN** the request is not forwarded to the model source
+- **AND** subscription routing preserves the recorded account owner
+
+#### Scenario: Direct WebSocket preserves established turn-state owner account
+
+- **GIVEN** a source is also configured for the requested model
+- **AND** a follow-up frame carries `x-codex-turn-state` matching an active subscription session
+- **WHEN** a direct Responses WebSocket client submits the turn
+- **THEN** the turn remains on the subscription WebSocket path
+- **AND** the proxy does not emit `model_source_requires_http_transport`
 
 ### Requirement: Source-routed chat payloads are sanitized before forwarding
 
@@ -7200,6 +7229,59 @@ rule. A missing or invalid value MUST remain absent.
 - **WHEN** an upstream retry hint contains a line break or exceeds the bounded
   field length
 - **THEN** codex-lb does not copy that value downstream
+
+### Requirement: Pre-visible HTTP authentication recovery preserves legal replay
+
+When a pre-visible HTTP Responses 401 reaches account-level retry, the proxy MUST retain its existing bounded same-account forced-refresh attempt. When that attempt cannot repair authentication, a movable request MUST try another eligible account within the existing attempt and time budget. The exact replacement body MUST pass the canonical account-neutral fresh-replay predicate; known response bookkeeping MAY be projected out only when that produces a complete self-contained replacement. Installing the replacement body and clearing its transient dispatch-owner binding MUST be atomic within the retry state transition.
+
+Independent file, previous-response, turn-state, conversation, single-account, and legacy hard-affinity ownership MUST NOT be weakened. Opaque compaction, hosted-tool results, unknown payload fields, and unresolved tool state MUST NOT be discarded to manufacture replay eligibility. Same-account successful refresh MUST retain the original body. A failure after downstream output or with ambiguous upstream execution MUST NOT authorize replay. When no legal replacement exists, the original authentication failure MUST be surfaced rather than `preferred_account_unavailable`; existing previous-response-specific error mapping MUST remain unchanged.
+
+The rejected account's stream lease MUST be released before replacement selection. API-key reservations MUST settle before deferred account-health writes, including failure and cancellation paths. Subsequent replacement failures MUST supersede earlier authentication errors.
+
+Each projected reasoning block MUST be followed by a complete retained assistant
+answer in the same turn before any fresh user or instruction boundary. Earlier
+assistant answers, recognized reasoning fields, summaries alone, empty or
+incomplete assistant messages, and unresolved tool calls MUST NOT prove that
+reasoning is redundant. Every affected turn MUST satisfy this proof independently.
+
+#### Scenario: Expired access plus failed refresh recovers a full transcript
+
+- **GIVEN** an unanchored complete text/tool transcript with response-owned IDs and reasoning bookkeeping
+- **WHEN** account A returns pre-visible 401 and forced refresh fails permanently
+- **THEN** the proxy validates a projected account-neutral body and completes on account B
+- **AND** another independent message does not repeat A's rejected authentication
+
+#### Scenario: Successful refresh retains the original body
+
+- **GIVEN** account A rejects the first attempt with 401
+- **WHEN** forced refresh succeeds and A accepts the retry
+- **THEN** both attempts use the original input and no account switch occurs
+
+#### Scenario: Hard ownership and opaque state fail closed
+
+- **GIVEN** the request contains a required file or previous-response owner, turn state, opaque compaction, or unresolved tool output
+- **WHEN** authentication cannot be repaired on A
+- **THEN** the request is not sent to B and returns the authentication failure or its existing previous-response-specific error
+
+#### Scenario: A post-output 401 cannot replay
+
+- **GIVEN** A has already emitted downstream-visible output
+- **WHEN** authentication subsequently fails
+- **THEN** the proxy does not replay the request on another account
+
+#### Scenario: Reasoning without a retained answer fails closed
+
+- **GIVEN** account-owned encrypted reasoning is followed only by a fresh user message
+- **WHEN** pre-visible authentication recovery cannot repair the owning account
+- **THEN** the reasoning is not discarded to manufacture account-neutral replay
+- **AND** no replacement request is sent to another account
+
+#### Scenario: An earlier complete turn does not authorize an incomplete later turn
+
+- **GIVEN** one retained turn contains reasoning and a complete assistant answer
+- **AND** a later reasoning block has no complete retained answer before the next user message
+- **WHEN** authentication recovery evaluates cross-account replay
+- **THEN** the entire replacement is rejected as unsafe
 
 ### Requirement: Routed native Responses streams consume Rust-framed SSE
 
@@ -10863,3 +10945,236 @@ SDK parser failure.
 - **WHEN** the bridge settles the turn
 - **THEN** it emits one terminal `response.failed` event
 - **AND** that terminal event includes a stable `response.id`
+
+### Requirement: Owner-forward HTTP streams preserve SSE event boundaries
+
+The owner-forward HTTP receiver MUST dispatch each complete SSE event delimited
+by two consecutive CR, LF, or CRLF line endings, including mixed endings,
+without waiting for connection close. Chunk boundaries MUST NOT change payload
+text or cause a CRLF continuation byte to become part of the next event. Invalid
+UTF-8 bytes in complete events or the final unterminated block MUST decode with
+replacement characters instead of aborting the relay. Valid UTF-8 characters
+split across chunks MUST remain intact. Existing idle and request-budget timeout
+classification MUST remain unchanged.
+
+#### Scenario: Non-LF framing streams incrementally
+
+- **WHEN** an owner forwards multiple events separated by CRLF, CR, or mixed CR/LF blank lines
+- **THEN** the origin dispatches each event before EOF
+- **AND** the final `response.completed` remains separately parseable
+
+#### Scenario: Chunk boundaries preserve text and event identity
+
+- **WHEN** network chunks split a multi-byte UTF-8 character or a CRLF separator
+- **THEN** decoded payload text remains intact
+- **AND** the next event has no residual separator byte prefixed to its fields
+
+#### Scenario: Malformed UTF-8 is replaced
+
+- **WHEN** an event or the final unterminated block contains invalid UTF-8
+- **THEN** the receiver replaces the invalid bytes with U+FFFD
+- **AND** continues delivering subsequent events when present
+
+### Requirement: Transcript helper identity rules are deterministic
+
+Transcript helpers MUST extract the stable `id`, `call_id`, and `type` fields
+without mutating input. Tool calls MUST carry both `id` and `call_id`; tool
+outputs MUST carry `call_id`; repeatable non-tool output items MUST carry
+`id`, except for the identity-less `compaction` boundary marker.
+
+#### Scenario: Tool and message identities are validated
+
+- **WHEN** a helper validates a function call, function output, message, or
+  compaction item
+- **THEN** it accepts only the identity shape specified above
+- **AND** it leaves the original item unchanged
+
+### Requirement: Transcript echo matching and tool de-duplication fail closed
+
+Echo matching MUST ignore provider-owned item ids and an omitted optional
+status, but MUST reject conflicting explicit statuses or other content.
+Exact repeated tool calls or outputs with the same call id MUST be removed only
+when their type and canonical content match exactly; conflicting content MUST
+return an ineligible result. Malformed JSON-compatible item types MUST not
+raise while being inspected.
+
+#### Scenario: Exact echoes are removed and conflicts are rejected
+
+- **WHEN** a replay list contains an exact duplicate tool call or output
+- **THEN** the duplicate is removed while order of remaining items is kept
+- **WHEN** the same call id has different content or status
+- **THEN** de-duplication returns an ineligible result
+- **AND** an unhashable item type is preserved for normal validation
+
+### Requirement: Abrupt upstream websocket drops remain account-neutral
+
+When an HTTP bridge upstream websocket ends with a terminal transport message (a close or receive error) that carries no upstream-authored close frame (`None` or adapter-synthesized RFC 6455 `1006`) and no established account-neutral transport classification (process-network, liveness-timeout, keepalive-timeout), the proxy MUST NOT write per-drop account error-health (`record_error`) for that unclassified `stream_incomplete` drop, regardless of whether application-layer output or response events were already observed. When such a drop occurs before any application-layer output was observed (zero response events and no buffered reasoning prelude) and settles its pending requests as failures, the proxy MUST record it into the windowed eventless account failure signal so that repeated eventless drops on the same account within the window still apply the drain penalty. Drops occurring after application-layer output was observed MUST NOT be recorded into the eventless failure signal. A failure that carries an upstream-authored close frame (including non-clean codes such as 1008 or 1011) or arrives as a non-terminal protocol-invalid frame (for example a binary message) MUST keep the existing account penalty semantics. The per-bridge retry circuit MUST still record the failure at bridge scope.
+
+#### Scenario: Sporadic frame-less drops do not strand a continuity-bound conversation
+
+- **GIVEN** a conversation continuity-bound to account A via `previous_response_id`
+- **AND** account A's upstream websocket drops three times with no close frame and zero response events, spread wider than the eventless failure window
+- **WHEN** the client sends the next continuity-bound follow-up
+- **THEN** account A's `error_count` receives no per-drop increment and stays below the error-backoff threshold
+- **AND** the follow-up still routes to account A instead of failing with `previous_response_owner_unavailable`
+
+#### Scenario: Post-output frame-less drops do not penalize account health
+
+- **GIVEN** an active request that has received response events or buffered model output on account A
+- **WHEN** the upstream websocket terminates abruptly with no close frame (`None` or 1006)
+- **THEN** account A's `error_count` receives no per-drop increment and the account is not penalized
+- **AND** the drop is not recorded into the windowed eventless failure signal
+- **AND** the interrupted request fails closed to the client
+
+#### Scenario: Repeated eventless drops inside the window still drain the account
+
+- **GIVEN** an account whose upstream websocket drops with no close frame and zero response events on three separate bridge failures within the eventless failure window
+- **WHEN** the third drop is recorded
+- **THEN** the windowed eventless failure signal applies the minimum drain penalty so new turns avoid the account until its health probe succeeds
+
+#### Scenario: Close frames keep the account penalty
+
+- **GIVEN** an upstream websocket ending that carries an upstream-authored close frame (for example 1008 or 1011), or a non-terminal protocol-invalid binary frame
+- **WHEN** the reader failure path settles the pending requests
+- **THEN** the account penalty semantics are unchanged from before this change
+
+### Requirement: Bounded Memory for Paused HTTP Bridge Streams
+Events emitted by the HTTP Responses bridge for an active downstream stream MUST be buffered in a queue bounded by both a queued-payload byte budget (32 MiB) and an event-count cap (4096). Queued bytes MUST be released dynamically as the downstream consumer drains events.
+
+When a downstream consumer pauses or stops reading, unconsumed live output MUST NOT exceed the configured byte budget or event cap. If the queue is saturated:
+1. The shared upstream reader MUST pause enqueueing until the downstream consumer drains sufficient bytes or events.
+2. A zero-byte event (such as the terminal sentinel `None`) MUST NOT be rejected by the byte budget as long as the event cap has room.
+3. An event arriving at an empty queue MUST be accepted regardless of size.
+4. If the downstream consumer stays stalled longer than `stream_idle_timeout_seconds` or the request deadline, the proxy MUST fail the request with `stream_idle_timeout` and MUST NOT penalize the upstream account.
+5. If the downstream consumer disconnects or detaches, waiting upstream putters MUST be unblocked immediately without crashing the shared upstream reader.
+
+#### Scenario: Downstream consumer pauses and resumes
+- **Given** an active HTTP bridge response stream with a bounded event queue
+- **When** the downstream consumer stops reading and queued events reach the 32 MiB byte budget
+- **Then** subsequent upstream events pause enqueueing without growing worker memory
+- **When** the downstream consumer resumes reading and drains queued events
+- **Then** upstream enqueueing resumes and subsequent events are delivered to the consumer.
+
+#### Scenario: Downstream consumer stays stalled beyond timeout
+- **Given** an active HTTP bridge response stream whose queue is saturated
+- **When** the downstream consumer does not drain any events before `stream_idle_timeout_seconds` expires
+- **Then** the request is failed with `error.code = "stream_idle_timeout"`
+- **And** the upstream account health is NOT penalized.
+
+#### Scenario: Downstream client disconnects while queue is saturated
+- **Given** an upstream reader waiting for space in a saturated stream queue
+- **When** the downstream client disconnects and the request is detached
+- **Then** the event queue is closed and the waiting upstream reader is unblocked immediately
+- **And** the shared upstream reader continues running without crashing.
+
+### Requirement: Retry Circuit Scheduled Purge Fencing
+The durable bridge repository scheduled purge for stale retry circuits (`purge_retry_circuits_before`) SHALL fence each deletion against concurrent row modifications.
+
+#### Scenario: Stale retry circuit candidate updated before deletion
+- **Given** a retry circuit row that matched the stale predicate at candidate selection time with `updated_at_epoch = T0` and `admission_generation = G0`
+- **When** a concurrent operation advances `admission_generation` to `G1` or updates `updated_at_epoch` to `T1`
+- **Then** the deletion statement SHALL match 0 rows and SHALL NOT delete the updated retry circuit row.
+
+### Requirement: Monotonic Quarantine Generations Across Removals
+The in-memory bridge quarantine registry SHALL maintain strictly monotonic generation numbering per session key across entry removals and prunings.
+
+#### Scenario: Re-quarantined key after entry removal
+- **Given** a session key that was quarantined at generation `N` and subsequently removed from the active quarantine registry
+- **When** the same session key is quarantined again
+- **Then** the new quarantine entry SHALL receive a generation strictly greater than `N`.
+
+### Requirement: Quarantine Ownership Verification on Clear
+A completing request clearing quarantine on healthy completion SHALL verify that the active quarantine entry was established for the same session.
+
+#### Scenario: Delayed completion from prior session
+- **Given** an active quarantine entry established by session B
+- **When** an earlier request from session A attempts to clear quarantine for the same session key
+- **Then** the quarantine entry for session B SHALL NOT be cleared.
+
+### Requirement: Usage-limit messages classify as account rate limits
+
+When an upstream error envelope carries a message asserting that the account's usage limit has been reached, and its normalized error code is either the `upstream_error` value a missing code normalizes to or `invalid_request_error`, the proxy MUST classify the failure `rate_limit`. The override is deliberately limited to those two codes: a code that already carries its own classification decision — a rate-limit or quota code, `overloaded_error`, or any other transient code — keeps it, so this requirement cannot silently reverse "Model-capacity messages are retryable transient failures" or the rule that `overloaded_error` stays retryable regardless of status. Such a failure MUST NOT be classified `retryable_transient`, MUST NOT be treated as a burst rejection, and MUST NOT be answered with same-account backoff: the account is out of quota, so waiting on it cannot succeed.
+
+This requirement does not change the classification of an envelope that already carries a quota or rate-limit code; that case keeps the stronger classification it has today.
+
+Reclassification MUST NOT remove client-visible retry guidance. A rejection that would previously have surfaced with a `Retry-After` hint MUST still carry one, or an `error.resets_at`, when it reaches the client.
+
+Message matching MUST be punctuation-insensitive and MUST NOT depend on the HTTP status, because upstream delivers this message both as an HTTP body and as a serialized `response.failed` frame that carries no status.
+
+Serialized `response.failed` frames that carry code-less or `invalid_request_error` usage-limit messages MUST enter the same classifier and account-exclusion path before the terminal-frame gate decides the response. The absence of `upstream_error` from transport retry-code allowlists MUST NOT bypass the pool walk for those frames.
+
+#### Scenario: Code-less usage-limit 429 rotates instead of backing off
+
+- **WHEN** upstream answers with HTTP `429` whose body carries no error code and whose message asserts the usage limit has been reached
+- **THEN** `classify_upstream_failure` returns `failure_class = "rate_limit"`
+- **AND** the failure is not a burst rejection
+- **AND** an unbound request excludes the account and continues the pool walk instead of waiting 1 s / 2 s / 4 s on it
+
+#### Scenario: Code-less usage-limit response.failed frame rotates
+
+- **WHEN** upstream serializes a pre-visible `response.failed` frame with no error code and a message asserting the usage limit has been reached
+- **THEN** the streaming path classifies it with the same usage-limit evidence as the HTTP-body form
+- **AND** an unbound request excludes the account and continues the pool walk before surfacing a terminal frame
+
+#### Scenario: Usage-limit message under a non-rate-limit code still rotates
+
+- **WHEN** upstream returns an envelope whose normalized error code is `invalid_request_error` and whose message asserts the usage limit has been reached
+- **THEN** `classify_upstream_failure` returns `failure_class = "rate_limit"`
+- **AND** the account's rate-limit health penalty is recorded as for any other rate-limit rejection
+
+#### Scenario: A coded rate-limit envelope is unaffected
+
+- **WHEN** upstream returns an envelope whose normalized error code is `rate_limit_exceeded` or `usage_limit_reached`
+- **THEN** the classification is exactly what it is today
+- **AND** this requirement adds no message-based reclassification on top of it
+
+### Requirement: Model-capacity rejections do not exclude the account from the pool walk
+
+A rejection whose message says the selected model is at capacity describes the requested model, not the selected account. When the proxy decides whether a pre-visible failure justifies excluding the selected account for the remainder of the request, a model-capacity rejection MUST NOT justify that exclusion — but only for a failure class whose account-health write leaves the account selectable.
+
+A rejection that benches the account is the opposite case and MUST still exclude it. A `rate_limit` or `quota` classification persists a status and a reset deadline, so selection will not offer that account again regardless of what the walk decides; reporting it as "do not exclude" would hand the walk a candidate selection cannot use, and would make the two answers contradict each other for the one envelope that carries both a benching code and the capacity message. The health write is the authority on whether an account is benched; the capacity carve-out applies to the walkable classes it leaves alone.
+
+The account-health write, the persisted status, the reset deadline and the model-capacity replay wait are unchanged by this requirement: it governs account selection only.
+
+The exclusion answer the classifier reports MUST be the selection predicate, not an exhaustion predicate. It is true for every pre-visible failure the walk may move away from — `rate_limit`, `quota` and `retryable_transient` alike, which includes the code-less burst 429 that "An unbound burst rejection walks instead of surfacing" requires to be excluded — and false only when the rejection is a model-capacity one on a class whose health write leaves the account selectable. A field that answers "was this account exhaustion" instead collapses the burst rejection and the capacity rejection to the same value and cannot drive the walk. A message that asserts the usage limit MUST take precedence over a model-capacity match when both appear in one envelope, because the usage limit is account-scoped.
+
+#### Scenario: Capacity on a walkable class does not rotate the pool
+
+- **GIVEN** a pool of several selectable accounts and a request that is not owner-bound
+- **WHEN** the selected account returns a `retryable_transient` rejection whose message says the selected model is at capacity
+- **THEN** the account is not excluded, and the pool is not walked for a condition no account can serve
+
+#### Scenario: A benching code excludes even under a capacity message
+
+- **WHEN** the selected account returns an envelope whose code is `rate_limit_exceeded` or a quota code, and whose message also says the selected model is at capacity
+- **THEN** the account keeps the rate-limit or quota health classification it has today, which benches it
+- **AND** it is excluded for the remainder of the request, because selection will not offer a benched account and the two answers must not contradict each other
+
+#### Scenario: Usage limit wins when both messages appear
+
+- **WHEN** an envelope's message asserts both the model capacity and that the usage limit has been reached
+- **THEN** the rejection is treated as account exhaustion
+- **AND** the account is excluded for the remainder of the request
+
+### Requirement: Native transport failure lifecycle
+
+Native Codex streaming clients expect a terminal SSE event or structured transport failure handling when an upstream stream fails. When an HTTP bridge native stream encounters a synthetic transport failure or an upstream rejection of a proxy-injected anchor (`bridge_previous_response_not_found`), the proxy MUST deliver a terminal SSE `response.failed` event if the HTTP 200 headers have already been committed (including after keepalive events have been sent), and MUST NOT abruptly terminate the socket without a terminal event.
+
+#### Scenario: Native client receives terminal event after keepalive on rejected anchor
+
+- **GIVEN** a native Codex streaming request to the HTTP bridge
+- **AND** a keepalive event has been written to the client
+- **WHEN** upstream rejects the anchor with `previous_response_not_found`
+- **THEN** the bridge yields an SSE `response.failed` terminal event
+- **AND** the HTTP connection does not abort with an unexpected EOF or disconnect before completion
+
+#### Scenario: Startup probe classifies bridge_previous_response_not_found as native transport failure
+
+- **GIVEN** a native Codex streaming request encountering `bridge_previous_response_not_found` during startup probe
+- **WHEN** the startup error is evaluated
+- **THEN** it is classified as a native transport failure
+- **AND** the client receives a stream carrying a terminal retryable event instead of a raw JSON 502 error
+
+
+
+

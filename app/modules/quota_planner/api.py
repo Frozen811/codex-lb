@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Body, Depends, Query, Request
 
@@ -126,7 +127,9 @@ def _warmup_action_response(result) -> QuotaPlannerWarmupActionResponse:
 def _validate_working_days(days: list[int] | None, current: tuple[int, ...]) -> tuple[int, ...]:
     if days is None:
         return current
-    normalized = tuple(sorted({int(day) for day in days if 0 <= int(day) <= 6}))
+    normalized = tuple(sorted(set(days)))
+    if any(day < 0 or day > 6 for day in normalized):
+        raise DashboardBadRequestError("workingDays must contain weekday numbers 0-6", code="invalid_quota_planner")
     if not normalized:
         raise DashboardBadRequestError("workingDays must include at least one weekday", code="invalid_quota_planner")
     if len(normalized) != len(days):
@@ -134,6 +137,17 @@ def _validate_working_days(days: list[int] | None, current: tuple[int, ...]) -> 
             "workingDays must contain unique weekday numbers 0-6",
             code="invalid_quota_planner",
         )
+    return normalized
+
+
+def _validate_timezone(value: str | None, current: str) -> str:
+    normalized = (value or "").strip()
+    if not normalized:
+        return current
+    try:
+        ZoneInfo(normalized)
+    except (ZoneInfoNotFoundError, ValueError) as exc:
+        raise DashboardBadRequestError("timezone must be a valid timezone name", code="invalid_quota_planner") from exc
     return normalized
 
 
@@ -154,7 +168,7 @@ async def update_quota_planner_settings(
     current = await context.repository.get_settings()
     updated = PlannerSettings(
         mode=payload.mode or current.mode,
-        timezone=(payload.timezone or current.timezone).strip() or current.timezone,
+        timezone=_validate_timezone(payload.timezone, current.timezone),
         working_days=_validate_working_days(payload.working_days, current.working_days),
         working_hours_start=payload.working_hours_start or current.working_hours_start,
         working_hours_end=payload.working_hours_end or current.working_hours_end,

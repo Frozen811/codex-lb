@@ -24,6 +24,7 @@ from app.core.errors import OpenAIErrorEnvelope, openai_error
 from app.core.openai.exceptions import ClientPayloadError
 from app.core.openai.images import (
     DEFAULT_PUBLIC_IMAGE_MODEL,
+    MAX_IMAGE_FANOUT,
     V1ImageData,
     V1ImageResponse,
     V1ImagesEditsForm,
@@ -103,14 +104,10 @@ def _build_image_generation_tool(
     is_edit: bool = False,
 ) -> dict[str, JsonValue]:
     # NOTE: the upstream ``image_generation`` tool config does not accept
-    # ``n``. ``validate_image_request_parameters`` unconditionally
-    # rejects ``n > 1`` because client-side fan-out is not implemented
-    # yet, so this function is only ever called with ``n == 1``. The
-    # assert below catches a future regression where the API-boundary
-    # cap is loosened without also adding fan-out, instead of silently
-    # dropping the requested count.
-    assert n == 1, "image_generation tool does not accept n; fan-out is not implemented"
-    del n  # rejected upstream of this call (fan-out not yet implemented)
+    # ``n``. Multi-image generation is fanned out across concurrent internal
+    # Responses requests.
+    assert 1 <= n <= MAX_IMAGE_FANOUT, f"n must be between 1 and {MAX_IMAGE_FANOUT}"
+    del n
     tool: dict[str, JsonValue] = {
         "type": "image_generation",
         "model": model,
@@ -322,6 +319,7 @@ def validate_generations_payload(payload: V1ImagesGenerationsRequest) -> V1Image
         n=payload.n,
         partial_images=payload.partial_images,
         output_compression=payload.output_compression,
+        streaming=bool(payload.stream),
     )
     if payload.model != resolved_model:
         # Pydantic models are immutable by default; build a copy with the
@@ -348,6 +346,7 @@ def validate_edits_payload(payload: V1ImagesEditsForm) -> V1ImagesEditsForm:
         n=payload.n,
         partial_images=payload.partial_images,
         output_compression=payload.output_compression,
+        streaming=bool(payload.stream),
     )
     if payload.model != resolved_model:
         return payload.model_copy(update={"model": resolved_model})

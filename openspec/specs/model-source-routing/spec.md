@@ -153,3 +153,32 @@ source-ownership selection, owner pinning, or stale-anchor matching.
 - **THEN** account health receives the original upstream code
 - **AND** source ownership and stale-anchor classification remain unchanged
 
+### Requirement: Model sources declare plan availability for ChatGPT OAuth consumers
+
+When constructing upstream model descriptors from configured Model Sources, the catalog builder SHALL populate `available_in_plans` from the source model's metadata when present, and SHALL default to all standard ChatGPT plan types (`free`, `plus`, `pro`, `team`, `edu`) when omitted or empty, enabling ChatGPT OAuth users in Codex Desktop to access model source models.
+
+#### Scenario: Custom model source defaults to standard ChatGPT plans
+- **GIVEN** an enabled model source with no explicit plan restrictions in metadata
+- **WHEN** the model catalog is projected for Codex clients
+- **THEN** each model entry includes standard ChatGPT plans in `available_in_plans`
+- **AND** Codex Desktop client-side plan validation allows the model for ChatGPT accounts
+
+### Requirement: CLIProxyAPI catalog discovery and unavailable model ownership retention
+
+Model sources configured with external catalog discovery (CLIProxyAPI) MUST support automated catalog synchronization and unavailable model ownership retention:
+1. When catalog synchronization runs, the source SHALL query the provider's `/v1/models` catalog.
+2. In the event of an upstream outage, the system SHALL preserve the last successfully observed model catalog snapshot.
+3. Models omitted from an upstream catalog update MUST be retained in the model registry marked as unavailable rather than removed. Requests for omitted models MUST return model unavailability errors rather than falling through to native subscription accounts.
+
+#### Scenario: Unreachable catalog preserves last known snapshot
+- **GIVEN** a model source with a cached catalog snapshot
+- **WHEN** the external catalog endpoint is temporarily unreachable
+- **THEN** the model registry retains the existing model snapshot without dropping models
+
+#### Scenario: Omitted external model retains ownership and rejects fallback
+- **GIVEN** a model previously registered to an external model source
+- **WHEN** an updated catalog snapshot omits that model
+- **THEN** the model is retained as unavailable
+- **AND** client requests for that model do not route to subscription accounts
+
+

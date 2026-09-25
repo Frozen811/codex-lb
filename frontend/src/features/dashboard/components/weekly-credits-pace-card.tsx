@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import type { WeeklyCreditPace, WeeklyCreditRunwayStatus } from "@/features/dashboard/utils";
 import { useDateDisplayFormatStore } from "@/hooks/use-date-format";
 import { cn } from "@/lib/utils";
-import { formatCompactNumber, formatDateTimeInline, formatModelLabel } from "@/utils/formatters";
+import { formatCompactNumber, formatCurrency, formatDateTimeInline, formatModelLabel } from "@/utils/formatters";
 
 const PRO_WEEKLY_CAPACITY_CREDITS = 50_400;
 
@@ -304,6 +304,15 @@ function RunwayWeeklyCreditsPaceCard({
           </p>
           {saturated ? (
             <p className="mt-1 text-[11px] text-muted-foreground">{t("dashboard.weeklyPace.saturatedFloor")}</p>
+          ) : null}
+          {pace.estimatedFullWeeklyLimitCostUsd != null && pace.estimatedFullWeeklyLimitCostUsd > 0 ? (
+            <p className="mt-1 text-[11px] tabular-nums text-muted-foreground" data-testid="weekly-estimated-limit-cost">
+              {t("dashboard.weeklyPace.estimatedLimitCost", {
+                fullCost: formatCurrency(pace.estimatedFullWeeklyLimitCostUsd),
+                usedCost: formatCurrency(pace.usedCostUsd ?? 0),
+                percent: Math.round(pace.actualUsedPercent),
+              })}
+            </p>
           ) : null}
         </div>
 

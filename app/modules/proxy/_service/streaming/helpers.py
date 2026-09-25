@@ -72,7 +72,7 @@ from app.db.models import (
     Account,
     AccountStatus,  # noqa: F401
 )
-from app.modules.api_keys.service import ApiKeyData
+from app.modules.api_keys.service import ApiKeyData, ApiKeyUsageReservationData
 from app.modules.proxy._load_balancer.overload_backoff import (
     UPSTREAM_OVERLOAD_CODES,
     UPSTREAM_SOFT_OVERLOAD_CODES,
@@ -81,6 +81,9 @@ from app.modules.proxy._load_balancer.overload_backoff import (
 )
 from app.modules.proxy._service.api_key_usage import (
     _API_KEY_RESERVATION_HEARTBEAT_SECONDS as _API_KEY_RESERVATION_HEARTBEAT_SECONDS,
+)
+from app.modules.proxy._service.api_key_usage import (
+    _request_usage_refresh as _request_usage_refresh,
 )
 from app.modules.proxy._service.compact import (
     _service_tier_from_compact_payload as _service_tier_from_compact_payload,
@@ -405,6 +408,9 @@ from app.modules.proxy._service.websocket.helpers import (
     _websocket_top_level_error_payload,  # noqa: F401
     _wrapped_websocket_error_event,  # noqa: F401
 )
+from app.modules.proxy._service.websocket.helpers import (
+    _is_account_neutral_transport_drop as _is_account_neutral_transport_drop,
+)
 from app.modules.proxy.affinity import (
     _sticky_key_from_session_header,  # noqa: F401
 )
@@ -426,7 +432,6 @@ from app.modules.proxy.http_bridge_forwarding import (
     OwnerForwardRelayFailure as OwnerForwardRelayFailure,
 )
 from app.modules.proxy.load_balancer import AccountSelection
-from app.modules.usage.updater import UsageUpdater
 
 
 def _facade() -> Any:
@@ -531,6 +536,38 @@ def _stream_iterator_after_capacity_admission(
 _REQUEST_TRANSPORT_HTTP = "http"
 
 
+def _stream_responses(
+    proxy: _StreamingServiceProtocol,
+    payload: ResponsesRequest,
+    headers: Mapping[str, str],
+    *,
+    codex_session_affinity: bool = False,
+    propagate_http_errors: bool = False,
+    openai_cache_affinity: bool = False,
+    api_key: ApiKeyData | None = None,
+    api_key_reservation: ApiKeyUsageReservationData | None = None,
+    suppress_text_done_events: bool = False,
+    request_transport: str = _REQUEST_TRANSPORT_HTTP,
+    client_ip: str | None = None,
+    enforce_openai_sdk_contract: bool = True,
+) -> AsyncIterator[str]:
+    _maybe_log_proxy_request_payload("stream", payload, headers)
+    filtered = _facade().filter_inbound_headers(headers)
+    return proxy._stream_with_retry(
+        payload,
+        filtered,
+        codex_session_affinity=codex_session_affinity,
+        propagate_http_errors=propagate_http_errors,
+        openai_cache_affinity=openai_cache_affinity,
+        api_key=api_key,
+        api_key_reservation=api_key_reservation,
+        suppress_text_done_events=suppress_text_done_events,
+        request_transport=request_transport,
+        client_ip=client_ip,
+        enforce_openai_sdk_contract=enforce_openai_sdk_contract,
+    )
+
+
 def _should_penalize_stream_error(code: str | None, message: str | None = None) -> bool:
     """Whether this stream failure owes the account a health write.
 
@@ -620,31 +657,6 @@ def _classify_upstream_close(
     return "transient"
 
 
-def _is_account_neutral_transport_drop(
-    close_code: int | None,
-    *,
-    response_events_seen: int,
-) -> bool:
-    """Return whether an upstream websocket ending is account-neutral evidence.
-
-    An abrupt transport drop that carries no close frame and arrived before
-    any application-layer response event is the weakest possible evidence of
-    account ill-health: the account never spoke at the application layer for
-    this request. Charging the account lets a few infrastructure resets push
-    it into error backoff and 502 continuity-bound follow-ups while healthy
-    pool siblings idle (issue #1754). Any close frame — even a non-clean one —
-    is upstream-authored evidence and keeps the existing penalty semantics, as
-    does a drop after response events started streaming.
-
-    Close code 1006 (abnormal closure) is reserved by RFC 6455 and can never
-    appear in an actual close frame: adapters synthesize it locally when the
-    socket dies without one (aiohttp stores 1006 on ``close_code`` for an
-    abnormal CLOSED), so it counts as frame-less here.
-    """
-
-    return close_code in (None, 1006) and response_events_seen == 0
-
-
 def _should_infer_upstream_status_from_proxy_error(exc: ProxyResponseError, upstream_error_code: str | None) -> bool:
     if exc.failure_phase == "status":
         return True
@@ -716,7 +728,11 @@ def _rewrite_previous_response_stream_error(
             None,
         )
     normalized_code = _normalize_error_code(error_code, error_type)
-    if preferred_account_id is not None and normalized_code in _facade()._ACCOUNT_RECOVERY_RETRY_CODES:
+    if (
+        preferred_account_id is not None
+        and normalized_code != "token_revoked"
+        and normalized_code in _facade()._ACCOUNT_RECOVERY_RETRY_CODES
+    ):
         _record_continuity_fail_closed(
             surface="http_stream",
             reason="owner_account_unavailable",
@@ -807,7 +823,9 @@ def _mark_stream_settlement_interrupted(
     )
 
 
-def _stamp_terminal(settlement: _StreamSettlement, event_type: str | None, clock: Clock) -> bool:
+def _stamp_terminal(
+    settlement: _StreamSettlement, event_type: str | None, clock: Clock, *, observed_at: float | None = None
+) -> bool:
     """Return whether ``event_type`` is an upstream terminal frame, stamping its parse instant on the settlement.
 
     Called at the HTTP stream's terminal-detection sites before the frame is
@@ -817,7 +835,8 @@ def _stamp_terminal(settlement: _StreamSettlement, event_type: str | None, clock
     """
     if event_type not in {"response.completed", "response.failed", "response.incomplete", "error"}:
         return False
-    settlement.upstream_terminal_at = clock.monotonic()
+    if settlement.upstream_terminal_at is None:
+        settlement.upstream_terminal_at = clock.monotonic() if observed_at is None else observed_at
     return True
 
 
@@ -1100,6 +1119,7 @@ def _is_account_neutral_request_rejection(
 
 def _is_model_scoped_rejection(
     *,
+    code: str,
     http_status: int | None,
     message: str | None,
 ) -> bool:
@@ -1118,31 +1138,13 @@ def _is_model_scoped_rejection(
     returned, so the caller keeps trying other accounts, whose entitlements may
     differ.
 
-    The normalized code is not part of the match. Upstream delivers this
-    rejection with neither ``code`` nor ``type`` on the streaming path, which
-    normalizes to ``upstream_error``; on other paths it arrives as
-    ``invalid_request_error``. Only the exact message shape decides membership.
+    ``model_not_found`` is authoritative. Code-less legacy rejections still
+    need the exact message shape because their streaming frames normalize to
+    ``upstream_error``; other non-400 errors remain account-scoped.
     """
-    if http_status is not None and http_status != 400:
+    if code != "model_not_found" and http_status is not None and http_status != 400:
         return False
-    return is_model_scoped_upstream_rejection(message)
-
-
-def _request_usage_refresh(proxy: Any, account_id: str) -> None:
-    """Schedule a tracked, coalesced usage refresh after a streamed ``usage_limit_reached``.
-
-    ``mark_rate_limit`` persists status only, while the pool-exhaustion
-    predicate also needs a >= 100 % usage row that would otherwise wait for
-    the next scheduler tick. The refresh runs on its own background session
-    and never touches this request's ``Account``.
-    """
-    schedule = getattr(proxy, "_schedule_cancel_safe_cleanup", None)
-    if schedule is None:
-        return
-    refresh = UsageUpdater.request_refresh(account_id)
-    if refresh is None:
-        return
-    schedule(refresh, action="request_usage_refresh", request_id=get_request_id() or "unknown")
+    return is_model_scoped_upstream_rejection(message, error_code=code)
 
 
 async def _handle_stream_error(
@@ -1200,6 +1202,7 @@ async def _handle_stream_error(
         )
         return classified
     if _is_model_scoped_rejection(
+        code=code,
         http_status=http_status,
         message=error.get("message"),
     ):
@@ -1223,7 +1226,13 @@ async def _handle_stream_error(
     elif classified["failure_class"] == "quota":
         await proxy._load_balancer.mark_quota_exceeded(account, error)
     elif code in PERMANENT_FAILURE_CODES:
-        await proxy._load_balancer.mark_permanent_failure(account, code)
+        downgraded = await proxy._load_balancer.mark_permanent_failure(account, code)
+        if code == "token_revoked" and not downgraded:
+            # A concurrent re-auth won the guarded write. Do not leave the
+            # pre-settlement local quarantine wedged on the repaired account.
+            from app.modules.proxy.account_cache import clear_account_routing_unavailable
+
+            clear_account_routing_unavailable(account.id)
     else:
         await proxy._load_balancer.record_error(account)
         _facade().logger.info(

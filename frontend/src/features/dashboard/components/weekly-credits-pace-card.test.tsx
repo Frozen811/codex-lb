@@ -463,4 +463,21 @@ describe("WeeklyCreditsPaceCard runway layout", () => {
     ).not.toBeInTheDocument();
     expect(screen.getByText(/at ~6K\/h/)).toBeInTheDocument();
   });
+
+  it("renders estimated 100% weekly limit cost when present", () => {
+    render(
+      <WeeklyCreditsPaceCard
+        pace={{
+          ...RUNWAY_PACE,
+          actualUsedPercent: 20,
+          usedCostUsd: 50,
+          estimatedFullWeeklyLimitCostUsd: 250,
+        }}
+      />,
+    );
+
+    const costElement = screen.getByTestId("weekly-estimated-limit-cost");
+    expect(costElement).toBeInTheDocument();
+    expect(costElement).toHaveTextContent("Est. 100% weekly limit: $250.00 ($50.00 used at 20%)");
+  });
 });

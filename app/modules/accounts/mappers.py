@@ -118,12 +118,39 @@ def _account_to_summary(
     # quota, but not who it belongs to upstream.
     email = mask_email(account.email) if redact_identity else account.email
     auth_status = _build_auth_status(account, encryptor) if include_auth else None
+    has_active_secondary = (
+        secondary_usage is not None
+        and secondary_usage.used_percent is not None
+        and usage_core.is_weekly_window_minutes(secondary_usage.window_minutes)
+    )
+    if (
+        monthly_usage is None
+        and primary_usage is not None
+        and usage_core.is_monthly_window_minutes(primary_usage.window_minutes)
+        and not has_active_secondary
+    ):
+        monthly_usage = primary_usage
+        primary_usage = None
+
     effective_primary_usage, effective_secondary_usage = _effective_usage_windows(
         primary_usage,
         secondary_usage,
     )
 
-    if monthly_usage is not None and usage_core.capacity_for_plan(plan_type, "monthly") is None:
+    if (
+        monthly_usage is not None
+        and usage_core.capacity_for_plan(plan_type, "monthly") is None
+        and any(
+            row is not None
+            and row.window_minutes
+            in {
+                usage_core.DEFAULT_WINDOW_MINUTES_PRIMARY,
+                usage_core.DEFAULT_WINDOW_MINUTES_SECONDARY,
+            }
+            and row.recorded_at > monthly_usage.recorded_at
+            for row in (primary_usage, secondary_usage)
+        )
+    ):
         monthly_usage = None
     usage_refreshed_at = _latest_usage_recorded_at(primary_usage, secondary_usage, monthly_usage)
     monthly_used_percent = _normalize_used_percent(monthly_usage)
@@ -433,6 +460,13 @@ def _effective_usage_windows(
 ) -> tuple[UsageHistory | None, UsageHistory | None]:
     if primary_usage is None:
         return None, secondary_usage
+    has_active_secondary = (
+        secondary_usage is not None
+        and secondary_usage.used_percent is not None
+        and usage_core.is_weekly_window_minutes(secondary_usage.window_minutes)
+    )
+    if usage_core.is_monthly_window_minutes(primary_usage.window_minutes) and not has_active_secondary:
+        return None, secondary_usage
     if not usage_core.is_weekly_window_minutes(primary_usage.window_minutes):
         return primary_usage, secondary_usage
     if secondary_usage is None:
@@ -450,7 +484,7 @@ def _build_auth_status(account: Account, encryptor: TokenEncryptor) -> AccountAu
     id_token = _decrypt_token(encryptor, account.id_token_encrypted)
 
     access_expires = _token_expiry(access_token)
-    refresh_state = "stored" if refresh_token else "missing"
+    refresh_state = "stored" if refresh_token else "non_refreshable"
     id_state = "unknown"
     if id_token:
         claims = extract_id_token_claims(id_token)

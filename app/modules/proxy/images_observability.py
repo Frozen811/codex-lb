@@ -35,6 +35,7 @@ def record_images_route_observability(
     status: int,
     outcome: str,
     started_at: float,
+    fanout: int = 1,
 ) -> None:
     duration_seconds = max(time.perf_counter() - started_at, 0.0)
     model_label = _bounded_model_label(model)
@@ -52,11 +53,12 @@ def record_images_route_observability(
         image_request_duration_seconds.labels(**labels).observe(duration_seconds)
     logger.log(
         logging.INFO if status < 400 else logging.WARNING,
-        "images_route_complete route=%s model=%s stream=%s status=%s outcome=%s duration_ms=%.2f",
+        "images_route_complete route=%s model=%s stream=%s status=%s outcome=%s duration_ms=%.2f fanout=%d",
         route,
         model_label,
         stream_label,
         status,
         outcome,
         duration_seconds * 1000.0,
+        fanout,
     )

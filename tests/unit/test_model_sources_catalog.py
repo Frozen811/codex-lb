@@ -426,3 +426,16 @@ def test_declared_summaries_imply_the_chat_path_reasoning_opt_in() -> None:
     /v1/models, so declaring it alone must not leave the chat path stripping."""
     summaries_only = _reasoning_source(json.dumps({"supports_reasoning": True, "supports_reasoning_summaries": True}))
     assert source_model_supports_reasoning(summaries_only, "reasoning-model") is True
+
+
+def test_source_model_defaults_available_in_plans_for_chatgpt_oauth() -> None:
+    source = _reasoning_source(None)
+    [model] = source_models_to_upstream_models([source])
+    assert model.available_in_plans == frozenset({"free", "plus", "pro", "team", "edu"})
+
+
+def test_source_model_respects_custom_available_in_plans() -> None:
+    raw = json.dumps({"available_in_plans": ["pro", "team"]})
+    source = _reasoning_source(raw)
+    [model] = source_models_to_upstream_models([source])
+    assert model.available_in_plans == frozenset({"pro", "team"})

@@ -33,6 +33,7 @@ from app.db.session import get_background_session
 from app.modules.accounts.auth_manager import AccountsRepositoryPort, AuthManager, _clean_optional
 from app.modules.accounts.background_repository import BackgroundAccountsRepository
 from app.modules.proxy.account_cache import get_account_selection_cache, mark_account_routing_unavailable
+from app.modules.proxy.account_eligibility import account_reauth_credentials_are_unavailable
 from app.modules.usage.additional_quota_keys import canonicalize_additional_quota_key
 from app.modules.usage.background_repository import BackgroundAdditionalUsageRepository, BackgroundUsageRepository
 from app.modules.usage.plan_downgrade_observations import (
@@ -312,7 +313,9 @@ class UsageUpdater:
         interval = USAGE_REFRESH_INTERVAL_SECONDS
         _prune_usage_refresh_auth_cooldowns()
         for account in accounts:
-            if account.status in (AccountStatus.REAUTH_REQUIRED, AccountStatus.DEACTIVATED):
+            if account.status == AccountStatus.DEACTIVATED or account_reauth_credentials_are_unavailable(
+                account, self._encryptor
+            ):
                 continue
             if _is_usage_refresh_in_cooldown(account.id):
                 continue
@@ -412,18 +415,35 @@ class UsageUpdater:
         account: Account,
         *,
         access_token_override: str | None = None,
+        probe_verified: bool = False,
     ) -> AccountRefreshResult:
         """Refresh one account and expose whether the upstream fetch completed."""
-        if account.status in (AccountStatus.REAUTH_REQUIRED, AccountStatus.DEACTIVATED):
+        if account.status == AccountStatus.DEACTIVATED or account_reauth_credentials_are_unavailable(
+            account, self._encryptor
+        ):
             return AccountRefreshResult(usage_written=False, fetch_succeeded=False)
         try:
+            refresh_fn = (
+                (
+                    lambda: self._refresh_account(
+                        account,
+                        usage_account_id=account.chatgpt_account_id,
+                        access_token_override=access_token_override,
+                        probe_verified=True,
+                    )
+                )
+                if probe_verified
+                else (
+                    lambda: self._refresh_account(
+                        account,
+                        usage_account_id=account.chatgpt_account_id,
+                        access_token_override=access_token_override,
+                    )
+                )
+            )
             result = await _USAGE_REFRESH_SINGLEFLIGHT.run(
                 account.id,
-                lambda: self._refresh_account(
-                    account,
-                    usage_account_id=account.chatgpt_account_id,
-                    access_token_override=access_token_override,
-                ),
+                refresh_fn,
                 join_existing=False,
             )
             await self._sync_account_from_repo(account)
@@ -559,7 +579,10 @@ class UsageUpdater:
         account = await accounts_repo.get_by_id(account_id)
         if account is None:
             return None
-        if account.status in (AccountStatus.PAUSED, AccountStatus.REAUTH_REQUIRED, AccountStatus.DEACTIVATED):
+        if account.status in (
+            AccountStatus.PAUSED,
+            AccountStatus.DEACTIVATED,
+        ) or account_reauth_credentials_are_unavailable(account, TokenEncryptor()):
             return None
         updater = UsageUpdater(
             BackgroundUsageRepository(),
@@ -591,6 +614,7 @@ class UsageUpdater:
         *,
         usage_account_id: str | None,
         access_token_override: str | None = None,
+        probe_verified: bool = False,
     ) -> AccountRefreshResult:
         access_token = access_token_override or self._encryptor.decrypt(account.access_token_encrypted)
         payload: UsagePayload | None = None
@@ -617,7 +641,7 @@ class UsageUpdater:
             if access_token_override is not None:
                 _mark_usage_refresh_auth_cooldown(account.id, exc.status_code)
                 return AccountRefreshResult(usage_written=False, fetch_succeeded=False)
-            if exc.status_code != 401 or not self._auth_manager:
+            if exc.status_code != 401 or not self._auth_manager or account.status == AccountStatus.REAUTH_REQUIRED:
                 _mark_usage_refresh_auth_cooldown(account.id, exc.status_code)
                 return AccountRefreshResult(usage_written=False, fetch_succeeded=False)
             try:
@@ -792,7 +816,13 @@ class UsageUpdater:
             snapshot_windows,
         )
         usage_written = any(_usage_entry_written(entry) for entry in entries)
-        await self._recover_quota_status_from_usage(account, primary=primary, secondary=secondary, monthly=monthly)
+        await self._recover_quota_status_from_usage(
+            account,
+            primary=primary,
+            secondary=secondary,
+            monthly=monthly,
+            probe_verified=probe_verified,
+        )
         return AccountRefreshResult(usage_written=usage_written)
 
     async def _deactivate_for_client_error(self, account: Account, exc: UsageFetchError) -> None:
@@ -879,11 +909,12 @@ class UsageUpdater:
         primary: UsageWindow | None,
         secondary: UsageWindow | None,
         monthly: UsageWindow | None = None,
+        probe_verified: bool = False,
     ) -> None:
         if not self._auth_manager:
             return
         if account.status == AccountStatus.RATE_LIMITED:
-            if account.blocked_at is not None:
+            if account.blocked_at is not None and not probe_verified:
                 # An account marked RATE_LIMITED by an actual 429 always
                 # carries a blocked_at marker. Honor the persisted cooldown
                 # deadline (Retry-After hint, upstream reset metadata, or the
@@ -894,6 +925,9 @@ class UsageUpdater:
                 # ended: throttles are not always quota-based. Rows without
                 # blocked_at are stale window-derived markings and keep the
                 # fresh-usage recovery below.
+                # When probe_verified is True, an operator-triggered probe has
+                # confirmed that upstream successfully accepted traffic for this
+                # account, so available quota can clear the stale hold.
                 now = time.time()
                 cooldown_deadline = plausible_rate_limit_reset_at(account.reset_at, now=now) or (
                     float(account.blocked_at) + RATE_LIMITED_MIN_COOLDOWN_SECONDS

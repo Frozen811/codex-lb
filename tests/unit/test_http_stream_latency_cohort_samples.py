@@ -140,3 +140,63 @@ async def test_http_stream_without_a_terminal_frame_records_no_throughput_sample
     assert row["error_code"] == "stream_incomplete"
     runtime = service._load_balancer._runtime.get(account.id)
     assert runtime is None or (not runtime.tps_samples and not runtime.ttft_samples)
+
+
+@pytest.mark.asyncio
+async def test_http_stream_records_observed_upstream_phase_timings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request_logs = _RequestLogsRecorder()
+    service, clock, scheduler = _virtual_service(request_logs)
+    account = _make_account("acc_http_phases")
+
+    async def fake_stream(*_args: object, **_kwargs: object) -> AsyncIterator[str]:
+        clock.advance(1.0)  # first event at t=1 s
+        yield _sse({"type": "response.in_progress"})
+        clock.advance(1.0)  # response.created at t=2 s
+        yield _sse({"type": "response.created", "response": {"id": "resp_http_phases"}})
+        clock.advance(1.0)  # first token at t=3 s
+        yield _sse({"type": "response.output_text.delta", "delta": "hello"})
+        clock.advance(2.0)  # completed at t=5 s
+        yield _sse(
+            {
+                "type": "response.completed",
+                "response": {
+                    "id": "resp_http_phases",
+                    "usage": {"input_tokens": 100, "output_tokens": 20},
+                },
+            }
+        )
+
+    monkeypatch.setattr(proxy_service, "core_stream_responses", fake_stream)
+    payload = ResponsesRequest.model_validate(
+        {"model": "gpt-5.6-sol", "instructions": "hi", "input": [], "stream": True}
+    )
+
+    chunks = [
+        chunk
+        async for chunk in service._stream_once(
+            account,
+            payload,
+            {"session_id": "sid-http-phases"},
+            "req_http_phases",
+            False,
+            request_started_at=clock.monotonic(),
+            api_key=None,
+            api_key_reservation=None,
+            settlement=proxy_service._StreamSettlement(),
+            suppress_text_done_events=False,
+            upstream_stream_transport=None,
+            request_transport="http",
+        )
+    ]
+    await scheduler.drain()
+    assert await service.drain_persistence_tasks(timeout_seconds=1.0)
+
+    assert len(chunks) == 4
+    (row,) = request_logs.calls
+    assert row["status"] == "success"
+    assert row["latency_first_upstream_event_ms"] == 1_000
+    assert row["latency_response_created_ms"] == 2_000
+    assert row["latency_first_token_ms"] == 3_000
+    assert row["latency_ms"] == 5_000

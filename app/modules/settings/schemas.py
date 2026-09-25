@@ -30,7 +30,7 @@ def _normalize_weekly_pace_working_days(value: str | None) -> str | None:
 class AdditionalQuotaPolicy(DashboardModel):
     quota_key: str
     display_label: str
-    routing_policy: str = Field(pattern=r"^(inherit|burn_first|normal|preserve)$")
+    routing_policy: str = Field(pattern=r"^(inherit|burn_first|normal|preserve|disabled)$")
     model_ids: list[str] = Field(default_factory=list)
 
 
@@ -94,6 +94,7 @@ class DashboardSettingsResponse(DashboardModel):
     routing_strategy: str = Field(
         pattern=r"^(usage_weighted|round_robin|capacity_weighted|relative_availability|fill_first|sequential_drain|reset_drain|single_account)$"
     )
+    subagent_account_preference: str = Field(pattern=r"^(off|parent_bound_only|always)$")
     relative_availability_power: float = Field(gt=0.0)
     relative_availability_top_k: int = Field(ge=1, le=20)
     single_account_id: str | None = None
@@ -269,6 +270,10 @@ class DashboardSettingsUpdateRequest(DashboardModel):
     routing_strategy: str | None = Field(
         default=None,
         pattern=r"^(usage_weighted|round_robin|capacity_weighted|relative_availability|fill_first|sequential_drain|reset_drain|single_account)$",
+    )
+    subagent_account_preference: str | None = Field(
+        default=None,
+        pattern=r"^(off|parent_bound_only|always)$",
     )
     relative_availability_power: float | None = Field(default=None, gt=0.0)
     relative_availability_top_k: int | None = Field(default=None, ge=1, le=20)

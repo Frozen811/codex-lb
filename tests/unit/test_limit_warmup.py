@@ -45,9 +45,8 @@ def _usage(
 ) -> UsageHistory:
     window_minutes = {"primary": 300, "secondary": 10_080, "monthly": 43_200}[window]
     if recorded_at is None:
-        recorded_at = datetime.fromtimestamp(
-            reset_at - window_minutes * 60,
-            tz=timezone.utc,
+        recorded_at = (
+            datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(seconds=reset_at - window_minutes * 60)
         ).replace(tzinfo=None)
     return UsageHistory(
         account_id=account_id,
@@ -2278,3 +2277,77 @@ async def test_recent_attempt_cooldown_does_not_block_distinct_reset() -> None:
 
     assert sender.calls == [(account.id, "gpt-5.1-codex-mini")]
     assert [(row.reset_at, row.status) for row in repo.rows] == [(1000, "failed"), (3000, "succeeded")]
+
+
+def test_staggered_idle_slot_reachable_for_sliding_reset_at() -> None:
+    # Issue #1976: When an idle account reports a sliding reset_at (reset_at = now + window_seconds),
+    # non-zero slots must still evaluate against the rolling cycle instead of collapsing to elapsed=0.
+    account_ids = ["acc_1", "acc_2", "acc_3"]
+    window_seconds = 18_000
+    # acc_2 has index 1 -> slot_offset = 6000. At now=6000, upstream reports reset_at = 6000 + 18000 = 24000.
+    now_at_slot = datetime.fromtimestamp(6000, tz=timezone.utc).replace(tzinfo=None)
+    sliding_reset_at = 24_000
+
+    due = limit_warmup_service._staggered_idle_due(
+        "acc_2",
+        account_ids,
+        now=now_at_slot,
+        reset_at=sliding_reset_at,
+        window_seconds=window_seconds,
+    )
+
+    assert due is not None
+    assert due.slot_offset_seconds == 6000
+
+    # Before slot: at now=5900, reset_at = 5900 + 18000 = 23900.
+    before_slot = limit_warmup_service._staggered_idle_due(
+        "acc_2",
+        account_ids,
+        now=datetime.fromtimestamp(5900, tz=timezone.utc).replace(tzinfo=None),
+        reset_at=23_900,
+        window_seconds=window_seconds,
+    )
+    assert before_slot is None
+
+    # After slot grace passed before interval started: at now=6100, interval_started_at=6070.
+    after_grace = limit_warmup_service._staggered_idle_due(
+        "acc_2",
+        account_ids,
+        now=datetime.fromtimestamp(6100, tz=timezone.utc).replace(tzinfo=None),
+        reset_at=24_100,
+        interval_started_at=datetime.fromtimestamp(6070, tz=timezone.utc).replace(tzinfo=None),
+        usage_refresh_interval_seconds=60,
+        window_seconds=window_seconds,
+    )
+    assert after_grace is None
+
+
+@pytest.mark.asyncio
+async def test_staggered_idle_warmup_fires_for_sliding_reset_at(monkeypatch) -> None:
+    # Full end-to-end service run where an idle account with sliding reset_at
+    # warms up once its staggered slot arrives.
+    now = datetime.fromtimestamp(6000, tz=timezone.utc).replace(tzinfo=None)
+    monkeypatch.setattr(limit_warmup_service, "utcnow", lambda: now)
+    repo = FakeWarmupRepo()
+    sender = FakeSender()
+    service = LimitWarmupService(repo, FakeRequestLogsRepo(), sender=sender)
+    accounts = [_account("acc_1"), _account("acc_2"), _account("acc_3")]
+    account = accounts[1]
+
+    # acc_2 is at slot offset 6000, reset_at slides to 24_000 (now + 18000)
+    await service.run_after_usage_refresh(
+        accounts=accounts,
+        settings=_settings(limit_warmup_staggered_idle_enabled=True),
+        before_primary={account.id: _usage(account.id, used_percent=0, reset_at=24_000, recorded_at=now)},
+        before_secondary={},
+        after_primary={account.id: _usage(account.id, used_percent=0, reset_at=24_000, recorded_at=now)},
+        after_secondary={},
+        refresh_started_at=now,
+    )
+
+    assert sender.calls == [(account.id, "gpt-5.1-codex-mini")]
+    assert len(repo.rows) == 1
+    assert repo.rows[0].account_id == "acc_2"
+    assert repo.rows[0].window == "primary_idle"
+    assert repo.rows[0].status == "succeeded"
+

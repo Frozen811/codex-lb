@@ -209,9 +209,11 @@ class DashboardService:
             secondary_history=secondary_history,
             now=now,
             usage_refresh_interval_seconds=USAGE_REFRESH_INTERVAL_SECONDS,
+            encryptor=self._encryptor,
             trailing_demand_used_percent_by_account=trailing_demand,
             working_days=_parse_weekly_pace_working_days(dashboard_settings.weekly_pace_working_days),
             smoothing_window_minutes=dashboard_settings.weekly_pace_smoothing_minutes,
+            activity_cost_usd=activity_cost.total_usd if activity_cost else None,
         )
         await _attach_top_api_keys(self._repo, weekly_credit_pace, now)
 
@@ -260,6 +262,7 @@ class DashboardService:
             secondary_history=secondary_history,
             now=now,
             usage_refresh_interval_seconds=USAGE_REFRESH_INTERVAL_SECONDS,
+            encryptor=self._encryptor,
             trailing_demand_used_percent_by_account=trailing_demand,
             working_days=_parse_weekly_pace_working_days(dashboard_settings.weekly_pace_working_days),
             smoothing_window_minutes=dashboard_settings.weekly_pace_smoothing_minutes,

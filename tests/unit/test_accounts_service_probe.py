@@ -12,7 +12,6 @@ from app.core.crypto import TokenEncryptor
 from app.db.models import Account, AccountStatus
 from app.modules.accounts.repository import AccountsRepository
 from app.modules.accounts.service import (
-    PROBE_MAX_OUTPUT_TOKENS,
     AccountNotProbableError,
     AccountsService,
 )
@@ -156,7 +155,7 @@ async def test_probe_account_captures_before_after_snapshot(monkeypatch):
     assert service._usage_updater is not None
     force_refresh_mock = service._usage_updater.force_refresh_result
     assert isinstance(force_refresh_mock, AsyncMock)
-    force_refresh_mock.assert_awaited_once_with(account)
+    force_refresh_mock.assert_awaited_once_with(account, probe_verified=True)
 
 
 @pytest.mark.asyncio
@@ -350,10 +349,24 @@ async def test_send_probe_request_uses_shared_http_client(monkeypatch):
     assert captured["headers"]["Authorization"] == f"Bearer {_PROBE_TOKEN_PLAINTEXT}"
     assert captured["headers"]["chatgpt-account-id"] == _CHATGPT_ACCOUNT_ID
     assert captured["json"]["model"] == "gpt-5.5-test"
-    assert captured["json"]["max_output_tokens"] == PROBE_MAX_OUTPUT_TOKENS
-    assert captured["json"]["max_output_tokens"] == 16
+    assert "max_output_tokens" not in captured["json"]
     assert captured["json"]["stream"] is True
     assert captured["json"]["store"] is False
     assert captured["timeout"].total == 30.0
     assert captured["timeout"].connect is None
     assert captured["timeout"].sock_connect == 10.0
+
+
+@pytest.mark.asyncio
+async def test_probe_account_passes_probe_verified_to_usage_updater(monkeypatch):
+    account = _make_account()
+    service = _build_service(account=account, primary_pct=0.0, secondary_pct=0.0)
+
+    async def _fake_probe(**kwargs):
+        return 200
+
+    monkeypatch.setattr(service, "_send_probe_request", _fake_probe)
+
+    await service.probe_account(_ACCOUNT_ID)
+
+    service._usage_updater.force_refresh_result.assert_awaited_once_with(account, probe_verified=True)

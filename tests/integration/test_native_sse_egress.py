@@ -45,6 +45,12 @@ class _UnexpectedPythonSession:
         raise AssertionError("direct native HTTP must not use aiohttp websocket")
 
 
+def _free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
 async def _read_request(reader: asyncio.StreamReader) -> tuple[bytes, bytes]:
     head = await reader.readuntil(b"\r\n\r\n")
     content_length = 0
@@ -640,44 +646,42 @@ async def test_routed_native_selection_stops_after_response_head(
         await _finish_chunks(writer)
 
     async with _serve_http(selected_handler) as selected_url, _serve_http(replay_handler) as replay_url:
-        with socket.socket() as unavailable:
-            # Reserve a non-listening port: a deterministic refused connection
-            # proves pre-dispatch fallback without relying on external hosts.
-            unavailable.bind(("127.0.0.1", 0))
-            dead_port = unavailable.getsockname()[1]
-            for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
-                monkeypatch.setenv(name, f"http://127.0.0.1:{dead_port}")
-            monkeypatch.setenv("NO_PROXY", "*")
-            monkeypatch.setenv("no_proxy", "*")
-            route = ResolvedUpstreamRoute(
-                mode="account_bound",
-                pool_id="fallback-pool",
-                endpoint=ResolvedProxyEndpoint("refused", "http", "127.0.0.1", dead_port),
-                fallbacks=(
-                    ResolvedProxyEndpoint("selected", "http", "127.0.0.1", urlsplit(selected_url).port or 80),
-                    ResolvedProxyEndpoint("no-replay", "http", "127.0.0.1", urlsplit(replay_url).port or 80),
+        # Reserve an unallocated port: an immediate refused connection proves
+        # pre-dispatch fallback portably without binding or holding an open socket.
+        dead_port = _free_port()
+        for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+            monkeypatch.setenv(name, f"http://127.0.0.1:{dead_port}")
+        monkeypatch.setenv("NO_PROXY", "*")
+        monkeypatch.setenv("no_proxy", "*")
+        route = ResolvedUpstreamRoute(
+            mode="account_bound",
+            pool_id="fallback-pool",
+            endpoint=ResolvedProxyEndpoint("refused", "http", "127.0.0.1", dead_port),
+            fallbacks=(
+                ResolvedProxyEndpoint("selected", "http", "127.0.0.1", urlsplit(selected_url).port or 80),
+                ResolvedProxyEndpoint("no-replay", "http", "127.0.0.1", urlsplit(replay_url).port or 80),
+            ),
+        )
+        trace = proxy_module.UpstreamProxyRouteTrace()
+        with override_stream_timeouts(idle_timeout_seconds=0.15):
+            events = await asyncio.wait_for(
+                _collect(
+                    stream_responses(
+                        _request("selected-endpoint"),
+                        {},
+                        "test-access-token",
+                        "test-account",
+                        base_url="http://upstream.invalid",
+                        route=route,
+                        route_trace=trace,
+                        session=cast(aiohttp.ClientSession, session),
+                        upstream_stream_transport_override="http",
+                        suppress_live_usage=True,
+                        native_egress_client=native_worker,
+                    )
                 ),
+                timeout=3,
             )
-            trace = proxy_module.UpstreamProxyRouteTrace()
-            with override_stream_timeouts(idle_timeout_seconds=0.15):
-                events = await asyncio.wait_for(
-                    _collect(
-                        stream_responses(
-                            _request("selected-endpoint"),
-                            {},
-                            "test-access-token",
-                            "test-account",
-                            base_url="http://upstream.invalid",
-                            route=route,
-                            route_trace=trace,
-                            session=cast(aiohttp.ClientSession, session),
-                            upstream_stream_transport_override="http",
-                            suppress_live_usage=True,
-                            native_egress_client=native_worker,
-                        )
-                    ),
-                    timeout=3,
-                )
 
     assert len(accepted_heads) == 1
     assert accepted_heads[0].startswith(b"POST http://upstream.invalid/codex/responses ")
@@ -845,7 +849,9 @@ _COMPACT_EVENTS = (
 )
 
 _COMPACT_CASES = json.loads(
-    (Path(__file__).resolve().parents[2] / "crates/codex-lb-responses/tests/fixtures/compact-v1.json").read_text()
+    (Path(__file__).resolve().parents[2] / "crates/codex-lb-responses/tests/fixtures/compact-v1.json").read_text(
+        encoding="utf-8"
+    )
 )
 
 
@@ -1314,28 +1320,27 @@ async def test_native_compact_routed_fallback_keeps_metadata_and_never_replays_a
         await _finish_chunks(writer)
 
     async with _serve_http(selected) as selected_url, _serve_http(replay) as replay_url:
-        with socket.socket() as refused:
-            refused.bind(("127.0.0.1", 0))  # reserved port without a listener
-            route = ResolvedUpstreamRoute(
-                mode="account_bound",
-                pool_id="compact-fallback",
-                endpoint=ResolvedProxyEndpoint("refused", "http", "127.0.0.1", refused.getsockname()[1]),
-                fallbacks=(
-                    ResolvedProxyEndpoint("selected", "http", "127.0.0.1", urlsplit(selected_url).port or 80),
-                    ResolvedProxyEndpoint("replay", "http", "127.0.0.1", urlsplit(replay_url).port or 80),
-                ),
-            )
-            trace = proxy_module.UpstreamProxyRouteTrace()
-            request = _compact(
-                selected_url, native_worker, monkeypatch, routed=True, selected_route=route, route_trace=trace
-            )
-            if outcome == "complete":
-                assert (await request).id == "resp_compact"
-            else:
-                with pytest.raises(ProxyResponseError) as caught:
-                    await request
-                assert caught.value.failure_phase == "body_read"
-                assert not caught.value.retryable_same_contract
+        refused_port = _free_port()
+        route = ResolvedUpstreamRoute(
+            mode="account_bound",
+            pool_id="compact-fallback",
+            endpoint=ResolvedProxyEndpoint("refused", "http", "127.0.0.1", refused_port),
+            fallbacks=(
+                ResolvedProxyEndpoint("selected", "http", "127.0.0.1", urlsplit(selected_url).port or 80),
+                ResolvedProxyEndpoint("replay", "http", "127.0.0.1", urlsplit(replay_url).port or 80),
+            ),
+        )
+        trace = proxy_module.UpstreamProxyRouteTrace()
+        request = _compact(
+            selected_url, native_worker, monkeypatch, routed=True, selected_route=route, route_trace=trace
+        )
+        if outcome == "complete":
+            assert (await request).id == "resp_compact"
+        else:
+            with pytest.raises(ProxyResponseError) as caught:
+                await request
+            assert caught.value.failure_phase == "body_read"
+            assert not caught.value.retryable_same_contract
     assert len(accepted) == 1
     assert not replays
     assert trace == proxy_module.UpstreamProxyRouteTrace("account_bound", "compact-fallback", "selected", True)

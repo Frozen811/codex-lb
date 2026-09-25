@@ -176,6 +176,18 @@ async def internal_drain_status(request: Request) -> HealthCheckResponse:
         except Exception as exc:
             checks["http_bridge_activity_error"] = type(exc).__name__
 
+    if proxy_service is not None and hasattr(proxy_service, "request_persistence_activity_snapshot_nowait"):
+        try:
+            persistence_activity = proxy_service.request_persistence_activity_snapshot_nowait()
+            checks.update(
+                {
+                    key: str(value).lower() if isinstance(value, bool) else str(value)
+                    for key, value in persistence_activity.items()
+                }
+            )
+        except Exception as exc:
+            checks["request_persistence_activity_error"] = type(exc).__name__
+
     return HealthCheckResponse(status="ok", checks=checks)
 
 

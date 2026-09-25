@@ -15,6 +15,8 @@ from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit.service import AuditService
+from app.core.audit.types import AuditSeverity, AuditTarget
 from app.core.auth import DEFAULT_PLAN, OpenAIAuthClaims, extract_id_token_claims
 from app.core.auth.refresh import (
     TOKEN_REFRESH_TIMEOUT_SECONDS,
@@ -26,7 +28,11 @@ from app.core.auth.refresh import (
     refresh_access_token,
     should_refresh,
 )
-from app.core.balancer import PERMANENT_FAILURE_CODES, account_status_for_permanent_failure
+from app.core.balancer import (
+    PERMANENT_FAILURE_CODES,
+    account_status_for_permanent_failure,
+    reauth_reason_blocks_routing,
+)
 from app.core.crypto import TokenEncryptor
 from app.core.plan_types import coerce_account_plan_type
 from app.core.upstream_proxy import UpstreamProxyRouteError, resolve_upstream_route
@@ -36,6 +42,7 @@ from app.db.models import Account, AccountProxyBinding, AccountStatus
 from app.db.session import get_background_session
 from app.modules.accounts.refresh_claims import RefreshClaimCoordinatorPort, get_refresh_claim_coordinator
 from app.modules.proxy.account_cache import get_account_selection_cache, mark_account_routing_unavailable
+from app.modules.proxy.account_eligibility import account_access_token_expires_at
 from app.modules.proxy.work_admission import ADMISSION_WAIT_TIMEOUT_SECONDS
 
 
@@ -75,6 +82,7 @@ class AccountsRepositoryPort(Protocol):
         last_refresh: datetime,
         *,
         expected_refresh_token_encrypted: bytes,
+        encryptor: TokenEncryptor | None = None,
         plan_type: str | None = None,
         email: str | None = None,
         chatgpt_account_id: str | None = None,
@@ -182,6 +190,19 @@ def _token_refresh_claim_ttl_seconds() -> float:
 # (unchanged) refresh material must NOT re-exchange the stored consumed/dead
 # token; it must fail closed and surface the terminal state instead.
 _TERMINAL_REFRESH_STATUSES = frozenset({AccountStatus.REAUTH_REQUIRED, AccountStatus.DEACTIVATED})
+
+# These describe the refresh credential, not an upstream rejection of the
+# access token or termination of the account/session. Only ordinary preflight
+# callers may try a still-unexpired access token after these failures.
+_REFRESH_CREDENTIAL_FAILURE_CODES = frozenset(
+    {
+        "refresh_token_expired",
+        "refresh_token_reused",
+        "refresh_token_invalidated",
+        "invalid_refresh_token",
+        "invalid_grant",
+    }
+)
 
 
 _RefreshSingleflightKey: TypeAlias = tuple[str, str]
@@ -306,11 +327,37 @@ class AuthManager:
         self._refresh_claims = refresh_claims
 
     async def ensure_fresh(self, account: Account, *, force: bool = False) -> Account:
+        if not self._encryptor.decrypt(account.refresh_token_encrypted):
+            return await self._ensure_chatgpt_account_id(account)
         if force or (account.status != AccountStatus.REAUTH_REQUIRED and should_refresh(account.last_refresh)):
-            account = await _REFRESH_SINGLEFLIGHT.run(
-                _refresh_singleflight_key(self._encryptor, account),
-                lambda: self._run_refresh(account),
-            )
+            ordinary_active_preflight = not force and account.status == AccountStatus.ACTIVE
+            try:
+                account = await _REFRESH_SINGLEFLIGHT.run(
+                    _refresh_singleflight_key(self._encryptor, account),
+                    lambda: self._run_refresh(account),
+                )
+            except RefreshError as exc:
+                if (
+                    not ordinary_active_preflight
+                    or not exc.is_permanent
+                    or exc.code not in _REFRESH_CREDENTIAL_FAILURE_CODES
+                ):
+                    raise
+                # Keep recovery outside singleflight: a forced caller sharing
+                # this exchange must still fail after an upstream auth rejection.
+                # Re-read because the owned refresh task (or a peer) may have
+                # updated a different ORM instance. Never clear its warning.
+                latest = await self._repo.get_by_id_fresh(account.id)
+                if (
+                    latest is None
+                    or latest.status != AccountStatus.REAUTH_REQUIRED
+                    or latest.deactivation_reason != PERMANENT_FAILURE_CODES[exc.code]
+                ):
+                    raise
+                expires_at = account_access_token_expires_at(latest, self._encryptor)
+                if expires_at is None or expires_at <= time.time():
+                    raise
+                account = _adopt_account_row(account, latest)
         return await self._ensure_chatgpt_account_id(account)
 
     async def _run_refresh(self, account: Account) -> Account:
@@ -485,7 +532,7 @@ class AuthManager:
                     if caller_deadline is not None:
                         remaining_budget = caller_deadline - time.monotonic()
                         if remaining_budget <= 0:
-                            raise RefreshError(
+                            failure = RefreshError(
                                 "refresh_claim_timeout",
                                 f"Token refresh for account {account.id} exhausted its "
                                 f"{caller_budget:.3f}s budget waiting for a peer replica's refresh "
@@ -493,6 +540,8 @@ class AuthManager:
                                 False,
                                 transport_error=True,
                             )
+                            self._log_refresh_attempt_failure(account.id, failure)
+                            raise failure
                         override_token = push_token_refresh_timeout_override(remaining_budget)
                         try:
                             return await self._perform_refresh(
@@ -519,13 +568,15 @@ class AuthManager:
                 return _adopt_account_row(account, latest)
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise RefreshError(
+                failure = RefreshError(
                     "refresh_claim_timeout",
                     f"Token refresh for account {account.id} is claimed by another replica; "
                     f"timed out waiting {wait_seconds:.3f}s for its rotation",
                     False,
                     transport_error=True,
                 )
+                self._log_refresh_attempt_failure(account.id, failure)
+                raise failure
             # Cap the per-iteration sleep to the remaining claim-wait budget.
             # The configured poll interval may exceed what is left of the
             # caller's deadline; sleeping the full interval would let this
@@ -574,6 +625,43 @@ class AuthManager:
             exc_info=None if self._redact_sensitive_details else last_exc,
         )
 
+    def _log_refresh_attempt_failure(self, account_id: str, exc: RefreshError) -> None:
+        """Correlate one failed attempt without exposing identities or provider content."""
+        # Shared refresh work may serve private callers. Correlate failures
+        # without exposing identities or untrusted provider error content.
+        safe_codes = {
+            "refresh_token_revoked",
+            "refresh_token_reused",
+            "refresh_token_expired",
+            "refresh_token_invalidated",
+            "invalid_grant",
+            "invalid_refresh_token",
+            "token_revoked",
+            "token_invalidated",
+            "account_auth_invalidated",
+            "account_deactivated",
+            "account_suspended",
+            "transport_error",
+            "upstream_proxy_unavailable",
+            "refresh_claim_timeout",
+            "invalid_response",
+            "http_400",
+            "http_401",
+            "http_403",
+            "http_429",
+            "http_500",
+            "http_502",
+            "http_503",
+            "http_504",
+        }
+        logger.warning(
+            "OAuth refresh attempt failed account_ref=%s code=%s permanent=%s transport=%s",
+            sha256(account_id.encode("utf-8")).hexdigest()[:16],
+            exc.code if exc.code in safe_codes else "other",
+            bool(exc.is_permanent),
+            bool(exc.transport_error),
+        )
+
     async def _perform_refresh(
         self,
         account: Account,
@@ -583,9 +671,16 @@ class AuthManager:
     ) -> Account:
         attempted_fingerprint = _refresh_token_material_fingerprint(self._encryptor, refresh_token_encrypted)
         refresh_token = self._encryptor.decrypt(refresh_token_encrypted)
+        if not refresh_token:
+            raise RefreshError(
+                "non_refreshable_account",
+                "Account does not have a refresh token and cannot be refreshed",
+                True,
+            )
         try:
             result = await self._refresh_tokens(refresh_token, account=account)
         except RefreshError as exc:
+            self._log_refresh_attempt_failure(account.id, exc)
             if exc.is_permanent:
                 adopted = await self._handle_permanent_refresh_failure(
                     account, exc, attempted_fingerprint, deadline=deadline
@@ -661,6 +756,7 @@ class AuthManager:
                 workspace_label=new_workspace_label,
                 seat_type=new_seat_type,
                 expected_refresh_token_encrypted=expected_refresh_token_encrypted,
+                encryptor=self._encryptor,
             )
 
         adopted = await self._persist_refreshed_tokens(
@@ -671,6 +767,12 @@ class AuthManager:
         )
         if adopted is not None:
             return adopted
+
+        latest = await self._repo.get_by_id_fresh(account.id)
+        if latest is not None:
+            # Rotation can reconcile a concurrent access rejection or preserve
+            # a newer operator status; detached callers must adopt that state.
+            return _adopt_account_row(account, latest)
 
         account.access_token_encrypted = new_access_token_encrypted
         account.refresh_token_encrypted = new_refresh_token_encrypted
@@ -935,7 +1037,6 @@ class AuthManager:
         never overwritten in any branch.
         """
         status = AccountStatus.REAUTH_REQUIRED
-        reason = "Refresh token persistence conflict; stored token is stale - re-login required"
         expected = expected_refresh_token_encrypted
         for _attempt in range(_FINAL_PERSIST_MAX_ATTEMPTS):
             latest = await self._repo.get_by_id_fresh(account.id)
@@ -948,6 +1049,11 @@ class AuthManager:
                 # ADOPT it; do NOT flag reauth on a healthy rotated row.
                 return _adopt_account_row(account, latest)
             expected = latest.refresh_token_encrypted
+            reason = (
+                latest.deactivation_reason
+                if reauth_reason_blocks_routing(latest.deactivation_reason)
+                else "Refresh token persistence conflict; stored token is stale - re-login required"
+            )
             applied = await self._repo.update_status_if_current(
                 account.id,
                 status,
@@ -961,6 +1067,17 @@ class AuthManager:
                 account.status = status
                 account.deactivation_reason = reason
                 get_account_selection_cache().invalidate()
+                AuditService.log_async(
+                    "account_reauth_required",
+                    target=AuditTarget("account", account.id),
+                    severity=AuditSeverity.WARNING,
+                    details={
+                        "account_id": account.id,
+                        "email": account.email,
+                        "deactivation_reason": reason,
+                        "code": "token_persist_conflict",
+                    },
+                )
                 logger.warning(
                     "Token-refresh compare-and-set for account_id=%s could not persist the freshly "
                     "rotated token after the dedicated final-persist retries (%s); flagged the account "
@@ -1038,7 +1155,6 @@ class AuthManager:
             != attempted_fingerprint
         ):
             return _adopt_account_row(account, latest)
-        reason = PERMANENT_FAILURE_CODES.get(exc.code, exc.message)
         status = account_status_for_permanent_failure(exc.code)
         for attempt in range(_TOKEN_CAS_MAX_ATTEMPTS):
             # The FIRST status CAS always runs so a genuine permanent failure is
@@ -1068,6 +1184,11 @@ class AuthManager:
                     False,
                     transport_error=True,
                 ) from exc
+            reason = (
+                latest.deactivation_reason
+                if status == AccountStatus.REAUTH_REQUIRED and reauth_reason_blocks_routing(latest.deactivation_reason)
+                else PERMANENT_FAILURE_CODES.get(exc.code, exc.message)
+            )
             applied = await self._repo.update_status_if_current(
                 account.id,
                 status,
@@ -1080,9 +1201,23 @@ class AuthManager:
             if applied:
                 account.status = status
                 account.deactivation_reason = reason
-                if status == AccountStatus.DEACTIVATED:
+                if status == AccountStatus.DEACTIVATED or (
+                    status == AccountStatus.REAUTH_REQUIRED and reauth_reason_blocks_routing(reason)
+                ):
                     mark_account_routing_unavailable(account.id)
                 get_account_selection_cache().invalidate()
+                if status == AccountStatus.REAUTH_REQUIRED:
+                    AuditService.log_async(
+                        "account_reauth_required",
+                        target=AuditTarget("account", account.id),
+                        severity=AuditSeverity.WARNING,
+                        details={
+                            "account_id": account.id,
+                            "email": account.email,
+                            "deactivation_reason": reason,
+                            "code": exc.code,
+                        },
+                    )
                 return None
             # CAS missed: the freshly observed account state changed between the
             # re-read and the write. Re-read to decide why.

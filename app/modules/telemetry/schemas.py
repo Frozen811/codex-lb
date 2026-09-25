@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 DeploymentMethod = Literal["docker", "k8s", "pip", "bare"]
 ActiveConsentState = Literal["undecided", "enabled"]
@@ -131,7 +131,15 @@ class TelemetryOptOut(TelemetryModel):
     app_version: str
     event: Literal["optout"] = "optout"
     instance_id: str
-    occurred_at: str
+    occurred_at: datetime | str
+
+    @field_serializer("occurred_at", when_used="json")
+    def serialize_occurred_at(self, value: datetime | str) -> str:
+        if isinstance(value, datetime):
+            if value.tzinfo is None:
+                return f"{value.isoformat()}Z"
+            return value.isoformat().replace("+00:00", "Z")
+        return value
 
 
 class TelemetrySnapshotEnvelope(TelemetryModel):

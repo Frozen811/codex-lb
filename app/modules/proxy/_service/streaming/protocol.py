@@ -7,6 +7,7 @@ class _StreamingServiceProtocol(Protocol):
     _acquire_account_response_create_lease_or_overload: Any
     _cancel_api_key_reservation_heartbeat_task: Any
     _drain_deferred_account_error_backoffs: Any
+    _durable_bridge: Any
     _encryptor: Any
     _ensure_fresh_with_budget: Any
     _get_work_admission: Any

@@ -827,6 +827,63 @@ async def test_codex_alpha_search_forwards_request_and_response(async_client, mo
 
 
 @pytest.mark.asyncio
+async def test_codex_alpha_search_v1_forwards_to_upstream(async_client, monkeypatch):
+    calls: list[dict[str, Any]] = []
+    upstream_body = b'{"results": [{"title": "OpenAI", "url": "https://openai.com"}]}'
+
+    async def fake_codex_control_request(
+        _self: Any,
+        path: str,
+        *,
+        method: str,
+        payload: bytes | None,
+        query_params: list[tuple[str, str]],
+        headers: Any,
+        codex_session_affinity: bool,
+        api_key: Any,
+        privacy_policy: Any,
+        success_gate: Any,
+    ) -> core_proxy.CodexControlResponse:
+        del codex_session_affinity, api_key, privacy_policy, success_gate
+        calls.append(
+            {
+                "path": path,
+                "method": method,
+                "payload": payload,
+                "query_params": query_params,
+                "session_id": headers.get("session_id"),
+            }
+        )
+        return core_proxy.CodexControlResponse(
+            status_code=200,
+            body=upstream_body,
+            headers={"content-type": "application/json", "x-request-id": "search-v1-req"},
+        )
+
+    monkeypatch.setattr(proxy_module.ProxyService, "codex_control_request", fake_codex_control_request)
+    payload = b'{"query": "OpenAI"}'
+
+    response = await async_client.post(
+        "/v1/alpha/search?result_count=5",
+        content=payload,
+        headers={"content-type": "application/json", "session_id": "search-v1-session"},
+    )
+
+    assert response.status_code == 200
+    assert response.content == upstream_body
+    assert response.headers["x-request-id"] == "search-v1-req"
+    assert calls == [
+        {
+            "path": "alpha/search",
+            "method": "POST",
+            "payload": payload,
+            "query_params": [("result_count", "5")],
+            "session_id": "search-v1-session",
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_codex_alpha_search_preserves_normalized_control_error_contract(async_client, monkeypatch):
     async def fake_codex_control_request(*_args, **_kwargs):
         raise ProxyResponseError(

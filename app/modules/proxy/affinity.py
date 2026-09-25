@@ -102,6 +102,12 @@ class _AffinityPolicy:
     # only: it never participates in routing, but it is the signal that tells
     # an operator whether unanchored threads are being held or are churning.
     prompt_cache_derivation_outcome: str | None = None
+    # Internal, one-way-derived exact-thread keys used only by the optional
+    # fresh-subagent placement preference. They never prove request ownership
+    # and stay out of selection_kwargs(): the load balancer never sees them.
+    subagent_parent_selection_key: str | None = None
+    subagent_parent_response_marker_key: str | None = None
+    response_bound_thread_marker_key: str | None = None
 
     @property
     def selection_key(self) -> str | None:
@@ -192,6 +198,11 @@ def _codex_session_selection_key(key: str) -> str:
     # sentinel above—not secrecy—provides source separation from raw rows.
     digest = sha256(key.encode()).hexdigest()
     return f"{_CODEX_SELECTION_KEY_PREFIX}:session_header:{digest}"
+
+
+def _response_bound_thread_marker_key(thread_selection_key: str) -> str:
+    digest = sha256(thread_selection_key.encode()).hexdigest()
+    return f"{_CODEX_SELECTION_KEY_PREFIX}:response_bound_thread:{digest}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -527,6 +538,52 @@ def _request_allows_unavailable_legacy_owner_abandonment(payload: ResponsesReque
     return responses_payload_is_account_neutral_fresh_replay(replay_payload)
 
 
+def _request_is_account_neutral_fresh_child(payload: ResponsesRequest) -> bool:
+    replay_payload = dict(payload.to_replay_safety_payload())
+    if replay_payload.get("type") == "response.create":
+        replay_payload.pop("type")
+    return responses_payload_is_account_neutral_fresh_replay(replay_payload)
+
+
+def _with_subagent_lineage(
+    policy: _AffinityPolicy,
+    payload: ResponsesRequest,
+    headers: Mapping[str, str],
+) -> _AffinityPolicy:
+    identity = _codex_backend_identity(headers)
+    own_thread_key = identity.thread_selection_key
+    previous_response_id = payload.previous_response_id
+    marker_key = (
+        _response_bound_thread_marker_key(own_thread_key)
+        if own_thread_key is not None and isinstance(previous_response_id, str) and bool(previous_response_id.strip())
+        else None
+    )
+
+    normalized = {key.lower(): value for key, value in headers.items()}
+    subagent = normalized.get("x-openai-subagent", "").strip()
+    parent_thread_id = normalized.get("x-codex-parent-thread-id", "").strip()
+    parent_thread_key: str | None = None
+    if (
+        subagent
+        and parent_thread_id
+        and identity.thread_id is not None
+        and parent_thread_id != identity.thread_id
+        and policy.kind == StickySessionKind.PROMPT_CACHE
+        and policy.codex_session_source == "thread_header"
+        and _request_is_account_neutral_fresh_child(payload)
+    ):
+        parent_thread_key = _codex_backend_identity(headers, thread_id=parent_thread_id).thread_selection_key
+
+    return replace(
+        policy,
+        subagent_parent_selection_key=parent_thread_key,
+        subagent_parent_response_marker_key=(
+            _response_bound_thread_marker_key(parent_thread_key) if parent_thread_key is not None else None
+        ),
+        response_bound_thread_marker_key=marker_key,
+    )
+
+
 def _affinity_with_payload_continuity(
     policy: _AffinityPolicy,
     payload: ResponsesRequest | ResponsesCompactRequest,
@@ -544,6 +601,7 @@ def _sticky_key_for_codex_control_request(
     headers: Mapping[str, str],
     *,
     codex_session_affinity: bool,
+    max_age_seconds: int = 86400,
 ) -> _AffinityPolicy:
     turn_state_key = _sticky_key_from_turn_state_header(headers)
     if turn_state_key:
@@ -552,6 +610,32 @@ def _sticky_key_for_codex_control_request(
             kind=StickySessionKind.CODEX_SESSION,
             codex_session_source="turn_state",
         )
+    thread_affinity = _thread_codex_session_affinity(
+        headers,
+        enabled=codex_session_affinity,
+        max_age_seconds=max_age_seconds,
+    )
+    if thread_affinity is not None:
+        normalized = {key.lower(): value for key, value in headers.items()}
+        subagent = normalized.get("x-openai-subagent", "").strip()
+        parent_thread_id = normalized.get("x-codex-parent-thread-id", "").strip()
+        identity = _codex_backend_identity(headers)
+        if (
+            subagent
+            and parent_thread_id
+            and identity.thread_id is not None
+            and parent_thread_id != identity.thread_id
+            and thread_affinity.codex_session_source == "thread_header"
+        ):
+            parent_thread_key = _codex_backend_identity(headers, thread_id=parent_thread_id).thread_selection_key
+            thread_affinity = replace(
+                thread_affinity,
+                subagent_parent_selection_key=parent_thread_key,
+                subagent_parent_response_marker_key=(
+                    _response_bound_thread_marker_key(parent_thread_key) if parent_thread_key is not None else None
+                ),
+            )
+        return thread_affinity
     session_affinity = _bare_codex_session_affinity(
         headers,
         enabled=codex_session_affinity,
@@ -590,6 +674,7 @@ def _sticky_key_for_thread_goal_request(
     return _sticky_key_for_codex_control_request(
         headers,
         codex_session_affinity=codex_session_affinity,
+        max_age_seconds=max_age_seconds,
     )
 
 
@@ -746,6 +831,26 @@ def _record_prompt_cache_resolution(resolution: _PromptCacheResolution) -> _Prom
     return resolution
 
 
+SUBAGENT_PROMPT_CACHE_MAX_AGE_SECONDS: int = 300
+
+
+def _is_subagent_headers(headers: Mapping[str, str]) -> bool:
+    normalized = {key.lower(): value for key, value in headers.items()}
+    subagent = normalized.get("x-openai-subagent", "").strip().lower()
+    parent_thread_id = normalized.get("x-codex-parent-thread-id", "").strip()
+    parent_session_id = normalized.get("x-parent-session-id", "").strip()
+    return bool(parent_session_id or (subagent and subagent not in ("0", "false", "no")) or parent_thread_id)
+
+
+def _effective_prompt_cache_max_age_seconds(
+    headers: Mapping[str, str],
+    configured_max_age_seconds: int,
+) -> int:
+    if _is_subagent_headers(headers):
+        return min(configured_max_age_seconds, SUBAGENT_PROMPT_CACHE_MAX_AGE_SECONDS)
+    return configured_max_age_seconds
+
+
 def _sticky_key_for_responses_request(
     payload: ResponsesRequest,
     headers: Mapping[str, str],
@@ -760,11 +865,12 @@ def _sticky_key_for_responses_request(
     # This helper only classifies locality keys. Stored-object continuity such
     # as `previous_response_id` is resolved later by ProxyService and must stay
     # hard owner-bound even if this returns a prompt-cache affinity policy.
+    effective_max_age_seconds = _effective_prompt_cache_max_age_seconds(headers, openai_cache_affinity_max_age_seconds)
     resolution = _resolve_prompt_cache_key(
         payload,
         openai_cache_affinity=openai_cache_affinity,
         api_key=api_key,
-        max_age_seconds=openai_cache_affinity_max_age_seconds,
+        max_age_seconds=effective_max_age_seconds,
     )
     cache_key = resolution.sticky_key
     cache_key_source = resolution.source
@@ -779,7 +885,7 @@ def _sticky_key_for_responses_request(
         thread_affinity := _thread_codex_session_affinity(
             headers,
             enabled=codex_session_affinity,
-            max_age_seconds=openai_cache_affinity_max_age_seconds,
+            max_age_seconds=effective_max_age_seconds,
         )
     ) is not None:
         policy = thread_affinity
@@ -795,7 +901,7 @@ def _sticky_key_for_responses_request(
         policy = _AffinityPolicy(
             key=cache_key,
             kind=StickySessionKind.PROMPT_CACHE,
-            max_age_seconds=openai_cache_affinity_max_age_seconds,
+            max_age_seconds=effective_max_age_seconds,
             prompt_cache_key_source=cache_key_source,
         )
     elif sticky_threads_enabled:
@@ -827,4 +933,5 @@ def _sticky_key_for_responses_request(
     ):
         policy = replace(policy, abandon_unavailable_legacy_owner=True)
     policy = replace(policy, prompt_cache_derivation_outcome=resolution.outcome)
-    return _affinity_with_payload_continuity(policy, payload)
+    policy = _affinity_with_payload_continuity(policy, payload)
+    return _with_subagent_lineage(policy, payload, headers)

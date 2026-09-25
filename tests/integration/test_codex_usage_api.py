@@ -993,3 +993,132 @@ async def test_codex_usage_cancellation_closes_initial_scope_without_reopening(
         release_owned_refresh.set()
         for owned_task in owned_tasks:
             await asyncio.wait_for(owned_task, timeout=1)
+
+
+@pytest.mark.asyncio
+async def test_codex_usage_backend_api_aliases_and_plan_preservation(async_client, db_setup, monkeypatch):
+    async with SessionLocal() as session:
+        accounts_repo = AccountsRepository(session)
+        usage_repo = UsageRepository(session)
+
+        # acc_caller is Plus, acc_other is Pro
+        await accounts_repo.upsert(
+            _make_account(
+                "acc_caller_plus",
+                "caller@example.com",
+                chatgpt_account_id="workspace_caller",
+                plan_type="plus",
+            )
+        )
+        await accounts_repo.upsert(
+            _make_account(
+                "acc_other_pro",
+                "other@example.com",
+                chatgpt_account_id="workspace_other",
+                plan_type="pro",
+            )
+        )
+        now_epoch = int(utcnow().replace(tzinfo=timezone.utc).timestamp())
+        await usage_repo.add_entry(
+            "acc_caller_plus",
+            10.0,
+            window="primary",
+            reset_at=now_epoch + 300,
+            window_minutes=300,
+        )
+        await usage_repo.add_entry(
+            "acc_other_pro",
+            20.0,
+            window="primary",
+            reset_at=now_epoch + 300,
+            window_minutes=300,
+        )
+
+    async def stub_fetch_usage(*, access_token: str, account_id: str | None, **_: object) -> UsagePayload:
+        return UsagePayload.model_validate({"plan_type": "plus", "rate_limit_reset_credits": {"available_count": 1}})
+
+    monkeypatch.setattr("app.core.auth.dependencies.fetch_usage", stub_fetch_usage)
+    # acc_other_pro has 2 reset credits in store
+    await get_rate_limit_reset_credits_store().set("acc_other_pro", _reset_credit_snapshot("credit-other"))
+
+    # Test /backend-api/wham/usage alias
+    response_wham = await async_client.get(
+        "/backend-api/wham/usage",
+        headers={
+            "Authorization": "Bearer chatgpt-token",
+            "chatgpt-account-id": "workspace_caller",
+        },
+    )
+    assert response_wham.status_code == 200
+    data_wham = response_wham.json()
+    assert data_wham["plan_type"] == "plus"
+    # 1 from caller + 1 from acc_other_pro snapshot = 2
+    assert data_wham["rate_limit_reset_credits"]["available_count"] == 2
+
+    # Test /backend-api/codex/usage alias
+    response_codex = await async_client.get(
+        "/backend-api/codex/usage",
+        headers={
+            "Authorization": "Bearer chatgpt-token",
+            "chatgpt-account-id": "workspace_caller",
+        },
+    )
+    assert response_codex.status_code == 200
+    assert response_codex.json()["plan_type"] == "plus"
+
+
+@pytest.mark.asyncio
+async def test_codex_consume_reset_credit_cross_account(async_client, db_setup, monkeypatch):
+    async with SessionLocal() as session:
+        accounts_repo = AccountsRepository(session)
+        await accounts_repo.upsert(
+            _make_account("acc_caller_x", "caller-x@example.com", chatgpt_account_id="workspace_caller_x")
+        )
+        await accounts_repo.upsert(
+            _make_account("acc_owner_y", "owner-y@example.com", chatgpt_account_id="workspace_owner_y")
+        )
+
+    async def stub_fetch_usage(*, access_token: str, account_id: str | None, **_: object) -> UsagePayload:
+        return UsagePayload.model_validate({"plan_type": "plus"})
+
+    consume_calls: list[dict[str, object]] = []
+
+    async def stub_consume_rate_limit_reset_credit(**kwargs: object) -> ConsumeRateLimitResetCreditResponse:
+        consume_calls.append(kwargs)
+        return ConsumeRateLimitResetCreditResponse.model_validate({"code": "reset", "windows_reset": 1})
+
+    refreshed_accounts: list[str] = []
+
+    class StubUsageUpdater:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        async def force_refresh(self, account: Account, *, access_token_override: str | None = None) -> bool:
+            refreshed_accounts.append(account.id)
+            return True
+
+    monkeypatch.setattr("app.core.auth.dependencies.fetch_usage", stub_fetch_usage)
+    monkeypatch.setattr("app.modules.proxy.api.consume_rate_limit_reset_credit", stub_consume_rate_limit_reset_credit)
+    monkeypatch.setattr("app.modules.proxy.api.UsageUpdater", StubUsageUpdater)
+
+    # acc_owner_y has the credit in store
+    await get_rate_limit_reset_credits_store().set("acc_owner_y", _reset_credit_snapshot("credit-target-999"))
+
+    # Caller consumes it via /backend-api/wham/rate-limit-reset-credits/consume
+    response = await async_client.post(
+        "/backend-api/wham/rate-limit-reset-credits/consume",
+        headers={
+            "Authorization": "Bearer chatgpt-token",
+            "chatgpt-account-id": "workspace_caller_x",
+        },
+        json={"redeem_request_id": "credit-target-999"},
+    )
+    assert response.status_code == 200
+    assert response.json()["code"] == "reset"
+    # Verification: consumed against acc_owner_y
+    assert len(consume_calls) == 1
+    assert consume_calls[0]["account_id"] == "workspace_owner_y"
+    assert consume_calls[0]["redeem_request_id"] == "credit-target-999"
+    # Verification: refreshed both accounts
+    assert "acc_owner_y" in refreshed_accounts
+    assert "acc_caller_x" in refreshed_accounts

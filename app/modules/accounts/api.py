@@ -29,6 +29,9 @@ from app.modules.accounts.schemas import (
     AccountAliasRequest,
     AccountAliasResponse,
     AccountAuthExportResponse,
+    AccountBackupExportResponse,
+    AccountBackupRestoreRequest,
+    AccountBackupRestoreResponse,
     AccountDeleteResponse,
     AccountImportResponse,
     AccountLimitWarmupUpdateRequest,
@@ -36,6 +39,8 @@ from app.modules.accounts.schemas import (
     AccountPauseResponse,
     AccountProbeRequest,
     AccountProbeResponse,
+    AccountQuotaLimitUpdateRequest,
+    AccountQuotaLimitUpdateResponse,
     AccountReactivateResponse,
     AccountRoutingPolicyUpdateRequest,
     AccountRoutingPolicyUpdateResponse,
@@ -204,6 +209,49 @@ async def export_account_auth(
         actor=AuditActor.from_principal(principal),
         target=AuditTarget("account", account_id),
         details={"account_id": account_id},
+    )
+    return result
+
+
+@router.post("/backup/export", response_model=AccountBackupExportResponse)
+async def export_accounts_backup(
+    request: Request,
+    response: Response,
+    principal: DashboardPrincipal = Depends(require_dashboard_permission(Permission.ACCOUNTS_EXPORT)),
+    context: AccountsContext = Depends(get_accounts_context),
+) -> AccountBackupExportResponse:
+    result = await context.service.export_backup()
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    AuditService.log_async(
+        "accounts_backup_exported",
+        actor_ip=request.client.host if request.client else None,
+        actor=AuditActor.from_principal(principal),
+        target=AuditTarget("accounts_backup", "all"),
+        details={"account_count": result.account_count},
+    )
+    return result
+
+
+@router.post("/backup/restore", response_model=AccountBackupRestoreResponse)
+async def restore_accounts_backup(
+    request: Request,
+    payload: AccountBackupRestoreRequest,
+    principal: DashboardPrincipal = Depends(require_dashboard_permission(Permission.ACCOUNTS_WRITE)),
+    context: AccountsContext = Depends(get_accounts_context),
+) -> AccountBackupRestoreResponse:
+    result = await context.service.restore_backup(payload)
+    AuditService.log_async(
+        "accounts_backup_restored",
+        actor_ip=request.client.host if request.client else None,
+        actor=AuditActor.from_principal(principal),
+        target=AuditTarget("accounts_backup", "restore"),
+        details={
+            "restored_count": result.restored_count,
+            "skipped_count": result.skipped_count,
+            "failed_count": result.failed_count,
+        },
     )
     return result
 
@@ -403,6 +451,40 @@ async def update_account_routing_policy(
     if not success:
         raise DashboardNotFoundError("Account not found", code="account_not_found")
     return AccountRoutingPolicyUpdateResponse(account_id=account_id, routing_policy=payload.routing_policy)
+
+
+@router.get("/{account_id}/quota-limit", response_model=AccountQuotaLimitUpdateResponse)
+async def get_account_quota_limit(
+    account_id: str,
+    context: AccountsContext = Depends(get_accounts_context),
+) -> AccountQuotaLimitUpdateResponse:
+    account = await context.service.get_account(account_id)
+    if not account:
+        raise DashboardNotFoundError("Account not found", code="account_not_found")
+    limit = context.service.get_quota_limit(account_id)
+    return AccountQuotaLimitUpdateResponse(account_id=account_id, limit_percent=limit)
+
+
+@router.put("/{account_id}/quota-limit", response_model=AccountQuotaLimitUpdateResponse)
+async def update_account_quota_limit(
+    request: Request,
+    account_id: str,
+    payload: AccountQuotaLimitUpdateRequest,
+    principal: DashboardPrincipal = Depends(require_dashboard_permission(Permission.ACCOUNTS_WRITE)),
+    context: AccountsContext = Depends(get_accounts_context),
+) -> AccountQuotaLimitUpdateResponse:
+    account = await context.service.get_account(account_id)
+    if not account:
+        raise DashboardNotFoundError("Account not found", code="account_not_found")
+    context.service.set_quota_limit(account_id, payload.limit_percent)
+    AuditService.log_async(
+        "account_quota_limit_updated",
+        actor_ip=request.client.host if request.client else None,
+        actor=AuditActor.from_principal(principal),
+        target=AuditTarget("account", account_id),
+        details={"account_id": account_id, "limit_percent": payload.limit_percent},
+    )
+    return AccountQuotaLimitUpdateResponse(account_id=account_id, limit_percent=payload.limit_percent)
 
 
 @router.delete("/{account_id}", response_model=AccountDeleteResponse)

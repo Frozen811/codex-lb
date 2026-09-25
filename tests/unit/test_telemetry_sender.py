@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from app.modules.telemetry.consent import TelemetryIdentity
-from app.modules.telemetry.schemas import TelemetrySnapshot, build_snapshot_envelope
+from app.modules.telemetry.schemas import TelemetryOptOut, TelemetrySnapshot, build_snapshot_envelope
 from app.modules.telemetry.sender import TelemetrySender
 
 pytestmark = pytest.mark.unit
@@ -367,3 +367,49 @@ async def test_preview_and_sender_snapshot_envelopes_have_identical_key_structur
     sender_body = json.loads(sender._post_signed.await_args_list[-1].args[2])
     preview_body = json.loads(preview.model_dump_json())
     assert _key_structure(sender_body) == _key_structure(preview_body)
+
+
+def test_telemetry_opt_out_datetime_serialization() -> None:
+    naive_dt = datetime(2026, 8, 20, 15, 30, 0)
+    aware_dt = datetime(2026, 8, 20, 15, 30, 0, tzinfo=UTC)
+
+    opt_naive = TelemetryOptOut(
+        app_version="1.25.0",
+        instance_id="inst-1",
+        occurred_at=naive_dt,
+    )
+    opt_aware = TelemetryOptOut(
+        app_version="1.25.0",
+        instance_id="inst-2",
+        occurred_at=aware_dt,
+    )
+    opt_str = TelemetryOptOut(
+        app_version="1.25.0",
+        instance_id="inst-3",
+        occurred_at="2026-08-20T15:30:00Z",
+    )
+
+    assert json.loads(opt_naive.model_dump_json())["occurred_at"] == "2026-08-20T15:30:00Z"
+    assert json.loads(opt_aware.model_dump_json())["occurred_at"] == "2026-08-20T15:30:00Z"
+    assert json.loads(opt_str.model_dump_json())["occurred_at"] == "2026-08-20T15:30:00Z"
+
+
+@pytest.mark.asyncio
+async def test_sender_synchronizes_snapshot_transmission_and_opt_out() -> None:
+    snapshot = _snapshot()
+    identity = TelemetryIdentity(snapshot.instance_id, Ed25519PrivateKey.generate())
+
+    active_state = True
+
+    async def dynamic_context_provider():
+        return active_state, identity
+
+    sender = TelemetrySender(context_provider=dynamic_context_provider)
+    sender._ensure_activated = AsyncMock()
+    sender._post_signed = AsyncMock()
+
+    session = Mock()
+    active_state = False
+    await sender._transmit_once(session, snapshot, identity)
+    sender._post_signed.assert_not_awaited()
+

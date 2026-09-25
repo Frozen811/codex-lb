@@ -69,11 +69,67 @@ export function useApiKeys() {
     },
   });
 
+  const resetUsageMutation = useMutation({
+    mutationFn: (keyId: string) => updateApiKey(keyId, { resetUsage: true }),
+    onSuccess: () => {
+      toast.success(t("apiKeys.toasts.usageReset"));
+      void queryClient.invalidateQueries({ queryKey: ["api-keys", "list"] });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || t("apiKeys.toasts.usageResetFailed"));
+    },
+  });
+
+  const bulkResetUsageMutation = useMutation({
+    mutationFn: async (keyIds: string[]) => {
+      const results = await Promise.allSettled(
+        keyIds.map((keyId) => updateApiKey(keyId, { resetUsage: true }))
+      );
+      const succeeded: string[] = [];
+      const failed: { keyId: string; error: Error }[] = [];
+      results.forEach((res, index) => {
+        if (res.status === "fulfilled") {
+          succeeded.push(keyIds[index]);
+        } else {
+          failed.push({
+            keyId: keyIds[index],
+            error: res.reason instanceof Error ? res.reason : new Error(String(res.reason)),
+          });
+        }
+      });
+      return { succeeded, failed, total: keyIds.length };
+    },
+    onSuccess: (data) => {
+      if (data.succeeded.length > 0 && data.failed.length === 0) {
+        toast.success(
+          data.succeeded.length === 1
+            ? t("apiKeys.toasts.usageReset")
+            : t("apiKeys.toasts.usageResetMany", { count: data.succeeded.length })
+        );
+      } else if (data.succeeded.length > 0) {
+        toast.warning(
+          t("apiKeys.toasts.usageResetPartial", {
+            succeeded: data.succeeded.length,
+            failed: data.failed.length,
+          })
+        );
+      } else {
+        toast.error(t("apiKeys.toasts.usageResetFailed"));
+      }
+      void queryClient.invalidateQueries({ queryKey: ["api-keys", "list"] });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || t("apiKeys.toasts.usageResetFailed"));
+    },
+  });
+
   return {
     apiKeysQuery,
     createMutation,
     updateMutation,
     deleteMutation,
     regenerateMutation,
+    resetUsageMutation,
+    bulkResetUsageMutation,
   };
 }

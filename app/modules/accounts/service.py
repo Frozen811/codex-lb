@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import cast
 from uuid import uuid4
 
@@ -14,14 +14,14 @@ from sqlalchemy.exc import OperationalError
 from app.core.auth import (
     DEFAULT_EMAIL,
     DEFAULT_PLAN,
+    AuthFile,
+    AuthTokens,
     claims_from_auth,
     generate_unique_account_id,
     parse_auth_json,
     token_expiry_epoch_ms,
 )
-from app.core.auth.api_key_cache import get_api_key_cache
 from app.core.auth.refresh import RefreshError
-from app.core.cache.invalidation import NAMESPACE_API_KEY, get_cache_invalidation_poller
 from app.core.clients.http import lease_http_session
 from app.core.clients.usage import (
     ConsumeRateLimitResetCreditResponse,
@@ -32,6 +32,7 @@ from app.core.clients.usage import (
 from app.core.config.settings import get_settings
 from app.core.crypto import TokenEncryptor
 from app.core.openai.host_models import resolve_default_host_model
+from app.core.openai.requests import _strip_unsupported_fields
 from app.core.plan_types import coerce_account_plan_type
 from app.core.upstream_proxy import ResolvedUpstreamRoute, UpstreamProxyRouteError, resolve_upstream_route
 from app.core.upstream_proxy.cache import get_upstream_route_cache
@@ -43,12 +44,20 @@ from app.db.session import get_background_session
 from app.modules.accounts.auth_manager import AuthManager
 from app.modules.accounts.deletion import request_account_deletion_run
 from app.modules.accounts.mappers import build_account_summaries, build_account_usage_trends
+from app.modules.accounts.quota_restriction import (
+    get_account_quota_restriction,
+    set_account_quota_restriction,
+)
 from app.modules.accounts.repository import AccountsRepository
 from app.modules.accounts.schemas import (
     AccountAdditionalQuota,
     AccountAdditionalWindow,
     AccountAuthExportResponse,
     AccountAuthExportTokens,
+    AccountBackupExportResponse,
+    AccountBackupItem,
+    AccountBackupRestoreRequest,
+    AccountBackupRestoreResponse,
     AccountImportResponse,
     AccountOpenCodeAuthExportAccount,
     AccountProbeResponse,
@@ -85,8 +94,6 @@ _DETAIL_BUCKET_SECONDS = 3600  # 1h → 168 points
 
 PROBE_REQUEST_TIMEOUT_SECONDS = 30.0
 PROBE_CONNECT_TIMEOUT_SECONDS = 10.0
-# Codex rejects probe completions below this output-token floor (1 → 400, 16 → 200).
-PROBE_MAX_OUTPUT_TOKENS = 16
 # Network/upstream failure sentinel for ``probe_status_code`` — kept as ``0`` so
 # the value is distinguishable from any real HTTP status the upstream might
 # return.
@@ -441,14 +448,19 @@ class AccountsService:
             return None
         return account
 
+    async def get_account(self, account_id: str) -> Account | None:
+        return await self._get_visible_account(account_id)
+
     async def export_auth(self, account_id: str) -> AccountAuthExportResponse | None:
         account = await self._get_visible_account(account_id)
         if account is None:
             return None
 
         access_token = self._encryptor.decrypt(account.access_token_encrypted)
-        refresh_token = self._encryptor.decrypt(account.refresh_token_encrypted)
-        id_token = self._encryptor.decrypt(account.id_token_encrypted)
+        raw_refresh_token = self._encryptor.decrypt(account.refresh_token_encrypted)
+        refresh_token = raw_refresh_token or None
+        raw_id_token = self._encryptor.decrypt(account.id_token_encrypted)
+        id_token = raw_id_token or None
         expires = token_expiry_epoch_ms(access_token) or 0
 
         tokens = AccountAuthExportTokens(
@@ -472,7 +484,7 @@ class AccountsService:
 
         opencode_auth_json = OpenCodeAuthJson(
             openai=OpenCodeOAuthAuth(
-                refresh=refresh_token,
+                refresh=refresh_token or "",
                 access=access_token,
                 expires=expires,
                 account_id=account.chatgpt_account_id,
@@ -491,11 +503,14 @@ class AccountsService:
             opencode_auth_json=opencode_auth_json,
         )
 
-    async def import_account(self, raw: bytes) -> AccountImportResponse:
-        try:
-            auth = parse_auth_json(raw)
-        except (json.JSONDecodeError, ValidationError, UnicodeDecodeError, TypeError) as exc:
-            raise InvalidAuthJsonError("Invalid auth.json payload") from exc
+    async def import_account(self, raw: bytes | AuthFile) -> AccountImportResponse:
+        if isinstance(raw, AuthFile):
+            auth = raw
+        else:
+            try:
+                auth = parse_auth_json(raw)
+            except (json.JSONDecodeError, ValidationError, UnicodeDecodeError, TypeError) as exc:
+                raise InvalidAuthJsonError("Invalid auth.json payload") from exc
         claims = claims_from_auth(auth)
 
         email = claims.email or DEFAULT_EMAIL
@@ -513,8 +528,8 @@ class AccountsService:
             seat_type=claims.seat_type,
             plan_type=plan_type,
             access_token_encrypted=self._encryptor.encrypt(auth.tokens.access_token),
-            refresh_token_encrypted=self._encryptor.encrypt(auth.tokens.refresh_token),
-            id_token_encrypted=self._encryptor.encrypt(auth.tokens.id_token),
+            refresh_token_encrypted=self._encryptor.encrypt(auth.tokens.refresh_token or ""),
+            id_token_encrypted=self._encryptor.encrypt(auth.tokens.id_token or ""),
             last_refresh=last_refresh,
             status=AccountStatus.ACTIVE,
             deactivation_reason=None,
@@ -538,6 +553,7 @@ class AccountsService:
         if saved.status == AccountStatus.ACTIVE:
             clear_account_routing_unavailable(saved.id)
         get_account_selection_cache().invalidate()
+        await propagate_account_routing_change()
         return AccountImportResponse(
             account_id=saved.id,
             email=saved.email,
@@ -665,16 +681,12 @@ class AccountsService:
         if result:
             mark_account_routing_unavailable(account_id)
             get_account_selection_cache().invalidate()
-            get_api_key_cache().clear()
             # Finalization cascades the account_proxy_bindings row away, and
             # account ids are deterministic (delete-then-re-import regenerates
             # the same id), so the cached route outcome must not survive the
             # delete request; the worker invalidates again after finalizing.
             await get_upstream_route_cache().invalidate()
             await propagate_account_routing_change()
-            poller = get_cache_invalidation_poller()
-            if poller is not None:
-                await poller.bump(NAMESPACE_API_KEY)
             request_account_deletion_run()
         return result
 
@@ -683,6 +695,93 @@ class AccountsService:
         if normalized == "":
             normalized = None
         return await self._repo.update_alias(account_id, normalized)
+
+    def get_quota_limit(self, account_id: str) -> float | None:
+        return get_account_quota_restriction(account_id)
+
+    def set_quota_limit(self, account_id: str, limit_percent: float | None) -> None:
+        set_account_quota_restriction(account_id, limit_percent)
+
+    async def export_backup(self) -> AccountBackupExportResponse:
+        now = datetime.now(timezone.utc)
+        accounts = await self._repo.list_accounts()
+        backup_items: list[AccountBackupItem] = []
+        for account in accounts:
+            if getattr(account, "delete_requested_at", None) is not None:
+                continue
+            access_token = self._encryptor.decrypt(account.access_token_encrypted)
+            raw_refresh = self._encryptor.decrypt(account.refresh_token_encrypted)
+            refresh_token = raw_refresh or None
+            raw_id = self._encryptor.decrypt(account.id_token_encrypted)
+            id_token = raw_id or None
+
+            tokens = CodexAuthTokens(
+                id_token=id_token,
+                access_token=access_token,
+                refresh_token=refresh_token,
+                account_id=account.chatgpt_account_id,
+            )
+            item = AccountBackupItem(
+                id=account.id,
+                email=account.email,
+                alias=account.alias,
+                plan_type=account.plan_type,
+                status=account.status.value if hasattr(account.status, "value") else str(account.status),
+                routing_policy=getattr(account, "routing_policy", "normal"),
+                limit_warmup=getattr(account, "limit_warmup_enabled", False),
+                tokens=tokens,
+                created_at=account.created_at,
+            )
+            backup_items.append(item)
+
+        return AccountBackupExportResponse(
+            version="1.0",
+            exported_at=now,
+            account_count=len(backup_items),
+            accounts=backup_items,
+            settings_overrides={},
+        )
+
+    async def restore_backup(self, payload: AccountBackupRestoreRequest) -> AccountBackupRestoreResponse:
+        restored_count = 0
+        skipped_count = 0
+        failed_count = 0
+        errors: list[str] = []
+
+        for item in payload.accounts:
+            try:
+                if not item.tokens or not item.tokens.access_token:
+                    skipped_count += 1
+                    continue
+                auth = AuthFile(
+                    tokens=AuthTokens(
+                        access_token=item.tokens.access_token,
+                        refresh_token=item.tokens.refresh_token,
+                        id_token=item.tokens.id_token,
+                    ),
+                    email=item.email,
+                    plan_type=item.plan_type,
+                    account_id=item.tokens.account_id,
+                )
+                await self.import_account(auth)
+                if item.alias:
+                    await self.set_account_alias(item.id, item.alias)
+                if item.routing_policy:
+                    await self.set_routing_policy(item.id, item.routing_policy)
+                if item.limit_warmup:
+                    await self.set_limit_warmup_enabled(item.id, True)
+                restored_count += 1
+            except Exception as exc:
+                failed_count += 1
+                errors.append(f"Account {item.id} restore failed: {exc}")
+
+        return AccountBackupRestoreResponse(
+            success=failed_count == 0,
+            restored_count=restored_count,
+            skipped_count=skipped_count,
+            failed_count=failed_count,
+            errors=errors,
+        )
 
     async def probe_account(
         self,
@@ -720,7 +819,10 @@ class AccountsService:
 
         usage_refresh_fetch_succeeded: bool | None = None
         if self._usage_repo and self._usage_updater:
-            usage_refresh_result = await self._usage_updater.force_refresh_result(probe_account)
+            usage_refresh_result = await self._usage_updater.force_refresh_result(
+                probe_account,
+                probe_verified=200 <= probe_status < 300,
+            )
             usage_refresh_fetch_succeeded = usage_refresh_result.fetch_succeeded
             # Forced refresh can still persist fresh OAuth credentials before a
             # later upstream usage fetch fails. Selection-cache rows carry
@@ -783,10 +885,10 @@ class AccountsService:
                     "content": [{"type": "input_text", "text": "."}],
                 }
             ],
-            "max_output_tokens": PROBE_MAX_OUTPUT_TOKENS,
             "stream": True,
             "store": False,
         }
+        body = _strip_unsupported_fields(body)
         timeout = aiohttp.ClientTimeout(
             total=PROBE_REQUEST_TIMEOUT_SECONDS,
             sock_connect=PROBE_CONNECT_TIMEOUT_SECONDS,

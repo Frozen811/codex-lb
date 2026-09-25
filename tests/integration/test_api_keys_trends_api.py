@@ -744,3 +744,61 @@ async def test_usage_7d_keeps_unknown_account_usage_separate_from_deleted_accoun
             "isDeleted": False,
         },
     ]
+
+
+@pytest.mark.asyncio
+async def test_usage_configurable_windows(async_client):
+    key_id = await _create_api_key(async_client, name="window-key")
+    now = utcnow()
+
+    await _insert_request_logs(
+        RequestLog(
+            api_key_id=key_id,
+            request_id="req-recent",
+            requested_at=now - timedelta(days=2),
+            model="gpt-5.1",
+            status="ok",
+            input_tokens=100,
+            output_tokens=50,
+            cost_usd=0.20,
+        ),
+        RequestLog(
+            api_key_id=key_id,
+            request_id="req-older",
+            requested_at=now - timedelta(days=20),
+            model="gpt-5.1",
+            status="ok",
+            input_tokens=200,
+            output_tokens=80,
+            cost_usd=0.40,
+        ),
+    )
+
+    # 7-day default
+    resp_7d = await async_client.get(f"/api/api-keys/{key_id}/usage")
+    assert resp_7d.status_code == 200
+    data_7d = resp_7d.json()
+    assert data_7d["days"] == 7
+    assert data_7d["totalTokens"] == 150
+    assert data_7d["totalRequests"] == 1
+
+    # 30-day window includes both
+    resp_30d = await async_client.get(f"/api/api-keys/{key_id}/usage?days=30")
+    assert resp_30d.status_code == 200
+    data_30d = resp_30d.json()
+    assert data_30d["days"] == 30
+    assert data_30d["totalTokens"] == 430
+    assert data_30d["totalRequests"] == 2
+
+    # Validation bounds: days < 1 or days > 90 -> 422
+    resp_invalid_low = await async_client.get(f"/api/api-keys/{key_id}/usage?days=0")
+    assert resp_invalid_low.status_code == 422
+
+    resp_invalid_high = await async_client.get(f"/api/api-keys/{key_id}/usage?days=91")
+    assert resp_invalid_high.status_code == 422
+
+    # Parameterized trends
+    resp_trends = await async_client.get(f"/api/api-keys/{key_id}/trends?days=14")
+    assert resp_trends.status_code == 200
+    assert "tokens" in resp_trends.json()
+

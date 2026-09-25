@@ -162,6 +162,8 @@ class _RequestLogMixin:
         latency_ms: int,
         status: str,
         latency_first_token_ms: int | None = None,
+        output_delta_count: int | None = None,
+        latency_first_output_ms: int | None = None,
         latency_queue_ms: int | None = None,
         latency_response_created_ms: int | None = None,
         latency_first_upstream_event_ms: int | None = None,
@@ -230,6 +232,9 @@ class _RequestLogMixin:
                 latency_ms=latency_ms,
                 status=status,
                 latency_first_token_ms=latency_first_token_ms,
+                latency_first_output_ms=latency_first_output_ms,
+                output_delta_count=output_delta_count,
+                latency_upstream_terminal_ms=latency_upstream_terminal_ms,
                 latency_queue_ms=latency_queue_ms,
                 latency_response_created_ms=latency_response_created_ms,
                 latency_first_upstream_event_ms=latency_first_upstream_event_ms,
@@ -398,6 +403,41 @@ class _RequestLogMixin:
                     logger.warning("Persistence task did not drain before shutdown: %s", task.get_name())
                 return False
 
+    def request_persistence_activity_snapshot_nowait(self) -> dict[str, int | bool]:
+        """Return an instantaneous non-blocking snapshot of detached persistence tasks.
+
+        Exposed during drain so orchestrators (preStop hooks, readiness checks)
+        can observe detached background log and reservation settlement tasks
+        after in_flight has dropped to zero.
+        """
+        proxy = cast(_RequestLogServiceProtocol, self)
+        persistence_tasks = [
+            task
+            for task in (proxy._request_log_tasks | proxy._background_cleanup_tasks)
+            if not task.done() and _is_persistence_task(task)
+        ]
+        api_key_settlements = [
+            task
+            for task in persistence_tasks
+            if _is_persistence_task(
+                task,
+                (
+                    "proxy-stream-api-key-settle-",
+                    "proxy-release_stream_api_key_reservation",
+                    "http-bridge-recovery-settlement-",
+                ),
+            )
+        ]
+        pending_count = len(persistence_tasks)
+        settlements_count = len(api_key_settlements)
+        is_active = pending_count > 0
+        return {
+            "request_persistence_pending": pending_count,
+            "request_persistence_active": is_active,
+            "api_key_settlements_pending": settlements_count,
+            "persistence_drain_active": is_active,
+        }
+
     def _track_request_log_task(
         self,
         task: asyncio.Task[None],
@@ -440,6 +480,9 @@ class _RequestLogMixin:
         latency_ms: int,
         status: str,
         latency_first_token_ms: int | None = None,
+        latency_upstream_terminal_ms: int | None = None,
+        output_delta_count: int | None = None,
+        latency_first_output_ms: int | None = None,
         latency_queue_ms: int | None = None,
         latency_response_created_ms: int | None = None,
         latency_first_upstream_event_ms: int | None = None,
@@ -506,6 +549,9 @@ class _RequestLogMixin:
                     connection_request_kind=connection_request_kind,
                     latency_ms=latency_ms,
                     latency_first_token_ms=latency_first_token_ms,
+                    latency_first_output_ms=latency_first_output_ms,
+                    output_delta_count=output_delta_count,
+                    latency_upstream_terminal_ms=latency_upstream_terminal_ms,
                     latency_queue_ms=latency_queue_ms,
                     latency_response_created_ms=latency_response_created_ms,
                     latency_first_upstream_event_ms=latency_first_upstream_event_ms,

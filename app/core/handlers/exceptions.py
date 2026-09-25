@@ -88,6 +88,9 @@ def _error_format(request: Request) -> str | None:
         return "dashboard"
     if path in {"/v1", "/backend-api"} or path.startswith(("/v1/", "/backend-api/")):
         return "openai"
+    # Codex plugin-catalog namespace (reached via chatgpt_base_url).
+    if path in {"/ps", "/plugins"} or path.startswith(("/ps/", "/plugins/")):
+        return "openai"
     # Unmatched ``/scim/...`` paths never reach the router's marker dependency,
     # so the 404 an identity provider probing for an unimplemented resource
     # gets has to be decided here. Without it the answer is FastAPI's

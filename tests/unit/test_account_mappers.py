@@ -188,3 +188,50 @@ def test_normalize_account_routing_policy() -> None:
     assert _normalize_account_routing_policy("preserve") == "preserve"
     assert _normalize_account_routing_policy("legacy") == "normal"
     assert _normalize_account_routing_policy(None) == "normal"
+
+
+def test_capacity_for_plan_team_monthly() -> None:
+    from app.core.usage import capacity_for_plan
+
+    assert capacity_for_plan("team", "monthly") == 7560.0
+    assert capacity_for_plan("team", "secondary") == 7560.0
+    assert capacity_for_plan("team", "primary") == 225.0
+
+
+def test_account_to_summary_maps_team_30d_primary_window_to_monthly() -> None:
+    from unittest.mock import MagicMock
+
+    from app.modules.accounts.mappers import _account_to_summary
+
+    account = _account(AccountStatus.ACTIVE)
+    account.plan_type = "team"
+    primary = UsageHistory(
+        account_id="account-1",
+        window="primary",
+        used_percent=4.0,
+        reset_at=1_800_000_000,
+        window_minutes=43200,
+        recorded_at=datetime(2026, 1, 1, 12, 0, 0),
+    )
+    encryptor = MagicMock()
+
+    summary = _account_to_summary(
+        account=account,
+        primary_usage=primary,
+        secondary_usage=None,
+        monthly_usage=None,
+        request_usage=None,
+        additional_quotas=None,
+        limit_warmup=None,
+        encryptor=encryptor,
+        include_auth=False,
+    )
+
+    assert summary.usage.monthly_remaining_percent == 96.0
+    assert summary.usage.primary_remaining_percent is None
+    assert summary.usage.secondary_remaining_percent is None
+    assert summary.window_minutes_monthly == 43200
+    assert summary.window_minutes_primary is None
+    assert summary.window_minutes_secondary is None
+    assert summary.reset_at_monthly is not None
+    assert summary.reset_at_primary is None

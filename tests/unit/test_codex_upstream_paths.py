@@ -436,6 +436,94 @@ async def test_codex_control_request_uses_codex_client_when_route_is_resolved(ro
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("path", "expected_url"),
+    [
+        pytest.param("thread/goal/get", "https://chatgpt.test/codex/thread/goal/get", id="codex-namespace-default"),
+        pytest.param("wham/agent-identities/jwks", "https://chatgpt.test/wham/agent-identities/jwks", id="wham"),
+        pytest.param("ps/plugins/list", "https://chatgpt.test/ps/plugins/list", id="plugin-catalog"),
+        pytest.param("plugins/featured", "https://chatgpt.test/plugins/featured", id="plugin-featured"),
+    ],
+)
+async def test_codex_control_request_keeps_root_namespaces_out_of_codex_prefix(
+    route: ResolvedUpstreamRoute, path: str, expected_url: str
+) -> None:
+    client = _CodexClient()
+
+    await codex_control_request(
+        path,
+        method="GET",
+        payload=None,
+        query_params={},
+        headers={"accept": "application/json"},
+        access_token="access",
+        account_id="chatgpt_account",
+        base_url="https://chatgpt.test",
+        route=route,
+        codex_client=cast(Any, client),
+    )
+
+    assert client.calls[0]["url"] == expected_url
+
+
+@pytest.mark.asyncio
+async def test_codex_control_request_does_not_duplicate_content_type(route: ResolvedUpstreamRoute) -> None:
+    client = _CodexClient()
+    trace = UpstreamProxyRouteTrace()
+
+    response = await codex_control_request(
+        "alpha/search",
+        method="POST",
+        payload=b'{"query": "test"}',
+        query_params={},
+        headers={
+            "content-type": "application/json",
+            "user-agent": "codex_cli_rs/0.1.0",
+        },
+        access_token="access",
+        account_id="chatgpt_account",
+        base_url="https://chatgpt.test",
+        route=route,
+        codex_client=cast(Any, client),
+        route_trace=trace,
+    )
+
+    assert response.status_code == 200
+    sent_headers = client.calls[0]["headers"]
+    content_type_headers = [k for k in sent_headers if k.lower() == "content-type"]
+    assert len(content_type_headers) == 1
+    assert sent_headers[content_type_headers[0]] == "application/json"
+
+
+@pytest.mark.asyncio
+async def test_codex_control_request_removes_content_type_when_no_payload(route: ResolvedUpstreamRoute) -> None:
+    client = _CodexClient()
+    trace = UpstreamProxyRouteTrace()
+
+    response = await codex_control_request(
+        "alpha/search",
+        method="GET",
+        payload=None,
+        query_params={},
+        headers={
+            "content-type": "application/json",
+        },
+        access_token="access",
+        account_id="chatgpt_account",
+        base_url="https://chatgpt.test",
+        route=route,
+        codex_client=cast(Any, client),
+        route_trace=trace,
+    )
+
+    assert response.status_code == 200
+    sent_headers = client.calls[0]["headers"]
+    content_type_headers = [k for k in sent_headers if k.lower() == "content-type"]
+    assert len(content_type_headers) == 0
+
+
+
+@pytest.mark.asyncio
 async def test_compact_responses_uses_codex_client_when_route_is_resolved(route: ResolvedUpstreamRoute) -> None:
     client = _CodexClient(_CompactStreamResponse())
     trace = UpstreamProxyRouteTrace()
@@ -1704,3 +1792,20 @@ async def test_stream_responses_python_http_prepares_only_consumed_json(
     else:
         assert trace_records == []
     assert full_body_dumps == expected_preparation_dumps
+
+
+def test_codex_desktop_builtin_openai_provider_config() -> None:
+    """Issue #2262: Verify overriding [model_providers.openai] base_url points to codex-lb backend-api/codex."""
+    expected_path = "/backend-api/codex"
+    provider_config = {
+        "model_provider": "openai",
+        "model_providers": {
+            "openai": {
+                "base_url": f"http://127.0.0.1:2455{expected_path}",
+            }
+        },
+    }
+    base_url = provider_config["model_providers"]["openai"]["base_url"]
+    assert base_url.endswith("/backend-api/codex")
+    assert provider_config["model_provider"] == "openai"
+

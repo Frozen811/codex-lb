@@ -128,6 +128,8 @@ class WeeklyCreditPaceResponse(DashboardModel):
     stale_account_count: int = 0
     inactive_account_count: int = 0
     confidence: WeeklyCreditPaceConfidence = "low"
+    estimated_full_weekly_limit_cost_usd: float | None = None
+    used_cost_usd: float | None = None
 
 
 class DashboardOverviewResponse(DashboardModel):

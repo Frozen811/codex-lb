@@ -74,6 +74,7 @@ from app.core.errors import (
     OpenAIErrorDetail,
     OpenAIErrorEnvelope,
     ResponseFailedEvent,
+    is_upstream_usage_limit_message,
     openai_error,
     response_failed_event,
     synthetic_stream_failure_event,
@@ -243,7 +244,12 @@ _RESPONSE_CREATE_TOOL_OUTPUT_OMISSION_NOTICE = (
 )
 _RESPONSE_CREATE_IMAGE_OMISSION_NOTICE = "[codex-lb omitted historical inline image to fit upstream websocket budget]"
 _SLIMMABLE_TOOL_CALL_OUTPUT_ITEM_TYPES = frozenset(
-    {"function_call_output", "custom_tool_call_output", "apply_patch_call_output"}
+    {
+        "function_call_output",
+        "custom_tool_call_output",
+        "apply_patch_call_output",
+        "computer_call_output",
+    }
 )
 _AGENT_CONTROL_TOOL_NAMESPACES = frozenset({"collaboration", "multi_agent_v1"})
 _AGENT_CONTROL_OUTPUT_TYPE_BY_CALL_TYPE = {
@@ -315,9 +321,12 @@ _WEBSOCKET_HANDSHAKE_ERROR_HINTS = (
     ("usage_not_included", "usage not included"),
     ("insufficient_quota", "insufficient quota"),
     ("quota_exceeded", "quota exceeded"),
-    ("usage_limit_reached", "usage limit reached"),
-    ("rate_limit_exceeded", "rate limit"),
 )
+# The generic throttling substring, kept out of the table above so the
+# account-scoped usage limit -- read by ``is_upstream_usage_limit_message``, so
+# the handshake and the failure classifier agree on what upstream said -- is
+# tried first. It is the weaker reading of a sentence that carries both.
+_WEBSOCKET_RATE_LIMIT_HINT = "rate limit"
 
 _EDGE_CHALLENGE_BODY_MARKERS = (
     "cf-chl-",
@@ -1213,6 +1222,10 @@ def _infer_websocket_handshake_error_code(status: int | None, message: str) -> s
     for code, hint in _WEBSOCKET_HANDSHAKE_ERROR_HINTS:
         if hint in lowered:
             return code
+    if is_upstream_usage_limit_message(message):
+        return "usage_limit_reached"
+    if _WEBSOCKET_RATE_LIMIT_HINT in lowered:
+        return "rate_limit_exceeded"
     if status == 401:
         return "invalid_api_key"
     if status == 404:
@@ -1388,11 +1401,15 @@ def _effective_compact_connect_timeout(configured_timeout_seconds: float) -> flo
     return max(0.001, min(configured_timeout_seconds, override))
 
 
-def _effective_compact_total_timeout() -> float | None:
-    # Override-only: the dashboard ``compact_request_budget_seconds`` (pushed by
-    # the compact service as a per-request override) is the sole total cap.
+def _effective_compact_total_timeout(configured_timeout_seconds: float | None) -> float | None:
+    # The per-request compact budget bounds the main path. An explicit upstream
+    # cap remains an operator escape hatch and can only shorten that budget.
     override = _COMPACT_TOTAL_TIMEOUT_OVERRIDE.get()
-    return None if override is None else max(0.001, override)
+    if configured_timeout_seconds is None:
+        return None if override is None else max(0.001, override)
+    if override is None:
+        return configured_timeout_seconds
+    return max(0.001, min(configured_timeout_seconds, override))
 
 
 def _effective_transcribe_connect_timeout(configured_timeout_seconds: float) -> float:
@@ -3355,6 +3372,15 @@ def _slim_historical_response_content_part(part: JsonValue) -> tuple[JsonValue, 
         if _is_inline_image_reference(image_url):
             return _response_create_inline_image_notice_part(), 1
 
+    if part_type == "computer_screenshot":
+        image_url_value = part_mapping.get("image_url")
+        if is_json_mapping(image_url_value):
+            image_url = image_url_value.get("url")
+        else:
+            image_url = image_url_value
+        if _is_inline_image_reference(image_url):
+            return _response_create_inline_image_notice_part(), 1
+
     return part_mapping, 0
 
 
@@ -4053,6 +4079,7 @@ async def _stream_responses_with_session(
                             connect_timeout_seconds=current_timeout.sock_connect,
                             response_head_timeout_seconds=current_timeout.sock_read,
                             proxy_url=resolve_http_proxy_from_env(url),
+                            pool_key=account_id,
                             sse=(
                                 NativeSseOptions(effective_idle_timeout, MAX_SSE_EVENT_BYTES, interpret_responses=True)
                                 if not non_streaming_http
@@ -4869,7 +4896,21 @@ class _CompactCommandTransport:
             replace=_replace_header_preserving_position,
         )
         pre_request_started_at = time.monotonic()
-        compact_timeout_seconds = _effective_compact_total_timeout()
+        try:
+            compact_timeout_seconds = _effective_compact_total_timeout(
+                getattr(settings, "compact_request_budget_seconds", None)
+            )
+        except TypeError:
+            compact_timeout_seconds = _effective_compact_total_timeout()
+        default_idle_timeout = getattr(settings, "stream_idle_timeout_seconds", 7200.0)
+        try:
+            compact_idle_timeout_seconds = (
+                _effective_compact_total_timeout(None) or default_idle_timeout
+            )
+        except TypeError:
+            compact_idle_timeout_seconds = (
+                _effective_compact_total_timeout() or default_idle_timeout
+            )
         effective_connect_timeout = _effective_compact_connect_timeout(settings.upstream_connect_timeout_seconds)
         payload_dict = _responses_compact_payload_for_responses_endpoint(self.payload)
         payload_dict["store"] = False
@@ -4953,7 +4994,7 @@ class _CompactCommandTransport:
             headers=upstream_headers,
         )
         sse_options = NativeSseOptions(
-            compact_timeout_seconds or settings.stream_idle_timeout_seconds,
+            compact_idle_timeout_seconds,
             MAX_SSE_EVENT_BYTES,
             content_type_aware=True,
             collect_compact=True,
@@ -4974,6 +5015,7 @@ class _CompactCommandTransport:
                             connect_timeout_seconds=effective_connect_timeout,
                             response_head_timeout_seconds=compact_timeout_seconds,
                             proxy_url=resolve_http_proxy_from_env(url),
+                            pool_key=self.account_id,
                             sse=sse_options,
                         )
                     )
@@ -5072,7 +5114,7 @@ class _CompactCommandTransport:
                 try:
                     data = await _compact_response_payload_from_success_response(
                         resp,
-                        idle_timeout_seconds=compact_timeout_seconds or settings.stream_idle_timeout_seconds,
+                        idle_timeout_seconds=compact_idle_timeout_seconds,
                         max_event_bytes=MAX_SSE_EVENT_BYTES,
                     )
                 except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as exc:
@@ -5615,15 +5657,27 @@ async def codex_control_request(
     effective_privacy_policy = (
         CodexControlRequestPrivacyPolicy.PRIVATE_REALTIME if normalized_path == "realtime/calls" else privacy_policy
     )
-    upstream_path = normalized_path if normalized_path.startswith("wham/") else f"codex/{normalized_path}"
+    # Control requests default to the ``codex/`` namespace; ``wham/`` and the
+    # plugin catalog (``ps/plugins/*``, ``plugins/featured``) sit directly under
+    # ``backend-api`` upstream and are forwarded verbatim.
+    upstream_path = (
+        normalized_path if normalized_path.startswith(("wham/", "ps/", "plugins/")) else f"codex/{normalized_path}"
+    )
     url = f"{upstream_base}/{upstream_path}"
     request_method = method.upper()
     upstream_headers = _build_upstream_headers(headers, access_token, account_id, accept=headers.get("accept", "*/*"))
     content_type = next((value for key, value in headers.items() if key.lower() == "content-type"), None)
-    if content_type:
-        upstream_headers["Content-Type"] = content_type
-    elif payload is None:
-        upstream_headers.pop("Content-Type", None)
+    if payload is None:
+        for key in list(upstream_headers):
+            if key.lower() == "content-type":
+                del upstream_headers[key]
+    elif content_type:
+        _replace_header_preserving_position(
+            upstream_headers,
+            "content-type",
+            content_type,
+            fallback_name="Content-Type",
+        )
     total_timeout = (
         max(0.001, timeout_seconds)
         if timeout_seconds is not None

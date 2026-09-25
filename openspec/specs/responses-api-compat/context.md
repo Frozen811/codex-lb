@@ -252,6 +252,19 @@ New client guides added to `docs/client-setup.md` should stay configuration-only
 examples of this contract; anything needing new proxy behavior requires its own
 OpenSpec change first.
 
+## Pre-Visible Authentication Recovery
+
+An HTTP 401 first gets the existing same-account refresh attempt. If authentication
+cannot be repaired, complete unanchored text/tool history can move to another
+account after known bookkeeping is projected out and the entire replacement passes
+the canonical replay predicate. Successful refresh keeps the original body. Files,
+turn state, previous responses, legacy ownership, opaque compaction, hosted results,
+and unresolved tool calls cannot be discarded for recovery. For example, expired
+access plus `invalid_grant` can move a complete transcript from A to B; a pinned
+file request stays on A and surfaces the authentication failure. Existing
+previous-response error mapping is unchanged. Reservations settle before deferred
+authentication health writes, including cancellation and replacement failure.
+
 ## Operational Notes
 
 - Pre-release: run unit/integration tests and optional OpenAI client compatibility tests.
@@ -316,6 +329,21 @@ The cache retains its existing API-key partition, session-first lookup and same-
 Local failure events and locally assigned response IDs are separate facts. `ParsedSseBlock.is_local` identifies generated events; `response_id_is_local` excludes a generated ID even when SDK normalization wraps a real upstream error. These flags remain outside serialized event bytes and survive parsed-payload reattachment. Thus an oversized-frame failure cannot invent an upstream owner, while a real upstream error with a locally assigned ID remains a valid event for timing. The shared HTTP/direct/routed WebSocket normalizer and this provenance contract are owned here; HTTP timing consumes them through the owner dependency. Existing durable-log behavior is unchanged. See the [ownership requirement](spec.md#requirement-observed-http-response-ids-publish-same-process-ownership-before-delivery).
 
 Canonical background JSON acknowledgements with status `queued` or `in_progress` carry the same authoritative response identity as SSE lifecycle events. The lifecycle parser includes both, and the HTTP relay keeps queued events on the parsed path. For example, a two-account request receiving a queued acknowledgement can immediately route a same-process continuation to its known account while its originating log is pending. An in-progress event following token output has the same ownership behavior. The provider still decides whether unfinished work can be continued.
+
+## Owner-forward SSE framing
+
+The [owner-forward framing contract](spec.md#requirement-owner-forward-http-streams-preserve-sse-event-boundaries)
+uses the canonical CR/LF separator detector while retaining the bridge's own
+scheduler and request budget. For example, a created event ending in
+`\r\n\r\n` followed by a completed event now reaches the origin as two events
+before EOF. A trailing CR can dispatch immediately; the following LF, if any,
+belongs to that ending rather than the next event.
+
+Malformed UTF-8 decodes as U+FFFD, including final unterminated bytes; downstream
+JSON validation still applies. Valid multi-byte UTF-8 split across chunks was
+already buffered safely and remains intact. Ordinary owners emit LF, making
+this compatibility hardening for the receiver. No migration, operator setting,
+account-selection change, or new event-size policy is involved.
 
 ## Detached retirement sweep deadline
 

@@ -140,3 +140,12 @@ These rules encode recurring review blockers observed across codex-lb PRs.
   `simplicity-budget-approved` label; feature documentation goes to `docs/` +
   openspec (never new README sections); dashboard-visible PRs include
   before/after screenshots.
+
+## Astra Prompt Guidance & Agent Execution
+
+When acting as an AI coding assistant (such as GPT-6 Astra or other frontier models) in this repository:
+
+- **Autonomy & Decisiveness**: Do not pause for intermediate conversational confirmation on planned or agreed implementation steps. Complete code edits, test additions, and spec synchronization end-to-end.
+- **Scope-Bounded Verification**: Run focused, targeted tests covering the modified subsystem (e.g. `uv run pytest tests/unit/test_<area>.py`) and linters (`uv run ruff check`) rather than launching expansive full-repository test suites for minor changes.
+- **Test Database Isolation**: Unit and integration test suites automatically run against isolated temporary SQLite or test databases. Never pause out of concern for local database corruption or data loss when running documented test commands.
+- **OpenSpec & Simplicity Alignment**: Maintain OpenSpec as the strict SSOT. Keep `spec.md` normative with testable requirements, and place rationale, design decisions, and operational details in `context.md`. Follow the repository simplicity gates (P1–P6) without introducing unnecessary configuration surface.

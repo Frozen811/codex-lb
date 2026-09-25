@@ -326,7 +326,7 @@ class Settings(BaseSettings):
     # T3 → dashboard (deprecated env alias, remove next minor)
     http_responses_stream_request_budget_seconds: float = Field(default=7200.0, gt=0)
     # T3 → dashboard (deprecated env alias, remove next minor)
-    compact_request_budget_seconds: float = Field(default=180.0, gt=0)
+    compact_request_budget_seconds: float = Field(default=900.0, gt=0)
     # T3 → dashboard (deprecated env alias, remove next minor)
     stream_idle_timeout_seconds: float = Field(default=7200.0, gt=0)
     # T3 → dashboard (deprecated env alias, remove next minor)
@@ -391,6 +391,10 @@ class Settings(BaseSettings):
     # first-boot opt-out fallback; a persisted dashboard decision always wins.
     telemetry_enabled: bool | None = None
     telemetry_endpoint: str = "https://telemetry.tokmaxxing.com"
+    # Raw Fernet key material (32-byte url-safe base64 string) for stateless
+    # replicas that cannot share or mount an encryption.key file (issue #1572).
+    # When omitted or empty, encryption_key_file is used instead.
+    encryption_key: str | None = None
     encryption_key_file: Path = DEFAULT_ENCRYPTION_KEY_FILE
     # Startup cross-replica encryption-key consistency check against the shared
     # database sentinel: "enforce" refuses startup on mismatch, "warn" logs an
@@ -615,6 +619,24 @@ class Settings(BaseSettings):
                 if path.startswith("~"):
                     return f"{prefix}{Path(path).expanduser()}"
         return value
+
+    @field_validator("encryption_key", mode="before")
+    @classmethod
+    def _validate_encryption_key(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        raw = value.strip() if isinstance(value, str) else str(value).strip()
+        if not raw:
+            return None
+        from cryptography.fernet import Fernet
+
+        try:
+            Fernet(raw.encode("utf-8"))
+        except Exception as exc:
+            raise ValueError(
+                f"CODEX_LB_ENCRYPTION_KEY must be a valid 32-byte url-safe base64-encoded Fernet key: {exc}"
+            ) from exc
+        return raw
 
     @field_validator("encryption_key_file", mode="before")
     @classmethod

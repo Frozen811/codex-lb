@@ -29,6 +29,7 @@ from app.modules.dashboard_roles.service import resolve_role_grants
 from app.modules.dashboard_users.break_glass import BreakGlassRequiresTotpError
 from app.modules.settings.repository import SettingsRepository
 from app.modules.usage.additional_quota_keys import (
+    ADDITIONAL_QUOTA_ROUTING_POLICIES,
     normalize_additional_quota_key,
 )
 
@@ -68,6 +69,7 @@ class DashboardSettingsData:
     auto_redeem_reset_credits_before_expiry: bool
     show_reset_credit_expiry_badge: bool
     routing_strategy: str
+    subagent_account_preference: str
     relative_availability_power: float
     relative_availability_top_k: int
     single_account_id: str | None
@@ -187,6 +189,7 @@ class DashboardSettingsUpdateData:
     auto_redeem_reset_credits_before_expiry: bool
     show_reset_credit_expiry_badge: bool
     routing_strategy: str
+    subagent_account_preference: str
     relative_availability_power: float
     relative_availability_top_k: int
     single_account_id: str | None
@@ -394,6 +397,7 @@ class SettingsService:
             auto_redeem_reset_credits_before_expiry=payload.auto_redeem_reset_credits_before_expiry,
             show_reset_credit_expiry_badge=payload.show_reset_credit_expiry_badge,
             routing_strategy=payload.routing_strategy,
+            subagent_account_preference=payload.subagent_account_preference,
             relative_availability_power=payload.relative_availability_power,
             relative_availability_top_k=payload.relative_availability_top_k,
             single_account_id=payload.single_account_id,
@@ -507,7 +511,6 @@ class SettingsService:
 _RETENTION_DISABLED_DAYS = 0
 
 
-_ROUTING_POLICIES = frozenset({"inherit", "normal", "burn_first", "preserve"})
 
 # Inheritable settings with an environment fallback: the ``dashboard_settings``
 # column, the ``Settings`` field and the provenance key share one name.
@@ -649,6 +652,7 @@ def _settings_data(row: DashboardSettings, totp: TotpEnrollmentSummary) -> Dashb
         auto_redeem_reset_credits_before_expiry=row.auto_redeem_reset_credits_before_expiry,
         show_reset_credit_expiry_badge=row.show_reset_credit_expiry_badge,
         routing_strategy=row.routing_strategy,
+        subagent_account_preference=row.subagent_account_preference,
         relative_availability_power=row.relative_availability_power,
         relative_availability_top_k=row.relative_availability_top_k,
         single_account_id=row.single_account_id,
@@ -752,7 +756,7 @@ def _parse_additional_quota_routing_policies(raw: str | None) -> dict[str, str]:
             continue
         normalized_quota_key = normalize_additional_quota_key(quota_key)
         policy = policy.strip().lower()
-        if normalized_quota_key and policy in _ROUTING_POLICIES:
+        if normalized_quota_key and policy in ADDITIONAL_QUOTA_ROUTING_POLICIES:
             policies[normalized_quota_key] = policy
     return policies
 
@@ -764,6 +768,6 @@ def _dump_additional_quota_routing_policies(policies: dict[str, str]) -> str:
             continue
         normalized_quota_key = normalize_additional_quota_key(quota_key)
         normalized_policy = policy.strip().lower()
-        if normalized_quota_key is not None and normalized_policy in _ROUTING_POLICIES:
+        if normalized_quota_key is not None and normalized_policy in ADDITIONAL_QUOTA_ROUTING_POLICIES:
             normalized[normalized_quota_key] = normalized_policy
     return json.dumps(normalized, sort_keys=True, separators=(",", ":"))
