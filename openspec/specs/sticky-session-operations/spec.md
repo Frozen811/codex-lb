@@ -1603,3 +1603,32 @@ When a pre-visible upstream failure on the HTTP stream transport is a code-less 
 - **THEN** the failover decision is `failover_next`
 - **AND** the next selection excludes account A and, while another candidate exists, the burst cooldown steers it away from A as well
 
+### Requirement: Sticky thread switchover deferred to compaction boundaries
+
+To protect prompt-cache locality and prevent unexpected token re-billing during active conversations, sticky thread selection MUST NOT switch the pinned account during standard follow-up turns under routine quota pressure (`reallocate_sticky=False`). Sticky switchover MUST be deferred until explicit compaction boundaries where `reallocate_sticky=True` is enabled.
+
+#### Scenario: Normal follow-up maintains sticky affinity
+- **GIVEN** an active conversation thread with a healthy pinned account
+- **WHEN** a normal follow-up request is processed
+- **THEN** selection retains the pinned account without triggering sticky reallocation
+
+#### Scenario: Compaction boundary enables sticky reallocation
+- **GIVEN** a remote compaction request for an active thread
+- **WHEN** account selection runs with `reallocate_sticky=True`
+- **THEN** sticky reallocation is permitted to switch to a healthier account
+
+### Requirement: Subagent prompt-cache affinity TTL
+
+The system SHALL bound prompt-cache and thread-scoped sticky session TTL for short-lived child subagents. When a request carries subagent lineage indicators (such as `x-parent-session-id`, `x-openai-subagent`, or `x-codex-parent-thread-id`), the effective prompt-cache affinity TTL MUST NOT exceed 300 seconds (`SUBAGENT_PROMPT_CACHE_MAX_AGE_SECONDS`), bounding the lease and session lifetime to avoid exhausting stream leases for short-lived subagent tasks.
+
+#### Scenario: Subagent request receives bounded 300s prompt cache TTL
+- **WHEN** a request arrives with an `x-parent-session-id`, `x-openai-subagent`, or `x-codex-parent-thread-id` header
+- **AND** prompt-cache or thread affinity is enabled with a default TTL greater than 300 seconds (e.g. 3600s)
+- **THEN** the resolved affinity policy uses a maximum age of 300 seconds
+
+#### Scenario: Non-subagent request receives full configured prompt cache TTL
+- **WHEN** a request arrives without subagent headers
+- **THEN** the resolved affinity policy uses the configured `openai_cache_affinity_max_age_seconds`
+
+
+

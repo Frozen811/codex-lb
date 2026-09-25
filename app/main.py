@@ -589,9 +589,14 @@ async def lifespan(app: FastAPI):
     # Remote-bump callbacks must be non-propagating variants: a propagating callback
     # would re-bump on every observed bump and feedback-loop across replicas.
     cache_poller.on_invalidation(NAMESPACE_ACCOUNT_ROUTING, routing_availability_cache.refresh_from_db)
+    cache_poller.on_invalidation(NAMESPACE_ACCOUNT_ROUTING, get_api_key_cache().clear)
     cache_poller.on_invalidation(
         NAMESPACE_ACCOUNT_SELECTION,
         lambda: get_account_selection_cache().invalidate(propagate=False),
+    )
+    cache_poller.on_invalidation(
+        NAMESPACE_ACCOUNT_SELECTION,
+        routing_availability_cache.refresh_from_db,
     )
     cache_poller.on_invalidation(
         NAMESPACE_SETTINGS,
@@ -1034,6 +1039,7 @@ def create_app() -> FastAPI:
     app.include_router(proxy_api.internal_router)
     app.include_router(proxy_api.ws_router)
     app.include_router(proxy_api.wham_router)
+    app.include_router(proxy_api.plugin_catalog_router)
     app.include_router(proxy_api.v1_router)
     app.include_router(proxy_api.v1_ws_router)
     app.include_router(proxy_api.transcribe_router)
@@ -1077,7 +1083,10 @@ def create_app() -> FastAPI:
     # probes for resources this release does not implement (Groups,
     # ServiceProviderConfig), and answering those with index.html and a 200
     # tells it they are supported. They must be a SCIM 404.
-    excluded_prefixes = ("api/", "v1/", "backend-api/", "health", "scim/")
+    # ``ps/`` and ``plugins/`` are the Codex plugin-catalog namespace: an unknown
+    # path there must 404 like any other API miss instead of returning the
+    # dashboard HTML to a client expecting JSON.
+    excluded_prefixes = ("api/", "v1/", "backend-api/", "health", "scim/", "ps/", "plugins/")
 
     def _is_static_asset_path(path: str) -> bool:
         if path.startswith("assets/"):

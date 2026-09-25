@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from math import ceil, isfinite
 from typing import Literal
 
+from app.core.crypto import TokenEncryptor
 from app.core.usage import PLAN_CAPACITY_CREDITS_SECONDARY
 from app.core.usage.depletion import EWMAState, ewma_update
 from app.core.utils.time import naive_utc_to_epoch
@@ -18,6 +19,7 @@ from app.modules.dashboard.schemas import (
     WeeklyCreditResetEvent,
     WeeklyCreditRunwayStatus,
 )
+from app.modules.proxy.account_eligibility import account_reauth_credentials_are_unavailable
 
 PRO_WEEKLY_CAPACITY_CREDITS = PLAN_CAPACITY_CREDITS_SECONDARY["pro"]
 RECENT_BURN_WINDOW = timedelta(hours=6)
@@ -72,10 +74,12 @@ def build_weekly_credit_pace(
     secondary_history: dict[str, list[UsageHistory]],
     now: datetime,
     usage_refresh_interval_seconds: int,
+    encryptor: TokenEncryptor,
     top_api_keys: list[WeeklyCreditApiKeyAttribution] | None = None,
     trailing_demand_used_percent_by_account: Mapping[str, float] | None = None,
     working_days: set[int] | None = None,
     smoothing_window_minutes: int = 30,
+    activity_cost_usd: float | None = None,
 ) -> WeeklyCreditPaceResponse | None:
     """Build server-side weekly quota pace from active, fresh weekly usage rows.
 
@@ -112,7 +116,11 @@ def build_weekly_credit_pace(
             continue
 
         account = accounts_by_id.get(summary.account_id)
-        if account is None or account.status not in PACE_ELIGIBLE_ACCOUNT_STATUSES:
+        if (
+            account is None
+            or account.status not in PACE_ELIGIBLE_ACCOUNT_STATUSES
+            or account_reauth_credentials_are_unavailable(account, encryptor, now=now_ms / 1000.0)
+        ):
             inactive_account_count += 1
             continue
 
@@ -232,6 +240,13 @@ def build_weekly_credit_pace(
         if demand_surplus_accounts > 0 and (runway_status == "runs_dry" or saturated_account_count > 0):
             add_pro_accounts = ceil(demand_surplus_accounts)
 
+    estimated_full_weekly_limit_cost_usd = None
+    used_cost_usd = None
+    if activity_cost_usd is not None and activity_cost_usd > 0:
+        used_cost_usd = round(activity_cost_usd, 2)
+        if actual_used_percent > 0:
+            estimated_full_weekly_limit_cost_usd = round(activity_cost_usd / (actual_used_percent / 100.0), 2)
+
     return WeeklyCreditPaceResponse(
         total_full_credits=total_full_credits,
         total_actual_remaining_credits=total_actual_remaining_credits,
@@ -271,6 +286,8 @@ def build_weekly_credit_pace(
         stale_account_count=stale_account_count,
         inactive_account_count=inactive_account_count,
         confidence=_confidence(len(pace_accounts), rate_sample_count, stale_account_count),
+        estimated_full_weekly_limit_cost_usd=estimated_full_weekly_limit_cost_usd,
+        used_cost_usd=used_cost_usd,
     )
 
 

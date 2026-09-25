@@ -2,10 +2,12 @@
 
 ## Purpose
 Defines how the proxy chooses which account serves a request and how upstream feedback changes that choice. It covers the selection strategies operators can pick (relative availability, sequential and reset drain, single-account, manual and additional-quota policies, reset-window preference), how rate-limit, overload, and error signals scope penalties to the responsible account, and which of those signals must be shared across replicas versus kept replica-local. The goal is to spend pooled quota deliberately while never leaving a request routed to an account that cannot serve it.
+
 ## Requirements
+
 ### Requirement: Relative availability routing
 
-The proxy account selector SHALL support a `relative_availability` routing strategy. The strategy SHALL evaluate only accounts that have passed the existing eligibility, health-tier, model-plan, quota, cooldown, circuit-breaker, and budget-safety gates. Re-authentication-required accounts SHALL be treated as hard-blocked routing candidates, the same as paused and deactivated accounts. For each candidate, it SHALL compute a raw score from remaining secondary-window credits divided by seconds until the secondary-window reset, using bounded fallbacks for unknown or near-immediate reset times, and SHALL select from the highest weighted candidates according to the configured power and top-K cutoff.
+The proxy account selector SHALL support a `relative_availability` routing strategy. The strategy SHALL evaluate only accounts that have passed the existing eligibility, health-tier, model-plan, quota, cooldown, circuit-breaker, and budget-safety gates. Paused and deactivated accounts SHALL be hard-blocked. Re-authentication-required accounts SHALL be hard-blocked only when access credentials are known expired or carry proven `account_auth_invalidated` rejection; refresh-only warnings SHALL remain candidates subject to the other gates. For each candidate, the strategy SHALL compute a raw score from remaining secondary-window credits divided by seconds until the secondary-window reset, using bounded fallbacks for unknown or near-immediate reset times, and SHALL select from the highest weighted candidates according to the configured power and top-K cutoff.
 
 #### Scenario: Soon-resetting usable credits are preferred
 - **GIVEN** two healthy eligible accounts with equal remaining secondary credits
@@ -14,9 +16,15 @@ The proxy account selector SHALL support a `relative_availability` routing strat
 - **THEN** the sooner-resetting account receives the higher relative-availability score
 
 #### Scenario: Relative availability preserves canonical gates
-- **GIVEN** one account is paused, reauth-required, deactivated, rate-limited, quota-exceeded, cooling down, or outside the requested model plan
+- **GIVEN** one account is paused, deactivated, rate-limited, quota-exceeded, cooling down, outside the requested model plan, or reauth-required with expired or proven-rejected access credentials
 - **WHEN** account selection uses `relative_availability`
 - **THEN** that account is not selected by the relative-availability strategy
+
+#### Scenario: Relative availability retains refresh-only warning candidates
+- **GIVEN** an otherwise eligible account is reauth-required only because its refresh credentials need repair
+- **AND** its access credentials are not known expired and have no proven rejection
+- **WHEN** account selection uses `relative_availability`
+- **THEN** the account remains a routing candidate
 
 ### Requirement: Relative availability dashboard tuning
 Dashboard settings SHALL expose `relative_availability_power` and `relative_availability_top_k` alongside the routing strategy. The backend SHALL validate power as positive and top-K as an integer from 1 through 20. The dashboard UI SHALL reject non-integer top-K input without truncating decimal values.
@@ -335,12 +343,15 @@ When upstream rejects a request because of the request payload itself, the proxy
 ### Requirement: Stale in-memory account sessions must not stay routable
 
 The service MUST remove accounts from routing when they are paused, deleted,
-marked `reauth_required`, or otherwise made unavailable by a permanent
-credential/session failure. This applies even when a long-lived in-memory HTTP
+deactivated, or marked `reauth_required` with known expired access credentials
+or proven `account_auth_invalidated` access rejection. A refresh-only
+`reauth_required` warning MUST NOT by itself remove an account whose access
+token is not known expired from routing. This applies even when a long-lived in-memory HTTP
 bridge session still holds an older `ACTIVE` account object. When the account
 is successfully imported, re-authenticated, or reactivated, the service MUST
 clear the in-memory unavailable marker. The routing-unavailable state MUST be
-derived from persisted account status and MUST converge on every replica
+derived from persisted account status and authentication-failure reason, with
+known access-token expiry checked during selection and reuse, and MUST converge on every replica
 within the cache-invalidation bus bound (marks and clears both propagate);
 bridge-session reuse checks MUST NOT add per-request database reads; sessions
 pinned to a deleted account MUST NOT be reused on any replica. A local
@@ -529,6 +540,41 @@ derived quota window MUST report below `100%` usage before recovery.
 - **WHEN** selection reconstructs the account from recent available usage in every applicable window
 - **THEN** normal compare-and-set recovery may restore the account to `active`
 
+### Requirement: Re-authentication-required routing distinguishes usable access credentials
+
+When account refresh credentials need repair but the upstream account is not known to be disabled, the system MUST mark the account `reauth_required`. The selector MUST retain refresh-only warning accounts whose access tokens are not known expired as candidates, subject to normal routing constraints. The selector MUST exclude `reauth_required` accounts with known expired access credentials or proven `account_auth_invalidated` access rejection from every routing strategy and hard-affinity fallback until credential repair. Hard account-owned continuity MUST remain fail-closed when its owner is excluded.
+
+Operator pickers that configure new single-account or account-scoped assignments MUST continue to omit paused, `reauth_required`, and deactivated accounts. This operator-assignment restriction MUST NOT remove refresh-only warning accounts from ordinary routing or existing ownership. Reauthentication-required accounts MUST NOT be paused into a resumable state.
+
+#### Scenario: Token invalidated account leaves the pool
+
+- **GIVEN** account A is `reauth_required`
+- **AND** its access credentials are known expired or carry the proven `account_auth_invalidated` reason
+- **AND** account B is active
+- **WHEN** a proxy request selects an account
+- **THEN** account B is selected
+- **AND** account A is not considered an eligible candidate
+
+#### Scenario: Refresh-only warning remains an ordinary routing candidate
+
+- **GIVEN** account A is `reauth_required` only because its refresh token needs repair
+- **AND** its access token is not known expired and has no proven access-rejection reason
+- **WHEN** a proxy request selects an account or reuses existing ownership
+- **THEN** account A remains eligible subject to normal routing constraints
+
+#### Scenario: Account requiring operator repair cannot be newly selected for scoped routing
+
+- **GIVEN** account A is paused, reauth-required, or deactivated
+- **WHEN** an operator opens a scoped account-routing picker
+- **THEN** account A is not offered as a new selectable account
+
+#### Scenario: Re-authentication-required account cannot be paused into resumable state
+
+- **GIVEN** account A is `reauth_required`
+- **WHEN** an operator attempts to pause account A
+- **THEN** the request is rejected
+- **AND** account A remains `reauth_required`
+
 ### Requirement: Selection state expires elapsed usage windows
 
 When building account selection state, the proxy SHALL treat any main-window usage sample (primary or secondary) whose `reset_at` timestamp has elapsed as a reset window: the derived used percentage becomes `0.0` and the derived reset timestamp is cleared, regardless of the sample's recorded used percentage. The rule SHALL apply after weekly-only primary remapping and SHALL mutate only derived selection inputs, not stored usage rows. Expired samples SHALL map to `0.0` rather than unknown so usage-derived status recovery still evaluates.
@@ -627,7 +673,7 @@ This constraint applies to every recovery path that writes account status, inclu
 
 ### Requirement: Transient balancer health signals are replica-local
 
-Transient error counts, error-backoff windows, drain/probe health tiers, probe success streaks, and in-flight/lease pressure SHALL be maintained per replica
+Transient error counts, error-backoff windows, drain/probe health tiers, probe success streaks, in-flight/lease pressure, recent first-token latency samples and recent per-model output-throughput samples SHALL be maintained per replica
 as advisory routing state and SHALL NOT require cross-replica agreement;
 persisted account status, `reset_at`, and `blocked_at` transitions are the
 only cross-replica health signals. Each replica SHALL converge on its own
@@ -639,6 +685,12 @@ observations.
 - **WHEN** replica B, which has recorded no errors for X, performs selection
 - **THEN** replica B may select account X
 - **AND** replica B backs off independently once its own error threshold for X is reached
+
+#### Scenario: Peer weighs latency from its own samples
+
+- **GIVEN** replica A holds enough first-token or throughput samples to discount account X
+- **WHEN** replica B, which has recorded no samples for X, performs a weighted selection
+- **THEN** replica B applies a neutral multiplier to account X
 
 ### Requirement: Round-robin tie-breaking is decorrelated across replicas
 
@@ -840,35 +892,94 @@ an owner, or fall back to an ordinary account.
 - **THEN** selection receives the same scope, strategy, ownership, admission,
   and retry inputs as before this change
 
+### Requirement: Proven rejected reauthentication credentials stop routing
+
+When an HTTP Responses access token is rejected with 401 and forced refresh fails permanently or the refreshed access token is again rejected with 401, the proxy MUST persist `reauth_required` with the existing `account_auth_invalidated` reason for that credential generation, unless the refresh handler has persisted a deactivating outcome. A deactivating refresh failure MUST retain `deactivated` and its original reason. Ordinary selection and live bridge reuse MUST reject either state even when JWT expiry is unknown or in the future. This requirement overrides warning-only routing only for proven access-authentication failure; a refresh-only credential-repair warning without an upstream access-token rejection MUST retain warning-only routing.
+
+The status update MUST be conditioned on the rejected access-token and refresh-token ciphertexts and current status fields. A concurrent credential repair MUST NOT be overwritten or marked unavailable by the stale rejection. A later refresh-only failure MUST NOT weaken the persisted access-rejection reason. Reauthentication or reimport that repairs credentials and clears the reason MUST restore eligibility. Routing-unavailable evidence MUST survive a cache refresh and be observable by another replica through the routing availability snapshot.
+
+A successful guarded token rotation that replaces the rejected access credentials after rejection commits MUST atomically clear that generation's `reauth_required` and `account_auth_invalidated` status. It MUST invalidate routing snapshots and reconcile the caller's account state. It MUST preserve unrelated paused, deactivated, quota, cooldown, and operator state. The same final eligibility MUST hold whether repair or rejection commits first.
+
+#### Scenario: New messages avoid the rejected warning account
+
+- **GIVEN** account A has unknown or future access-token expiry and account B is healthy
+- **WHEN** A's upstream 401 is followed by permanent forced-refresh failure
+- **THEN** a later independent message selects B without sending to A
+- **AND** A remains visible as requiring reauthentication
+
+#### Scenario: A refresh warning alone does not retire usable access
+
+- **GIVEN** A requires reauthentication because its refresh token is invalid
+- **WHEN** its stored access token has not been rejected and is not known expired
+- **THEN** ordinary routing can still select A
+
+#### Scenario: Concurrent access-only repair survives stale rejection
+
+- **GIVEN** a request used A's old access token
+- **WHEN** another actor replaces that access token before the rejection is persisted
+- **THEN** the guarded rejection update does not modify the repaired row or publish an unavailable mark
+
+#### Scenario: Repair clears the routing block
+
+- **GIVEN** A was excluded for proven access-authentication failure
+- **WHEN** repaired credentials are imported and routing snapshots refresh
+- **THEN** A can be selected and reused again
+
+#### Scenario: Repair invalidation wins over a completed rejection write
+
+- **GIVEN** a guarded rejection write succeeds for account A
+- **WHEN** credential repair is reflected in the local routing cache before the request publishes its unavailable mark
+- **THEN** the stale rejection MUST NOT replace the repaired routing state
+- **AND** a routing invalidation MUST still reconcile the final committed state
+
+#### Scenario: A snapshot read before rejection cannot swallow its invalidation
+
+- **GIVEN** a routing snapshot refresh observes A as active while its rejection write is pending
+- **WHEN** the rejection write subsequently commits
+- **THEN** the post-write invalidation MUST make the committed rejection visible within the cache-invalidation bus bound
+#### Scenario: Deactivating forced refresh remains disabled after failover
+
+- **GIVEN** an access rejection is followed by a forced refresh that deactivates the account
+- **WHEN** the request recovers on another account or fails closed
+- **THEN** the original account remains deactivated with the refresh failure reason
+
+#### Scenario: Rotation repairs a rejection that committed first
+
+- **GIVEN** an in-flight token exchange uses the unchanged refresh credential
+- **AND** a peer commits access rejection for that credential generation first
+- **WHEN** the exchange successfully rotates the access and refresh credentials
+- **THEN** the matching rejection status is cleared atomically with token persistence
+- **AND** local and peer routing snapshots converge to the repaired eligibility
+
 ### Requirement: Invalid refresh tokens require account re-authentication
 
 The system MUST classify an upstream OAuth `invalid_refresh_token` refresh
 failure as permanent, persist the affected account as re-authentication required
-through the guarded refresh-account status path, and exclude that account from
-normal account selection until an operator reauthenticates or imports fresh
-credentials.
+through the guarded refresh-account status path. Normal account selection MUST
+exclude that account only when its access credentials are known expired or carry
+proven access rejection; a refresh-only warning MUST retain ordinary eligibility.
 
 #### Scenario: OAuth invalid-refresh-token response removes the account from routing
 
 - **GIVEN** an active account attempts a token refresh
 - **WHEN** upstream OAuth returns `invalid_refresh_token`
 - **THEN** the refresh path persists the account status as `reauth_required`
-- **AND** the account is not selected for subsequent routed requests until fresh
-  credentials are supplied
+- **AND** subsequent routing distinguishes refresh-only warnings from expired or
+  proven-rejected access credentials
 
 ### Requirement: Re-authentication-required accounts remain request-routable
 
-The system MUST distinguish request routability from refresh-token eligibility. `active` accounts MUST be request-routable. A `reauth_required` account MUST remain request-routable only while its stored access token is not known to be expired; paused and deactivated accounts MUST remain excluded.
+The system MUST distinguish request routability from refresh-token eligibility. `active` accounts MUST be request-routable. A `reauth_required` account MUST remain request-routable only while its stored access token is not known expired and has no proven `account_auth_invalidated` rejection; paused and deactivated accounts MUST remain excluded.
 
 This status baseline is canonical for proxy selection, owner-bound affinity, warmup, automations, API-key account pools and scopes, probes, access-token-authenticated usage and reset-credit operations, and dashboard projections of routable capacity. Capability-specific references to active, eligible, or hard-unavailable accounts MUST apply this baseline unless a stricter credential-expiry, security, ownership, model, quota, cooldown, or operator-policy gate is explicitly required.
 
-Selecting a routable `reauth_required` account MUST use its stored access token without proactive refresh-token exchange. Its sticky, bridge, file, response, and realtime ownership MUST remain bound while that token is unexpired. Once a known access-token expiry is reached, new proxy selection and live bridge reuse MUST stop before upstream I/O. Movable soft affinity MAY fail over, while hard account-owned continuity MUST remain fail-closed rather than crossing accounts.
+Selecting a routable `reauth_required` account MUST use its stored access token without proactive refresh-token exchange. Its sticky, bridge, file, response, and realtime ownership MUST remain bound while that token is unexpired and not proven rejected. Once a known access-token expiry is reached or access rejection is proven, new proxy selection and live bridge reuse MUST stop before upstream I/O. Movable soft affinity MAY fail over, while hard account-owned continuity MUST remain fail-closed rather than crossing accounts.
 
-A permanent forced-refresh failure while serving a movable request MUST release the account's lease and exclude it from that request's remaining attempts. The failure MUST NOT create a process-wide routing block before the stored access token's known expiry.
+A permanent forced-refresh failure while serving a movable request MUST release the account's lease and exclude it from that request's remaining attempts. A refresh-only warning MUST NOT create a process-wide routing block before the stored access token's known expiry. Proven access rejection and deactivating refresh failures MUST block routing as specified above.
 
 #### Scenario: Token-invalidated account remains in the pool
 
-- **GIVEN** account A is `reauth_required` with a usable stored access token
+- **GIVEN** account A is `reauth_required` with a usable stored access token and no proven access rejection
 - **WHEN** an ordinary proxy or supporting access-token operation selects an account
 - **THEN** account A remains eligible after all other applicable gates
 - **AND** its refresh token is not proactively exchanged
@@ -876,7 +987,7 @@ A permanent forced-refresh failure while serving a movable request MUST release 
 #### Scenario: Warning state preserves ownership
 
 - **GIVEN** account A owns sticky or hard continuity
-- **WHEN** account A becomes `reauth_required` with an unexpired stored access token
+- **WHEN** account A becomes `reauth_required` with an unexpired stored access token and no proven access rejection
 - **THEN** the ownership remains bound to account A
 - **AND** the transition alone does not delete or rebind continuity
 
@@ -901,13 +1012,14 @@ A permanent forced-refresh failure while serving a movable request MUST release 
 - **AND** forced refresh fails permanently after upstream rejects A's access token
 - **WHEN** the request retries selection
 - **THEN** account A is excluded from that request's remaining attempts
-- **AND** account A may still be considered by a later independent request
+- **AND** proven-rejected account A is excluded from later independent requests until credential repair
 
-#### Scenario: Request-routable account can be selected for scoped routing
+#### Scenario: Request-routable warning account cannot be newly assigned scoped routing
 
 - **GIVEN** account A is `reauth_required`
 - **WHEN** an operator opens a scoped account-routing picker
-- **THEN** account A is offered as selectable
+- **THEN** account A is not offered as a new assignment until credential repair
+- **AND** its existing ordinary routing eligibility is unchanged
 
 #### Scenario: Hard-blocked account cannot be newly selected for scoped routing
 
@@ -1230,4 +1342,479 @@ When upstream answers a stream dispatch for a selected account with HTTP 429 who
 - **WHEN** the rejection is observed
 - **THEN** the burst cooldown for account A is engaged immediately, before the replacement dispatch or backoff wait
 - **AND** the deferred transient penalty, written after settlement, does not extend the cooldown deadline
+
+### Requirement: Rejection repair depends on changed access-token material
+
+A guarded token rotation MUST NOT clear proven access rejection solely because encryption produces different ciphertext for unchanged access-token material. Replacing only refresh or ID token material MUST NOT restore access-token eligibility or suppress a pending rejection of unchanged access material. Credential comparison and the resulting write MUST remain fenced against concurrent token replacement.
+
+#### Scenario: Refresh returns the rejected access token again
+- **WHEN** refresh persists newly encrypted copies of the same rejected access token
+- **THEN** the account retains its rejection reason and remains excluded locally and after a routing snapshot refresh
+
+#### Scenario: Refresh-only rotation precedes rejection retry
+- **WHEN** rotation replaces refresh-token material but retains the rejected access-token material before rejection persistence retries
+- **THEN** the rejection MUST persist against the latest token ciphertexts
+- **AND** genuine access-token replacement during that retry MUST prevent a stale rejection write
+
+### Requirement: Concurrent health writes do not erase proven credential rejection
+
+When a rejection write loses a compare-and-set because noncredential health fields changed, the proxy MUST re-read current state and retry while the rejected access-token material remains current. It MUST preserve concurrent reset and blocked timestamps and MUST NOT override an operator pause, deactivation, or repaired access-token material. Conversely, later health and cooldown updates from in-flight requests MUST NOT erase a committed proven access rejection or restore the same rejected credentials to selection or bridge reuse. Cooldown evidence MUST remain available for a subsequent genuine credential repair.
+
+#### Scenario: Rate limiting commits before rejection persistence
+- **WHEN** another request changes the rejected account's cooldown without changing credentials before the rejection write
+- **THEN** the rejection is persisted while the concurrent cooldown timestamps are retained
+- **AND** the account remains excluded after that cooldown expires
+
+#### Scenario: A peer repairs credentials before retry
+- **WHEN** the fresh state contains replacement access-token material
+- **THEN** the stale rejection does not overwrite that state or mark the repaired account unavailable
+
+#### Scenario: Health updates follow a committed rejection
+- **WHEN** an older in-flight request reports rate limiting, quota exhaustion, or recovery after access rejection commits
+- **THEN** the rejected account MUST remain unavailable after routing snapshot refresh and cooldown expiry
+- **AND** applicable cooldown timestamps MUST be retained without replacing the blocking authentication state
+
+### Requirement: Direct dispatch honors credential availability
+
+Warmup in every targeting mode and automation dispatch, whether manual or scheduled, MUST exclude reauthentication accounts with proven access rejection or known expired access credentials. Refresh-only warnings with usable or unknown-expiry access credentials MUST retain existing eligibility subject to independent gates.
+
+#### Scenario: Direct consumer targets a rejected account
+- **WHEN** warmup or an automation targets an account carrying proven access rejection
+- **THEN** no upstream request is sent using that account
+
+#### Scenario: Direct consumer targets a refresh-only warning
+- **WHEN** warmup or an automation targets a refresh-only warning account whose access token is not known expired
+- **THEN** credential availability alone does not exclude it
+
+### Requirement: Access-rejection evidence survives persistence conflicts and unrelated repairs
+
+Refresh-token persistence-conflict handling MUST preserve an existing proven access-rejection reason while the rejected credentials remain current. A repair of account B MUST NOT suppress a successful rejection mark for account A. Only explicit repair evidence for A MUST fence its stale marks; a snapshot rebuild or cache reset alone MUST NOT suppress a committed rejection mark.
+
+#### Scenario: Persistence conflict meets an existing rejection
+- **WHEN** guarded token persistence exhausts retries while the current row retains proven access rejection
+- **THEN** the returned and persisted account retain the blocking rejection reason
+
+#### Scenario: An unrelated account is repaired during rejection persistence
+- **WHEN** B is repaired while A's guarded rejection write succeeds
+- **THEN** A is immediately unavailable to stale live bridge reuse without waiting for the next invalidation poll
+
+#### Scenario: A stale snapshot is published before a committed rejection mark
+- **WHEN** a routing snapshot reads A before its rejection commits and is published before the local mark is applied
+- **THEN** the mark MUST immediately block stale bridge reuse without requiring another invalidation poll
+
+#### Scenario: Same-account repair spans snapshot refresh or reset
+- **WHEN** an explicit repair of A invalidates a pending older rejection mark
+- **AND** a snapshot refresh or cache reset occurs before that mark is applied
+- **THEN** the stale mark MUST remain suppressed
+
+### Requirement: Usage and capacity consumers share credential availability
+
+Usage refresh, reset-credit refresh and manual reset-credit eligibility, and routable dashboard capacity MUST exclude reauthentication accounts with known expired access credentials or proven access rejection. Refresh-only warning accounts whose access token is not known expired MUST retain access-based service subject to independent consumer constraints. This requirement refines older status-only exclusions for access-token-authenticated operations, including request-triggered usage refresh. This MUST NOT authorize proactive refresh-token exchange for warning accounts.
+
+#### Scenario: Usable refresh-only warning
+- **WHEN** a reauthentication warning has usable access credentials without proven rejection
+- **THEN** usage and reset-credit service and capacity accounting do not exclude it solely for the warning status
+
+#### Scenario: Rejected or expired access credentials
+- **WHEN** a reauthentication account has proven rejection or known expired access credentials
+- **THEN** those consumers exclude it from access-based service and routable capacity
+
+### Requirement: Credential repair preserves active reset-based cooldowns
+
+Replacing rejected access-token material MUST NOT make an account with an unexpired persisted reset-based cooldown selectable before its reset. Credential repair MUST preserve the reset deadline and independent operator restrictions while removing the repaired authentication rejection. After the reset expires, existing routing recovery rules MUST govern eligibility.
+
+#### Scenario: Rate limiting precedes rejection and repair
+- **WHEN** rate limiting persists a future reset deadline before access rejection replaces the routing status
+- **AND** guarded token rotation repairs the rejected access credentials
+- **THEN** selection MUST still exclude that account until the cooldown expires
+- **AND** rejection persistence and repair MUST NOT overwrite unrelated cooldown timestamps
+
+### Requirement: Secret-safe refresh failure correlation
+The system SHALL log each failed refresh attempt with a stable pseudonymous account reference, an allowlisted failure code, and permanent and transport classification flags. The event SHALL be labeled as a refresh-attempt failure, not proof of an OAuth exchange. Known local pre-exchange failures `upstream_proxy_unavailable` and `refresh_claim_timeout` SHALL retain their safe codes rather than being mapped to `other`. It SHALL NOT log raw account identifiers, credentials, provider messages, response bodies, or exception traces in that diagnostic, including when shared refresh work serves private callers. Unknown codes SHALL be represented as `other`.
+
+#### Scenario: Revoked refresh token
+- **WHEN** a refresh exchange fails with `refresh_token_revoked`
+- **THEN** the diagnostic includes that code and a stable pseudonymous account reference
+- **AND** does not contain the refresh token, account email, raw account ID, or provider error message
+
+#### Scenario: Untrusted provider error code
+- **WHEN** an OAuth error code is not allowlisted
+- **THEN** the diagnostic logs `other` and never includes the untrusted value
+
+#### Scenario: Local failure before exchange
+- **WHEN** route resolution or refresh admission fails before the provider exchange
+- **THEN** the refresh-attempt diagnostic preserves `upstream_proxy_unavailable` or `refresh_claim_timeout` respectively
+- **AND** no provider call is made
+
+#### Scenario: Private and ordinary callers share a failed refresh
+- **WHEN** a private caller and an ordinary caller overlap on the same refresh, in either arrival order
+- **THEN** a single refresh attempt runs and both callers receive the refresh error
+- **AND** exactly one content-free, account-correlatable failure warning is emitted
+
+#### Scenario: Refresh claim exhausts the caller budget
+- **WHEN** a foreign claim remains held until the caller budget expires, or acquisition finishes after that budget expires
+- **THEN** exactly one safe refresh-attempt warning includes `code=refresh_claim_timeout`
+- **AND** no provider exchange runs, and an acquired claim is released
+
+### Requirement: Weighted strategies discount relatively slow upstream first-token latency
+
+The balancer SHALL keep a replica-local, bounded window (3600 s, at most 64 samples per account) of upstream first-token latencies per account, sampled only from request-log rows with `status` `success`, `request_kind` `normal`, a recorded first-token latency, an upstream send anchor, fewer than 20000 uncached input tokens (input tokens minus cached input tokens), reasoning effort absent, `minimal` or `low`, zero response-create-gate and bridge-queue wait, and a single upstream send with no account-capacity wait. The sampled latency MUST be measured from the upstream `response.create` send, not from request-state creation: the request-log funnel takes the row's start-to-send offset as `latency_upstream_send_ms` (not persisted) and the sample is `latency_first_token_ms - latency_upstream_send_ms`, so local pre-send work on the bridge path (session lookup and reconnect, prewarm, image inlining, payload slimming) and the direct WebSocket path (owner binding) is never attributed to the selected account, whether or not the later bridge-queue gate happened to be free. The WebSocket/bridge finalizer derives the offset from the turn's `response_create_sent_at` stamp; the HTTP stream path re-anchors its attempt clock after admission immediately before the upstream send and passes `0`. A row without a send anchor (`latency_upstream_send_ms` absent, or a send stamped after the first token) MUST NOT be sampled; the persisted `latency_first_token_ms` is unchanged. The response-create-gate wait MUST include the time spent waiting for global response-create admission after the session gate is acquired, so a direct WebSocket turn that waited on the saturated global limit records a non-zero gate wait. Rows with `request_kind` `warmup`, `compaction` or `realtime_live`, error rows, rows that waited on the response-create gate, global response-create admission or the bridge queue, and WebSocket/bridge rows whose first-token latency spans a retried `response.create` send, a transparent direct-WebSocket replay (`replay_count` above zero) or an account-capacity wait (including a retry or replay that switched account) MUST NOT be sampled. When at least 3 accounts each hold at least 8 in-window samples, the first-token multiplier of each such account MUST be `1.0` when its estimate (the mean of its samples below the slowest decile) is within 15% above the fleet median of the per-account estimates, and `max(0.5, fleet_estimate / account_estimate)` otherwise; with fewer accounts or fewer samples the multiplier MUST be neutral. The fleet reference MUST be computed over every account the replica tracks, not only the candidates of the current selection. The first-token multiplier is one input of the latency cohort multiplier (see "Latency cohort multipliers are combined by minimum"). The discount MUST lift as the window clears. The window is never persisted.
+
+#### Scenario: A slow cohort receives less weighted traffic but is still drawn
+
+- **GIVEN** three accounts with equal remaining credits under `capacity_weighted`
+- **AND** two of them hold twenty eligible samples near 1.7 s and the third holds twenty near 6 s
+- **WHEN** fresh selections are drawn
+- **THEN** the slow account is drawn less often than either fast account
+- **AND** it is still drawn (the 0.5 floor keeps sampling it)
+
+#### Scenario: A uniformly slow fleet is neutral
+
+- **GIVEN** twenty accounts whose eligible samples all sit near 2.6 s
+- **WHEN** their draw weights are computed
+- **THEN** every multiplier is `1.0`
+
+#### Scenario: Thin evidence is neutral
+
+- **GIVEN** only two accounts hold eight or more eligible samples, or an account holds seven
+- **WHEN** draw weights are computed
+- **THEN** every multiplier is `1.0`
+
+#### Scenario: A large cached prefix keeps a small turn eligible
+
+- **GIVEN** a successful `normal` row with 25000 input tokens of which 20000 are cached input tokens
+- **WHEN** the row is written
+- **THEN** it adds a sample to the account's window
+
+#### Scenario: Ineligible rows are not sampled
+
+- **GIVEN** request-log rows for an account with `status` `error`, `request_kind` `warmup`, `compaction` or `realtime_live`, no first-token latency, 20000 or more uncached input tokens, reasoning effort `medium` or `high`, a non-zero gate or bridge-queue wait, or a first-token latency that spans a retried send, a direct-WebSocket replay or an account-capacity wait
+- **WHEN** the rows are written
+- **THEN** none of them adds a sample to the account's window
+
+#### Scenario: A transparently replayed direct WebSocket turn is not sampled
+
+- **GIVEN** a direct WebSocket turn whose upstream dropped after `response.create` and that was transparently replayed once (`replay_count` is 1) with no queue wait
+- **WHEN** the turn completes successfully and its request-log row is written
+- **THEN** the row is marked as retried
+- **AND** it adds no sample to the replacement account's window
+
+#### Scenario: Bridge pre-send work is not attributed to the account
+
+- **GIVEN** an HTTP-to-WebSocket bridge turn whose request state was created at 0 ms, whose `response.create` was sent at 3000 ms after session lookup, reconnect and slimming, whose first token arrived at 4700 ms, with no gate or bridge-queue wait and a single send
+- **WHEN** the turn completes successfully and its request-log row is written
+- **THEN** the row's persisted first-token latency is 4700 ms
+- **AND** the account's window gains a 1700 ms sample, not a 4700 ms one
+
+#### Scenario: A row without an upstream send anchor is not sampled
+
+- **GIVEN** an otherwise eligible WebSocket or bridge turn whose request state carries no `response.create` send stamp
+- **WHEN** its request-log row is written
+- **THEN** it adds no sample to the account's window
+
+#### Scenario: A direct WebSocket turn that waited for global admission is not sampled
+
+- **GIVEN** a direct WebSocket turn that acquired the session gate immediately but waited 2.5 s for global response-create admission because the limit was saturated
+- **WHEN** admission is granted
+- **THEN** the turn's response-create-gate wait is recorded as 2500 ms
+- **AND** its request-log row adds no sample to the account's window
+
+#### Scenario: The discount lifts when the window clears
+
+- **GIVEN** an account whose multiplier is `0.5`
+- **WHEN** more than 3600 s pass without new eligible samples
+- **THEN** its multiplier is `1.0` on the next state build
+
+### Requirement: Weighted strategies discount relatively slow per-model output throughput
+
+The balancer SHALL keep a replica-local, bounded window (3600 s, at most 64 samples per account and model) of upstream output throughputs per (account, model), where a sample is the row's total `output_tokens` (reasoning tokens included) divided by its generation span in seconds: from the first token to the **upstream terminal event** (`response.completed`). The span MUST end at the instant the upstream terminal frame was parsed, captured before the frame is delivered downstream and before terminal bookkeeping, durable bridge writes, API-key settlement, deferred health writes and cleanup; neither downstream delivery time nor local settlement latency MUST be counted as generation time. Every transport stamps that instant at its own terminal-parse site and the request-log funnel receives it as `latency_upstream_terminal_ms` (not persisted; the persisted `latency_ms` keeps measuring to the row's write): the direct WebSocket reader and the HTTP-to-WebSocket bridge reader stamp `upstream_terminal_at` on the matched turn when they parse the terminal frame (the bridge's stamp precedes the durable alias, operation, recovery and circuit-settlement writes that run before its finalizer), and the HTTP stream stamps its stream settlement when it parses the terminal frame, before yielding it, so a slow downstream consumer or an upstream connection that stays open after `response.completed` does not stretch the span. A row whose terminal frame was never parsed has no stamp and is an error row, which is not sampled. A row MUST be sampled only when it has `status` `success`, `request_kind` `normal`, a non-empty model that is not the `unknown` placeholder, a recorded first-token latency, a positive generation span, at least 200 output tokens, zero response-create-gate and bridge-queue wait, and a single upstream send with no account-capacity wait; the input size and reasoning effort MUST NOT affect eligibility. Rows with `request_kind` `warmup`, `compaction` or `realtime_live`, error rows, queued rows, retried or replayed rows, rows without a model and rows with fewer than 200 output tokens MUST NOT be sampled. When a selection is performed for a model and at least 3 accounts each hold at least 8 in-window samples for that model, the throughput multiplier of each such account MUST be `1.0` when its estimate (the median of its samples for that model) is within 15% below the fleet median of the per-account estimates for that model, and `max(0.5, account_estimate / fleet_estimate)` otherwise; with fewer accounts, fewer samples, or no requested model the throughput multiplier MUST be neutral. Samples for one model MUST NOT contribute to the estimate, the fleet reference or the account count of another model. The fleet reference MUST be computed over every account the replica tracks for that model, not only the candidates of the current selection. The throughput multiplier is one input of the latency cohort multiplier (see "Latency cohort multipliers are combined by minimum"). The discount MUST lift as the window clears. The window is never persisted.
+
+#### Scenario: A slow-throughput cohort on one model is discounted for that model
+
+- **GIVEN** nineteen accounts with sol samples, nine near 40 tok/s and ten between 66 and 108 tok/s
+- **WHEN** draw weights are computed for a sol selection
+- **THEN** each of the nine accounts has a throughput multiplier of about `40 / 66`
+- **AND** each of the ten accounts has a throughput multiplier of `1.0`
+
+#### Scenario: An account slow on one model is not discounted on another
+
+- **GIVEN** an account whose sol samples sit near 40 tok/s while two siblings sit near 70 tok/s
+- **AND** the same three accounts hold astra samples near 50 tok/s
+- **WHEN** draw weights are computed for an astra selection
+- **THEN** the account's multiplier is `1.0`
+- **AND** its multiplier for a sol selection is `40 / 70`
+
+#### Scenario: A uniform fleet is neutral
+
+- **GIVEN** twenty accounts whose sol samples all sit within 44 and 56 tok/s
+- **WHEN** draw weights are computed for a sol selection
+- **THEN** every multiplier is `1.0`
+
+#### Scenario: Thin per-model evidence is neutral
+
+- **GIVEN** two accounts with eight or more sol samples, a third with eight astra samples only, and a fourth with seven sol samples
+- **WHEN** draw weights are computed for a sol selection
+- **THEN** every multiplier is `1.0`
+
+#### Scenario: A build without a requested model does not consult throughput
+
+- **GIVEN** an account whose sol throughput multiplier would be `0.5`
+- **WHEN** states are built without a model (quota planner, model-less selection)
+- **THEN** its throughput multiplier is `1.0`
+
+#### Scenario: A qualifying row records a throughput sample
+
+- **GIVEN** a successful `normal` sol row with 60000 input tokens, reasoning effort `high`, 400 output tokens, 2000 ms first-token latency and its upstream terminal event at 12000 ms, no queue wait and a single send
+- **WHEN** the row is written
+- **THEN** it adds a 40 tok/s sample to the account's sol window
+- **AND** it adds no first-token sample (the row is outside the first-token slice)
+
+#### Scenario: Delayed API-key settlement does not dilute a WebSocket throughput sample
+
+- **GIVEN** a successful keyed WebSocket sol turn whose first token arrived at 2000 ms, whose `response.completed` was parsed at 12000 ms with 400 output tokens, and whose API-key settlement then takes 10 s
+- **WHEN** the finalizer settles the turn and writes its row
+- **THEN** the row's `latency_ms` is 22000 ms
+- **AND** the account's sol window gains a 40 tok/s sample, not a 20 tok/s one
+
+#### Scenario: A slow downstream consumer does not dilute an HTTP throughput sample
+
+- **GIVEN** a successful HTTP stream sol turn whose first token arrived at 2000 ms and whose `response.completed` frame was parsed at 12000 ms with 400 output tokens
+- **AND** the downstream client takes 5 s to drain the terminal frame and the upstream connection lingers 5 s more before the generator closes
+- **WHEN** the row is written
+- **THEN** the row's `latency_ms` is 22000 ms
+- **AND** the account's sol window gains a 40 tok/s sample, not a 20 tok/s one
+
+#### Scenario: Bridge bookkeeping after the terminal does not dilute a throughput sample
+
+- **GIVEN** a successful HTTP-to-WebSocket bridge sol turn whose first token arrived at 2000 ms and whose `response.completed` frame was parsed by the bridge reader at 12000 ms with 400 output tokens
+- **AND** durable alias, operation and circuit-settlement writes take 10 s before the finalizer runs and its API-key settlement takes 10 s more
+- **WHEN** the finalizer writes the row
+- **THEN** the row's `latency_ms` is 32000 ms
+- **AND** the account's sol window gains a 40 tok/s sample
+- **AND** the turn's terminal stamp was set when the frame was parsed, before the finalizer was entered
+
+#### Scenario: Queued, replayed, short and model-less rows record no throughput sample
+
+- **GIVEN** otherwise qualifying rows with a non-zero bridge-queue or gate wait, a retried or replayed send, 199 output tokens, or no model
+- **WHEN** the rows are written
+- **THEN** none of them adds a sample to any per-model window
+
+### Requirement: Latency cohort multipliers are combined by minimum
+
+For each candidate of a state build, the balancer SHALL compute the first-token multiplier and the throughput multiplier for the requested model and MUST multiply the candidate's draw weight by the smaller of the two; the two multipliers MUST NOT be multiplied together. The combined multiplier compounds with the error-rate multiplier and is consulted only by the `capacity_weighted` and `relative_availability` draws: it MUST NOT exclude any account, MUST NOT change `relative_availability` top-k membership or any deterministic probe pick, MUST NOT move an established sticky or continuity owner, and deterministic strategies (`round_robin`, `usage_weighted`, `fill_first`, `sequential_drain`, `reset_drain`, `single_account`) MUST be unaffected. The state build MUST receive the requested model from the selection that triggered it -- on the unbound path, on the sticky path when the key has no owner, and on both the live and the observe-only opportunistic admission builds -- so the throughput multiplier is model-aware. The balancer MUST log a transition of either multiplier (crossing `1.0` or moving by more than `0.1`), naming the combined multiplier, the signal that set it (`ttft`, `tps`, `both` or `none`), the model and which signal transitioned, without account identifiers. The first-token transition MUST be gated per account, so one first-token transition is logged once regardless of how many models (or none) are requested; the throughput transition MUST be gated per account and requested model. The balancer MUST retain a per-model throughput weight only while it is below `1.0`, so the per-account map is bounded by the models the account is discounted on and a neutral build for an unknown or evidence-less model retains nothing. Neither multiplier is persisted.
+
+#### Scenario: An account slow on both signals is discounted once
+
+- **GIVEN** an account whose first-token multiplier is `0.5` and whose sol throughput multiplier is `0.6`
+- **WHEN** draw weights are computed for a sol selection
+- **THEN** its combined multiplier is `0.5`, not `0.3`
+
+#### Scenario: The transition log names the signal and the model
+
+- **GIVEN** three accounts with sol throughput samples of which one sits near 40 tok/s and two near 70 tok/s, and no first-token samples
+- **WHEN** draw weights are computed for a sol selection
+- **THEN** one transition is logged with `signal=tps` and `model=gpt-5.6-sol`, and the line contains no account identifier
+- **AND** alternating astra and sol builds do not log the sol transition again
+
+#### Scenario: A first-token transition is logged once across models
+
+- **GIVEN** three accounts with first-token samples of which one sits near 6 s and two near 1.7 s, and no throughput samples
+- **WHEN** draw weights are computed for a sol selection, an astra selection, a model-less build and a selection for a model without evidence
+- **THEN** exactly one transition is logged, with `signal=ttft`
+- **AND** the account retains no per-model throughput weight
+
+#### Scenario: A neutral build for an unknown model retains nothing
+
+- **GIVEN** an account with sol throughput evidence and siblings that make it slow on sol
+- **WHEN** draw weights are computed for a model string with no evidence, the `unknown` placeholder, an empty model or no model
+- **THEN** every multiplier is `1.0`
+- **AND** the account retains no per-model throughput weight for any of those keys
+
+#### Scenario: A sticky fresh draw is weighted for the requested model
+
+- **GIVEN** a `codex_session` key with no owner and an account that is slow on sol and uniform on astra
+- **WHEN** the key selects with `model` sol
+- **THEN** the build applied the account's sol throughput multiplier
+- **AND** a fresh key selecting with `model` astra applies `1.0` for the same account
+
+#### Scenario: Opportunistic admission builds states for the requested model
+
+- **GIVEN** an account that is slow on sol
+- **WHEN** an observe-only admission check runs for sol
+- **THEN** the detached build applied the account's sol throughput multiplier and the live runtime retains no weight
+- **AND** a live admission check for sol records the weight and selects the same account as the observation
+
+#### Scenario: An established owner on a slow account is kept
+
+- **GIVEN** a `prompt_cache` key already bound to an account whose combined multiplier is `0.5`
+- **WHEN** the next turn selects with that key under `capacity_weighted`
+- **THEN** the established owner is returned
+
+### Requirement: A single account's rejection is not the pool's rejection
+
+When deterministic failover is enabled and a pre-visible upstream failure reports `excludes_account = true` on a request that is not owner-bound, the proxy MUST exclude the rejecting account for the remainder of that request and reselect from the accounts that remain, and MUST repeat this until either a selected account serves the request or no non-excluded candidate remains. `excludes_account` is the classifier's account-selection predicate: a model-capacity rejection on a walkable class is false, while quota, rate-limit, usage-limit, and burst-rejection failures that selection may move away from are true. When deterministic failover is disabled, the proxy MUST keep the existing surface-without-walk behavior. The proxy MUST NOT bound an enabled walk by a fixed attempt count unrelated to the size of the usable pool.
+
+The walk MUST terminate. Termination MUST be guaranteed by three independent bounds: the request budget deadline that already clamps every attempt; a runaway ceiling derived from the current candidate count, so it scales with any valid pool size and cannot become the ordinary bound; and a monotone-progress invariant requiring every `failover_next` outcome to grow the request-scoped excluded-account set. When a `failover_next` outcome does not grow that set, the proxy MUST log a warning naming the request and MUST terminate the walk rather than reselect.
+
+The monotone-progress invariant governs failover outcomes only. An account-capacity recovery that deliberately re-admits a previously excluded account — waiting for a local cap to clear rather than rejecting the account — MUST be allowed to remove its own exclusion, MUST NOT be reported as a progress failure, and MUST remain bounded by the request budget. A walk that could re-admit an account on failover evidence would not terminate; a walk that could not re-admit on capacity evidence would lose a recovery path that exists today.
+
+The proxy MUST record account health exactly once per attempted failover outcome. A walk across N accounts whose pre-visible failures each produce one `failover_next` outcome MUST produce N health writes. Same-account retry and post-refresh paths that perform another upstream dispatch on the same account MAY record that distinct dispatch result, as required by their existing retry-health contract; they MUST NOT duplicate a health write for the same dispatch outcome.
+
+Owner-bound requests are outside the relocation part of this requirement: a request that cannot move to another account MUST continue to return through the `owner_bound` branch and MUST NOT walk the pool. Burst rejections may still use the bounded same-account retry path. Required previous-response-owner compact requests are not owner-bound when the existing account-neutral fresh-replay gates have proven that their replay can safely move to another account after a pre-visible quota or rate-limit owner failure; those verified compact replays may use the walk. Usage-limit messages, including code-less and `invalid_request_error` envelopes, still use the new classification and same-account-backoff skip before their original rejection is surfaced.
+
+When a walk ends without a served response, the proxy MUST record which bound ended it — a non-retryable failure, an exhausted pool, the request deadline, the runaway ceiling, or a progress failure. Those outcomes are operationally different and MUST be distinguishable after the fact; collapsing them into one undifferentiated "surface" leaves an operator unable to tell a bad request from an exhausted fleet.
+
+#### Scenario: A usable sibling serves what one account rejected
+
+- **GIVEN** accounts A, B and C are selectable and a request is not owner-bound
+- **WHEN** account A answers the dispatch with an upstream HTTP 429 before any downstream-visible output
+- **THEN** account A is excluded for this request and account B is selected
+- **AND** when account B also rejects, account C is selected
+- **AND** when account C serves the request the client receives that response, not account A's 429
+
+#### Scenario: The walk is not capped at the legacy attempt constant
+
+- **GIVEN** a pool of more than three selectable accounts
+- **WHEN** the first three attempted accounts each return a pre-visible `rate_limit` failure
+- **THEN** the proxy attempts a fourth account rather than surfacing the third account's failure
+
+#### Scenario: Health is written once per attempted account
+
+- **GIVEN** a walk that attempts five accounts before one serves the request
+- **WHEN** the request completes
+- **THEN** exactly five account-health writes were recorded, one per attempted account
+
+#### Scenario: A selector that cannot make progress terminates the walk
+
+- **GIVEN** account selection returns an account that is already in the request's excluded set
+- **WHEN** the proxy evaluates the failover outcome
+- **THEN** a warning is logged for the request
+- **AND** the walk terminates through the pool-terminal path instead of reselecting
+
+#### Scenario: Owner-bound requests keep today's behaviour
+
+- **GIVEN** a request bound to account A by a file pin, turn-state ownership, the `single_account` routing strategy, or a required previous-response owner that has not passed the account-neutral fresh-replay gates
+- **WHEN** account A returns a pre-visible failure
+- **THEN** the proxy does not walk the pool
+- **AND** burst rejections keep the bounded same-account retry path
+- **AND** other classes follow their owner-bound classification and terminal-rendering rules without relocating to another account
+
+### Requirement: A walk proves exhaustion from its own attempts
+
+When a walk has attempted every candidate the selector offered and excluded each of them on usage-window exhaustion evidence, the proxy MUST treat the pool as exhausted, whether or not the persisted-state exhaustion predicate can see it yet.
+
+The proxy MUST NOT make this conclusion depend on a background or debounced usage refresh, which cannot land before the terminal decision of the request that provoked it. It MUST NOT depend on writing a usage sample onto the transient account state either: the runtime state the health write persists carries the account's status but not that sample, so a sample written during the attempt does not survive to be read back.
+
+The walk therefore MUST carry its own per-account evidence to the terminal decision, and the terminal decision MUST accept it only when that evidence proves usage-window exhaustion: a coded `usage_limit_reached`, a message-derived usage-limit rejection, or quota evidence that carries the same structured usage-window meaning. Other quota-class errors, such as `usage_not_included` or `insufficient_quota`, still exclude the account when selection may move away, but they MUST NOT by themselves authorize a canonical `usage_limit_reached` pool response. The persisted-state probe remains authoritative for the case the walk cannot speak to — a request that never attempted the whole pool, because selection refused it earlier.
+
+#### Scenario: Every attempted account was exhausted
+
+- **GIVEN** a walk that attempted every account the selector offered
+- **AND** each of them was excluded on usage-window exhaustion evidence
+- **WHEN** the walk ends
+- **THEN** the pool is treated as exhausted without waiting for any background refresh
+- **AND** the client receives the canonical `usage_limit_reached` rejection
+
+#### Scenario: A transient walk-out is not exhaustion
+
+- **GIVEN** a walk whose attempted accounts were excluded on transient evidence rather than exhaustion evidence
+- **WHEN** the walk ends
+- **THEN** the walk's own evidence does not prove exhaustion
+- **AND** the terminal decision falls back to the persisted-state probe
+
+#### Scenario: A message-derived usage limit counts as exhaustion evidence
+
+- **GIVEN** an account excluded because its rejection's message proved the usage limit rather than its error code
+- **WHEN** the walk tallies its evidence
+- **THEN** that exclusion counts exactly as a coded `usage_limit_reached` exclusion does
+
+### Requirement: Pool-walk termination consults the exhaustion probe
+
+When an account walk ends without a served response, the client-visible failure MUST be decided from the bound that ended the walk, and MUST NOT be the first, the last, or an arbitrary per-account rejection chosen without that decision.
+
+Two bounds answer without consulting the probe, because the pool's state is not what ended the walk: a `non_retryable` failure surfaces as itself, and an exhausted request budget yields `upstream_request_timeout` as "Streaming Responses requests use a bounded retry budget" requires. For every other bound the proxy MUST consult the pool-exhaustion probe at most once per request, using the same eligibility and security-scope filtering ordinary selection applies, and MUST combine that answer with the walk's own evidence as required by "A walk proves exhaustion from its own attempts".
+
+When the probe reports pool-wide usage exhaustion, the proxy MUST render the canonical usage-limit rejection defined by "Pool usage exhaustion is reported as a usage-limit error", including `error.resets_at` when an authoritative reset timestamp is available.
+
+When neither the probe nor the walk's own evidence proves exhaustion — including the decline the probe returns for drain routing strategies — the proxy MUST return the preserved failure of the last attempted account, with its upstream status, error code, error body and retry hints unchanged.
+
+A client that receives the canonical pool rejection MUST NOT be left without retry guidance: when no authoritative reset timestamp is available for `error.resets_at`, the response MUST carry a retry hint instead.
+
+#### Scenario: Every account exhausted yields the canonical pool rejection
+
+- **GIVEN** every selectable account rejects the request with a quota or usage-limit failure
+- **WHEN** the walk ends
+- **THEN** the probe is consulted exactly once
+- **AND** the client receives HTTP `429` with `error.code = "usage_limit_reached"` and `error.resets_at` when a reset timestamp is known
+
+### Requirement: Strict model-to-account routing
+
+The proxy routing layer SHALL support strict model-to-account routing. When configured, requests for a mapped model MUST be routed exclusively to the designated account matching the target account ID, email, alias, or workspace identity.
+
+The route mapping SHALL be configurable via local configuration and per-request routing headers (`x-codex-model-account-routing`). When a request matches a configured model route:
+1. If the target account exists and is available, the request MUST be served by that account.
+2. If the target account is missing, unavailable, rate-limited, cooling down, or outside the caller's scoped accounts, the proxy MUST fail the request with a routing error (`model_account_not_found`, `model_account_unavailable`, or `model_account_scope_mismatch`) instead of silently falling back to another account.
+3. Unmapped models SHALL continue to use the standard load balancing strategy across eligible accounts.
+
+#### Scenario: Request for mapped model routes strictly to designated account
+- **GIVEN** a model route mapping `gpt-5.6-sol` to account `Account A`
+- **AND** `Account A` is healthy and active
+- **WHEN** a request arrives requesting model `gpt-5.6-sol`
+- **THEN** `Account A` is selected to serve the request
+
+#### Scenario: Request for mapped model fails closed when designated account is unavailable
+- **GIVEN** a model route mapping `gpt-5.6-sol` to account `Account A`
+- **AND** `Account A` is rate-limited or excluded
+- **AND** other healthy accounts in the pool support `gpt-5.6-sol`
+- **WHEN** a request arrives requesting model `gpt-5.6-sol`
+- **THEN** the request fails closed with `model_account_unavailable`
+- **AND** no alternate account is selected
+
+### Requirement: Account quota limit restriction
+
+The load balancing and selection system SHALL support per-account quota limit restrictions (`max_quota_percent`).
+When a quota limit restriction is configured for an account (e.g., 50.0%), the selector SHALL compare the account's current used quota percentage against the restriction threshold.
+
+If an account's used quota percentage exceeds the configured limit restriction, the account SHALL be treated as exhausted and excluded from ordinary load balancing selection, preserving the remaining headroom for external or cloud usage.
+
+#### Scenario: Account below configured quota limit is eligible
+- **GIVEN** an active account with a configured limit restriction of 50.0%
+- **AND** the account's recorded used quota is 40.0%
+- **WHEN** account selection runs
+- **THEN** the account remains eligible for selection
+
+#### Scenario: Account exceeding configured quota limit is excluded
+- **GIVEN** an active account with a configured limit restriction of 50.0%
+- **AND** the account's recorded used quota is 55.0%
+- **WHEN** account selection runs
+- **THEN** the account is treated as exhausted and excluded from candidate selection
+
+### Requirement: Health-tier dominance over budget-safe routing
+
+In budget-safe account selection (`_select_account_preferring_budget_safe`), health tiers MUST strictly dominate budget thresholds. The preferred pool of accounts below the budget threshold MUST be computed from the highest available health tier (`_best_health_tier_states`), preventing degraded, cooling-down, or backoff accounts from leapfrogging healthy accounts simply because they have lower usage.
+
+#### Scenario: Healthy account above budget threshold preferred over degraded account below threshold
+- **GIVEN** Account A is in `HEALTH_TIER_HEALTHY` with usage above the budget threshold
+- **AND** Account B is in a lower health tier (`HEALTH_TIER_PROBING` or cooldown) with usage below the budget threshold
+- **WHEN** budget-safe account selection runs
+- **THEN** Account A is selected because its health tier strictly dominates Account B
+
+#### Scenario: Budget-safe preference applies within the same health tier
+- **GIVEN** Account A and Account B are both in `HEALTH_TIER_HEALTHY`
+- **AND** Account A is below the budget threshold while Account B is above it
+- **WHEN** budget-safe account selection runs
+- **THEN** Account A is selected as budget-safe
+
+### Requirement: Pace-aware routing across reset boundaries
+
+The load balancer SHALL compute pace deviation (`actual_used_pct - expected_used_pct`) based on elapsed time within each account's quota reset window (`calculate_pace_deviation`). When routing across multiple eligible accounts, the system SHALL support prioritizing accounts running behind pace (possessing pace surplus) over accounts running hot ahead of schedule, guiding cumulative fleet usage to land smoothly on reset boundaries.
+
+#### Scenario: Account behind pace prioritized over account ahead of pace
+- **GIVEN** Account A and Account B have identical total quota
+- **AND** Account A is running behind pace (usage below expected schedule for its window)
+- **AND** Account B is running ahead of pace (usage above expected schedule for its window)
+- **WHEN** pace-aware selection evaluates candidates
+- **THEN** Account A is prioritized to receive traffic
+
+
 

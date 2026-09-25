@@ -11,12 +11,14 @@ from app.modules.proxy._service.http_bridge.helpers import (
     _http_bridge_pending_count_nowait,
     _http_bridge_pending_state_is_stale,
     _http_bridge_request_counts_against_queue,
+    _http_bridge_session_account_active,
     _log_http_bridge_event,
     _raise_http_bridge_incompatible_admission_handoff,
     _record_http_bridge_unanchored_handoff_recovery,
     http_bridge_activity_snapshot_nowait,
 )
 from app.modules.proxy._service.http_bridge.protocol import _HTTPBridgeServiceProtocol
+from app.modules.proxy._service.http_bridge.quarantine import _http_bridge_session_key_quarantined
 from app.modules.proxy._service.support import (
     _http_bridge_session_supports_service_tier,
     _HTTPBridgeSession,
@@ -42,23 +44,42 @@ class _HTTPBridgeActivityMixin:
         require_preferred_account: bool,
         request_service_tier: str | None,
     ) -> tuple[Any, bool]:
-        if original_request_unanchored and existing is not None:
-            detached = self._detach_http_bridge_session_locked(key, expected_session=existing)
-            if detached is not None:
-                force_durable_takeover = True
-                _record_http_bridge_unanchored_handoff_recovery(reason="closed_admission_handoff")
-                _log_http_bridge_event(
-                    "unanchored_handoff_recovery",
-                    key,
-                    account_id=detached.account.id,
-                    model=request_model,
-                    detail="outcome=retired_closed_admission_handoff",
-                    cache_key_family=key.affinity_kind,
-                    model_class=_extract_model_class(request_model) if request_model else None,
-                    owner_check_applied=False,
-                )
-                self._schedule_http_bridge_session_closes([detached], reason="unanchored_handoff_recovery")
-            return None, force_durable_takeover
+        if existing is not None:
+            quarantined = getattr(existing, "quarantined", False) or _http_bridge_session_key_quarantined(self, key)
+            retiring = bool(getattr(getattr(existing, "upstream_control", None), "retire_after_drain", False))
+            account_inactive = not _http_bridge_session_account_active(existing)
+            existing_account_id = getattr(getattr(existing, "account", None), "id", None)
+            same_account_stale = (
+                existing.closed
+                and (preferred_account_id is None or existing_account_id == preferred_account_id)
+                and (retiring or account_inactive or not bool(getattr(existing, "pending_requests", None)))
+            )
+            if original_request_unanchored or quarantined or same_account_stale:
+                detached = self._detach_http_bridge_session_locked(key, expected_session=existing)
+                if detached is not None:
+                    force_durable_takeover = True
+                    recovery_reason = (
+                        "quarantined_session"
+                        if quarantined
+                        else "retiring_closed_handoff"
+                        if retiring
+                        else "inactive_account_closed_handoff"
+                        if account_inactive
+                        else "closed_admission_handoff"
+                    )
+                    _record_http_bridge_unanchored_handoff_recovery(reason=recovery_reason)
+                    _log_http_bridge_event(
+                        "unanchored_handoff_recovery",
+                        key,
+                        account_id=detached.account.id,
+                        model=request_model,
+                        detail=f"outcome=retired_closed_admission_handoff,reason={recovery_reason}",
+                        cache_key_family=key.affinity_kind,
+                        model_class=_extract_model_class(request_model) if request_model else None,
+                        owner_check_applied=False,
+                    )
+                    self._schedule_http_bridge_session_closes([detached], reason=recovery_reason)
+                return None, force_durable_takeover
 
         _raise_http_bridge_incompatible_admission_handoff(
             session=existing,

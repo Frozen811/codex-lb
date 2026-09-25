@@ -1400,3 +1400,45 @@ async def test_interpreted_sse_rejects_invalid_metadata_without_replay(
         assert not client._streams
     finally:
         await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_native_egress_request_serializes_pool_key(tmp_path: Path) -> None:
+    helper = tmp_path / "native-helper"
+    source = """#!/usr/bin/env python3
+import json
+import sys
+
+for line in sys.stdin:
+    cmd = json.loads(line)
+    if cmd["type"] == "request":
+        assert cmd["pool_key"] == "acc-test-pool-123"
+        print(json.dumps({
+            "type": "head",
+            "request_id": cmd["request_id"],
+            "status": 200,
+            "http_version": "HTTP/2.0",
+            "headers": [["content-type", "application/json"]],
+        }), flush=True)
+        print(json.dumps({
+            "type": "chunk",
+            "request_id": cmd["request_id"],
+            "data": "",
+        }), flush=True)
+        print(json.dumps({"type": "end", "request_id": cmd["request_id"]}), flush=True)
+"""
+    _write_helper(helper, source)
+    client = SubprocessNativeEgressClient(helper)
+    try:
+        response = await client.request(
+            NativeEgressRequest(
+                method="POST",
+                url="https://example.test",
+                headers={},
+                pool_key="acc-test-pool-123",
+            )
+        )
+        assert response.status == 200
+    finally:
+        await client.aclose()
+

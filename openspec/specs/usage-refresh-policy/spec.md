@@ -204,6 +204,17 @@ The system MUST recognize account plan types returned by upstream ChatGPT auth a
 - **THEN** the account contributes `1125.0` primary capacity and `37800.0` secondary capacity
 - **AND** the computed remaining credits are non-zero according to the reported usage percent
 
+### Requirement: Plan credit capacities support registered overrides
+
+The system MUST permit registering plan capacity overrides for any supported account plan and window (primary, secondary, monthly). When an override is registered, `capacity_for_plan` and all dependent credit calculations (including remaining credits and weekly pace projections) MUST return the registered capacity value instead of the built-in default.
+
+#### Scenario: Calibrated Pro Lite capacity override takes precedence
+
+- **GIVEN** a registered capacity override for `prolite` secondary window of `25000.0` credits
+- **WHEN** `capacity_for_plan` is called for a `prolite` account with window `secondary`
+- **THEN** the returned capacity is `25000.0`
+- **AND** clearing overrides restores the default `37800.0` capacity
+
 ### Requirement: Pro Lite accounts are eligible for Pro-gated models
 
 The system MUST treat stored `prolite` account plan types as Pro-equivalent when evaluating model registry plan eligibility, while preserving the stored `prolite` value for display and request-log context.
@@ -522,6 +533,12 @@ The configured `limit_warmup_cooldown_seconds` SHALL gate only staggered idle wa
 - **AND** the system MUST NOT send another staggered idle warm-up for that same account/cycle tuple
 - **AND** account slots MUST be spread deterministically across the account's rolling window so restarts do not align all opted-in accounts into the same phase
 
+#### Scenario: Staggered idle slots remain reachable when reset deadline slides with now
+- **GIVEN** multiple active opted-in accounts participate in staggered idle warm-up
+- **AND** upstream rate limit reports a sliding reset deadline that continuously advances with the current evaluation clock
+- **WHEN** background usage refresh evaluates each account inside its designated slot
+- **THEN** non-zero staggered idle slots MUST evaluate their elapsed slot phase against a stable cycle start so that all account slots remain reachable and are not starved by the sliding reset timestamp
+
 #### Scenario: Staggered idle warm-up is skipped for accounts with real usage
 - **GIVEN** staggered idle warm-up is enabled globally
 - **AND** an active opted-in account has a short-window primary usage sample with `used_percent` above the configured `limit_warmup_idle_threshold_percent`
@@ -536,14 +553,21 @@ The configured `limit_warmup_cooldown_seconds` SHALL gate only staggered idle wa
 
 ### Requirement: Operators can probe an account to wake the upstream limiter
 
-The dashboard MUST expose an admin-only endpoint that sends a single minimal `responses.create` directly to upstream pinned to one account, bypassing load-balancer scoring, then immediately refreshes that account's `/wham/usage` snapshot. The probe `responses.create` MUST set `max_output_tokens` to `16`, the current Codex token floor; values below that floor MUST NOT be used. The endpoint MUST surface the before/after usage and account status so operators can verify whether the upstream limiter re-evaluated.
+The dashboard MUST expose an admin-only endpoint that sends a single minimal `responses.create` directly to upstream pinned to one account, bypassing load-balancer scoring, then immediately refreshes that account's `/wham/usage` snapshot. The probe `responses.create` MUST strip unsupported upstream fields (`_UNSUPPORTED_UPSTREAM_FIELDS`) so upstream endpoints do not reject the request with HTTP 400. When an operator probe returns a successful HTTP response (2xx) and the subsequent usage refresh confirms available quota across all applicable windows, any stale rate-limit hold (`AccountStatus.RATE_LIMITED` with `blocked_at`) SHALL be cleared to `AccountStatus.ACTIVE`. The endpoint MUST surface the before/after usage and account status so operators can verify whether the upstream limiter re-evaluated.
 
 #### Scenario: Probe wakes the upstream limiter and refreshes usage state
 - **WHEN** an operator POSTs to `/api/accounts/{account_id}/probe`
 - **AND** the account is `active`, `rate_limited`, or `quota_exceeded`
-- **THEN** the service sends one `responses.create` request directly to `{upstream_base_url}/codex/responses` with `max_output_tokens=16`, `stream=true`, `store=false`
+- **THEN** the service sends one `responses.create` request directly to `{upstream_base_url}/codex/responses` with `stream=true`, `store=false` and unsupported upstream fields stripped
 - **AND** the service triggers an immediate `UsageUpdater.refresh_accounts` for that account
 - **AND** the response body carries `probe_status_code`, `primary_used_percent_before`, `primary_used_percent_after`, `secondary_used_percent_before`, `secondary_used_percent_after`, `account_status_before`, `account_status_after`
+
+#### Scenario: Verified probe recovers stale rate-limited hold when quota is available
+- **WHEN** an operator probes an account whose status is `rate_limited` with a persisted `blocked_at`
+- **AND** the upstream probe request returns a 2xx success status code
+- **AND** the refreshed usage reports available quota (< 100%)
+- **THEN** the account status transitions to `active`
+- **AND** `blocked_at` and `reset_at` are cleared to null
 
 #### Scenario: Probe rejects hard-blocked accounts
 - **WHEN** an operator POSTs to `/api/accounts/{account_id}/probe`
@@ -1836,9 +1860,13 @@ Auth Guardian MUST preserve stable account identities while its candidate-query 
 
 ### Requirement: Streaming usage-limit failures request an immediate coalesced usage refresh
 
-When an upstream stream fails with the error code `usage_limit_reached`, the proxy
-MUST request an immediate usage refresh for the failing account in addition to
-marking it rate limited. The refresh MUST run as a tracked background task that
+The proxy MUST request an immediate usage refresh for the failing account when
+an upstream stream fails with a rejection whose classifier result reports
+distinct usage-limit evidence. It still marks that account rate limited. The trigger is
+that usage-limit evidence field, not the literal error code and not the broader
+`failure_class`: upstream proves the same condition with the code
+`usage_limit_reached` and, on the code-less and `invalid_request_error` paths,
+with the message alone, and both must record the same evidence. The refresh MUST run as a tracked background task that
 never blocks or alters the response, MUST load the account from a fresh
 background-session row rather than the request's `Account` instance, and MUST
 bypass the usage freshness gate. Usage refreshes run on two per-account
@@ -1855,7 +1883,8 @@ cooldown, or when the fresh row is missing, `paused`, `reauth_required`, or
 `deactivated`. When the requested (or joined) refresh writes usage rows it MUST
 invalidate the account selection cache, so the next selection observes the new
 usage evidence without waiting out the cache TTL. Plain `rate_limit_exceeded`
-throttling and quota error codes MUST NOT request a refresh.
+throttling and quota error codes MUST NOT request a refresh; widening the
+trigger to the distinct usage-limit evidence MUST NOT widen it to those.
 
 #### Scenario: A 429 storm produces a single upstream fetch
 
@@ -1907,6 +1936,19 @@ throttling and quota error codes MUST NOT request a refresh.
 - **GIVEN** usage refresh is disabled, or the account is in auth cooldown, or its fresh row is missing, `paused`, `reauth_required`, or `deactivated`
 - **WHEN** a stream on that account fails with `usage_limit_reached`
 - **THEN** no upstream usage fetch runs
+
+#### Scenario: A message-derived usage limit requests the same refresh
+
+- **GIVEN** an upstream stream fails with an envelope carrying no error code, or `invalid_request_error`, whose message asserts the account's usage limit has been reached
+- **WHEN** the proxy records account health for it
+- **THEN** it requests the immediate coalesced usage refresh exactly as it does for the `usage_limit_reached` code
+- **AND** the same debounce window, singleflight lanes and eligibility skips apply
+
+#### Scenario: Throttling and quota codes still do not refresh
+
+- **GIVEN** an upstream stream fails with `rate_limit_exceeded` carrying no usage-limit message, or with a quota error code
+- **WHEN** the proxy records account health for it
+- **THEN** no usage refresh is requested
 
 ### Requirement: Permanent refresh failure preserves request eligibility
 
@@ -2223,3 +2265,172 @@ Account probes without an explicit model MUST use the same ordered registry sele
 #### Scenario: No candidate qualifies
 - **WHEN** neither candidate has plan visibility without suppression
 - **THEN** the selected host is `gpt-5.6-luna` and existing downstream error handling applies
+
+### Requirement: Usage-share admission fails open on incomplete upstream evidence
+
+An API-key usage-share estimate SHALL require, for every account contributing capacity, a known normalized long-window capacity and a fresh current long-window sample containing usage percentage, a future reset deadline, and the canonical duration for that long-window slot whose derived window start is no later than the sample's recording time. If required evidence is missing, stale, elapsed, or otherwise incomplete, the API-key policy snapshot SHALL record the affected account ids instead of treating them as unused or denying the key.
+
+When quota-consuming subscription work reaches usage-share admission with such a snapshot, Codex-LB SHALL admit it and request the existing debounced, singleflight usage refresh for at most one affected account per request. The normal staggered scheduler SHALL remain responsible for considering the other accounts. An incomplete usage-share snapshot MUST NOT enter the ordinary 60-second API-key authentication cache, so the next request can observe newly written evidence and rebuild the estimate immediately. Failure to create or schedule that best-effort refresh MUST NOT convert the fail-open admission into a request failure.
+
+#### Scenario: Noncanonical long-window duration fails open
+
+- **GIVEN** a secondary or monthly usage row reports a duration that does not match that canonical quota window
+- **WHEN** usage-share evidence is evaluated
+- **THEN** that account's estimate is unavailable and admission fails open
+- **AND** the malformed duration cannot widen the demand scan or pair one window's percentage with another window's capacity
+
+#### Scenario: Future-dated evidence does not create a false cap
+
+- **GIVEN** a persisted long-window sample is timestamped after the policy snapshot's evidence-read time
+- **WHEN** usage-share evidence is evaluated
+- **THEN** that account's estimate is unavailable and admission fails open
+- **AND** a sample committed during policy loading remains valid because evaluation time is taken after the usage reads
+
+#### Scenario: Post-sample demand does not inflate attribution
+
+- **GIVEN** a request-log row is timestamped after the contributing usage sample was recorded
+- **WHEN** the key's proportional demand is calculated for that sample
+- **THEN** that later row contributes to neither the numerator nor the denominator
+
+#### Scenario: A sample cannot predate its reported quota window
+
+- **GIVEN** a fresh long-window sample whose derived window start is later than its own recording time
+- **WHEN** usage-share evidence is evaluated
+- **THEN** that account's estimate is unavailable and admission fails open
+
+#### Scenario: Missing evidence does not falsely block or burst refreshes
+
+- **GIVEN** a configured key's pool contains many accounts without complete fresh long-window usage evidence
+- **WHEN** quota-consuming subscription work reaches usage-share admission
+- **THEN** the usage-share policy allows it
+- **AND** schedules at most one immediate per-account usage refresh
+- **AND** leaves the other accounts to the normal staggered scheduler
+
+#### Scenario: Fresh evidence is observed without waiting for the auth-cache TTL
+
+- **GIVEN** an HTTP request built an incomplete usage-share snapshot and was admitted fail-open
+- **AND** the requested usage refresh subsequently writes the missing long-window evidence
+- **WHEN** the key authenticates on its next request
+- **THEN** the policy snapshot is rebuilt from the fresh rows
+- **AND** the prior incomplete snapshot does not remain cached for the ordinary 60-second TTL
+
+#### Scenario: Reauth token expiry invalidates cached capacity
+
+- **GIVEN** a `reauth_required` account contributes capacity because its stored access token is still routable
+- **WHEN** that token reaches its known expiry before the ordinary cache TTL, usage reset, or evidence-freshness boundary
+- **THEN** the cached API-key policy snapshot is rebuilt
+- **AND** the expired account no longer contributes allocation capacity
+
+#### Scenario: Request refresh can read usage from a reauthentication-required account
+
+- **GIVEN** a `reauth_required` account remains request-routable with an unexpired stored access token
+- **AND** usage-share admission finds its long-window evidence incomplete
+- **WHEN** the existing request-triggered refresh runs for that account
+- **THEN** it may query usage with the stored access token
+- **AND** it MUST NOT attempt an OAuth refresh-token exchange
+- **AND** an authorization or permanent client failure remains a best-effort refresh failure
+- **AND** it neither fails the admitted request nor changes the account status
+
+#### Scenario: A request storm coalesces refreshes
+
+- **GIVEN** many share checks observe the same stale account inside the request-refresh debounce window
+- **WHEN** they request a refresh
+- **THEN** the existing refresh path performs at most one immediate upstream fetch for that account
+
+#### Scenario: Refresh scheduling failure preserves fail-open admission
+
+- **GIVEN** usage-share admission has incomplete evidence and permits the request
+- **WHEN** creating or scheduling the best-effort immediate refresh fails
+- **THEN** the original request remains admitted
+- **AND** the refresh failure is reported without leaking an unscheduled coroutine
+
+#### Scenario: Monthly-only evidence does not use stale weekly data
+
+- **GIVEN** an account's current plan has monthly capacity
+- **AND** no fresh monthly row exists
+- **WHEN** a lingering secondary row from another plan remains stored
+- **THEN** the usage-share estimate is unavailable for that account
+- **AND** the secondary row is not substituted for the required monthly evidence
+
+#### Scenario: Weekly quota explicitly reported in primary remains valid
+
+- **GIVEN** upstream explicitly reports a weekly-duration quota in the primary slot
+- **WHEN** the canonical weekly-primary normalization selects that row
+- **THEN** usage-share estimation treats it as the account's current long window
+
+#### Scenario: Later weekly-primary evidence supersedes monthly residue
+
+- **GIVEN** an account with monthly capacity has a previously recorded monthly row
+- **AND** a later fetch explicitly reports a weekly-duration quota in the primary slot
+- **WHEN** the canonical weekly-primary normalization selects that row
+- **THEN** usage-share estimation uses the later weekly-primary window
+- **AND** the older monthly row does not control the estimate
+
+### Requirement: Persisted current reset evidence survives a skipped poll
+
+For the account selected by a background refresh slice, reset-confirmed warm-up SHALL evaluate retained authoritative usage evidence even when the poll writes no new usage. A confirmed reset pair belonging to the latest quota window SHALL remain eligible after additional same-window snapshots or scheduler restart. Recovery MUST require an unexpired reset deadline matching the latest snapshot within the existing five-second deduplication tolerance, and MUST apply current usage availability, current account state, global opt-in, per-account opt-in and plan-applicable window selection. Missing evidence MUST NOT be replaced with an inferred reset.
+
+The durable account/window/reset attempt claim SHALL consume recovered evidence across workers and restarts. Pending, succeeded, failed and skipped attempts MUST all prevent another attempt for the same reset identity. A skipped poll MUST NOT admit initial-Free, paid-to-Free or staggered-idle warm-up, including when a concurrent live snapshot arrives after refresh starts.
+
+#### Scenario: Live ingestion wins the write race
+
+- **GIVEN** an eligible account has a retained confirmed reset pair written through live usage ingestion
+- **WHEN** the next scheduled poll skips the fresh account
+- **THEN** the scheduler attempts one reset-confirmed warm-up for that current window
+
+#### Scenario: Duplicate observations and restart preserve consumption
+
+- **GIVEN** a reset-confirmed attempt already exists
+- **WHEN** duplicate live snapshots, a restarted scheduler or a later poll observes the same reset
+- **THEN** no second warm-up attempt or send occurs
+
+#### Scenario: Further live observations preserve the reset pair
+
+- **GIVEN** additional same-window usage snapshots arrive before the scheduler evaluates a confirmed reset
+- **WHEN** the scheduler evaluates the current window
+- **THEN** it can recover the earlier consecutive pair without relying on a fixed count of newest rows
+
+#### Scenario: Historical evidence does not override current eligibility
+
+- **GIVEN** a retained reset pair exists
+- **WHEN** the latest window supersedes that reset, its deadline has expired, current quota is exhausted or below the configured availability gate, or the account opts out
+- **THEN** no warm-up is sent from that historical pair
+
+#### Scenario: No transition is invented from incomplete history
+
+- **GIVEN** only an available snapshot or a jitter-only pair remains
+- **WHEN** the scheduler evaluates a freshness-skipped account
+- **THEN** no reset-confirmed warm-up is sent
+
+#### Scenario: Scheduled resets tolerate missing duration metadata
+
+- **GIVEN** consecutive retained snapshots cross the previous reset deadline and confirm a new available window
+- **WHEN** the new snapshot omits duration metadata or its deadline exceeds one nominal window from observation
+- **THEN** recovery still evaluates the confirmed pair using the ordinary reset rules
+
+#### Scenario: A delayed deadline stays recoverable after a late restart
+
+- **GIVEN** a confirmed weekly reset has a next deadline one week and 120 seconds after observation
+- **AND** subsequent same-window snapshots preserve that identity
+- **WHEN** the scheduler restarts one week and 10 seconds after the reset and skips a fresh poll
+- **THEN** it still recovers the retained reset pair and attempts one warm-up before the deadline expires
+
+#### Scenario: A live write during a skipped poll does not bootstrap or idle-warm
+
+- **GIVEN** a fresh account has no confirmed reset evidence
+- **AND** its scheduled poll skips without writing usage
+- **WHEN** a live snapshot arrives after that refresh starts
+- **THEN** the snapshot does not trigger initial-Free or staggered-idle warm-up
+
+### Requirement: Preflight refresh credential failure retains unexpired access tokens
+
+When an account undergoes active preflight refresh in `ensure_fresh` and the upstream refresh exchange fails with a recognized permanent credential failure code (`refresh_token_invalidated`, `refresh_token_expired`, `invalid_grant`, `app_session_terminated`), the system MUST re-read the latest account row from the database.
+If the freshly re-read account's access token expiration is strictly in the future (`account_access_token_expires_at > time.time()`), the system MUST adopt the row without raising a `RefreshError`, allowing callers to continue using the unexpired access token.
+
+#### Scenario: Unexpired access token is retained after preflight refresh revocation
+- **GIVEN** an active account with an unexpired access token whose `last_refresh` warrants preflight refresh
+- **WHEN** preflight refresh receives `refresh_token_invalidated` from upstream
+- **THEN** the account is marked `reauth_required` in the database
+- **AND** `ensure_fresh` does not raise `RefreshError`
+- **AND** the unexpired access token is returned and dispatched upstream
+

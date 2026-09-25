@@ -12,14 +12,16 @@ from sqlalchemy import select, update
 import app.modules.proxy.service as proxy_module
 from app.core.auth import generate_unique_account_id
 from app.core.auth.refresh import RefreshError
+from app.core.balancer import PERMANENT_FAILURE_CODES
 from app.core.clients.proxy import ProxyResponseError
 from app.core.config.settings import get_settings
+from app.core.crypto import TokenEncryptor
 from app.core.errors import openai_error
 from app.core.exceptions import ProxyAuthError, ProxyRateLimitError
 from app.core.openai.models import CompactResponsePayload
 from app.core.upstream_proxy import ResolvedProxyEndpoint, ResolvedUpstreamRoute, UpstreamProxyRouteError
 from app.core.utils.time import utcnow
-from app.db.models import ApiKeyLimit, RequestLog
+from app.db.models import Account, AccountStatus, ApiKeyLimit, RequestLog
 from app.db.session import SessionLocal
 from app.modules.usage.repository import UsageRepository
 
@@ -127,6 +129,49 @@ def _install_successful_warmup_stub(monkeypatch: pytest.MonkeyPatch, captured_mo
 
     monkeypatch.setattr(proxy_module.ProxyService, "_ensure_fresh_with_budget", _fake_ensure_fresh)
     monkeypatch.setattr(proxy_module, "core_compact_responses", _fake_compact)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["normal", "strict", "force"])
+async def test_warmup_excludes_unavailable_reauth_credentials(async_client, monkeypatch, mode):
+    await _enable_api_key_auth(async_client)
+    encryptor = TokenEncryptor()
+    account_ids: dict[str, str] = {}
+    for name, reason, expires_at in (
+        ("rejected", "account_auth_invalidated", 4102444800),
+        ("expired", "refresh_token_expired", 1),
+        ("warning", "refresh_token_expired", 4102444800),
+    ):
+        account_id = await _import_account(async_client, f"warmup-{name}", f"{name}@example.com")
+        account_ids[name] = account_id
+        await _add_primary_usage(account_id, used_percent=0.0, window_minutes=300)
+        async with SessionLocal() as session:
+            await session.execute(
+                update(Account)
+                .where(Account.id == account_id)
+                .values(
+                    status=AccountStatus.REAUTH_REQUIRED,
+                    deactivation_reason=PERMANENT_FAILURE_CODES[reason],
+                    access_token_encrypted=encryptor.encrypt(_encode_jwt({"exp": expires_at})),
+                )
+            )
+            await session.commit()
+
+    _, key = await _create_api_key(async_client, name="reauth-warmup")
+    captured_models: list[str] = []
+    _install_successful_warmup_stub(monkeypatch, captured_models)
+    response = await async_client.post("/v1/warmup", headers={"Authorization": f"Bearer {key}"}, json={"mode": mode})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total_accounts"] == 1
+    assert [entry["account_id"] for entry in payload["submitted"]] == [account_ids["warning"]]
+    assert payload["skipped"] == []
+    assert payload["failed"] == []
+    assert len(captured_models) == 1
+    async with SessionLocal() as session:
+        logged_account_ids = (await session.execute(select(RequestLog.account_id))).scalars().all()
+    assert logged_account_ids == [account_ids["warning"]]
 
 
 @pytest.mark.asyncio
@@ -793,6 +838,38 @@ async def test_warmup_respects_api_key_account_scope(async_client, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_warmup_excludes_active_account_with_revoked_token_reason(async_client, monkeypatch):
+    await _enable_api_key_auth(async_client)
+    revoked_id = await _import_account(async_client, "acc-warmup-revoked", "warmup-revoked@example.com")
+    healthy_id = await _import_account(async_client, "acc-warmup-healthy", "warmup-healthy@example.com")
+    async with SessionLocal() as session:
+        await session.execute(
+            update(Account)
+            .where(Account.id == revoked_id)
+            .values(
+                status=AccountStatus.ACTIVE,
+                deactivation_reason="Authentication token revoked - re-login required",
+            )
+        )
+        await session.commit()
+
+    _, key = await _create_api_key(async_client, name="warmup-revoked")
+    captured_models: list[str] = []
+    _install_successful_warmup_stub(monkeypatch, captured_models)
+
+    response = await async_client.post(
+        "/v1/warmup",
+        headers={"Authorization": f"Bearer {key}"},
+        json={"mode": "force"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total_accounts"] == 1
+    assert [entry["account_id"] for entry in payload["submitted"]] == [healthy_id]
+
+
+@pytest.mark.asyncio
 async def test_warmup_rejects_disallowed_model_without_upstream_calls(async_client, monkeypatch):
     await _enable_api_key_auth(async_client)
     settings_response = await async_client.put(
@@ -1164,3 +1241,50 @@ async def test_warmup_uses_unique_request_ids_per_account(async_client, monkeypa
     logged_request_ids = [row.request_id for row in rows]
     assert len(set(logged_request_ids)) == 2
     assert set(logged_request_ids) == set(captured_request_ids)
+
+
+@pytest.mark.asyncio
+async def test_warmup_falls_back_to_plain_responses_on_compact_404(async_client, monkeypatch):
+    await _enable_api_key_auth(async_client)
+    _key_id, key = await _create_api_key(async_client, name="fallback-key")
+    account_id = await _import_account(async_client, "warmup-fallback-404", "warmup-404@example.com")
+
+    async def _fake_ensure_fresh(self, account, *, force=False, timeout_seconds=None):
+        del self, force, timeout_seconds
+        return account
+
+    async def _fake_compact_404(payload, headers, access_token, account_id, **kwargs):
+        del payload, headers, access_token, account_id, kwargs
+        raise ProxyResponseError(
+            404,
+            openai_error("Not Found", "upstream_error"),
+        )
+
+    fallback_called = []
+
+    async def _fake_stream_responses(payload, headers, access_token, account_id, **kwargs):
+        del headers, access_token, account_id, kwargs
+        fallback_called.append(payload.model)
+        yield (
+            'data: {"type": "response.completed", "response": {"id": "resp-fallback-123", '
+            '"usage": {"input_tokens": 5, "output_tokens": 3}}}\n\n'
+        )
+
+    monkeypatch.setattr(proxy_module.ProxyService, "_ensure_fresh_with_budget", _fake_ensure_fresh)
+    monkeypatch.setattr(proxy_module, "core_compact_responses", _fake_compact_404)
+    monkeypatch.setattr(proxy_module, "core_stream_responses", _fake_stream_responses)
+
+    response = await async_client.post(
+        "/v1/warmup",
+        headers={"Authorization": f"Bearer {key}"},
+        json={"mode": "force"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total_accounts"] == 1
+    assert len(payload["submitted"]) == 1
+    assert payload["submitted"][0]["account_id"] == account_id
+    assert payload["failed"] == []
+    assert len(fallback_called) == 1
+

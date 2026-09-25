@@ -29,6 +29,7 @@ from app.db.models import (
     DashboardUserInvite,
     DashboardUserStatus,
 )
+from app.db.session import sqlite_writer_section
 
 _USERNAME_PATTERN = re.compile(r"^[a-z0-9._-]{1,64}$")
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -332,7 +333,9 @@ class DashboardUsersRepository:
         moment and neither depends on that subtlety.
         """
 
-        if self._session.get_bind().dialect.name == "sqlite":
+        bind = self._session.get_bind()
+        dialect_name = getattr(getattr(bind, "dialect", None), "name", None)
+        if dialect_name == "sqlite":
             try:
                 await self._session.execute(text("BEGIN IMMEDIATE"))
             except OperationalError as exc:
@@ -539,24 +542,36 @@ class DashboardUsersRepository:
             .where(live_invite_filter(now))
             .exists()
         )
-        deleted = (
+        has_candidates = (
             await self._session.execute(
-                delete(DashboardUser)
+                select(DashboardUser.id)
                 .where(DashboardUser.status == DashboardUserStatus.INVITED.value)
                 .where(expired_invite)
                 .where(~live_invite)
-                .returning(DashboardUser.id)
-                .execution_options(synchronize_session=False)
+                .limit(1)
             )
-        ).scalars()
-        purged = list(deleted.all())
-        if not purged:
-            await self._session.rollback()
+        ).first() is not None
+        if not has_candidates:
             return 0
-        # The FK cascades on both dialects; delete explicitly so no ORM state lingers.
-        await self._session.execute(delete(DashboardUserInvite).where(DashboardUserInvite.user_id.in_(purged)))
-        await self._session.commit()
-        return len(purged)
+        async with sqlite_writer_section():
+            deleted = (
+                await self._session.execute(
+                    delete(DashboardUser)
+                    .where(DashboardUser.status == DashboardUserStatus.INVITED.value)
+                    .where(expired_invite)
+                    .where(~live_invite)
+                    .returning(DashboardUser.id)
+                    .execution_options(synchronize_session=False)
+                )
+            ).scalars()
+            purged = list(deleted.all())
+            if not purged:
+                await self._session.rollback()
+                return 0
+            # The FK cascades on both dialects; delete explicitly so no ORM state lingers.
+            await self._session.execute(delete(DashboardUserInvite).where(DashboardUserInvite.user_id.in_(purged)))
+            await self._session.commit()
+            return len(purged)
 
     async def rotate_invite(self, user_id: str, *, token_hash: bytes, expires_at: datetime) -> bool:
         """Rotate the invite only while the account is still ``invited`` (no commit); ``False`` = refused."""
@@ -588,14 +603,15 @@ class DashboardUsersRepository:
         and return the freshly loaded account. Any failure rolls the whole write back."""
 
         try:
-            await self._session.flush()
-            if bump_generation:
-                await self._session.execute(
-                    update(DashboardUser)
-                    .where(DashboardUser.id == user_id)
-                    .values(session_generation=DashboardUser.session_generation + 1)
-                )
-            await self._session.commit()
+            async with sqlite_writer_section():
+                await self._session.flush()
+                if bump_generation:
+                    await self._session.execute(
+                        update(DashboardUser)
+                        .where(DashboardUser.id == user_id)
+                        .values(session_generation=DashboardUser.session_generation + 1)
+                    )
+                await self._session.commit()
         except Exception:
             await self._session.rollback()
             raise
@@ -608,9 +624,32 @@ class DashboardUsersRepository:
     async def rollback(self) -> None:
         await self._session.rollback()
 
-    async def deactivate_owned_keys(self, user_id: str) -> list[str]:
-        """Turn off every active key the account owns, recording why (no commit); returns their hashes."""
+    async def _lock_owner(self, user_id: str) -> None:
+        """Take the owner's row before reading which of its keys the cascade must move.
 
+        Both directions of the cascade read ``api_keys`` and then write it,
+        while the API-key page's ``isActive: true`` reads the owner's status
+        (``FOR UPDATE`` on this same row) and then writes the key. Under
+        PostgreSQL's READ COMMITTED neither read is repeated, so with the two
+        rows taken in opposite orders a key switched on after the cascade's
+        scan — but committed before the disable — survives active on a
+        disabled owner. Taking the owner row first puts both sides in one
+        order: whoever loses the row reads the winner's committed state.
+
+        SQLite ignores ``FOR UPDATE`` and needs nothing here: its writers are
+        serialised by the database write lock the callers already hold.
+        """
+
+        await self._session.execute(select(DashboardUser.id).where(DashboardUser.id == user_id).with_for_update())
+
+    async def deactivate_owned_keys(self, user_id: str) -> list[str]:
+        """Turn off every active key the account owns, recording why (no commit); returns their hashes.
+
+        The owner's row is taken first so "which keys are active" is read under
+        the lock the API-key page holds while it re-enables one.
+        """
+
+        await self._lock_owner(user_id)
         result = await self._session.execute(
             update(ApiKey)
             .where(ApiKey.owner_user_id == user_id)
@@ -623,36 +662,41 @@ class DashboardUsersRepository:
     async def reactivate_owner_disabled_keys(self, user_id: str) -> list[str] | None:
         """Restore only the keys the owner cascade turned off; manual blocks stay off.
 
-        The UPDATE is conditional on the owner being active at that moment;
-        ``None`` means the owner is not active (nothing was written).
+        The owner's row is taken first (see :meth:`_lock_owner`) and the UPDATE
+        is conditional on the owner being active at that moment; a disable that
+        is already in flight therefore either commits first — and this reads
+        its ``disabled`` — or waits for this and then finds the restored keys
+        active. ``None`` means the owner is not active (nothing was written).
         """
 
+        await self._lock_owner(user_id)
         owner_active = (
             select(DashboardUser.id)
             .where(DashboardUser.id == ApiKey.owner_user_id)
             .where(DashboardUser.status == DashboardUserStatus.ACTIVE.value)
             .exists()
         )
-        result = await self._session.execute(
-            update(ApiKey)
-            .where(ApiKey.owner_user_id == user_id)
-            .where(ApiKey.is_active.is_(False))
-            .where(ApiKey.deactivated_reason == ApiKeyDeactivatedReason.OWNER_DISABLED.value)
-            .where(owner_active)
-            .values(is_active=True, deactivated_reason=None)
-            .returning(ApiKey.key_hash)
-            .execution_options(synchronize_session=False)
-        )
-        hashes = list(result.scalars().all())
-        if not hashes:
-            status = (
-                await self._session.execute(select(DashboardUser.status).where(DashboardUser.id == user_id))
-            ).scalar_one_or_none()
-            if status != DashboardUserStatus.ACTIVE.value:
-                await self._session.rollback()
-                return None
-        await self._session.commit()
-        return hashes
+        async with sqlite_writer_section():
+            result = await self._session.execute(
+                update(ApiKey)
+                .where(ApiKey.owner_user_id == user_id)
+                .where(ApiKey.is_active.is_(False))
+                .where(ApiKey.deactivated_reason == ApiKeyDeactivatedReason.OWNER_DISABLED.value)
+                .where(owner_active)
+                .values(is_active=True, deactivated_reason=None)
+                .returning(ApiKey.key_hash)
+                .execution_options(synchronize_session=False)
+            )
+            hashes = list(result.scalars().all())
+            if not hashes:
+                status = (
+                    await self._session.execute(select(DashboardUser.status).where(DashboardUser.id == user_id))
+                ).scalar_one_or_none()
+                if status != DashboardUserStatus.ACTIVE.value:
+                    await self._session.rollback()
+                    return None
+            await self._session.commit()
+            return hashes
 
     async def delete_user(
         self,
@@ -672,26 +716,27 @@ class DashboardUsersRepository:
         """
 
         try:
-            hashes = await self.deactivate_owned_keys(user.id)
-            await self._session.execute(
-                update(ApiKey).where(ApiKey.owner_user_id == user.id).values(owner_user_id=None)
-            )
-            await self._session.execute(delete(DashboardUserInvite).where(DashboardUserInvite.user_id == user.id))
-            await self._session.execute(delete(DashboardIdentity).where(DashboardIdentity.user_id == user.id))
-            stmt = delete(DashboardUser).where(DashboardUser.id == user.id)
-            if require_other_admin:
-                stmt = stmt.where(self._other_active_admin_exists(user.id))
-            if require_other_break_glass:
-                stmt = stmt.where(self._other_qualifying_break_glass_exists(user.id))
-            if only_while_invited:
-                stmt = stmt.where(DashboardUser.status == DashboardUserStatus.INVITED.value)
-            deleted = await self._session.execute(
-                stmt.returning(DashboardUser.id).execution_options(synchronize_session=False)
-            )
-            if deleted.scalar_one_or_none() is None:
-                await self._session.rollback()
-                return None
-            await self._session.commit()
+            async with sqlite_writer_section():
+                hashes = await self.deactivate_owned_keys(user.id)
+                await self._session.execute(
+                    update(ApiKey).where(ApiKey.owner_user_id == user.id).values(owner_user_id=None)
+                )
+                await self._session.execute(delete(DashboardUserInvite).where(DashboardUserInvite.user_id == user.id))
+                await self._session.execute(delete(DashboardIdentity).where(DashboardIdentity.user_id == user.id))
+                stmt = delete(DashboardUser).where(DashboardUser.id == user.id)
+                if require_other_admin:
+                    stmt = stmt.where(self._other_active_admin_exists(user.id))
+                if require_other_break_glass:
+                    stmt = stmt.where(self._other_qualifying_break_glass_exists(user.id))
+                if only_while_invited:
+                    stmt = stmt.where(DashboardUser.status == DashboardUserStatus.INVITED.value)
+                deleted = await self._session.execute(
+                    stmt.returning(DashboardUser.id).execution_options(synchronize_session=False)
+                )
+                if deleted.scalar_one_or_none() is None:
+                    await self._session.rollback()
+                    return None
+                await self._session.commit()
         except Exception:
             await self._session.rollback()
             raise

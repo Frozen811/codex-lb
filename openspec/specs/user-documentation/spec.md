@@ -42,6 +42,12 @@ OpenSpec remains the normative source of truth. Every docs page that documents s
 - **WHEN** the all-contributors bot regenerates the contributors table
 - **THEN** the `ALL-CONTRIBUTORS-LIST:START`/`:END` markers still exist in `README.md` and the update applies cleanly
 
+#### Scenario: Codex Desktop built-in provider documentation is available in docs
+
+- **WHEN** an operator or user configures Codex Desktop to route through codex-lb while preserving the built-in OpenAI provider
+- **THEN** the documentation site provides configuration examples showing how to override `[model_providers.openai]`
+- **AND** the README remains focused on quickstart instructions without expanding into custom provider runbooks
+
 ### Requirement: .env.example is a commented zero-drift sample
 
 `.env.example` SHALL contain only commented-out values, SHALL NOT state values that contradict the code defaults in `app/core/config/settings.py`, and SHALL retain the commented `# CODEX_LB_LEADER_ELECTION_ENABLED=false` single-instance escape hatch. Copying the file verbatim MUST yield the same behavior as running with no configuration.
@@ -112,4 +118,18 @@ from regenerated output, when the settings surface exceeds its ratchet
 - **WHEN** the reference page is regenerated
 - **THEN** its "Removed" section lists exactly the names in `_REMOVED_SETTINGS`
 - **AND** the page has no deprecated-env-alias list
+
+### Requirement: Client examples recommend current frontier model lineup
+
+Client setup documentation across the quickstart README and the documentation site SHALL recommend `gpt-6-astra` for complex reasoning and coding tasks. Model-specific context-window guides (such as the 872k context-window opt-in) SHALL remain specific to the GPT-5.6 family. Inert client configuration profiles and multi-client configuration examples SHALL demonstrate current frontier defaults without modifying catalog, pricing, or protocol contracts.
+
+#### Scenario: Client setup examples use GPT-6 Astra
+
+- **WHEN** an operator inspects the quickstart client setup section in `README.md`, `README.zh-CN.md`, or `docs/client-setup.md`
+- **THEN** the primary model configuration snippet uses `gpt-6-astra` with `model_reasoning_effort = "xhigh"`
+
+#### Scenario: GPT-5.6 context-window opt-in instructions remain family-specific
+
+- **WHEN** an operator reviews large context-window instructions
+- **THEN** the 872k context-window opt-in instructions explicitly apply to the `gpt-5.6-*` family
 

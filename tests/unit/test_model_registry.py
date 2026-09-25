@@ -63,6 +63,7 @@ EXPECTED_BOOTSTRAP_MINIMAL_CLIENT_VERSIONS = {
     "gpt-5.3-codex-spark": "0.100.0",
     "gpt-5.2": "0.0.1",
     "codex-auto-review": "0.98.0",
+    "gpt-reserve": "0.0.1",
 }
 
 
@@ -149,7 +150,10 @@ async def test_metadata_retains_full_live_model_after_later_catalog_omits_it():
     await registry.update({"plus": [sol, terra_v1]})
     await registry.update({"plus": [terra_v2]})
 
-    assert set(registry.get_models_with_fallback()) == {"gpt-5.6-terra"}
+    # gpt-reserve and gpt-5.3-codex-spark are bootstrap models carrying additional
+    # quota allowances: they are never in an upstream catalog, so they stay
+    # served from the bootstrap floor even when a later authoritative catalog omits them.
+    assert set(registry.get_models_with_fallback()) == {"gpt-5.6-terra", "gpt-reserve", "gpt-5.3-codex-spark"}
     assert registry.plan_types_for_model("gpt-5.6-sol") == frozenset()
     metadata = registry.get_models_for_metadata()
     assert metadata["gpt-5.6-sol"].base_instructions == "full live instructions"
@@ -163,9 +167,51 @@ async def test_first_partial_refresh_keeps_bootstrap_metadata_hidden_from_availa
 
     await registry.update({"plus": [_model("gpt-5.6-terra")]})
 
-    assert set(registry.get_models_with_fallback()) == {"gpt-5.6-terra"}
+    # gpt-reserve and gpt-5.3-codex-spark stay available from the bootstrap floor;
+    # other bootstrap-only models remain hidden after a refresh.
+    assert set(registry.get_models_with_fallback()) == {"gpt-5.6-terra", "gpt-reserve", "gpt-5.3-codex-spark"}
     assert "gpt-5.6-sol" in registry.get_models_for_metadata()
     assert registry.plan_types_for_model("gpt-5.6-sol") == frozenset()
+
+
+@pytest.mark.asyncio
+async def test_quota_only_reserve_survives_authoritative_catalog_refresh():
+    # Regression: an authoritative per-account catalog never lists the quota-only
+    # gpt-reserve slug. Treating its absence as withdrawal made an operator-enabled
+    # reserve return no_plan_support_for_model and vanish from /v1/models.
+    luna = _model("gpt-5.6-luna")
+    registry = ModelRegistry(ttl_seconds=60.0)
+
+    await registry.update(
+        {"pro": [luna]},
+        per_account_results={"account-pro": ("pro", [luna])},
+        active_account_plans={"account-pro": "pro"},
+    )
+
+    snapshot = registry.get_snapshot()
+    assert snapshot is not None
+    assert snapshot.account_catalogs_authoritative is True
+
+    # The quota-only reserve is preserved from the bootstrap floor...
+    assert registry.is_suppressed_model("gpt-reserve") is False
+    assert "gpt-reserve" in registry.get_models_with_fallback()
+    assert registry.plan_types_for_model("gpt-reserve") == frozenset({"plus", "pro"})
+    # ...account coverage is reported incomplete (None), not an empty set, so
+    # continuity resolution falls back to inference instead of excluding every
+    # account...
+    assert registry.account_ids_for_model("gpt-reserve") is None
+    # ...and its declared WebSocket transport preference survives the refresh.
+    assert registry.prefers_websockets("gpt-reserve") is True
+    # gpt-5.3-codex-spark is also preserved and available in pro plan
+    assert registry.is_suppressed_model("gpt-5.3-codex-spark") is False
+    assert "gpt-5.3-codex-spark" in registry.get_models_with_fallback()
+    assert "pro" in registry.plan_types_for_model("gpt-5.3-codex-spark")
+    assert registry.account_ids_for_model("gpt-5.3-codex-spark") is None
+    # ...while an ordinary bootstrap-only model omitted by the catalog is not.
+    assert "gpt-5.6-sol" not in registry.get_models_with_fallback()
+    assert registry.plan_types_for_model("gpt-5.6-sol") == frozenset()
+    # A real catalog model still reports its exact supporting accounts.
+    assert registry.account_ids_for_model("gpt-5.6-luna") == frozenset({"account-pro"})
 
 
 @pytest.mark.asyncio
@@ -214,7 +260,10 @@ async def test_prefers_websockets_does_not_use_bootstrap_after_snapshot():
         active_account_plans={"account-plus": "plus"},
     )
 
-    assert registry.prefers_websockets("gpt-5.3-codex-spark") is False
+    # Suppressed bootstrap models do not use bootstrap prefers_websockets
+    assert registry.prefers_websockets("gpt-5.3-codex") is False
+    # But quota-only / preserved bootstrap models keep their transport preference
+    assert registry.prefers_websockets("gpt-5.3-codex-spark") is True
 
 
 def test_prefers_websockets_uses_bootstrap_fallback_when_uninitialized():

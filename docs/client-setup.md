@@ -4,7 +4,7 @@ Point any OpenAI-compatible client at codex-lb. If [API key auth](api-keys.md) i
 
 Model availability is discovered from the upstream Codex model catalog and can vary by account plan, workspace, rollout, and upstream deprecation state. Prefer the live `GET /v1/models` or `GET /backend-api/codex/models` response over a copied static table when configuring clients or API-key model allowlists.
 
-The examples below use the current frontier lineup: **`gpt-5.6-sol`** (strongest), **`gpt-5.6-terra`** (balanced), and **`gpt-5.6-luna`** (fast) — all with a 272k default input budget and an 872k upstream maximum ([opt-in, Codex CLI only](#opting-into-the-872k-context-window)). `gpt-5.5` and `gpt-5.4` are still served for older pinned clients; retired slugs such as `gpt-5.3-codex`, `gpt-5.3-codex-spark`, and `gpt-5.1-codex-mini` were dropped from the upstream bundled catalog and should no longer be used in new configs.
+The examples below use the current frontier lineup: **`gpt-6-astra`** (recommended for complex reasoning and coding), alongside **`gpt-5.6-sol`**, **`gpt-5.6-terra`**, and **`gpt-5.6-luna`** — with GPT-5.6 family models featuring a 272k default input budget and an 872k upstream maximum ([opt-in, Codex CLI only](#opting-into-the-872k-context-window)). `gpt-5.5` and `gpt-5.4` are still served for older pinned clients; retired slugs such as `gpt-5.3-codex`, `gpt-5.3-codex-spark`, and `gpt-5.1-codex-mini` were dropped from the upstream bundled catalog and should no longer be used in new configs.
 
 | Client | Endpoint | Config |
 |--------|----------|--------|
@@ -19,7 +19,7 @@ The examples below use the current frontier lineup: **`gpt-5.6-sol`** (strongest
 `~/.codex/config.toml`:
 
 ```toml
-model = "gpt-5.6-sol"
+model = "gpt-6-astra"
 model_reasoning_effort = "xhigh"
 model_provider = "codex-lb"
 
@@ -30,6 +30,44 @@ wire_api = "responses"
 supports_websockets = true
 requires_openai_auth = true # required for codex app
 ```
+
+### Preserving built-in OpenAI provider (Codex Desktop)
+
+When routing ChatGPT-authenticated Codex Desktop through codex-lb, configuring a custom provider (`model_provider = "codex-lb"`) alters the provider identity seen by the Codex client stack. This can break conversation synchronization between web/mobile ChatGPT and Codex Desktop.
+
+To preserve the native provider identity and maintain seamless conversation synchronization without retagging sessions, override the built-in `[model_providers.openai]` provider definition directly:
+
+```toml
+model = "gpt-6-astra"
+model_reasoning_effort = "xhigh"
+model_provider = "openai"
+
+[model_providers.openai]
+base_url = "http://127.0.0.1:2455/backend-api/codex"
+```
+
+### Pool-wide limits in `/status`
+
+Codex reads the limits it shows in `/status` and the footer from
+`chatgpt_base_url`, which defaults to `https://chatgpt.com/backend-api` — so it
+reports the single account in your local `auth.json`, not the pool codex-lb is
+rotating through. Point it at codex-lb's origin (top level, before any
+`[section]` header):
+
+```toml
+chatgpt_base_url = "http://127.0.0.1:2455"
+```
+
+Codex then calls `GET /api/codex/usage`, which answers with the
+capacity-weighted usage of every active account, so the 5h and weekly bars
+describe the pool. The plugin catalog Codex fetches from the same base
+(`/ps/plugins/*`, `/plugins/featured`) is forwarded upstream with pool
+credentials, so browsing and installing from the remote marketplace keeps
+working. The `Account:` line still shows the local `auth.json` identity, and
+the usage-limit-reset hint is not surfaced through this path.
+
+Spec:
+[codex-plugin-catalog-passthrough](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/codex-plugin-catalog-passthrough).
 
 ### Opting into the 872k context window
 
@@ -79,7 +117,7 @@ http_headers = { "X-Codex-LB-Required-Capability" = "trusted_cyber" }
 Then create `~/.codex/daybreak-blue.config.toml`:
 
 ```toml
-model = "gpt-5.6-sol"
+model = "gpt-6-astra"
 model_provider = "codex-lb-daybreak-blue"
 ```
 
@@ -120,7 +158,7 @@ account. Restore direct Responses WebSocket availability
 instead of removing the carrier or retrying through ordinary HTTP. Codex LB
 narrows a direct WebSocket turn's first and later account selections to eligible accounts already marked
 `security_work_authorized`; if none are available, it fails closed without
-ordinary fallback. Selecting `gpt-5.6-sol` by itself does not activate this
+ordinary fallback. Selecting `gpt-6-astra` or `gpt-5.6-sol` by itself does not activate this
 path, and a Daybreak alias may resolve to that same underlying model. See
 OpenAI's
 [Trusted Access guidance](https://developers.openai.com/api/docs/guides/safety-checks/cybersecurity#authorized-access-and-agentic-workflows).
@@ -241,6 +279,12 @@ jq 'del(.openai)' ~/.local/share/opencode/auth.json > auth.json.tmp && mv auth.j
         "apiKey": "{env:CODEX_LB_API_KEY}"
       },
       "models": {
+        "gpt-6-astra": {
+          "name": "GPT-6-Astra",
+          "reasoning": true,
+          "options": { "reasoningEffort": "xhigh", "reasoningSummary": "detailed" },
+          "limit": { "context": 272000, "output": 65536 }
+        },
         "gpt-5.6-sol": {
           "name": "GPT-5.6-Sol",
           "reasoning": true,
@@ -268,7 +312,7 @@ jq 'del(.openai)' ~/.local/share/opencode/auth.json > auth.json.tmp && mv auth.j
       }
     }
   },
-  "model": "openai/gpt-5.6-sol"
+  "model": "openai/gpt-6-astra"
 }
 ```
 
@@ -287,8 +331,9 @@ opencode
 {
   "agents": {
     "defaults": {
-      "model": { "primary": "codex-lb/gpt-5.6-sol" },
+      "model": { "primary": "codex-lb/gpt-6-astra" },
       "models": {
+        "codex-lb/gpt-6-astra": { "params": { "cacheRetention": "short" } },
         "codex-lb/gpt-5.6-sol": { "params": { "cacheRetention": "short" } },
         "codex-lb/gpt-5.6-terra": { "params": { "cacheRetention": "short" } },
         "codex-lb/gpt-5.6-luna": { "params": { "cacheRetention": "short" } }
@@ -303,6 +348,15 @@ opencode
         "apiKey": "${CODEX_LB_API_KEY}",   // or "dummy" if API key auth is disabled
         "api": "openai-responses",
         "models": [
+          {
+            "id": "gpt-6-astra",
+            "name": "gpt-6-astra (codex-lb)",
+            "contextWindow": 272000,
+            "contextTokens": 272000,
+            "maxTokens": 4096,
+            "input": ["text"],
+            "reasoning": false
+          },
           {
             "id": "gpt-5.6-sol",
             "name": "gpt-5.6-sol (codex-lb)",
@@ -359,7 +413,7 @@ custom_providers:
 Then select the model interactively with `hermes model`, or in a session:
 
 ```text
-/model custom:codex-lb:gpt-5.6-sol
+/model custom:codex-lb:gpt-6-astra
 ```
 
 ```bash

@@ -252,3 +252,27 @@ async def test_stream_preflight_error_latency_uses_owner_clock(monkeypatch: pyte
     (row,) = request_logs.rows
     assert row["latency_ms"] == 2500
     assert row["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_write_request_log_persists_latency_upstream_terminal_ms() -> None:
+    """Regression for #2443: latency_upstream_terminal_ms is persisted as latency_ms to exclude settlement."""
+    scheduler = _RecordingVirtualScheduler(VirtualClock())
+    request_logs = _RequestLogsRepo()
+    service = _service(scheduler, request_logs)
+
+    await service._write_request_log(
+        account_id="acc-log",
+        api_key=None,
+        request_id="req-terminal-ms",
+        model="gpt-5.5",
+        latency_ms=1500,
+        latency_upstream_terminal_ms=1100,
+        status="success",
+    )
+    await scheduler.drain()
+
+    (row,) = request_logs.rows
+    assert row["latency_ms"] == 1100
+    assert row["status"] == "success"
+

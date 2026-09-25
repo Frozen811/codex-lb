@@ -3,7 +3,9 @@
 ## Purpose
 
 Define dashboard surface contracts so settings, account management, and operational views stay coherent across the SPA.
+
 ## Requirements
+
 ### Requirement: Settings page
 
 The Settings page SHALL include sections for: routing settings (sticky threads,
@@ -164,6 +166,21 @@ When a request log entry is associated with an account, the dashboard request-lo
 - **WHEN** a request log entry has no related account
 - **THEN** the `GET /api/request-logs` response includes `planType: null` or omits it
 - **AND** the dashboard recent-requests table still renders the row without failing
+
+### Requirement: Recent requests model source visibility
+When a request log entry has no associated account (`accountId` is null) but was routed to an upstream model source (`modelSourceId` is present), the dashboard recent-requests table MUST render the model source identifier in the account column instead of `Unassigned`. The request details dialog MUST display the `modelSourceId` and `modelSourceKind` under request metadata.
+
+#### Scenario: Model source request renders model source identifier in account column
+- **GIVEN** a request log entry where `accountId` is null and `modelSourceId` is populated
+- **WHEN** the recent-requests table renders the row
+- **THEN** the account column displays the `modelSourceId`
+- **AND** the column does not display `Unassigned`
+
+#### Scenario: Request details dialog displays model source metadata
+- **GIVEN** a selected request log entry with a populated `modelSourceId`
+- **WHEN** the user opens the request details dialog
+- **THEN** the dialog displays the model source identifier under `Model Source`
+- **AND** displays `modelSourceKind` under `Source Kind` when present
 
 ### Requirement: Request logs distinguish actual and requested service tiers
 When a request log entry includes service-tier data, the dashboard request-log API response MUST expose the billable tier, requested tier, and actual tier separately. The recent-requests UI MUST display the actual tier when available and MUST show the requested tier when it differs from the visible actual tier.
@@ -340,6 +357,17 @@ The dashboard SHALL show weekly quota runway when account weekly capacity credit
 
 - **WHEN** the overview response has arrived and the projections request is still in flight or failed
 - **THEN** the weekly runway card renders its full content from the overview payload with a stable layout footprint
+
+### Requirement: Dashboard displays estimated dollar value of full weekly limits
+
+The dashboard weekly pace card SHALL expose an estimated financial value in USD for the full (100%) weekly limits, derived from the actual weekly limit used percentage and the estimated API cost of used tokens.
+
+#### Scenario: Weekly pace card displays estimated full weekly limits value
+- **GIVEN** a non-zero weekly quota used percentage
+- **AND** a non-zero estimated token cost in USD
+- **WHEN** the weekly pace card renders
+- **THEN** it displays the estimated full 100% weekly limit value in USD
+- **AND** it shows the current cost used and percentage as context
 
 ### Requirement: Account weekly trend planned line
 
@@ -4220,3 +4248,41 @@ model-source models without assuming one global effort vocabulary.
 - **AND** the operator MUST still be able to replace that seed with arbitrary
   effort slugs before saving.
 
+### Requirement: API-key dialogs manage estimated usage-share caps
+
+The API-key create and edit dialogs SHALL expose one optional integer field labelled `Estimated pool allocation (%)`. It MUST accept 1 through 100, permit clearing, and serialize as `usageSharePercent`. It SHALL be visually separate from fixed token and dollar limits and explain that it caps the key's estimated subscription-backed generation usage at that share of its account pool, follows quota resets and pool membership, and excludes model-source, file, control, thread-goal, and realtime traffic.
+
+API-key table and detail surfaces SHALL present the configured percentage as an estimated pool cap and MUST NOT label it exact billing or current exact consumption.
+
+#### Scenario: Create an estimated-share key
+
+- **WHEN** an administrator enters 20 and creates the key
+- **THEN** the request contains `usageSharePercent: 20`
+- **AND** the returned key displays a 20 percent estimated pool cap
+
+#### Scenario: Clear an existing estimated share
+
+- **GIVEN** an existing key has a 20 percent policy
+- **WHEN** the field is cleared and saved
+- **THEN** the patch contains `usageSharePercent: null`
+
+#### Scenario: Unrelated edits preserve the share
+
+- **GIVEN** a key has a configured estimated usage share
+- **WHEN** an administrator edits only an unrelated field
+- **THEN** the patch omits `usageSharePercent`
+- **AND** the existing share is preserved
+
+#### Scenario: Fixed limits remain separate
+
+- **WHEN** a key has both a usage-share cap and fixed limits
+- **THEN** the dialog presents them separately
+- **AND** editing one does not reset the other
+
+#### Scenario: Allocation-only key is not described as unlimited
+
+- **GIVEN** a key has an estimated pool allocation and no fixed token or dollar rules
+- **WHEN** the table or detail view renders the key
+- **THEN** it displays the estimated pool cap
+- **AND** it MUST NOT label the key `No Limit` or say that no limits are configured
+- **AND** any empty-state copy is explicitly scoped to fixed limits

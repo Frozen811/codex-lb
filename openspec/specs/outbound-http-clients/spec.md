@@ -1383,3 +1383,49 @@ When the effective transport is unconditionally HTTP and the Python HTTP client 
 - **WHEN** an auto-transport Responses request includes an image-generation tool and uses the Python HTTP client with raw payload tracing inactive
 - **THEN** preparation MUST skip full-body serialization for the unused WebSocket size decision, including when the request is below the WebSocket byte budget
 - **AND** the real upstream MUST receive exactly the existing serialized HTTP body
+
+### Requirement: Typed Windows transport failures recover without unsafe replay
+
+The service MUST classify local DNS resolver failures, host-route failures, and
+typed Windows transport failures 64 and 121 separately from account-specific
+upstream failures. Classification MUST come from typed exception provenance or
+an already-preserved stable internal code, not from arbitrary message text. A
+Windows transport classification MUST NOT by itself prove that dispatch did not
+occur. Only typed pre-dispatch connection failures MAY be replayed automatically.
+When such a failure affects the current shared outbound HTTP client, subsequent
+callers MUST use a replacement client while active leases remain valid.
+
+#### Scenario: Ambiguous Windows failure retires transport without replay
+
+- **WHEN** an HTTP operation raises a typed OSError with winerror 64 or 121
+- **AND** no connector provenance proves that dispatch did not begin
+- **THEN** the failed shared generation is eligible for retirement
+- **AND** the selected account's health remains unchanged
+- **AND** the failed request is not automatically replayed
+
+#### Scenario: Windows connector failure can retry safely
+
+- **WHEN** a typed connector failure contains an OSError with winerror 64 or 121
+- **THEN** recovery MAY retry the request on the same account within its deadline
+
+#### Scenario: Windows message text does not establish provenance
+
+- **WHEN** an exception message contains `[WinError 121]` or `[WinError 64]`
+- **AND** its typed winerror field is absent
+- **THEN** it does not enter Windows transport recovery
+
+### Requirement: Native egress upstream client transport parity
+
+The native egress helper MUST mirror the HTTP transport characteristics of the official Codex client to prevent fingerprint divergence. Outbound HTTP/2 connections MUST use Rustls TLS, an initial stream window size of 2 MiB, and an initial connection window size of 5 MiB. Inbound non-native SDK requests MUST be normalized before dispatch by removing SDK-specific headers (`x-stainless-*`, `x-openai-client-*`) and setting standard Codex CLI persona identity (`User-Agent`, `originator`, and `version`).
+
+#### Scenario: Native egress HTTP/2 client profile matches Codex CLI
+- **WHEN** native egress establishes an upstream HTTP/2 connection
+- **THEN** the TLS provider is Rustls
+- **AND** the HTTP/2 initial stream window size is 2 MiB and initial connection window size is 5 MiB
+
+#### Scenario: Non-native SDK request is rewritten to Codex CLI persona
+- **WHEN** an inbound request includes `x-stainless-*` or `x-openai-client-*` headers
+- **THEN** those headers are stripped from the upstream request
+- **AND** `User-Agent` is normalized to the `codex_cli_rs` persona format
+
+

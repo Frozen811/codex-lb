@@ -53,13 +53,29 @@ The project-owned Uvicorn server MUST commit graceful drain before Uvicorn close
 
 ### Requirement: Graceful drain closes WebSocket admission
 
-Once graceful drain begins, the application MUST reject every new external WebSocket connection before invoking the route handler. A Responses WebSocket scope admitted before the barrier MUST remain tracked until its handler exits. Other WebSocket protocols MUST receive the same late-admission rejection but MUST NOT hold the Responses in-flight counter for their full connection lifetime.
+Once graceful drain begins, the application MUST reject every new external WebSocket connection before invoking the route handler. The rejection MUST be an HTTP denial response sent in place of the handshake (`websocket.http.response.start` followed by `websocket.http.response.body`), and MUST NOT be a pre-accept `websocket.close` frame, because ASGI servers surface a pre-accept close as an opaque HTTP `403` that clients treat as a terminal access error. The denial response MUST use HTTP status `503` and MUST carry a `Retry-After` header equal to the local overload retry-after value (`5`). For a proxy path (`/v1`, `/backend-api`, or any path below them) the body MUST be the OpenAI-style local-unavailable error envelope with `error.code = "proxy_unavailable"`, `error.type = "server_error"`, and `error.message = "Server is draining"`; for every other WebSocket path the body MUST be `{"detail": "Server is draining"}`. A Responses WebSocket scope admitted before the barrier MUST remain tracked until its handler exits. Other WebSocket protocols MUST receive the same late-admission rejection but MUST NOT hold the Responses in-flight counter for their full connection lifetime.
 
 #### Scenario: New WebSocket arrives during drain
 
 - **WHEN** a new WebSocket connection scope arrives after drain has begun
 - **THEN** the application rejects the connection without invoking its route handler
 - **AND** the rejected connection does not increase the in-flight count
+- **AND** the rejection is an HTTP denial response with status `503` and `Retry-After: 5`, not a pre-accept `websocket.close` frame
+
+#### Scenario: Proxy WebSocket upgrade is denied with the local-unavailable envelope
+
+- **GIVEN** drain has begun
+- **WHEN** a new WebSocket upgrade arrives at a proxy path such as `/v1/responses` or `/backend-api/codex/responses`
+- **THEN** the client receives HTTP `503` with `Retry-After: 5`
+- **AND** the JSON body carries `error.code = "proxy_unavailable"`, `error.type = "server_error"`, and `error.message = "Server is draining"`
+- **AND** the server access log reflects `503` instead of `403 Forbidden`
+
+#### Scenario: Non-proxy WebSocket upgrade is denied with a generic detail body
+
+- **GIVEN** drain has begun
+- **WHEN** a new WebSocket upgrade arrives at a non-proxy path such as `/ws/events`
+- **THEN** the client receives HTTP `503` with `Retry-After: 5`
+- **AND** the JSON body is `{"detail": "Server is draining"}`
 
 #### Scenario: WebSocket crosses the drain barrier
 
@@ -264,4 +280,22 @@ Recovery-settlement cleanup runs after the drain barrier, so it MUST be bounded 
 
 - **WHEN** configuration supplies zero, a negative value, or a value above 300
 - **THEN** settings validation fails
+
+### Requirement: Internal drain status reports request-persistence activity
+
+The `/internal/drain/status` endpoint MUST surface detached request-persistence activity alongside `in_flight` and bridge activity counters. The response payload `checks` dictionary MUST include `request_persistence_pending` (count of unfinished persistence tasks), `request_persistence_active` (boolean indicating whether any persistence tasks remain unfinished), `api_key_settlements_pending` (count of unfinished API-key reservation and settlement tasks), and `persistence_drain_active` (boolean indicating whether persistence work is currently blocking completion of drain).
+
+#### Scenario: Internal drain status reflects pending persistence tasks
+
+- **GIVEN** a server undergoing graceful drain with zero in-flight responses
+- **WHEN** detached background persistence or API-key settlement tasks are still executing
+- **THEN** `/internal/drain/status` reports `request_persistence_pending` as the number of running tasks
+- **AND** reports `request_persistence_active = "true"` and `persistence_drain_active = "true"`
+
+#### Scenario: Internal drain status reflects settled persistence tasks
+
+- **GIVEN** a server undergoing graceful drain with zero in-flight responses
+- **WHEN** all background persistence and settlement tasks have completed
+- **THEN** `/internal/drain/status` reports `request_persistence_pending = "0"`
+- **AND** reports `request_persistence_active = "false"` and `persistence_drain_active = "false"`
 

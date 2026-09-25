@@ -33,7 +33,7 @@ from app.modules.proxy.request_policy import normalize_responses_request_payload
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CORPUS_PATH = _REPO_ROOT / "tests" / "fixtures" / "passthrough_request_corpus.json"
-_CORPUS: list[dict[str, Any]] = json.loads(_CORPUS_PATH.read_text())
+_CORPUS: list[dict[str, Any]] = json.loads(_CORPUS_PATH.read_text(encoding="utf-8"))
 _BAD_ARRAYS: list[JsonValue] = [None, "abc", 123, {}]
 
 

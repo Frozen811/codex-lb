@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import anyio
 from sqlalchemy import select
 
+from app.core.balancer import reauth_reason_blocks_routing
 from app.core.cache.invalidation import (
     NAMESPACE_ACCOUNT_ROUTING,
     NAMESPACE_ACCOUNT_SELECTION,
@@ -96,12 +97,19 @@ _ROUTING_UNAVAILABLE_STATUSES = frozenset(
 )
 
 
+def _routing_entry_unavailable(entry: tuple[AccountStatus, str | None] | None) -> bool:
+    if entry is None:
+        return True
+    status, reason = entry
+    return status in _ROUTING_UNAVAILABLE_STATUSES or reauth_reason_blocks_routing(reason)
+
+
 class RoutingAvailabilityCache:
     """Cluster-coherent view of which accounts are unavailable for routing.
 
-    The cache keeps a snapshot of committed account statuses (``{account_id: status}``)
+    The cache keeps committed account statuses and authentication-failure reasons
     seeded at poller start and rebuilt on every ``account_routing`` bump. An account is
-    routing-unavailable when its committed status is PAUSED / DEACTIVATED, or the id
+    routing-unavailable when paused, deactivated, or proven authentication-invalidated, or the id
     is absent from the snapshot (deleted), or a local mark
     overlay entry exists (covering the same-replica window between a mark and the
     snapshot rebuild). RATE_LIMITED and QUOTA_EXCEEDED deliberately do NOT map to
@@ -113,22 +121,44 @@ class RoutingAvailabilityCache:
 
     def __init__(self, session_factory: Callable[[], AsyncSession] | None = None) -> None:
         self._session_factory = session_factory
-        self._snapshot: dict[str, AccountStatus] | None = None
+        self._snapshot: dict[str, tuple[AccountStatus, str | None]] | None = None
         self._local_marks: set[str] = set()
+        self._pending_persist_marks: set[str] = set()
+        self._generation = 0
+        self._repair_generations: dict[str, int] = {}
+
+    def generation_for_account(self, account_id: str) -> int:
+        return self._repair_generations.get(account_id, 0)
 
     @property
     def seeded(self) -> bool:
         return self._snapshot is not None
 
-    def mark_unavailable(self, account_id: str) -> None:
+    def mark_unavailable(self, account_id: str, *, generation: int | None = None) -> None:
+        # Only same-account repair supersedes a guarded write's local mark.
+        # A snapshot may have read before it committed. Always reconcile afterward.
+        if generation is None or generation == self.generation_for_account(account_id):
+            self._local_marks.add(account_id)
+            self._record_metrics()
+        _request_account_routing_bump()
+
+    def mark_unavailable_pending_persist(self, account_id: str) -> None:
+        """Keep a local routing block until its durable status is observed."""
         self._local_marks.add(account_id)
+        self._pending_persist_marks.add(account_id)
+        self._record_metrics()
         _request_account_routing_bump()
 
     def clear_unavailable(self, account_id: str) -> None:
+        self._generation += 1
+        self._repair_generations[account_id] = self._generation
         self._local_marks.discard(account_id)
+        self._pending_persist_marks.discard(account_id)
         if self._snapshot is not None:
-            self._snapshot[account_id] = AccountStatus.ACTIVE
+            self._snapshot[account_id] = (AccountStatus.ACTIVE, None)
+        self._record_metrics()
         _request_account_routing_bump()
+
 
     def is_unavailable(self, account_id: str) -> bool:
         if account_id in self._local_marks:
@@ -136,8 +166,10 @@ class RoutingAvailabilityCache:
         snapshot = self._snapshot
         if snapshot is None:
             return False
-        status = snapshot.get(account_id)
-        return status is None or status in _ROUTING_UNAVAILABLE_STATUSES
+        return _routing_entry_unavailable(snapshot.get(account_id))
+
+    def is_locally_unavailable(self, account_id: str) -> bool:
+        return account_id in self._local_marks
 
     async def refresh_from_db(self) -> None:
         """Rebuild the snapshot from committed account statuses.
@@ -149,7 +181,9 @@ class RoutingAvailabilityCache:
         SELECT is in flight may not be reflected in the rows it read (the status commit
         can land after the read), so filtering it against that snapshot would silently
         lose the mark. Such marks are preserved and re-evaluated by the next refresh,
-        which the mark's own queued ``account_routing`` bump guarantees.
+        which the mark's own queued ``account_routing`` bump guarantees. Marks created
+        while a keyed stream's durable health write is pending remain until a refresh
+        observes the committed blocking status.
 
         Database errors propagate to the caller: when invoked as an
         ``account_routing`` invalidation callback the poller then leaves the
@@ -161,23 +195,48 @@ class RoutingAvailabilityCache:
         factory = self._session_factory or SessionLocal
         session = factory()
         try:
-            result = await session.execute(select(Account.id, Account.status))
-            snapshot: dict[str, AccountStatus] = {account_id: status for account_id, status in result.all()}
+            result = await session.execute(select(Account.id, Account.status, Account.deactivation_reason))
+            snapshot: dict[str, tuple[AccountStatus, str | None]] = {
+                account_id: (status, reason) for account_id, status, reason in result.all()
+            }
         finally:
             await close_session(session)
         self._snapshot = snapshot
+        self._pending_persist_marks = {
+            account_id
+            for account_id in self._pending_persist_marks
+            if (entry := snapshot.get(account_id)) is not None
+            and not _routing_entry_unavailable(entry)
+        }
         self._local_marks = {
             account_id
             for account_id in self._local_marks
-            if account_id not in marks_before_refresh
-            or (status := snapshot.get(account_id)) is None
-            or status in _ROUTING_UNAVAILABLE_STATUSES
+            if account_id in self._pending_persist_marks
+            or account_id not in marks_before_refresh
+            or _routing_entry_unavailable(snapshot.get(account_id))
         }
+        self._record_metrics()
 
     def reset(self) -> None:
-        """Drop all state (snapshot back to unseeded). Test isolation helper."""
+        """Drop snapshot and marks without forgetting in-flight repair fences."""
         self._snapshot = None
         self._local_marks.clear()
+        self._pending_persist_marks.clear()
+        self._record_metrics()
+
+    def _record_metrics(self) -> None:
+        try:
+            from app.core.metrics.prometheus import record_account_metrics
+        except ImportError:
+            return
+
+        if self._snapshot is None:
+            record_account_metrics({})
+            return
+
+        statuses = {aid: entry[0] for aid, entry in self._snapshot.items()}
+        unavailable_ids = {aid for aid in self._snapshot if self.is_unavailable(aid)}
+        record_account_metrics(statuses, routing_unavailable_ids=unavailable_ids)
 
 
 _account_selection_cache = AccountSelectionCache()
@@ -198,8 +257,12 @@ def _request_account_routing_bump() -> None:
         poller.request_bump(NAMESPACE_ACCOUNT_ROUTING)
 
 
-def mark_account_routing_unavailable(account_id: str) -> None:
-    _routing_availability_cache.mark_unavailable(account_id)
+def mark_account_routing_unavailable(account_id: str, *, generation: int | None = None) -> None:
+    _routing_availability_cache.mark_unavailable(account_id, generation=generation)
+
+
+def mark_account_routing_unavailable_pending_persist(account_id: str) -> None:
+    _routing_availability_cache.mark_unavailable_pending_persist(account_id)
 
 
 def clear_account_routing_unavailable(account_id: str) -> None:
@@ -212,6 +275,10 @@ def clear_all_account_routing_unavailable() -> None:
 
 def is_account_routing_unavailable(account_id: str) -> bool:
     return _routing_availability_cache.is_unavailable(account_id)
+
+
+def is_account_locally_routing_unavailable(account_id: str) -> bool:
+    return _routing_availability_cache.is_locally_unavailable(account_id)
 
 
 async def propagate_account_routing_change() -> bool:

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import time
+from dataclasses import dataclass
+from typing import Any
 
 from app.core.openai.model_registry import (
     MODEL_SOURCE_KIND_OPENAI_COMPATIBLE,
@@ -86,11 +89,23 @@ def _to_upstream_model(source: ModelSource, source_model: ModelSourceModel) -> U
         supported_in_api=True,
         minimal_client_version=None,
         priority=0,
-        available_in_plans=frozenset(),
+        available_in_plans=_available_in_plans_from_metadata(raw),
         source_kind=source.kind,
         source_id=source.id,
         raw=raw,
     )
+
+
+_STANDARD_CHATGPT_PLANS: frozenset[str] = frozenset({"free", "plus", "pro", "team", "edu"})
+
+
+def _available_in_plans_from_metadata(raw: dict[str, JsonValue]) -> frozenset[str]:
+    declared = raw.get("available_in_plans")
+    if isinstance(declared, list):
+        plans = {str(p).strip().lower() for p in declared if isinstance(p, str) and str(p).strip()}
+        if plans:
+            return frozenset(plans)
+    return _STANDARD_CHATGPT_PLANS
 
 
 def _reasoning_levels_from_metadata(raw: dict[str, JsonValue]) -> tuple[ReasoningLevel, ...]:
@@ -303,3 +318,99 @@ def source_model_supports_vision(source: ModelSource, model: str) -> bool:
 
     entry = _enabled_source_model(source, model)
     return entry is not None and bool(entry.supports_vision)
+
+
+@dataclass(frozen=True)
+class CpaCatalogSnapshot:
+    source_id: str
+    models: tuple[str, ...]
+    synced_at: float
+
+
+_CPA_SNAPSHOTS: dict[str, CpaCatalogSnapshot] = {}
+
+
+def get_cpa_catalog_snapshot(source_id: str) -> CpaCatalogSnapshot | None:
+    return _CPA_SNAPSHOTS.get(source_id)
+
+
+def store_cpa_catalog_snapshot(source_id: str, model_ids: list[str]) -> CpaCatalogSnapshot:
+    snapshot = CpaCatalogSnapshot(
+        source_id=source_id,
+        models=tuple(model_ids),
+        synced_at=time.time(),
+    )
+    _CPA_SNAPSHOTS[source_id] = snapshot
+    return snapshot
+
+
+def clear_cpa_catalog_snapshots() -> None:
+    _CPA_SNAPSHOTS.clear()
+
+
+def parse_cpa_catalog_payload(payload: Any) -> list[str]:
+    """Parse OpenAI-compatible model catalog payload into a list of model IDs."""
+    if isinstance(payload, dict):
+        data = payload.get("data")
+        if isinstance(data, list):
+            items: list[str] = []
+            for item in data:
+                if isinstance(item, dict) and "id" in item and isinstance(item["id"], str):
+                    items.append(item["id"])
+                elif isinstance(item, str):
+                    items.append(item)
+            return items
+    elif isinstance(payload, list):
+        return [
+            item["id"] if isinstance(item, dict) and "id" in item and isinstance(item["id"], str) else str(item)
+            for item in payload
+        ]
+    return []
+
+
+def sync_cpa_catalog_models(
+    source_id: str,
+    existing_models: list[dict[str, Any]],
+    discovered_model_ids: list[str] | None,
+) -> list[dict[str, Any]]:
+    """Synchronize external CPA catalog models into a model source's models collection.
+
+    - Preserves last successful snapshot during outages (discovered_model_ids is None).
+    - Retains omitted models marked as is_enabled=False to preserve ownership and
+      prevent fallthrough to native subscription routing.
+    - Enables discovered models (is_enabled=True).
+    """
+    if discovered_model_ids is None:
+        # Outage: preserve existing models unchanged
+        return existing_models
+
+    store_cpa_catalog_snapshot(source_id, discovered_model_ids)
+    discovered_set = set(discovered_model_ids)
+
+    result_models: list[dict[str, Any]] = []
+    seen_model_ids: set[str] = set()
+
+    for model_dict in existing_models:
+        model_name = model_dict.get("model")
+        if not model_name:
+            continue
+        updated = dict(model_dict)
+        if model_name in discovered_set:
+            updated["is_enabled"] = True
+        else:
+            updated["is_enabled"] = False
+        result_models.append(updated)
+        seen_model_ids.add(model_name)
+
+    for model_id in discovered_model_ids:
+        if model_id not in seen_model_ids:
+            result_models.append(
+                {
+                    "model": model_id,
+                    "is_enabled": True,
+                    "supports_streaming": True,
+                }
+            )
+            seen_model_ids.add(model_id)
+
+    return result_models

@@ -18,17 +18,24 @@ def _write_jsonl(path: Path, records: list[dict[str, object]]) -> None:
 
 
 def _create_state_db(path: Path, providers: list[str]) -> None:
-    with sqlite3.connect(path) as conn:
+    conn = sqlite3.connect(path)
+    try:
         conn.execute("CREATE TABLE threads (id TEXT PRIMARY KEY, model_provider TEXT)")
         conn.executemany(
             "INSERT INTO threads (id, model_provider) VALUES (?, ?)",
             [(f"thread-{index}", provider) for index, provider in enumerate(providers)],
         )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def _read_state_providers(path: Path) -> list[str]:
-    with sqlite3.connect(path) as conn:
+    conn = sqlite3.connect(path)
+    try:
         return [row[0] for row in conn.execute("SELECT model_provider FROM threads ORDER BY id").fetchall()]
+    finally:
+        conn.close()
 
 
 def test_dry_run_reports_jsonl_and_sqlite_without_writing(tmp_path: Path) -> None:
@@ -211,7 +218,7 @@ def test_retag_uses_copy_fallback_when_live_sqlite_cannot_open(monkeypatch: pyte
         return original_connect(path, read_only=read_only, immutable=immutable)
 
     monkeypatch.setattr(codex_sessions_retag, "_connect_sqlite", flaky_connect)
-    monkeypatch.setattr(codex_sessions_retag, "_sqlite_count_provider_rows", lambda _path, _provider: 1)
+    monkeypatch.setattr(codex_sessions_retag, "_sqlite_count_provider_rows", lambda _path, _provider, *a, **k: 1)
 
     result = retag_codex_sessions(
         codex_home=codex_home,
@@ -293,7 +300,8 @@ def test_sqlite_copy_fallback_uses_consolidated_backup_and_removes_sidecars(tmp_
     codex_home = tmp_path / ".codex"
     state_db = codex_home / "state_5.sqlite"
     codex_home.mkdir()
-    with sqlite3.connect(state_db) as conn:
+    conn = sqlite3.connect(state_db)
+    try:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA wal_autocheckpoint=0")
         conn.execute("CREATE TABLE threads (id TEXT PRIMARY KEY, model_provider TEXT)")
@@ -302,6 +310,8 @@ def test_sqlite_copy_fallback_uses_consolidated_backup_and_removes_sidecars(tmp_
         assert Path(f"{state_db}-wal").stat().st_size > 0
 
         temp_path = codex_sessions_retag._copy_sqlite_to_temp(state_db)
+    finally:
+        conn.close()
 
     try:
         assert _read_state_providers(temp_path) == ["openai"]
@@ -378,3 +388,42 @@ def test_container_cgroup_detection_is_scoped_to_retag_module(tmp_path: Path) ->
     cgroup.write_text("0::/docker/container-id\n", encoding="utf-8")
 
     assert codex_sessions_retag._cgroup_mentions_container(cgroup) is True
+
+
+def test_retag_codex_sessions_targeted_session_id(tmp_path: Path) -> None:
+    codex_home = tmp_path / ".codex"
+    session_file_1 = codex_home / "sessions" / "2026" / "session_1.jsonl"
+    session_file_2 = codex_home / "sessions" / "2026" / "session_2.jsonl"
+    state_db = codex_home / "state_5.sqlite"
+    codex_home.mkdir(parents=True)
+    _write_jsonl(session_file_1, [{"model_provider": "openai", "id": "target-session-123"}])
+    _write_jsonl(session_file_2, [{"model_provider": "openai", "id": "other-session-456"}])
+
+    with sqlite3.connect(state_db) as conn:
+        conn.execute("CREATE TABLE threads (id TEXT PRIMARY KEY, model_provider TEXT)")
+        conn.executemany(
+            "INSERT INTO threads (id, model_provider) VALUES (?, ?)",
+            [("target-session-123", "openai"), ("other-session-456", "openai")],
+        )
+
+    result = retag_codex_sessions(
+        codex_home=codex_home,
+        source_provider="openai",
+        target_provider="codex-lb",
+        session_id="target-session-123",
+    )
+
+    assert result.jsonl_files_updated == 1
+    assert result.sqlite_rows_updated == 1
+    assert result.backup_path is not None
+
+    rec1 = json.loads(session_file_1.read_text(encoding="utf-8").strip())
+    rec2 = json.loads(session_file_2.read_text(encoding="utf-8").strip())
+    assert rec1["model_provider"] == "codex-lb"
+    assert rec2["model_provider"] == "openai"
+
+    with sqlite3.connect(state_db) as conn:
+        rows = dict(conn.execute("SELECT id, model_provider FROM threads").fetchall())
+    assert rows["target-session-123"] == "codex-lb"
+    assert rows["other-session-456"] == "openai"
+

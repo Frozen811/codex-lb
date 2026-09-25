@@ -161,6 +161,21 @@ async def test_sqlite_writer_section_does_not_serialize_memory_sqlite(monkeypatc
     await asyncio.wait_for(asyncio.gather(first_writer(), second_writer()), timeout=1)
 
 
+@pytest.mark.asyncio
+async def test_sqlite_writer_section_reentrant_on_file_sqlite(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(
+        session_module,
+        "_settings",
+        _FakeSettings(database_url=f"sqlite+aiosqlite:///{tmp_path / 'store.db'}"),
+    )
+    monkeypatch.setattr(session_module, "_sqlite_writer_lock", None)
+    entered = False
+    async with session_module.sqlite_writer_section():
+        async with session_module.sqlite_writer_section():
+            entered = True
+    assert entered is True
+
+
 def test_postgres_engine_kwargs_enable_pre_ping_and_recycle(monkeypatch) -> None:
     """Regression for #672: PostgreSQL engines MUST validate pooled connections
     on checkout (``pool_pre_ping``) and recycle them within a finite window

@@ -55,6 +55,7 @@ from app.modules.proxy.affinity import (
     _affinity_with_payload_continuity,
     _AffinityPolicy,
     _bare_codex_session_affinity,
+    _effective_prompt_cache_max_age_seconds,
     _is_synthesized_turn_state,
     _owner_lookup_session_id_from_headers,
     _prompt_cache_key_from_request_model,
@@ -74,6 +75,7 @@ from app.modules.proxy.helpers import (
     _normalize_error_code,
     _parse_openai_error,
     classify_upstream_failure,
+    keeps_account_in_the_walk,
 )
 from app.modules.proxy.load_balancer import (
     AccountConcurrencyCaps,
@@ -452,11 +454,14 @@ def _sticky_key_for_compact_request(
     # turns' transcript and will usually mint a new anchor. That is the same
     # answer the ordinary path gives for a compacted turn, and it is correct:
     # the upstream prefix cache is cold after compaction.
+    effective_max_age_seconds = _effective_prompt_cache_max_age_seconds(
+        headers, openai_cache_affinity_max_age_seconds
+    )
     resolution = _resolve_prompt_cache_key(
         payload,
         openai_cache_affinity=openai_cache_affinity,
         api_key=api_key,
-        max_age_seconds=openai_cache_affinity_max_age_seconds,
+        max_age_seconds=effective_max_age_seconds,
     )
     cache_key = resolution.sticky_key
     cache_key_source = resolution.source
@@ -471,7 +476,7 @@ def _sticky_key_for_compact_request(
         thread_affinity := _thread_codex_session_affinity(
             headers,
             enabled=codex_session_affinity,
-            max_age_seconds=openai_cache_affinity_max_age_seconds,
+            max_age_seconds=effective_max_age_seconds,
         )
     ) is not None:
         policy = thread_affinity
@@ -487,7 +492,7 @@ def _sticky_key_for_compact_request(
         policy = _AffinityPolicy(
             key=cache_key,
             kind=StickySessionKind.PROMPT_CACHE,
-            max_age_seconds=openai_cache_affinity_max_age_seconds,
+            max_age_seconds=effective_max_age_seconds,
             prompt_cache_key_source=cache_key_source,
         )
     elif sticky_threads_enabled:
@@ -921,30 +926,22 @@ class _CompactMixin:
                 surface="compact",
             )
             if previous_response_preferred_account_id is None:
-                selection_inputs = await proxy._load_balancer._load_selection_inputs(
-                    model=payload.model,
-                    additional_limit_name=None,
-                    account_ids=api_key.assigned_account_ids
-                    if api_key is not None and api_key.account_assignment_scope_enabled
-                    else None,
+                message = "Previous response owner account is unavailable; retry later."
+                _record_continuity_fail_closed(
+                    surface="compact",
+                    reason="owner_account_unavailable",
+                    previous_response_id=previous_response_id,
+                    session_id=previous_response_lookup_session_id,
+                    upstream_error_code="owner_lookup_miss",
                 )
-                if len(selection_inputs.accounts) != 1:
-                    message = "Previous response owner account is unavailable; retry later."
-                    _record_continuity_fail_closed(
-                        surface="compact",
-                        reason="owner_account_unavailable",
-                        previous_response_id=previous_response_id,
-                        session_id=previous_response_lookup_session_id,
-                        upstream_error_code="owner_lookup_miss",
-                    )
-                    raise ProxyResponseError(
-                        502,
-                        openai_error(
-                            "previous_response_owner_unavailable",
-                            message,
-                            error_type="server_error",
-                        ),
-                    )
+                raise ProxyResponseError(
+                    502,
+                    openai_error(
+                        "previous_response_owner_unavailable",
+                        message,
+                        error_type="server_error",
+                    ),
+                )
 
         # File pins are account ownership, not locality. Resolved turn-state or
         # previous-response owners above still take precedence (and conflicts
@@ -1918,6 +1915,11 @@ class _CompactMixin:
                                 break
                             refresh_retry_used = True
                             continue
+                        error = _parse_openai_error(exc.payload)
+                        code = _normalize_error_code(
+                            error.code if error else None,
+                            error.type if error else None,
+                        )
                         if exc.status_code == 500:
                             transient_retries += 1
                             if (
@@ -1944,22 +1946,32 @@ class _CompactMixin:
                                 account.id,
                                 transient_retries,
                             )
-                            if api_key is not None and api_key_reservation is not None:
-                                deferred_http_500_health.append((account, exc, transient_retries - 1))
-                            else:
-                                await proxy._handle_proxy_error(account, exc)
-                                # Record remaining errors so total equals transient_retries,
-                                # meeting the load balancer backoff threshold (error_count >= 3).
-                                await proxy._load_balancer.record_errors(account, transient_retries - 1)
+                            # A 500 takes this branch instead of the failover
+                            # decision below, so the account-selection answer is
+                            # taken here: a rejection that describes the
+                            # requested model rather than the account must leave
+                            # the account in the walk, or the next selection is
+                            # pushed onto a sibling that cannot serve the model
+                            # either.
+                            classified = classify_upstream_failure(
+                                error_code=code,
+                                error=_upstream_error_from_openai(error),
+                                http_status=exc.status_code,
+                                phase="first_event",
+                            )
+                            keep_account_in_walk = keeps_account_in_the_walk(classified)
+                            if not keep_account_in_walk:
+                                if api_key is not None and api_key_reservation is not None:
+                                    deferred_http_500_health.append((account, exc, transient_retries - 1))
+                                else:
+                                    await proxy._handle_proxy_error(account, exc)
+                                    # Record remaining errors so total equals transient_retries,
+                                    # meeting the load balancer backoff threshold (error_count >= 3).
+                                    await proxy._load_balancer.record_errors(account, transient_retries - 1)
+                                excluded_account_ids.add(account.id)
                             last_exc = exc
-                            excluded_account_ids.add(account.id)
                             transient_exhausted = True
                             break  # break inner loop → outer loop tries different account
-                        error = _parse_openai_error(exc.payload)
-                        code = _normalize_error_code(
-                            error.code if error else None,
-                            error.type if error else None,
-                        )
                         error_message = error.message if error else None
                         network_recovery.account_id = account.id
                         recovery_decision = await network_recovery.wait(
@@ -2074,7 +2086,7 @@ class _CompactMixin:
                             action = failover_decision(
                                 failure_class=classified["failure_class"],
                                 downstream_visible=False,
-                                candidates_remaining=_compact_max_account_attempts() - _account_attempt - 1,
+                                more_candidates_possible=_account_attempt < _compact_max_account_attempts() - 1,
                             )
                         else:
                             action = "surface"
@@ -2097,13 +2109,15 @@ class _CompactMixin:
                                 # recovery eligible for the remaining attempts.
                                 owner_quota_failover_eligible = True
                             last_exc = exc
-                            excluded_account_ids.add(account.id)
-                            await record_or_defer_stream_health(
-                                account,
-                                _upstream_error_from_openai(error),
-                                code,
-                                exc.status_code,
-                            )
+                            keep_account_in_walk = keeps_account_in_the_walk(classified)
+                            if not keep_account_in_walk:
+                                excluded_account_ids.add(account.id)
+                                await record_or_defer_stream_health(
+                                    account,
+                                    _upstream_error_from_openai(error),
+                                    code,
+                                    exc.status_code,
+                                )
                             transient_exhausted = True
                             break
                         await settle_compact_usage(

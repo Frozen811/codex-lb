@@ -44,6 +44,20 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     retag.add_argument("--to", dest="target_provider", metavar="PROVIDER", required=True, help="Provider tag to write.")
     retag.add_argument(
+        "--session-id",
+        dest="session_id",
+        metavar="ID",
+        default=None,
+        help="Targeted session ID to repair (skips scanning unrelated sessions).",
+    )
+    retag.add_argument(
+        "--thread-id",
+        dest="thread_id",
+        metavar="ID",
+        default=None,
+        help="Alias for --session-id.",
+    )
+    retag.add_argument(
         "--codex-home",
         type=Path,
         metavar="PATH",
@@ -279,12 +293,14 @@ def _run_codex_sessions_retag(args: argparse.Namespace) -> None:
     if not args.dry_run:
         _confirm_retag_write(args.yes)
 
+    target_session_id = getattr(args, "session_id", None) or getattr(args, "thread_id", None)
     try:
         result = retag_codex_sessions(
             codex_home=codex_home,
             source_provider=args.source_provider,
             target_provider=args.target_provider,
             dry_run=args.dry_run,
+            session_id=target_session_id,
             progress_logger=lambda message: print(message, flush=True),
         )
     except sqlite3.OperationalError as exc:

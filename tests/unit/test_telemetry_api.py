@@ -252,3 +252,28 @@ async def test_unexpected_opt_out_task_failure_is_debug_only_and_does_not_change
     assert response.status_code == 200
     assert caplog.records
     assert all(record.levelno == logging.DEBUG for record in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_preview_suppressed_and_no_identity_minted_under_env_kill_switch(
+    async_client,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("CODEX_LB_TELEMETRY_ENABLED", "false")
+    get_settings.cache_clear()
+
+    identity_mock = Mock(side_effect=AssertionError("identity must not be minted under env kill switch"))
+    monkeypatch.setattr(
+        "app.modules.telemetry.api.TelemetryConsentStore.get_or_create_identity",
+        identity_mock,
+    )
+
+    response = await async_client.get("/api/settings/telemetry?include_preview=true")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["state"] == "disabled"
+    assert payload["source"] == "env"
+    assert payload["active"] is False
+    assert payload["preview"] is None
+    identity_mock.assert_not_called()
+

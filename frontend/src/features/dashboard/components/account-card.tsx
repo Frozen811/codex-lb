@@ -95,9 +95,13 @@ export function AccountCard({ account, showAccountId = false, readOnly = false, 
   const primaryRemaining = primaryState.percent;
   const secondaryRemaining = secondaryState.percent;
   const monthlyRemaining = monthlyState.percent;
-  const hasPrimaryWindow = account.windowMinutesPrimary != null || primaryState.everKnown;
+  const isPrimaryMonthly =
+    account.windowMinutesPrimary != null && account.windowMinutesPrimary >= 40320;
+  const hasPrimaryWindow =
+    !isPrimaryMonthly && (account.windowMinutesPrimary != null || primaryState.everKnown);
   const hasSecondaryWindow = account.windowMinutesSecondary != null || secondaryState.everKnown;
-  const hasMonthlyWindow = account.windowMinutesMonthly != null || monthlyState.everKnown;
+  const hasMonthlyWindow =
+    isPrimaryMonthly || account.windowMinutesMonthly != null || monthlyState.everKnown;
   const weeklyOnly = !hasPrimaryWindow && hasSecondaryWindow;
   const monthlyOnly = hasMonthlyWindow && !hasPrimaryWindow && !hasSecondaryWindow;
   const subscriptionCreditsLabel = formatCreditValue(accountSubscriptionCredits(account));
@@ -168,10 +172,20 @@ export function AccountCard({ account, showAccountId = false, readOnly = false, 
       {/* Quota bars */}
       <div className={cn("mt-3.5 grid gap-3", weeklyOnly || monthlyOnly ? "grid-cols-1" : "grid-cols-2")}>
         {monthlyOnly ? (
-          <QuotaBar label={t("common.time.monthly")} percent={monthlyRemaining} resetLabel={monthlyReset} />
+          <QuotaBar
+            label={t("common.time.monthly")}
+            percent={isPrimaryMonthly && monthlyRemaining == null ? primaryRemaining : monthlyRemaining}
+            resetLabel={isPrimaryMonthly && account.resetAtMonthly == null ? primaryReset : monthlyReset}
+          />
         ) : (
           <>
-            {!weeklyOnly && <QuotaBar label="5h" percent={primaryRemaining} resetLabel={primaryReset} />}
+            {!weeklyOnly && (
+              <QuotaBar
+                label={isPrimaryMonthly ? t("common.time.monthly") : "5h"}
+                percent={primaryRemaining}
+                resetLabel={primaryReset}
+              />
+            )}
             <QuotaBar label={t("common.time.weekly")} percent={secondaryRemaining} resetLabel={secondaryReset} />
           </>
         )}

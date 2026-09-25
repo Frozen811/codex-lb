@@ -87,13 +87,16 @@ async def _response(
 ) -> TelemetryConsentResponse:
     preview: TelemetrySnapshotEnvelope | None = None
     if include_preview:
-        identity = await store.get_or_create_identity()
-        snapshot_consent = "enabled" if consent.state == "disabled" else consent.state
-        snapshot = await TelemetrySnapshotBuilder(session).build(
-            identity.instance_id,
-            consent=snapshot_consent,
-        )
-        preview = build_snapshot_envelope(snapshot)
+        if consent.source == "env" and not consent.active:
+            preview = None
+        else:
+            identity = await store.get_or_create_identity()
+            snapshot_consent = "enabled" if consent.state == "disabled" else consent.state
+            snapshot = await TelemetrySnapshotBuilder(session).build(
+                identity.instance_id,
+                consent=snapshot_consent,
+            )
+            preview = build_snapshot_envelope(snapshot)
     return TelemetryConsentResponse(
         state=consent.state,
         source=consent.source,

@@ -31,6 +31,7 @@ impl std::error::Error for StreamIdleTimeout {}
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct ClientKey {
+    pub(crate) pool_key: Option<String>,
     pub(crate) proxy_url: Option<String>,
     pub(crate) connect_timeout_ms: Option<u64>,
     pub(crate) decode_response: bool,

@@ -104,6 +104,7 @@ pub async fn run_stdio() -> Result<(), RequestError> {
                             continue;
                         }
                         let key = ClientKey {
+                            pool_key: request.pool_key.clone(),
                             proxy_url: request.proxy_url.clone(),
                             connect_timeout_ms: request.connect_timeout_ms,
                             decode_response: request
@@ -414,6 +415,7 @@ mod tests {
         install_provider();
         let mut pool = ClientPool::default();
         let key = ClientKey {
+            pool_key: None,
             proxy_url: None,
             connect_timeout_ms: Some(10_000),
             decode_response: true,
@@ -426,10 +428,34 @@ mod tests {
     }
 
     #[test]
+    fn pool_key_partitions_client_pool_entries() {
+        install_provider();
+        let mut pool = ClientPool::default();
+        let account_a = ClientKey {
+            pool_key: Some("acc-123".to_owned()),
+            proxy_url: None,
+            connect_timeout_ms: Some(10_000),
+            decode_response: true,
+        };
+        let account_b = ClientKey {
+            pool_key: Some("acc-456".to_owned()),
+            proxy_url: None,
+            connect_timeout_ms: Some(10_000),
+            decode_response: true,
+        };
+
+        pool.get(&account_a).expect("account_a client");
+        pool.get(&account_b).expect("account_b client");
+
+        assert_eq!(pool.clients.len(), 2);
+    }
+
+    #[test]
     fn response_decode_policy_partitions_client_pool_entries() {
         install_provider();
         let mut pool = ClientPool::default();
         let decoding = ClientKey {
+            pool_key: None,
             proxy_url: None,
             connect_timeout_ms: Some(10_000),
             decode_response: true,
@@ -451,6 +477,7 @@ mod tests {
         install_provider();
         let mut pool = ClientPool::default();
         let direct = ClientKey {
+            pool_key: None,
             proxy_url: None,
             connect_timeout_ms: Some(10_000),
             decode_response: true,
@@ -459,6 +486,7 @@ mod tests {
             proxy_url: Some("http://127.0.0.1:18080".to_owned()),
             connect_timeout_ms: Some(10_000),
             decode_response: true,
+            ..direct.clone()
         };
 
         pool.get(&direct).expect("direct client");

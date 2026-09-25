@@ -75,6 +75,7 @@ from app.modules.proxy._service.http_bridge.helpers import (
     _http_bridge_denied_anchor_fence_current_map,
     _http_bridge_denied_anchor_fence_entry,
     _http_bridge_durable_lease_ttl_seconds,
+    _http_bridge_event_incomplete_reason,
     _http_bridge_event_proves_upstream_liveness,
     _http_bridge_eventless_precreated_deadline,
     _http_bridge_request_budget_seconds,
@@ -90,9 +91,13 @@ from app.modules.proxy._service.http_bridge.helpers import (
 )
 from app.modules.proxy._service.http_bridge.quarantine import (
     _clear_http_bridge_quarantine,
+    _http_bridge_local_failure_fence,
     _http_bridge_quarantine_clear_fence,
     _record_http_bridge_quarantine_eventless_timeout,
     _record_http_bridge_quarantine_wedged_pending,
+)
+from app.modules.proxy._service.http_bridge.queues import (
+    _http_bridge_event_payload_size,
 )
 from app.modules.proxy._service.http_bridge.retry_circuit import (
     _HTTP_BRIDGE_RETRY_CIRCUIT_ANCHOR_ABANDONED_DETAIL,
@@ -134,6 +139,7 @@ from app.modules.proxy._service.http_bridge.service_stubs import (
     _websocket_event_error_message,
     _websocket_event_error_param,
     _websocket_event_error_type,
+    _websocket_event_upstream_error,
     _websocket_owner_pinned_quota_error_code,
     _websocket_precreated_auth_error_code,
     _websocket_precreated_retry_error_code,
@@ -171,6 +177,7 @@ from app.modules.proxy._service.support import (
     _HTTPBridgeRetryCircuitAttemptSelection,
     _HTTPBridgeSession,
     _mark_response_create_attempt_observed,
+    _observe_response_output_timing,
     _pop_websocket_deferred_reasoning_downstream_texts,
     _record_response_event,
     _signal_propagated_capacity_startup_ready,
@@ -368,6 +375,58 @@ def _http_bridge_operation_state_for_event(event_type: str | None) -> str | None
     }.get(event_type)
 
 
+async def _enqueue_http_bridge_downstream_event(
+    queue: Any,
+    item: str | None,
+    *,
+    request_state: Any | None = None,
+    scheduler: Scheduler | None = None,
+    clock: Clock | None = None,
+    settings: Any | None = None,
+) -> bool:
+    """Enqueue an item to the HTTP bridge event queue with stall timeout and detach handling.
+
+    Returns True if successfully enqueued, False if the request was detached or timed out.
+    """
+    if queue is None:
+        return False
+    if item is None or _http_bridge_event_payload_size(item) == 0:
+        try:
+            queue.put_nowait(item)
+            return True
+        except (asyncio.QueueFull, AttributeError):
+            pass
+    if settings is None:
+        settings = _service_get_settings()
+    stall_timeout: float | None = None
+    if request_state is not None and clock is not None:
+        deadline = getattr(request_state, "bridge_request_deadline", None)
+        if deadline is not None:
+            stall_timeout = max(0.1, deadline - clock.monotonic())
+    idle_timeout = float(getattr(settings, "stream_idle_timeout_seconds", 7200.0) if settings else 7200.0)
+    stall_timeout = min(stall_timeout, idle_timeout) if stall_timeout is not None else idle_timeout
+
+    try:
+        effective_scheduler = scheduler or REAL_SCHEDULER
+        await effective_scheduler.wait_for(queue.put(item), timeout=stall_timeout)
+        return True
+    except asyncio.CancelledError:
+        if request_state is not None and getattr(request_state, "draining_until_terminal", False):
+            return False
+        raise
+    except asyncio.TimeoutError:
+        logger.warning(
+            "HTTP bridge downstream consumer stalled exceeding queue limit request_id=%s",
+            getattr(request_state, "request_id", None),
+        )
+        if request_state is not None:
+            request_state.failure_phase_override = "downstream"
+            request_state.failure_detail_override = "consumer_backpressure"
+            if hasattr(queue, "close"):
+                queue.close()
+        return False
+
+
 async def _persist_http_bridge_operation_event(
     service: Any,
     session: "_HTTPBridgeSession",
@@ -433,8 +492,22 @@ async def _persist_http_bridge_operation_event(
     async def enqueue_terminal_delivery() -> bool:
         if terminal_event_queue is None:
             return False
-        await terminal_event_queue.put(event_block)
-        await terminal_event_queue.put(None)
+        await _enqueue_http_bridge_downstream_event(
+            terminal_event_queue,
+            event_block,
+            request_state=request_state,
+            scheduler=scheduler,
+            clock=clock_for(service),
+            settings=getattr(service, "settings", None),
+        )
+        await _enqueue_http_bridge_downstream_event(
+            terminal_event_queue,
+            None,
+            request_state=request_state,
+            scheduler=scheduler,
+            clock=clock_for(service),
+            settings=getattr(service, "settings", None),
+        )
         if terminal_delivery_scope is not None:
             async with session.pending_lock:
                 terminal_delivery_scope.terminal_enqueued = True
@@ -1061,7 +1134,8 @@ async def _wait_before_http_bridge_model_capacity_retry(
             if cancel_when_detached and request_state.event_queue is None:
                 return False
             if emit_keepalives and keepalive_countdown_seconds <= 0 and request_state.event_queue is not None:
-                await request_state.event_queue.put(
+                await _enqueue_http_bridge_downstream_event(
+                    request_state.event_queue,
                     format_sse_event(
                         _account_capacity_wait_payload(
                             request_state,
@@ -1070,7 +1144,10 @@ async def _wait_before_http_bridge_model_capacity_retry(
                             retry_after_seconds=remaining_sleep_seconds,
                             now=clock.monotonic(),
                         )
-                    )
+                    ),
+                    request_state=request_state,
+                    scheduler=scheduler,
+                    clock=clock,
                 )
                 keepalive_countdown_seconds = _ACCOUNT_SELECTION_RECOVERY_HEARTBEAT_SECONDS
             chunk_seconds = min(
@@ -1737,6 +1814,7 @@ class _HTTPBridgeUpstreamEventsMixin:
         transport_classification: str | None = None,
         retry_circuit_attempt_selection: _HTTPBridgeRetryCircuitAttemptSelection | None = None,
         account_neutral_transport_drop: bool = False,
+        upstream_output_observed: bool = False,
     ) -> bool:
         scheduler = scheduler_for(self)
         session.closed = True
@@ -1854,6 +1932,7 @@ class _HTTPBridgeUpstreamEventsMixin:
                 failed_pending_count > 0
                 and reservations_settled is not False
                 and observed_response_events == 0
+                and not upstream_output_observed
                 and (
                     retire_detail == _HTTP_BRIDGE_MISSING_RESPONSE_CREATED_TIMEOUT_DETAIL
                     or account_neutral_transport_drop
@@ -1885,7 +1964,14 @@ class _HTTPBridgeUpstreamEventsMixin:
                         (
                             detail
                             for detail in (retire_detail, error_code)
-                            if detail in {"stream_incomplete", "stream_idle_timeout", "upstream_keepalive_timeout"}
+                            if detail in {
+                                "stream_incomplete",
+                                "stream_idle_timeout",
+                                "upstream_keepalive_timeout",
+                                "missing_response_created_timeout",
+                                "response_create_gate_timeout_stuck_pending",
+                                _HTTP_BRIDGE_MISSING_RESPONSE_CREATED_TIMEOUT_DETAIL,
+                            }
                         ),
                         None,
                     )
@@ -2053,7 +2139,12 @@ class _HTTPBridgeUpstreamEventsMixin:
         clock = clock_for(self)
         runtime_settings = _service_get_settings()
         relay_upstream = session.upstream
-        receive_task: asyncio.Task[UpstreamWebSocketMessage] | None = None
+
+        async def receive_observed() -> tuple[UpstreamWebSocketMessage, float]:
+            message = await session.upstream.receive()
+            return message, clock.monotonic()
+
+        receive_task: asyncio.Task[tuple[UpstreamWebSocketMessage, float]] | None = None
         wakeup_task: asyncio.Task[bool] | None = None
         reader_failure_retry_circuit_attempt_selection: _HTTPBridgeRetryCircuitAttemptSelection | None = None
         try:
@@ -2088,12 +2179,12 @@ class _HTTPBridgeUpstreamEventsMixin:
                     stuck_gate_retire_after_seconds=stuck_gate_retire_after_seconds,
                 )
                 if receive_task is None:
-                    receive_task = scheduler.create_task(session.upstream.receive())
+                    receive_task = scheduler.create_task(receive_observed())
 
                 message: UpstreamWebSocketMessage | None = None
                 timed_out = False
                 if receive_task.done():
-                    message = receive_task.result()
+                    message, observed_at = receive_task.result()
                     receive_task = None
                 elif receive_timeout is not None and receive_timeout.timeout_seconds <= 0:
                     timed_out = True
@@ -2113,7 +2204,7 @@ class _HTTPBridgeUpstreamEventsMixin:
                         return_when=asyncio.FIRST_COMPLETED,
                     )
                     if receive_task in done:
-                        message = receive_task.result()
+                        message, observed_at = receive_task.result()
                         receive_task = None
                     elif wakeup_task in done:
                         wakeup_task.result()
@@ -2311,6 +2402,7 @@ class _HTTPBridgeUpstreamEventsMixin:
                         message=message,
                         scheduler=scheduler,
                         clock=clock,
+                        observed_at=observed_at,
                     )
                     if await self._retire_http_bridge_after_drain_if_ready(session):
                         break
@@ -2372,7 +2464,6 @@ class _HTTPBridgeUpstreamEventsMixin:
                 account_neutral_transport_drop = (
                     message.kind in ("close", "error")
                     and not account_neutral
-                    and not upstream_output_observed
                     and _is_account_neutral_transport_drop(
                         message.close_code, response_events_seen=response_events_seen
                     )
@@ -2405,6 +2496,7 @@ class _HTTPBridgeUpstreamEventsMixin:
                             and not (message.kind == "close" and close_classification == "clean")
                         ),
                         account_neutral_transport_drop=account_neutral_transport_drop,
+                        upstream_output_observed=upstream_output_observed,
                         **(
                             # An admission waiter must not inherit a socket whose
                             # heartbeat already proved it dead. Other failures
@@ -2487,6 +2579,7 @@ class _HTTPBridgeUpstreamEventsMixin:
         message: UpstreamWebSocketMessage | None = None,
         scheduler: Scheduler | None = None,
         clock: Clock | None = None,
+        observed_at: float | None = None,
     ) -> None:
         # The relay loop resolves the collaborators once per session and passes
         # them down; the fallback only serves direct callers (tests).
@@ -2494,6 +2587,8 @@ class _HTTPBridgeUpstreamEventsMixin:
             scheduler = scheduler_for(self)
         if clock is None:
             clock = clock_for(self)
+        if observed_at is None:
+            observed_at = clock.monotonic()
         # One JSON document per websocket text frame: parse it directly instead
         # of framing it as SSE and running the line parser over it. The
         # data-only block is what unmatched events relay.
@@ -2531,6 +2626,7 @@ class _HTTPBridgeUpstreamEventsMixin:
                 claimed_terminal_request_states=claimed_terminal_request_states,
                 scheduler=scheduler,
                 clock=clock,
+                observed_at=observed_at,
             )
         except BaseException:
             # Includes CancelledError. A terminal request popped from
@@ -2647,6 +2743,7 @@ class _HTTPBridgeUpstreamEventsMixin:
         claimed_terminal_request_states: list[_WebSocketRequestState],
         scheduler: Scheduler,
         clock: Clock,
+        observed_at: float,
     ) -> None:
         original_text = text
         error_message = _websocket_event_error_message(event_type, payload)
@@ -2679,6 +2776,7 @@ class _HTTPBridgeUpstreamEventsMixin:
             event=event,
         )
 
+        completion_local_failure_fence = _http_bridge_local_failure_fence(self)
         completed_event_queue: asyncio.Queue[str | None] | None = None
         completed_event_queue_claimed = False
         async with session.pending_lock:
@@ -2725,7 +2823,7 @@ class _HTTPBridgeUpstreamEventsMixin:
                 # classify the send as eventless.
                 _mark_response_create_attempt_observed(matched_request_state, event_type)
                 session.last_upstream_event_generation += 1
-                now = clock.monotonic()
+                now = observed_at
                 if matched_request_state.latency_first_upstream_event_ms is None:
                     matched_request_state.latency_first_upstream_event_ms = int(
                         max(0.0, now - matched_request_state.started_at) * 1000
@@ -2734,6 +2832,8 @@ class _HTTPBridgeUpstreamEventsMixin:
                     matched_request_state.latency_response_created_ms = int(
                         max(0.0, now - matched_request_state.started_at) * 1000
                     )
+                if event_type not in {"response.completed", "response.failed", "response.incomplete", "error"}:
+                    _observe_response_output_timing(matched_request_state, event_type, payload, now=observed_at)
                 actual_service_tier = _service_tier_from_event_payload(payload)
                 if actual_service_tier is not None:
                     matched_request_state.actual_service_tier = actual_service_tier
@@ -2829,13 +2929,6 @@ class _HTTPBridgeUpstreamEventsMixin:
                         allow_precreated_terminal_fallback=True,
                         prefer_draining_requests=anonymous_event_prefers_draining,
                     )
-                if terminal_request_state is not None:
-                    # Upstream generation ends here; the durable alias, operation,
-                    # recovery and circuit-settlement writes below and the
-                    # finalizer's settlement are local and must not stretch the
-                    # throughput sample's span. A later terminal for the same turn
-                    # (capacity retry) replaces it; those rows are not sampled.
-                    terminal_request_state.upstream_terminal_at = clock.monotonic()
                 if (
                     matched_request_state is None
                     and terminal_request_state is not None
@@ -2947,6 +3040,7 @@ class _HTTPBridgeUpstreamEventsMixin:
             )
             grouped_terminal_events = []
             for grouped_request_state in grouped_previous_response_request_states:
+                grouped_request_state.upstream_terminal_at = observed_at
                 grouped_request_state.error_http_status_override = 502
                 (
                     _grouped_downstream_text,
@@ -3102,8 +3196,20 @@ class _HTTPBridgeUpstreamEventsMixin:
                 else:
                     await append_ready.wait()
                     if grouped_request_state.event_queue is not None:
-                        await grouped_request_state.event_queue.put(grouped_event_block)
-                        await grouped_request_state.event_queue.put(None)
+                        await _enqueue_http_bridge_downstream_event(
+                            grouped_request_state.event_queue,
+                            grouped_event_block,
+                            request_state=grouped_request_state,
+                            scheduler=scheduler,
+                            clock=clock,
+                        )
+                        await _enqueue_http_bridge_downstream_event(
+                            grouped_request_state.event_queue,
+                            None,
+                            request_state=grouped_request_state,
+                            scheduler=scheduler,
+                            clock=clock,
+                        )
                     await await_all_grouped_deliveries()
                     await _persist_http_bridge_operation_event(
                         self,
@@ -3477,7 +3583,7 @@ class _HTTPBridgeUpstreamEventsMixin:
             await self._handle_or_defer_precreated_stream_health(
                 status_request_state,
                 session.account,
-                {"message": retry_error_message or "Upstream error"},
+                _websocket_event_upstream_error(event_type, payload),
                 retry_error_code,
             )
             retry_consumer_attached = (
@@ -3545,7 +3651,7 @@ class _HTTPBridgeUpstreamEventsMixin:
             await self._handle_or_defer_precreated_stream_health(
                 status_request_state,
                 session.account,
-                {"message": retry_error_message or "Upstream error"},
+                _websocket_event_upstream_error(event_type, payload),
                 owner_pinned_quota_error,
             )
             if (
@@ -3670,7 +3776,7 @@ class _HTTPBridgeUpstreamEventsMixin:
             await self._handle_or_defer_precreated_stream_health(
                 status_request_state,
                 session.account,
-                {"message": retry_error_message or "Upstream error"},
+                _websocket_event_upstream_error(event_type, payload),
                 retry_error_code,
             )
             # Pre-created anchored requests belong to the owner-pinned branch
@@ -3699,16 +3805,31 @@ class _HTTPBridgeUpstreamEventsMixin:
                         session.pending_requests.remove(status_request_state)
                         session.queued_request_count = max(0, session.queued_request_count - 1)
                 if staged:
-                    # A busy create gate forwards the upstream terminal as-is;
-                    # only a replay that was attempted and failed is rewritten.
-                    status_request_state.error_http_status_override = 502
-                    (
-                        _downstream_text,
-                        event_block,
-                        event,
-                        payload,
-                        event_type,
-                    ) = _build_stream_incomplete_terminal_event_for_request(status_request_state)
+                    # A failed retry must not hide an upstream quota response
+                    # (including its reset metadata) behind a synthetic 502.
+                    # Other replay failures remain fail-closed as
+                    # ``stream_incomplete`` because their original terminal is
+                    # not a status-bearing quota response.
+                    preserve_upstream_rate_limit = _http_error_status_from_payload(
+                        payload
+                    ) == 429 and retry_error_code in {
+                        "rate_limit_exceeded",
+                        "usage_limit_reached",
+                        "insufficient_quota",
+                        "usage_not_included",
+                        "quota_exceeded",
+                    }
+                    if preserve_upstream_rate_limit:
+                        _clear_websocket_request_error_overrides(status_request_state)
+                    else:
+                        status_request_state.error_http_status_override = 502
+                        (
+                            _downstream_text,
+                            event_block,
+                            event,
+                            payload,
+                            event_type,
+                        ) = _build_stream_incomplete_terminal_event_for_request(status_request_state)
 
         completed_usage = (
             event.response.usage if event_type == "response.completed" and event and event.response else None
@@ -3751,7 +3872,19 @@ class _HTTPBridgeUpstreamEventsMixin:
             # suppressed for the TTL because the clear cannot match), and a
             # failed registration would find no pre-settle poison detail to
             # re-seed.
-            completion_pre_settle_load_succeeded = await self._load_http_bridge_retry_circuit(session)
+            if (
+                terminal_request_state.verified_stale_anchor_retry_circuit_key == session.key
+                and terminal_request_state.verified_stale_anchor_quarantine_local_failure_fence is not None
+            ):
+                # A same-key replay carries older authority than this terminal
+                # event. Its load must not revoke post-origin local evidence.
+                completion_local_failure_fence = min(
+                    completion_local_failure_fence,
+                    terminal_request_state.verified_stale_anchor_quarantine_local_failure_fence,
+                )
+            completion_pre_settle_load_succeeded = await self._load_http_bridge_retry_circuit(
+                session, local_failure_fence=completion_local_failure_fence
+            )
             completion_quarantine_clear_fence = _http_bridge_quarantine_clear_fence(self, session.key)
             async with self._http_bridge_retry_circuit_lock:
                 pre_settle_state = self._http_bridge_retry_circuits.get(session.key)
@@ -3796,6 +3929,7 @@ class _HTTPBridgeUpstreamEventsMixin:
                 # anchor commits.
                 circuit_settled = await self._clear_http_bridge_retry_circuit(
                     session,
+                    local_failure_fence=completion_local_failure_fence,
                     settled_detail=(
                         _HTTP_BRIDGE_RETRY_CIRCUIT_ANCHOR_ABANDONED_DETAIL
                         if completion_settles_onto_tombstone
@@ -3942,8 +4076,10 @@ class _HTTPBridgeUpstreamEventsMixin:
                 self,
                 session,
                 key_generation=completion_quarantine_clear_fence,
+                local_failure_fence=completion_local_failure_fence,
                 additional_key=terminal_request_state.verified_stale_anchor_retry_circuit_key,
                 additional_key_generation=terminal_request_state.verified_stale_anchor_quarantine_generation,
+                additional_local_failure_fence=terminal_request_state.verified_stale_anchor_quarantine_local_failure_fence,
             )
 
         operation_state = _http_bridge_operation_state_for_event(event_type)
@@ -4215,7 +4351,8 @@ class _HTTPBridgeUpstreamEventsMixin:
                 )
                 _clear_websocket_deferred_reasoning_downstream_texts(terminal_request_state)
                 if terminal_request_state.event_queue is not None:
-                    await terminal_request_state.event_queue.put(
+                    await _enqueue_http_bridge_downstream_event(
+                        terminal_request_state.event_queue,
                         format_sse_event(
                             _security_work_advisory_event(
                                 code=_SECURITY_WORK_AUTHORIZATION_REQUIRED_CODE,
@@ -4234,12 +4371,19 @@ class _HTTPBridgeUpstreamEventsMixin:
                                 ),
                                 account_id=session.account.id,
                             )
-                        )
+                        ),
+                        request_state=terminal_request_state,
+                        scheduler=scheduler,
+                        clock=clock,
                     )
                 if can_retry_security_work:
                     retried = await self._retry_http_bridge_security_work_request(session, terminal_request_state)
                     if retried:
                         return
+
+        if terminal_request_state is not None:
+            terminal_request_state.upstream_terminal_at = observed_at
+            _observe_response_output_timing(terminal_request_state, event_type, payload, now=observed_at)
 
         terminal_strike_failures: int | None = None
         terminal_poison_detail: str | None = None
@@ -4267,7 +4411,20 @@ class _HTTPBridgeUpstreamEventsMixin:
                 error_code = _normalize_error_code(error.code if error else None, error.type if error else None)
             elif settlement_event and settlement_event.response:
                 error = settlement_event.response.error
-                error_code = _normalize_error_code(error.code if error else None, error.type if error else None)
+                if error:
+                    error_code = _normalize_error_code(error.code, error.type)
+                elif settlement_event_type == "response.incomplete":
+                    incomplete_reason = _http_bridge_event_incomplete_reason(settlement_event_type, settlement_payload)
+                    if incomplete_reason is None:
+                        incomplete_details = getattr(settlement_event.response, "incomplete_details", None)
+                        if incomplete_details is not None:
+                            incomplete_reason = getattr(incomplete_details, "reason", None)
+                            if incomplete_reason is None and isinstance(incomplete_details, dict):
+                                incomplete_reason = incomplete_details.get("reason")
+                    if incomplete_reason is not None:
+                        error_code = _normalize_error_code(incomplete_reason, None)
+                if not error_code:
+                    error_code = _normalize_error_code(None, None)
             _log_http_bridge_event(
                 "terminal_error",
                 session.key,
@@ -4349,7 +4506,13 @@ class _HTTPBridgeUpstreamEventsMixin:
                     )
             if matched_request_state is not None and matched_event_queue is not None and not suppress_downstream_event:
                 for deferred_text in matched_deferred_texts:
-                    await matched_event_queue.put(deferred_text)
+                    await _enqueue_http_bridge_downstream_event(
+                        matched_event_queue,
+                        deferred_text,
+                        request_state=matched_request_state,
+                        scheduler=scheduler,
+                        clock=clock,
+                    )
             if matched_request_state is not None and not suppress_downstream_event:
                 matched_terminal_enqueued = await _persist_http_bridge_operation_event(
                     self,
@@ -4367,7 +4530,13 @@ class _HTTPBridgeUpstreamEventsMixin:
                 and not suppress_downstream_event
                 and matched_terminal_enqueued is not True
             ):
-                await matched_event_queue.put(event_block)
+                await _enqueue_http_bridge_downstream_event(
+                    matched_event_queue,
+                    event_block,
+                    request_state=matched_request_state,
+                    scheduler=scheduler,
+                    clock=clock,
+                )
 
             if terminal_request_state is None:
                 return
@@ -4388,7 +4557,13 @@ class _HTTPBridgeUpstreamEventsMixin:
                             terminal=False,
                         )
                     if terminal_event_queue is not None:
-                        await terminal_event_queue.put(deferred_text)
+                        await _enqueue_http_bridge_downstream_event(
+                            terminal_event_queue,
+                            deferred_text,
+                            request_state=terminal_request_state,
+                            scheduler=scheduler,
+                            clock=clock,
+                        )
                 if not suppress_downstream_event:
                     terminal_enqueued = await _persist_http_bridge_operation_event(
                         self,
@@ -4406,10 +4581,22 @@ class _HTTPBridgeUpstreamEventsMixin:
                         terminal_delivery_scope=(completed_delivery_scope if completed_event_queue_claimed else None),
                     )
                 if terminal_event_queue is not None and terminal_enqueued is not True:
-                    await terminal_event_queue.put(event_block)
+                    await _enqueue_http_bridge_downstream_event(
+                        terminal_event_queue,
+                        event_block,
+                        request_state=terminal_request_state,
+                        scheduler=scheduler,
+                        clock=clock,
+                    )
             if terminal_event_queue is not None:
                 if terminal_enqueued is not True:
-                    await terminal_event_queue.put(None)
+                    await _enqueue_http_bridge_downstream_event(
+                        terminal_event_queue,
+                        None,
+                        request_state=terminal_request_state,
+                        scheduler=scheduler,
+                        clock=clock,
+                    )
                 if completed_event_queue_claimed and completed_delivery_scope is not None:
                     async with session.pending_lock:
                         # Keep the completed claim authoritative after its producer

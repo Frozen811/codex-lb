@@ -325,12 +325,13 @@ def test_responses_to_payload_omits_unset_tools():
 
 
 def test_responses_to_payload_omits_unset_tool_choice_and_parallel_tool_calls():
-    # Sibling-field audit for issue #1184: ``tool_choice`` and
-    # ``parallel_tool_calls`` default to ``None`` and are dropped by
-    # ``model_dump(exclude_none=True)`` when the client omits them, while
-    # explicit values (including ``false``) keep forwarding.
+    # Sibling-field audit for issue #1184 and issue #2465: ``tool_choice``
+    # defaults to ``None`` and is dropped by ``model_dump(exclude_none=True)``
+    # when the client omits it, while explicit values keep forwarding.
+    # In upstream Responses API, ``parallel_tool_calls`` is invalid and must
+    # always be stripped by ``to_payload()`` even when explicitly set.
     unset = ResponsesRequest.model_validate({"model": "gpt-5.6", "instructions": "hi", "input": []})
-    explicit = ResponsesRequest.model_validate(
+    explicit_false = ResponsesRequest.model_validate(
         {
             "model": "gpt-5.6",
             "instructions": "hi",
@@ -339,14 +340,26 @@ def test_responses_to_payload_omits_unset_tool_choice_and_parallel_tool_calls():
             "parallel_tool_calls": False,
         }
     )
+    explicit_true = ResponsesRequest.model_validate(
+        {
+            "model": "gpt-5.6",
+            "instructions": "hi",
+            "input": [],
+            "tool_choice": "auto",
+            "parallel_tool_calls": True,
+        }
+    )
 
     unset_payload = unset.to_payload()
-    explicit_payload = explicit.to_payload()
+    explicit_false_payload = explicit_false.to_payload()
+    explicit_true_payload = explicit_true.to_payload()
 
     assert "tool_choice" not in unset_payload
     assert "parallel_tool_calls" not in unset_payload
-    assert explicit_payload["tool_choice"] == "auto"
-    assert explicit_payload["parallel_tool_calls"] is False
+    assert explicit_false_payload["tool_choice"] == "auto"
+    assert "parallel_tool_calls" not in explicit_false_payload
+    assert "parallel_tool_calls" not in explicit_true_payload
+    assert "parallel_tool_calls" not in explicit_true.to_replay_safety_payload()
 
 
 def test_responses_to_payload_preserves_explicit_empty_tools():
@@ -1170,7 +1183,7 @@ def test_compact_strips_tool_fields():
     dumped = request.to_payload()
     assert "tools" not in dumped
     assert "tool_choice" not in dumped
-    assert dumped["parallel_tool_calls"] is False
+    assert "parallel_tool_calls" not in dumped
     assert "text" not in dumped
 
 
@@ -3059,7 +3072,7 @@ def test_v1_compact_strips_tool_fields():
     dumped = request.to_payload()
     assert "tools" not in dumped
     assert "tool_choice" not in dumped
-    assert dumped["parallel_tool_calls"] is False
+    assert "parallel_tool_calls" not in dumped
 
 
 def test_v1_compact_messages_convert():

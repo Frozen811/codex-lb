@@ -835,6 +835,42 @@ class DurableBridgeRepository:
             api_key_scope=api_key_scope,
         )
 
+    async def release_retry_circuit_claim(
+        self,
+        *,
+        session_key_kind: str,
+        session_key_value: str,
+        api_key_scope: str,
+        expected_updated_at_epoch: float,
+        expected_admission_generation: int,
+    ) -> bool:
+        """Release a claimed admission generation when the request exits before upstream dispatch.
+
+        Reverts admission_generation back to expected_admission_generation - 1 under the
+        lineage fence so subsequent requests can claim the half-open probe without waiting for
+        TTL expiration.
+        """
+        async with sqlite_writer_section():
+            statement = (
+                update(HttpBridgeRetryCircuit)
+                .where(
+                    HttpBridgeRetryCircuit.session_key_kind == session_key_kind,
+                    HttpBridgeRetryCircuit.session_key_hash == durable_bridge_hash(session_key_value),
+                    HttpBridgeRetryCircuit.api_key_scope == api_key_scope,
+                    HttpBridgeRetryCircuit.admission_generation == expected_admission_generation,
+                    HttpBridgeRetryCircuit.updated_at_epoch == expected_updated_at_epoch,
+                )
+                .values(
+                    admission_generation=max(0, expected_admission_generation - 1),
+                )
+            )
+            result = await self._session.execute(statement)
+            if getattr(result, "rowcount", 0) != 1:
+                await self._session.rollback()
+                return False
+            await self._session.commit()
+            return True
+
     async def supersede_retry_circuit_detail(
         self,
         *,
@@ -3632,8 +3668,27 @@ class DurableBridgeRepository:
                 await self._session.commit()
                 return False
             result = await self._session.execute(statement)
+            if result.scalar_one_or_none() is not None:
+                await self._session.commit()
+                return True
+            # The CAS also matches nothing when a racing duplicate retired this
+            # row first. The caller's question is "is this owner retired now?",
+            # not "did I retire it", so answer that: otherwise the loser of the
+            # race falls through to the retryable owner-unavailable failure the
+            # winner just replaced, and a client retrying quickly sees both.
+            already_retired = (
+                await self._session.execute(
+                    select(
+                        HttpBridgeSessionRecord.continuity_abandoned_at,
+                        HttpBridgeSessionRecord.continuity_abandonment_scope,
+                    ).where(
+                        HttpBridgeSessionRecord.id == session_id,
+                        HttpBridgeSessionRecord.account_id == expected_account_id,
+                    )
+                )
+            ).one_or_none()
             await self._session.commit()
-        return result.scalar_one_or_none() is not None
+        return already_retired is not None and _bridge_continuity_is_abandoned(*already_retired)
 
     async def retire_stale_unavailable_bridge_owners(self, cutoff: datetime, *, now: datetime) -> int:
         """Retire continuity owners that have been unroutable since ``cutoff``.
@@ -3854,6 +3909,8 @@ class DurableBridgeRepository:
                     HttpBridgeRetryCircuit.session_key_kind,
                     HttpBridgeRetryCircuit.session_key_hash,
                     HttpBridgeRetryCircuit.api_key_scope,
+                    HttpBridgeRetryCircuit.updated_at_epoch,
+                    HttpBridgeRetryCircuit.admission_generation,
                 )
                 .where(stale_predicate)
                 .limit(batch_size)
@@ -3863,12 +3920,20 @@ class DurableBridgeRepository:
                 return deleted_count
             batch_deleted_count = 0
             async with sqlite_writer_section():
-                for session_key_kind, session_key_hash, api_key_scope in keys:
+                for (
+                    session_key_kind,
+                    session_key_hash,
+                    api_key_scope,
+                    updated_at_epoch,
+                    admission_generation,
+                ) in keys:
                     deleted = await self._session.execute(
                         delete(HttpBridgeRetryCircuit)
                         .where(HttpBridgeRetryCircuit.session_key_kind == session_key_kind)
                         .where(HttpBridgeRetryCircuit.session_key_hash == session_key_hash)
                         .where(HttpBridgeRetryCircuit.api_key_scope == api_key_scope)
+                        .where(HttpBridgeRetryCircuit.updated_at_epoch == updated_at_epoch)
+                        .where(HttpBridgeRetryCircuit.admission_generation == admission_generation)
                         .where(stale_predicate)
                         .returning(HttpBridgeRetryCircuit.session_key_hash)
                     )

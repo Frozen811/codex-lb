@@ -249,6 +249,7 @@ def _dashboard_settings_response(settings, *, principal: DashboardPrincipal) -> 
         auto_redeem_reset_credits_before_expiry=settings.auto_redeem_reset_credits_before_expiry,
         show_reset_credit_expiry_badge=settings.show_reset_credit_expiry_badge,
         routing_strategy=settings.routing_strategy,
+        subagent_account_preference=settings.subagent_account_preference,
         relative_availability_power=settings.relative_availability_power,
         relative_availability_top_k=settings.relative_availability_top_k,
         single_account_id=settings.single_account_id,
@@ -1252,6 +1253,9 @@ async def update_settings(
                     else current.show_reset_credit_expiry_badge
                 ),
                 routing_strategy=payload.routing_strategy or current.routing_strategy,
+                subagent_account_preference=(
+                    payload.subagent_account_preference or current.subagent_account_preference
+                ),
                 relative_availability_power=(
                     payload.relative_availability_power
                     if payload.relative_availability_power is not None
@@ -1507,14 +1511,9 @@ async def update_settings(
     except ValueError as exc:
         raise DashboardBadRequestError(str(exc), code="invalid_totp_config") from exc
 
-    upstream_route_inputs_changed = (
-        current.upstream_proxy_routing_enabled != updated.upstream_proxy_routing_enabled
-        or current.upstream_proxy_default_pool_id != updated.upstream_proxy_default_pool_id
-    )
     # ``SettingsRepository.commit_refresh`` already cleared the route cache
-    # synchronously between the commit and its refresh await (no concurrent
-    # request can see the committed row alongside the stale cache); only the
-    # durable cross-replica signals remain here.
+    # synchronously after commit. The settings namespace is also the route
+    # cache's peer signal, and failed writes now remain queued for retry.
     await get_settings_cache().invalidate()
     changed_fields = [
         field_name
@@ -1537,6 +1536,7 @@ async def update_settings(
             "auto_redeem_reset_credits_before_expiry",
             "show_reset_credit_expiry_badge",
             "routing_strategy",
+            "subagent_account_preference",
             "relative_availability_power",
             "relative_availability_top_k",
             "single_account_id",
@@ -1631,14 +1631,6 @@ async def update_settings(
     ) != updated.provenance.get("http_responses_session_bridge_codex_prewarm_enabled"):
         changed_fields.append("http_responses_session_bridge_codex_prewarm_enabled")
     # end M3 codex prewarm
-    if upstream_route_inputs_changed:
-        # Durably bump ``upstream_route`` (with the coalesced retry fallback)
-        # rather than relying solely on the ``settings`` bump issued above:
-        # that bump is non-raising and enqueues no retry, so a transient write
-        # failure would leave peers on the stale route outcome until the TTL
-        # instead of the first recovered poll cycle. The re-clear inside
-        # ``invalidate`` is harmless; the guarding clear already ran pre-await.
-        await get_upstream_route_cache().invalidate()
     actor_ip = request.client.host if request.client else None
     AuditService.log_async(
         "settings_changed",

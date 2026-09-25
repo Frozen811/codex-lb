@@ -47,6 +47,21 @@ describe("ApiKeyTable", () => {
     expect(within(secondRow).getByText("No Limit")).toBeInTheDocument();
   });
 
+  it("renders the estimated pool cap without a no-limit label", () => {
+    renderWithProviders(
+      <ApiKeyTable
+        keys={[createApiKey({ usageSharePercent: 20 })]}
+        busy={false}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onRegenerate={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/Est\. pool cap 20%/)).toBeInTheDocument();
+    expect(screen.queryByText("No Limit")).not.toBeInTheDocument();
+  });
+
   it("renders traffic class labels in the traffic column", () => {
     const keys = [
       createApiKey({ id: "foreground-key", trafficClass: "foreground" }),
@@ -138,5 +153,99 @@ describe("ApiKeyTable", () => {
     );
 
     expect(screen.getByRole("button", { name: "Actions" })).toBeDisabled();
+  });
+
+  it("invokes onResetUsage with the single key when Reset usage is clicked in row menu", async () => {
+    const user = userEvent.setup();
+    const onResetUsage = vi.fn();
+    const target = createApiKey({
+      id: "key_with_limit",
+      name: "Limited key",
+      limits: [
+        {
+          id: 1,
+          limitType: "total_tokens",
+          limitWindow: "weekly",
+          maxValue: 1000,
+          currentValue: 500,
+          modelFilter: null,
+          resetAt: "2026-01-08T00:00:00Z",
+        },
+      ],
+    });
+
+    renderWithProviders(
+      <ApiKeyTable
+        keys={[target]}
+        busy={false}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onRegenerate={vi.fn()}
+        onResetUsage={onResetUsage}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    await user.click(screen.getByRole("menuitem", { name: /reset usage/i }));
+    expect(onResetUsage).toHaveBeenCalledWith([target]);
+  });
+
+  it("supports row selection, select all with limits, and bulk reset usage", async () => {
+    const user = userEvent.setup();
+    const onResetUsage = vi.fn();
+    const onSelectedIdsChange = vi.fn();
+    const key1 = createApiKey({
+      id: "key_1",
+      name: "Key 1",
+      limits: [
+        {
+          id: 1,
+          limitType: "total_tokens",
+          limitWindow: "weekly",
+          maxValue: 1000,
+          currentValue: 100,
+          modelFilter: null,
+          resetAt: "2026-01-08T00:00:00Z",
+        },
+      ],
+    });
+    const key2 = createApiKey({
+      id: "key_2",
+      name: "Key 2",
+      limits: [],
+    });
+
+    const { rerender } = renderWithProviders(
+      <ApiKeyTable
+        keys={[key1, key2]}
+        busy={false}
+        selectedIds={new Set()}
+        onSelectedIdsChange={onSelectedIdsChange}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onRegenerate={vi.fn()}
+        onResetUsage={onResetUsage}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /select all with limits/i }));
+    expect(onSelectedIdsChange).toHaveBeenCalledWith(new Set(["key_1"]));
+
+    rerender(
+      <ApiKeyTable
+        keys={[key1, key2]}
+        busy={false}
+        selectedIds={new Set(["key_1"])}
+        onSelectedIdsChange={onSelectedIdsChange}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onRegenerate={vi.fn()}
+        onResetUsage={onResetUsage}
+      />,
+    );
+
+    expect(screen.getByText("1 selected")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /reset usage \(1\)/i }));
+    expect(onResetUsage).toHaveBeenCalledWith([key1]);
   });
 });

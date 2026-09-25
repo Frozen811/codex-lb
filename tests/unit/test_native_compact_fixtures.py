@@ -10,7 +10,7 @@ import pytest
 from app.core.clients.proxy import ProxyResponseError, SSEResponse, _compact_response_payload_from_sse
 
 FIXTURES = Path(__file__).resolve().parents[2] / "crates/codex-lb-responses/tests/fixtures/compact-v1.json"
-CASES = json.loads(FIXTURES.read_text())
+CASES = json.loads(FIXTURES.read_text(encoding="utf-8"))
 
 
 class _FramedResponse:

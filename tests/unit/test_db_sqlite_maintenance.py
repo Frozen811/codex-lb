@@ -460,6 +460,7 @@ def test_recover_replace_restores_source_when_install_rename_fails(
         assert connection.execute("SELECT name FROM items").fetchall() == [("base",)]
 
 
+@pytest.mark.skipif(os.name == "nt", reason="wildcard characters in filenames are not supported on Windows")
 def test_recover_sidecar_cleanup_treats_wildcard_database_names_literally(tmp_path: Path) -> None:
     """A wildcard in the database name must not broaden master-journal cleanup."""
     db_path = tmp_path / "store*.db"

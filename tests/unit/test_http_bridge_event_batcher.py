@@ -912,3 +912,39 @@ async def test_close_cancels_background_flusher() -> None:
 
     assert batcher._task is None
     assert task.done()
+
+
+@pytest.mark.asyncio
+async def test_run_drains_queued_burst_without_sleeping_between_batches() -> None:
+    """Regression #2291: background flusher drains multiple batches in one pass
+    instead of sleeping flush_interval_seconds between each bounded batch.
+    """
+    durable = _FakeDurableBridge()
+    batcher = HttpBridgeOperationEventBatcher(
+        durable,
+        max_bytes=1024 * 1024,
+        batch_size=10,
+        flush_interval_seconds=10.0,
+        max_pending_events=100,
+    )
+    for i in range(30):
+        await batcher.enqueue(
+            operation_id="burst-op",
+            session_id="session-1",
+            instance_id="instance-1",
+            owner_epoch=1,
+            event_text=f"event-{i}",
+        )
+
+    for _ in range(50):
+        if len(durable.batches) == 3:
+            break
+        await asyncio.sleep(0.01)
+
+    assert len(durable.batches) == 3
+    assert [len(b) for b in durable.batches] == [10, 10, 10]
+    all_events = [ev for b in durable.batches for ev in b]
+    assert all_events == [f"event-{i}" for i in range(30)]
+
+    await batcher.close()
+

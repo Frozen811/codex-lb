@@ -62,6 +62,8 @@ pub struct NativeRequest {
     pub connect_timeout_ms: Option<u64>,
     pub proxy_url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pool_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sse: Option<NativeSseOptions>,
 }
 

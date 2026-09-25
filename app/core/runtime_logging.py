@@ -19,9 +19,19 @@ from app.core.types import JsonValue
 from app.core.utils.request_id import get_request_id
 
 _SENSITIVE_LOG_VALUE_PATTERNS = (
-    re.compile(r"(?i)(password|passwd|pwd|token|secret|api[_-]?key)(\s*[=:]\s*)([^\s,&]+)"),
-    re.compile(r"(?i)(bearer\s+)[A-Za-z0-9._~+/=:-]+"),
-    re.compile(r"(?i)(authorization\s*[=:]\s*)(?!\s*bearer\b)([^,&]+)"),
+    re.compile(
+        r"(?i)((?:[\"']?(?:password|passwd|pwd|token|secret|api[_-]?key)[\"']?\s*=\s*)|(?:(?<![\"'])(?:password|passwd|pwd|token|secret|api[_-]?key)\s*:\s*))"
+        r"(b?\"(?:\\.|[^\"\\])*(?:\"|\Z)|b?'(?:\\.|[^'\\])*(?:'|\Z)|[^\s,&]+)"
+    ),
+    re.compile(
+        r"(?i)(bearer\s+)"
+        r"(?:[a-zA-Z0-9_-]+\s*=\s*(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^,\s&]+)|\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[A-Za-z0-9._~+/=:-]+(?:\s+(?![a-zA-Z0-9_-]+\s*=)[A-Za-z0-9._~+/=:-]+)*)"
+        r"(?:\s*,\s*(?!(?:status|request_id|code|latency|method|path)\s*=)[a-zA-Z0-9_-]+\s*=\s*(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^,\s&]+))*"
+    ),
+    re.compile(
+        r"(?i)((?<![\w-])(?:[\"']?authorization[\"']?\s*=\s*|authorization\s*:\s*|\bauthorization\s+))(?!\s*bearer\b)"
+        r"([^,&]+(?:\s*,\s*(?!(?:status|request_id|code|latency|method|path)\s*=)[a-zA-Z0-9_-]+\s*=\s*(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^,\s&]+))*)"
+    ),
 )
 _LINE_BREAKS = re.compile(r"(\r\n|\n|\r)")
 # RFC 7617 ``Basic <base64>`` token: a reversible encoding of ``user:password``
@@ -30,7 +40,9 @@ _LINE_BREAKS = re.compile(r"(\r\n|\n|\r)")
 # behind cheap substring scans for the canonical, lowercase and uppercase
 # scheme spellings (the auth-scheme is case-insensitive per RFC 7235); the
 # regex itself is case-insensitive once a precheck hits.
-_BASIC_TOKEN_PATTERN = re.compile(r"(?i)(basic\s+)[A-Za-z0-9+/=]+")
+_BASIC_TOKEN_PATTERN = re.compile(
+    r"(?i)(basic\s+)(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[A-Za-z0-9+/=]+(?:\s+[A-Za-z0-9+/=]+)*)"
+)
 _BASIC_TOKEN_PRECHECKS = ("Basic ", "basic ", "BASIC ")
 # Fail-closed rendering when a redaction pass itself raises: the record is
 # still emitted (timestamp/level/logger intact) but never with the original,
@@ -58,7 +70,8 @@ _USERINFO_PATTERN = re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://)([^/?#\s@\"]+)@")
 # the next separator. Containers nested under a secret key are masked only to
 # their first level: a best-effort text backstop, not the structural pass.
 _PYTHON_REPR_SENSITIVE_LOG_VALUE_PATTERN = re.compile(
-    r"(?i)('[^'\\]*(?:password|passwd|pwd|token|secret|api[_-]?key|authorization)'\s*:\s*)"
+    r"(?i)('(?:[^'\\]*(?:password|passwd|pwd|token|secret|api[_-]?key|authorization))'\s*[:=]\s*|"
+    r"['\"](?:[^'\"\\\\]*(?:password|passwd|pwd|token|secret|api[_-]?key|authorization))['\"]\s*,\s*)"
     r"(b?'(?:\\.|[^'\\])*'|b?\"(?:\\.|[^\"\\])*\"|\[[^\[\]]*\]|\([^()]*\)|\{[^{}]*\}|[^,}\]\)\s]+)"
 )
 # Structured (JSON extra) keys whose string values are secrets by name.
@@ -227,7 +240,7 @@ def _redact_userinfo(match: re.Match[str]) -> str:
 
 
 def _redact_keyed_secret(match: re.Match[str]) -> str:
-    return f"{match.group(1)}{match.group(2)}{_LOG_REDACTION}"
+    return f"{match.group(1)}{_LOG_REDACTION}"
 
 
 def _redact_json_secret(match: re.Match[str]) -> str:

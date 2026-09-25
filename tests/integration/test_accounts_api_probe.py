@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
@@ -127,7 +128,7 @@ async def test_probe_active_account_returns_snapshot(
         captured["had_token"] = bool(access_token)
         return 200
 
-    async def _force_refresh_fetches_without_writing(self, account, *, ignore_refresh_disabled=False):  # noqa: ARG001
+    async def _force_refresh_fetches_without_writing(self, account, *, ignore_refresh_disabled=False, **kwargs):  # noqa: ARG001
         return AccountRefreshResult(usage_written=False, fetch_succeeded=True)
 
     monkeypatch.setattr(AccountsService, "_send_probe_request", _fake_probe)
@@ -165,6 +166,58 @@ async def test_probe_active_account_returns_snapshot(
 
 
 @pytest.mark.asyncio
+async def test_probe_route_omits_unsupported_output_limit(async_client, monkeypatch):
+    captured: dict[str, Any] = {}
+
+    class _Response:
+        def __init__(self, status: int) -> None:
+            self.status = status
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):  # noqa: ARG002
+            return False
+
+    class _Session:
+        def post(self, _url: str, **kwargs: Any):
+            payload = kwargs["json"]
+            captured["payload"] = payload
+            return _Response(400 if "max_output_tokens" in payload else 200)
+
+    class _Lease:
+        async def __aenter__(self):
+            return _Session()
+
+        async def __aexit__(self, exc_type, exc, tb):  # noqa: ARG002
+            return False
+
+    async def _force_refresh_fetches_without_writing(self, account, *, ignore_refresh_disabled=False, **kwargs):  # noqa: ARG001
+        return AccountRefreshResult(usage_written=False, fetch_succeeded=True)
+
+    record_probe_result = AsyncMock()
+    proxy_service = type("_ProbeRecorder", (), {"record_account_probe_result": record_probe_result})()
+    monkeypatch.setattr("app.modules.accounts.service.lease_http_session", lambda: _Lease())
+    monkeypatch.setattr(UsageUpdater, "force_refresh_result", _force_refresh_fetches_without_writing)
+    monkeypatch.setattr(accounts_api, "get_proxy_service_for_app", lambda app: proxy_service)
+
+    account_id = await _import_test_account(
+        async_client,
+        email="probe-wire-body@example.com",
+        account_id="acc_probe_wire_body",
+    )
+
+    response = await async_client.post(f"/api/accounts/{account_id}/probe")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["probeStatusCode"] == 200
+    assert captured["payload"]["stream"] is True
+    assert captured["payload"]["store"] is False
+    assert "max_output_tokens" not in captured["payload"]
+    record_probe_result.assert_awaited_once_with(account_id=account_id, http_status=200)
+
+
+@pytest.mark.asyncio
 async def test_probe_active_account_returns_snapshot_when_advisory_settlement_fails(async_client, monkeypatch):
     async def _fake_probe(self, *, access_token, chatgpt_account_id, model):
         del access_token
@@ -172,7 +225,7 @@ async def test_probe_active_account_returns_snapshot_when_advisory_settlement_fa
         del model
         return 200
 
-    async def _force_refresh_fetches_without_writing(self, account, *, ignore_refresh_disabled=False):  # noqa: ARG001
+    async def _force_refresh_fetches_without_writing(self, account, *, ignore_refresh_disabled=False, **kwargs):  # noqa: ARG001
         return AccountRefreshResult(usage_written=False, fetch_succeeded=True)
 
     record_probe_result = AsyncMock(side_effect=RuntimeError("local settlement unavailable"))
@@ -515,3 +568,66 @@ async def test_probe_uses_default_model_when_body_omitted(async_client, monkeypa
     # *some* model string rather than coupling the test to the constant.
     assert isinstance(captured["model"], str)
     assert captured["model"]
+
+
+@pytest.mark.asyncio
+async def test_probe_recovers_stale_rate_limited_account_to_active(async_client, monkeypatch):
+    import time
+
+    from app.db.models import Account, AccountStatus
+    from app.db.session import get_background_session
+
+    async def _fake_probe(self, *, access_token, chatgpt_account_id, model):  # noqa: ARG001
+        return 200
+
+    async def _fake_fetch_usage(**_kwargs):
+        return UsagePayload.model_validate(
+            {
+                "plan_type": "pro",
+                "rate_limit": {
+                    "primary_window": {
+                        "used_percent": 0.0,
+                        "reset_at": int(time.time()) + 3600,
+                        "window_minutes": 300,
+                    },
+                    "secondary_window": {
+                        "used_percent": 10.0,
+                        "reset_at": int(time.time()) + 86400,
+                        "window_minutes": 10080,
+                    },
+                },
+            }
+        )
+
+    monkeypatch.setattr(AccountsService, "_send_probe_request", _fake_probe)
+    monkeypatch.setattr("app.modules.usage.updater.fetch_usage", _fake_fetch_usage)
+
+    account_id = await _import_test_account(
+        async_client,
+        email="probe-recover-stale@example.com",
+        account_id="acc_probe_recover_stale",
+        plan_type="pro",
+    )
+
+    now = int(time.time())
+    async with get_background_session() as session:
+        account = await session.get(Account, account_id)
+        assert account is not None
+        account.status = AccountStatus.RATE_LIMITED
+        account.blocked_at = now - 5
+        account.reset_at = now + 3600
+        await session.commit()
+
+    response = await async_client.post(f"/api/accounts/{account_id}/probe")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["accountStatusBefore"] == "rate_limited"
+    assert body["accountStatusAfter"] == "active"
+    assert body["probeStatusCode"] == 200
+
+    async with get_background_session() as session:
+        account = await session.get(Account, account_id)
+        assert account is not None
+        assert account.status == AccountStatus.ACTIVE
+        assert account.blocked_at is None
+        assert account.reset_at is None

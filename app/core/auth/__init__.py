@@ -16,9 +16,9 @@ DEFAULT_PLAN = "unknown"
 class AuthTokens(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
-    id_token: str = Field(alias="idToken")
+    id_token: str | None = Field(default=None, alias="idToken")
     access_token: str = Field(alias="accessToken")
-    refresh_token: str = Field(alias="refreshToken")
+    refresh_token: str | None = Field(default=None, alias="refreshToken")
     account_id: str | None = Field(default=None, alias="accountId")
 
 
@@ -32,6 +32,32 @@ class AuthFile(BaseModel):
         alias="lastRefreshAt",
         validation_alias=AliasChoices("lastRefreshAt", "last_refresh"),
         serialization_alias="lastRefreshAt",
+    )
+    email: str | None = None
+    plan_type: str | None = Field(
+        default=None,
+        alias="planType",
+        validation_alias=AliasChoices("planType", "plan_type"),
+    )
+    workspace_id: str | None = Field(
+        default=None,
+        alias="workspaceId",
+        validation_alias=AliasChoices("workspaceId", "workspace_id"),
+    )
+    workspace_label: str | None = Field(
+        default=None,
+        alias="workspaceLabel",
+        validation_alias=AliasChoices("workspaceLabel", "workspace_label"),
+    )
+    seat_type: str | None = Field(
+        default=None,
+        alias="seatType",
+        validation_alias=AliasChoices("seatType", "seat_type"),
+    )
+    account_id: str | None = Field(
+        default=None,
+        alias="accountId",
+        validation_alias=AliasChoices("accountId", "account_id"),
     )
 
 
@@ -155,7 +181,9 @@ def parse_auth_json(raw: bytes) -> AuthFile:
     return model
 
 
-def extract_id_token_claims(id_token: str) -> IdTokenClaims:
+def extract_id_token_claims(id_token: str | None) -> IdTokenClaims:
+    if not id_token or not isinstance(id_token, str):
+        return IdTokenClaims()
     try:
         parts = id_token.split(".")
         if len(parts) < 2:
@@ -173,20 +201,40 @@ def extract_id_token_claims(id_token: str) -> IdTokenClaims:
 
 def claims_from_auth(auth: AuthFile) -> AccountClaims:
     claims = extract_id_token_claims(auth.tokens.id_token)
+    if not claims.model_dump(exclude_none=True) and auth.tokens.access_token:
+        access_claims = extract_id_token_claims(auth.tokens.access_token)
+        if access_claims.model_dump(exclude_none=True):
+            claims = access_claims
     auth_claims = claims.auth or OpenAIAuthClaims()
-    plan_type = auth_claims.chatgpt_plan_type or claims.chatgpt_plan_type
+    plan_type = auth.plan_type or auth_claims.chatgpt_plan_type or claims.chatgpt_plan_type
+    account_id = (
+        auth.account_id
+        or auth.tokens.account_id
+        or auth_claims.chatgpt_account_id
+        or claims.chatgpt_account_id
+    )
+    email = auth.email or claims.email
+    workspace_id = clean_account_identity_part(
+        auth.workspace_id or auth_claims.workspace_id or claims.workspace_id
+    )
+    workspace_label = clean_account_identity_part(
+        auth.workspace_label or auth_claims.workspace_label or claims.workspace_label
+    )
+    seat_type = normalize_seat_type(auth.seat_type or auth_claims.seat_type or claims.seat_type)
     return AccountClaims(
-        account_id=auth.tokens.account_id or auth_claims.chatgpt_account_id or claims.chatgpt_account_id,
-        email=claims.email,
+        account_id=account_id,
+        email=email,
         plan_type=plan_type,
-        workspace_id=clean_account_identity_part(auth_claims.workspace_id or claims.workspace_id),
-        workspace_label=clean_account_identity_part(auth_claims.workspace_label or claims.workspace_label),
-        seat_type=normalize_seat_type(auth_claims.seat_type or claims.seat_type),
+        workspace_id=workspace_id,
+        workspace_label=workspace_label,
+        seat_type=seat_type,
         chatgpt_user_id=resolve_seat_identity(claims, auth_claims),
     )
 
 
-def token_expiry_epoch_ms(token: str) -> int | None:
+def token_expiry_epoch_ms(token: str | None) -> int | None:
+    if not token or not isinstance(token, str):
+        return None
     claims = extract_id_token_claims(token)
     exp = claims.exp
     if isinstance(exp, (int, float)):

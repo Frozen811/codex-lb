@@ -11,6 +11,11 @@ from app.core.auth.dependencies import (
 )
 from app.core.exceptions import DashboardBadRequestError, DashboardConflictError, DashboardNotFoundError
 from app.dependencies import AutomationsContext, get_automations_context
+from app.modules.automations.presets import (
+    AutomationPresetResponse,
+    get_automation_preset,
+    list_automation_presets,
+)
 from app.modules.automations.schemas import (
     AutomationDeleteResponse,
     AutomationJobCreateRequest,
@@ -42,6 +47,41 @@ router = APIRouter(
     tags=["dashboard"],
     dependencies=[Depends(validate_dashboard_session), Depends(set_dashboard_error_format)],
 )
+
+
+@router.get("/presets", response_model=list[AutomationPresetResponse])
+async def list_presets() -> list[AutomationPresetResponse]:
+    return list_automation_presets()
+
+
+@router.post("/presets/{preset_id}/create", response_model=AutomationJobResponse)
+async def create_automation_from_preset(
+    preset_id: str,
+    _write_access=Depends(require_dashboard_write_access),
+    context: AutomationsContext = Depends(get_automations_context),
+) -> AutomationJobResponse:
+    preset = get_automation_preset(preset_id)
+    if preset is None:
+        raise DashboardNotFoundError(f"Automation preset not found: {preset_id}", code="preset_not_found")
+    input_data = AutomationJobCreateInput(
+        name=preset.name,
+        enabled=True,
+        include_paused_accounts=False,
+        schedule_type=preset.schedule_type,
+        schedule_time=preset.default_time,
+        schedule_timezone=preset.default_timezone,
+        schedule_threshold_minutes=15,
+        schedule_days=preset.default_days,
+        model=preset.model,
+        reasoning_effort=None,
+        prompt=preset.prompt,
+        account_ids=[],
+    )
+    try:
+        job = await context.service.create_job(input_data)
+    except AutomationValidationError as exc:
+        raise DashboardBadRequestError(str(exc), code=exc.code) from exc
+    return _to_job_response(job)
 
 
 @router.get("", response_model=AutomationJobsListResponse)

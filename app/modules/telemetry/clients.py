@@ -5,9 +5,15 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 CLIENT_FAMILY_BY_RAW_GROUP: dict[str, str] = {
+    "codex_cli_rs": "codex-cli",
+    "codex": "codex-cli",
+    "codex-cli": "codex-cli",
     "codex_exec": "codex-cli",
     "codex-tui": "codex-cli",
     "Codex Desktop": "codex-desktop",
+    "codex desktop": "codex-desktop",
+    "codex_chatgpt_desktop": "codex-desktop",
+    "codex_atlas": "codex-desktop",
     "codex_vscode": "codex-vscode",
     "AsyncOpenAI": "openai-sdk-python",
     "OpenAI": "openai-sdk-js",

@@ -14,6 +14,7 @@ from app.core.auth.dashboard_session_ttl import DEFAULT_DASHBOARD_SESSION_TTL_SE
 from app.core.exceptions import DashboardSettingsConflictError
 from app.core.upstream_proxy.cache import get_upstream_route_cache
 from app.db.models import DashboardSettings, DashboardUser, LocalLoginPolicy, ModelContextWindowOverride
+from app.db.session import sqlite_writer_section
 from app.modules.dashboard_users.repository import DashboardUsersRepository
 
 _SETTINGS_ID = 1
@@ -85,6 +86,7 @@ class SettingsRepository:
             auto_redeem_reset_credits_before_expiry=False,
             show_reset_credit_expiry_badge=True,
             routing_strategy="capacity_weighted",
+            subagent_account_preference="off",
             relative_availability_power=2.0,
             relative_availability_top_k=5,
             single_account_id=None,
@@ -132,7 +134,8 @@ class SettingsRepository:
         )
         self._session.add(row)
         try:
-            await self._session.commit()
+            async with sqlite_writer_section():
+                await self._session.commit()
         except IntegrityError:
             await self._session.rollback()
             existing = await self._session.get(DashboardSettings, _SETTINGS_ID)
@@ -179,6 +182,7 @@ class SettingsRepository:
         auto_redeem_reset_credits_before_expiry: bool | None = None,
         show_reset_credit_expiry_badge: bool | None = None,
         routing_strategy: str | None = None,
+        subagent_account_preference: str | None = None,
         relative_availability_power: float | None = None,
         relative_availability_top_k: int | None = None,
         single_account_id: str | None = None,
@@ -344,6 +348,8 @@ class SettingsRepository:
             settings.show_reset_credit_expiry_badge = show_reset_credit_expiry_badge
         if routing_strategy is not None:
             settings.routing_strategy = routing_strategy
+        if subagent_account_preference is not None:
+            settings.subagent_account_preference = subagent_account_preference
         if relative_availability_power is not None:
             settings.relative_availability_power = relative_availability_power
         if relative_availability_top_k is not None:
@@ -541,7 +547,8 @@ class SettingsRepository:
         self, settings: DashboardSettings, *, on_committed: Callable[[], None] | None = None
     ) -> None:
         try:
-            await self._session.commit()
+            async with sqlite_writer_section():
+                await self._session.commit()
         except StaleDataError as exc:
             # The optimistic version check (DashboardSettings.version) matched
             # zero rows: another writer (replica or request) committed first.
@@ -585,21 +592,23 @@ class ModelContextWindowOverridesRepository:
         insert_fn = _UPSERT_INSERT_FNS.get(dialect)
         if insert_fn is None:
             raise RuntimeError(f"model_context_window_overrides upsert unsupported for dialect={dialect!r}")
-        statement = insert_fn(ModelContextWindowOverride).values(slug=slug, context_window=context_window)
-        await self._session.execute(
-            statement.on_conflict_do_update(
-                index_elements=[ModelContextWindowOverride.slug],
-                set_={"context_window": context_window, "updated_at": func.now()},
+        async with sqlite_writer_section():
+            statement = insert_fn(ModelContextWindowOverride).values(slug=slug, context_window=context_window)
+            await self._session.execute(
+                statement.on_conflict_do_update(
+                    index_elements=[ModelContextWindowOverride.slug],
+                    set_={"context_window": context_window, "updated_at": func.now()},
+                )
             )
-        )
-        await self._session.commit()
+            await self._session.commit()
 
     async def delete(self, slug: str) -> bool:
         row = await self._session.get(ModelContextWindowOverride, slug)
         if row is None:
             return False
-        await self._session.delete(row)
-        await self._session.commit()
+        async with sqlite_writer_section():
+            await self._session.delete(row)
+            await self._session.commit()
         return True
 
 

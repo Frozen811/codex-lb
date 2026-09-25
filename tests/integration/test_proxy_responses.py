@@ -4,7 +4,9 @@ import asyncio
 import base64
 import json
 import logging
+import time
 from collections.abc import AsyncIterator, Iterator, Mapping
+from datetime import timedelta
 from types import SimpleNamespace
 from typing import cast
 
@@ -17,14 +19,17 @@ import app.modules.proxy.api as proxy_api_module
 import app.modules.proxy.downstream_delivery as downstream_delivery_module
 import app.modules.proxy.service as proxy_module
 from app.core.auth import generate_unique_account_id
+from app.core.auth.refresh import RefreshError, TokenRefreshResult
 from app.core.config.settings import Settings
+from app.core.crypto import TokenEncryptor
 from app.core.http_protocol import HTTP_DISCONNECTED_STATE
 from app.core.openai.models import CompactResponsePayload
 from app.core.openai.requests import ResponsesRequest
 from app.core.types import JsonValue
 from app.core.utils.time import utcnow
-from app.db.models import Account, DashboardSettings, RequestLog, StickySessionKind
+from app.db.models import Account, AccountStatus, DashboardSettings, RequestLog, StickySessionKind
 from app.db.session import SessionLocal
+from app.modules.accounts import auth_manager as auth_manager_module
 from app.modules.api_keys.service import ApiKeyUsageReservationData
 from app.modules.proxy._service.streaming import retry as streaming_retry_module
 from app.modules.proxy.downstream_delivery import (
@@ -158,6 +163,53 @@ def _disable_http_bridge(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(proxy_module, "get_settings_cache", lambda: _SettingsCache())
     monkeypatch.setattr(proxy_module, "get_settings", lambda: app_settings)
+
+
+@pytest.mark.asyncio
+async def test_v1_responses_health_write_failure_keeps_one_terminal(async_client, monkeypatch, caplog):
+    auth_json = _make_auth_json("acc_post_terminal_health", "post-terminal-health@example.com")
+    imported = await async_client.post(
+        "/api/accounts/import",
+        files={"auth_json": ("auth.json", json.dumps(auth_json), "application/json")},
+    )
+    assert imported.status_code == 200
+    health_attempts = []
+
+    async def fake_stream(*args, **kwargs):
+        yield 'data: {"type":"response.created","response":{"id":"resp_health_failure"}}\n\n'
+        yield 'data: {"type":"response.output_text.delta","delta":"hi"}\n\n'
+        raise proxy_client_module.ProxyResponseError(
+            429,
+            {"error": {"code": "usage_limit_reached", "message": "quota exhausted", "type": "rate_limit_error"}},
+        )
+
+    async def fail_health(self, account, error, code, **kwargs):
+        health_attempts.append(code)
+        raise RuntimeError("injected post-terminal health write failure")
+
+    monkeypatch.setattr(proxy_module, "core_stream_responses", fake_stream)
+    monkeypatch.setattr(proxy_module.ProxyService, "_handle_stream_error", fail_health)
+
+    response = await async_client.post(
+        "/v1/responses",
+        json={"model": "gpt-5.1", "instructions": "hi", "input": "hello", "stream": True},
+    )
+
+    assert response.status_code == 200
+    events = list(_iter_sse_events(response.text.splitlines()))
+    terminals = [
+        event
+        for event in events
+        if event.get("type") in {"response.failed", "response.completed", "response.incomplete", "error"}
+    ]
+    assert len(terminals) == 1
+    assert terminals[0]["response"]["error"]["code"] == "usage_limit_reached"
+    assert health_attempts == ["usage_limit_reached"]
+    health_logs = [
+        record for record in caplog.records if "Failed to write post-terminal stream health" in record.message
+    ]
+    assert len(health_logs) == 1
+    assert health_logs[0].exc_info is not None
 
 
 @pytest.mark.asyncio
@@ -564,6 +616,76 @@ async def test_backend_responses_forwards_explicit_empty_tools(async_client, mon
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["/backend-api/codex/responses", "/v1/responses"])
+@pytest.mark.parametrize("access_accepted", [True, False], ids=["access-accepted", "access-rejected"])
+async def test_responses_preflight_retains_unexpired_access_after_refresh_failure(
+    async_client, monkeypatch, path, access_accepted
+):
+    auth_manager_module._clear_refresh_singleflight_state()
+    raw_account_id = "acc_preflight_refresh_invalidated"
+    auth_json = _make_auth_json(raw_account_id, "preflight-refresh@example.com")
+    access_token = _encode_jwt({"exp": int(time.time()) + 3600})
+    auth_json["tokens"]["accessToken"] = access_token
+    response = await async_client.post(
+        "/api/accounts/import",
+        files={"auth_json": ("auth.json", json.dumps(auth_json), "application/json")},
+    )
+    assert response.status_code == 200
+
+    async with SessionLocal() as session:
+        account = (await session.execute(select(Account))).scalars().one()
+        account.last_refresh = utcnow() - timedelta(days=9)
+        before = (account.access_token_encrypted, account.refresh_token_encrypted, account.last_refresh)
+        await session.commit()
+
+    refresh_calls = 0
+    dispatched_tokens: list[str] = []
+
+    async def reject_refresh(_token: str, **_kwargs: object) -> TokenRefreshResult:
+        nonlocal refresh_calls
+        refresh_calls += 1
+        raise RefreshError("refresh_token_invalidated", "Refresh token was revoked", True)
+
+    async def accept_access(payload, headers, access_token, account_id, **kwargs):
+        del payload, headers, kwargs
+        assert account_id == raw_account_id
+        dispatched_tokens.append(access_token)
+        if not access_accepted:
+            raise proxy_module.ProxyResponseError(
+                401, {"error": {"code": "invalid_api_key", "message": "Access token rejected"}}
+            )
+        yield (
+            'data: {"type":"response.completed","response":{"id":"resp_retained_access",'
+            '"object":"response","status":"completed","output":[]}}\n\n'
+        )
+
+    monkeypatch.setattr(auth_manager_module, "refresh_access_token", reject_refresh)
+    monkeypatch.setattr(proxy_module, "core_stream_responses", accept_access)
+
+    response = await async_client.post(
+        path,
+        json={"model": "gpt-5.4", "instructions": "hi", "input": [], "stream": True},
+    )
+
+    if access_accepted:
+        assert response.status_code == 200
+        event = _extract_first_event(response.text.splitlines())
+        assert event["type"] == "response.completed"
+    else:
+        assert response.status_code == 401
+        assert response.json()["error"]["code"] == "invalid_api_key"
+    assert refresh_calls == 1
+    assert dispatched_tokens == [access_token]
+    async with SessionLocal() as session:
+        account = (await session.execute(select(Account))).scalars().one()
+        assert account.status == AccountStatus.REAUTH_REQUIRED
+        assert account.deactivation_reason is not None
+        assert "re-login required" in account.deactivation_reason
+        assert (account.access_token_encrypted, account.refresh_token_encrypted, account.last_refresh) == before
+        assert TokenEncryptor().decrypt(account.access_token_encrypted) == access_token
+
+
+@pytest.mark.asyncio
 async def test_backend_responses_preserves_non_message_developer_directive(async_client, monkeypatch):
     raw_account_id = "acc_future_directive"
     auth_json = _make_auth_json(raw_account_id, "future-directive@example.com")
@@ -664,6 +786,161 @@ async def test_proxy_responses_repeated_401_after_refresh_fails_over(async_clien
     assert event["response"]["id"] == "resp_stream_failover"
     assert captured_account_ids[0] == invalidated_account_id
     assert captured_account_ids[1] != invalidated_account_id
+
+
+@pytest.mark.asyncio
+async def test_proxy_responses_revoked_token_event_retires_account_and_fails_over(async_client, monkeypatch):
+    account_ids: list[str] = []
+    for suffix in ("a", "b"):
+        raw_account_id = f"acc_stream_token_revoked_{suffix}"
+        email = f"stream-token-revoked-{suffix}@example.com"
+        auth_json = _make_auth_json(raw_account_id, email)
+        response = await async_client.post(
+            "/api/accounts/import",
+            files={"auth_json": (f"auth-{suffix}.json", json.dumps(auth_json), "application/json")},
+        )
+        assert response.status_code == 200
+        account_ids.append(generate_unique_account_id(raw_account_id, email))
+
+    captured_account_ids: list[str | None] = []
+    captured_payloads: list[ResponsesRequest] = []
+    revoked_upstream_account_id: str | None = None
+
+    async def fake_stream(payload, headers, access_token, account_id, base_url=None, raise_for_status=False, **kwargs):
+        del headers, access_token, base_url, raise_for_status, kwargs
+        nonlocal revoked_upstream_account_id
+        if revoked_upstream_account_id is None:
+            revoked_upstream_account_id = account_id
+        captured_account_ids.append(account_id)
+        captured_payloads.append(payload)
+        if account_id == revoked_upstream_account_id:
+            yield (
+                'data: {"type":"response.failed","sequence_number":2,'
+                '"response":{"id":"resp_token_revoked","status":"failed",'
+                '"error":{"code":"token_revoked","type":"authentication_error",'
+                '"message":"Encountered invalidated oauth token for user, failing request"}}}\n\n'
+            )
+            return
+        yield (
+            'data: {"type":"response.completed","response":{"id":"resp_token_revoked_failover",'
+            '"object":"response","status":"completed","usage":{"input_tokens":2,"output_tokens":1}}}\n\n'
+        )
+
+    monkeypatch.setattr(proxy_module, "core_stream_responses", fake_stream)
+
+    async with async_client.stream(
+        "POST",
+        "/backend-api/codex/responses",
+        json={
+            "model": "gpt-5.6-sol",
+            "instructions": "hi",
+            "input": [
+                {"type": "message", "role": "user", "content": "first question"},
+                {
+                    "type": "reasoning",
+                    "id": "rs_revoked_owner",
+                    "encrypted_content": "opaque-state",
+                    "summary": [],
+                },
+                {
+                    "type": "message",
+                    "id": "msg_revoked_owner",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [{"type": "output_text", "text": "prior answer"}],
+                },
+                {"type": "message", "role": "user", "content": "continue"},
+            ],
+            "stream": True,
+            "prompt_cache_key": "stream-token-revoked-sticky",
+        },
+    ) as resp:
+        assert resp.status_code == 200
+        lines = [line async for line in resp.aiter_lines() if line]
+
+    event = _extract_first_event(lines)
+    assert event["type"] == "response.completed"
+    assert event["response"]["id"] == "resp_token_revoked_failover"
+    assert captured_account_ids[0] == revoked_upstream_account_id
+    assert captured_account_ids[1] != revoked_upstream_account_id
+    initial_input = captured_payloads[0].input
+    replay_input = captured_payloads[1].input
+    assert isinstance(initial_input, list)
+    assert isinstance(replay_input, list)
+    assert any(isinstance(item, dict) and item.get("type") == "reasoning" for item in initial_input)
+    assert all(not isinstance(item, dict) or item.get("type") != "reasoning" for item in replay_input)
+    assert all(not isinstance(item, dict) or "id" not in item for item in replay_input)
+
+    async with SessionLocal() as session:
+        accounts = {account.id: account for account in (await session.execute(select(Account))).scalars().all()}
+    revoked_account = next(
+        account for account in accounts.values() if account.chatgpt_account_id == revoked_upstream_account_id
+    )
+    assert revoked_account.id in account_ids
+    assert revoked_account.status == AccountStatus.REAUTH_REQUIRED
+    assert revoked_account.deactivation_reason == "Authentication token revoked - re-login required"
+
+
+@pytest.mark.asyncio
+async def test_proxy_responses_hard_owner_token_revoked_preserves_auth_error(async_client, monkeypatch):
+    raw_account_id = "acc_stream_token_revoked_owner"
+    email = "stream-token-revoked-owner@example.com"
+    auth_json = _make_auth_json(raw_account_id, email)
+    response = await async_client.post(
+        "/api/accounts/import",
+        files={"auth_json": ("auth-owner.json", json.dumps(auth_json), "application/json")},
+    )
+    assert response.status_code == 200
+
+    internal_account_id = generate_unique_account_id(raw_account_id, email)
+    captured_account_ids: list[str | None] = []
+
+    async def resolve_owner(self, *, previous_response_id, api_key, session_id, surface):
+        del self, api_key, session_id, surface
+        assert previous_response_id == "resp_revoked_hard_owner"
+        return internal_account_id
+
+    async def fake_stream(payload, headers, access_token, account_id, base_url=None, raise_for_status=False, **kwargs):
+        del payload, headers, access_token, base_url, raise_for_status, kwargs
+        captured_account_ids.append(account_id)
+        yield (
+            'data: {"type":"response.failed","sequence_number":2,'
+            '"response":{"id":"resp_revoked_hard_owner_failure","status":"failed",'
+            '"error":{"code":"token_revoked","type":"authentication_error",'
+            '"message":"Encountered invalidated oauth token for user, failing request"}}}\n\n'
+        )
+
+    monkeypatch.setattr(proxy_module.ProxyService, "_resolve_websocket_previous_response_owner", resolve_owner)
+    monkeypatch.setattr(proxy_module, "core_stream_responses", fake_stream)
+
+    async with async_client.stream(
+        "POST",
+        "/backend-api/codex/responses",
+        json={
+            "model": "gpt-5.6-sol",
+            "instructions": "continue",
+            "input": [],
+            "previous_response_id": "resp_revoked_hard_owner",
+            "stream": True,
+        },
+    ) as resp:
+        assert resp.status_code == 200
+        lines = [line async for line in resp.aiter_lines() if line]
+
+    event = _extract_first_event(lines)
+    assert event["type"] == "response.failed"
+    assert event["response"]["error"] == {
+        "code": "token_revoked",
+        "message": "Encountered invalidated oauth token for user, failing request",
+        "type": "authentication_error",
+    }
+    assert captured_account_ids == [raw_account_id]
+
+    async with SessionLocal() as session:
+        account = await session.get(Account, internal_account_id)
+    assert account is not None
+    assert account.status == AccountStatus.REAUTH_REQUIRED
+    assert account.deactivation_reason == "Authentication token revoked - re-login required"
 
 
 @pytest.mark.asyncio
@@ -1613,6 +1890,72 @@ async def test_v1_responses_missing_previous_response_owner_fails_closed_before_
             "previous_response_id": "resp_prev_http_missing_owner",
         },
         headers={"session_id": "sid_prev_http_missing_owner"},
+    )
+
+    assert response.status_code == 502
+    assert response.json()["error"]["code"] == "previous_response_owner_unavailable"
+    assert response.json()["error"]["message"] == "Previous response owner account is unavailable; retry later."
+
+
+@pytest.mark.asyncio
+async def test_v1_responses_single_account_missing_previous_response_owner_fails_closed_without_dispatch(
+    async_client,
+    monkeypatch,
+):
+    auth_json = _make_auth_json("acc_prev_single_cand", "prev-single-cand@example.com")
+    files = {"auth_json": ("auth.json", json.dumps(auth_json), "application/json")}
+    response = await async_client.post("/api/accounts/import", files=files)
+    assert response.status_code == 200
+
+    async def fake_stream(*args, **kwargs):
+        raise AssertionError("missing previous_response_id owner must fail closed even with 1 account")
+
+    async def fake_resolve_owner(self, *, previous_response_id, api_key, session_id, surface):
+        del self, previous_response_id, api_key, session_id, surface
+        return None
+
+    monkeypatch.setattr(proxy_module, "core_stream_responses", fake_stream)
+    monkeypatch.setattr(proxy_module.ProxyService, "_resolve_websocket_previous_response_owner", fake_resolve_owner)
+
+    response = await async_client.post(
+        "/v1/responses",
+        json={
+            "model": "gpt-5.1",
+            "input": "continue",
+            "previous_response_id": "resp_prev_single_missing_owner",
+        },
+        headers={"session_id": "sid_prev_single_missing_owner"},
+    )
+
+    assert response.status_code == 502
+    assert response.json()["error"]["code"] == "previous_response_owner_unavailable"
+    assert response.json()["error"]["message"] == "Previous response owner account is unavailable; retry later."
+
+
+@pytest.mark.asyncio
+async def test_v1_responses_compact_single_account_missing_previous_response_owner_fails_closed(
+    async_client,
+    monkeypatch,
+):
+    auth_json = _make_auth_json("acc_prev_compact_single", "prev-compact-single@example.com")
+    files = {"auth_json": ("auth.json", json.dumps(auth_json), "application/json")}
+    response = await async_client.post("/api/accounts/import", files=files)
+    assert response.status_code == 200
+
+    async def fake_resolve_owner(self, *, previous_response_id, api_key, session_id, surface):
+        del self, previous_response_id, api_key, session_id, surface
+        return None
+
+    monkeypatch.setattr(proxy_module.ProxyService, "_resolve_websocket_previous_response_owner", fake_resolve_owner)
+
+    response = await async_client.post(
+        "/v1/responses/compact",
+        json={
+            "model": "gpt-5.1",
+            "input": [{"role": "user", "content": [{"type": "input_text", "text": "continue"}]}],
+            "previous_response_id": "resp_prev_compact_missing_owner",
+        },
+        headers={"session_id": "sid_prev_compact_missing_owner"},
     )
 
     assert response.status_code == 502

@@ -59,4 +59,26 @@ describe("useApiKeys", () => {
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["api-keys", "list"] });
     });
   });
+
+  it("resets limit usage individually and in bulk", async () => {
+    const queryClient = createTestQueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+
+    const { result } = renderHook(() => useApiKeys(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => expect(result.current.apiKeysQuery.isSuccess).toBe(true));
+    const keys = result.current.apiKeysQuery.data ?? [];
+    expect(keys.length).toBeGreaterThan(0);
+
+    // Single reset
+    await result.current.resetUsageMutation.mutateAsync(keys[0].id);
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["api-keys", "list"] });
+
+    // Bulk reset
+    invalidateSpy.mockClear();
+    await result.current.bulkResetUsageMutation.mutateAsync([keys[0].id]);
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["api-keys", "list"] });
+  });
 });

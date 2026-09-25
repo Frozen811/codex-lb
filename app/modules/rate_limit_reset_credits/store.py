@@ -74,6 +74,9 @@ class RateLimitResetCreditsStore:
     def get(self, account_id: str) -> RateLimitResetCreditsSnapshot | None:
         return self._snapshots.get(account_id)
 
+    def list_all(self) -> dict[str, RateLimitResetCreditsSnapshot]:
+        return dict(self._snapshots)
+
     async def invalidate(self, account_id: str | None = None) -> None:
         async with self._lock:
             if account_id is None:

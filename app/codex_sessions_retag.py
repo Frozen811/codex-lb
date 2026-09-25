@@ -66,6 +66,7 @@ def retag_codex_sessions(
     codex_home: Path,
     source_provider: str,
     target_provider: str,
+    session_id: str | None = None,
     dry_run: bool = False,
     progress_logger: ProgressLogger | None = None,
 ) -> RetagResult:
@@ -83,16 +84,24 @@ def retag_codex_sessions(
     codex_home = codex_home.expanduser().resolve()
     sessions_dir = codex_home / "sessions"
     log(f"Using Codex home {codex_home}")
+    if session_id:
+        log(f"Targeting single session {session_id}")
     log(f"Retagging Codex sessions from {source_provider} to {target_provider}")
 
     # Build the full write set before taking a backup so dry-runs and real
     # retags report the same targets.
-    jsonl_files = tuple(_find_jsonl_session_files(sessions_dir))
+    jsonl_files = tuple(_find_jsonl_session_files(sessions_dir, target_session_id=session_id))
     state_dbs = tuple(_find_state_dbs(codex_home))
     provider_counts_before = _provider_counts(codex_home)
-    jsonl_files_to_update = tuple(path for path in jsonl_files if _jsonl_contains_provider(path, source_provider))
-    sqlite_dbs_to_update = tuple(db for db in state_dbs if _sqlite_count_provider_rows(db, source_provider) > 0)
-    sqlite_rows_matched = sum(_sqlite_count_provider_rows(db, source_provider) for db in sqlite_dbs_to_update)
+    jsonl_files_to_update = tuple(
+        path for path in jsonl_files if _jsonl_contains_provider(path, source_provider, target_session_id=session_id)
+    )
+    sqlite_dbs_to_update = tuple(
+        db for db in state_dbs if _sqlite_count_provider_rows(db, source_provider, target_session_id=session_id) > 0
+    )
+    sqlite_rows_matched = sum(
+        _sqlite_count_provider_rows(db, source_provider, target_session_id=session_id) for db in sqlite_dbs_to_update
+    )
 
     methods_used = _methods_used(jsonl_files_to_update, sqlite_dbs_to_update)
     log(f"JSONL sessions method scanned {len(jsonl_files)} files under {sessions_dir}")
@@ -109,13 +118,15 @@ def retag_codex_sessions(
         log(f"Created backup at {backup_path}")
 
         for path in jsonl_files_to_update:
-            if _retag_jsonl_file(path, source_provider, target_provider):
+            if _retag_jsonl_file(path, source_provider, target_provider, target_session_id=session_id):
                 jsonl_files_updated += 1
         if jsonl_files_to_update:
             log(f"Updated {jsonl_files_updated} JSONL session file(s)")
 
         for db_path in sqlite_dbs_to_update:
-            sqlite_rows_updated += _update_sqlite_provider(db_path, source_provider, target_provider)
+            sqlite_rows_updated += _update_sqlite_provider(
+                db_path, source_provider, target_provider, target_session_id=session_id
+            )
         if sqlite_dbs_to_update:
             log(f"Updated {sqlite_rows_updated} SQLite thread row(s)")
     else:
@@ -202,10 +213,32 @@ def _wsl_path_from_windows_userprofile(userprofile: str) -> Path:
     return Path("/mnt") / drive.lower() / Path(*parts)
 
 
-def _find_jsonl_session_files(sessions_dir: Path) -> tuple[Path, ...]:
+def _jsonl_record_matches_session(record: JsonObject, target_session_id: str) -> bool:
+    if record.get("session_id") == target_session_id or record.get("id") == target_session_id:
+        return True
+    payload = record.get("payload")
+    if isinstance(payload, dict):
+        if payload.get("session_id") == target_session_id or payload.get("id") == target_session_id:
+            return True
+        if payload.get("thread_id") == target_session_id:
+            return True
+    return False
+
+
+def _find_jsonl_session_files(sessions_dir: Path, target_session_id: str | None = None) -> tuple[Path, ...]:
     if not sessions_dir.is_dir():
         return ()
-    return tuple(sorted(path for path in sessions_dir.rglob("*.jsonl") if path.is_file()))
+    all_files = sorted(path for path in sessions_dir.rglob("*.jsonl") if path.is_file())
+    if target_session_id:
+        matched = [p for p in all_files if target_session_id in p.name]
+        if matched:
+            return tuple(matched)
+        return tuple(
+            p
+            for p in all_files
+            if any(_jsonl_record_matches_session(r, target_session_id) for r in _read_jsonl_records(p))
+        )
+    return tuple(all_files)
 
 
 def _find_state_dbs(codex_home: Path) -> tuple[Path, ...]:
@@ -219,11 +252,18 @@ def _state_db_sort_key(path: Path) -> tuple[int, str]:
     return version, path.name
 
 
-def _jsonl_contains_provider(path: Path, provider: str) -> bool:
-    return any(_jsonl_record_provider(record) == provider for record in _read_jsonl_records(path))
+def _jsonl_contains_provider(path: Path, provider: str, target_session_id: str | None = None) -> bool:
+    for record in _read_jsonl_records(path):
+        if target_session_id and not _jsonl_record_matches_session(record, target_session_id):
+            continue
+        if _jsonl_record_provider(record) == provider:
+            return True
+    return False
 
 
-def _retag_jsonl_file(path: Path, source_provider: str, target_provider: str) -> bool:
+def _retag_jsonl_file(
+    path: Path, source_provider: str, target_provider: str, target_session_id: str | None = None
+) -> bool:
     changed = False
     temp_path: Path | None = None
     try:
@@ -242,11 +282,15 @@ def _retag_jsonl_file(path: Path, source_provider: str, target_provider: str) ->
                 except json.JSONDecodeError:
                     output_handle.write(raw_line)
                     continue
-                if isinstance(record, dict) and _retag_jsonl_record_provider(record, source_provider, target_provider):
-                    # Preserve invalid or unrelated JSONL lines verbatim; only
-                    # matched session records are normalized through json.dumps.
-                    changed = True
-                    output_handle.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
+                if isinstance(record, dict):
+                    if target_session_id and not _jsonl_record_matches_session(record, target_session_id):
+                        output_handle.write(raw_line)
+                        continue
+                    if _retag_jsonl_record_provider(record, source_provider, target_provider):
+                        changed = True
+                        output_handle.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
+                    else:
+                        output_handle.write(raw_line)
                 else:
                     output_handle.write(raw_line)
     except Exception:
@@ -303,49 +347,85 @@ def _retag_jsonl_record_provider(record: JsonObject, source_provider: str, targe
     return True
 
 
-def _sqlite_count_provider_rows(db_path: Path, provider: str) -> int:
+def _sqlite_count_provider_rows(
+    db_path: Path, provider: str, target_session_id: str | None = None
+) -> int:
     try:
-        with _connect_sqlite(db_path, read_only=True) as conn:
+        conn = _connect_sqlite(db_path, read_only=True)
+        try:
             if not _sqlite_has_threads_table(conn):
                 return 0
             if not _sqlite_has_model_provider_column(conn):
                 return 0
-            row = conn.execute("SELECT COUNT(*) FROM threads WHERE model_provider = ?", (provider,)).fetchone()
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(threads)").fetchall()}
+            id_col = "id" if "id" in cols else ("thread_id" if "thread_id" in cols else None)
+            if target_session_id and id_col:
+                row = conn.execute(
+                    f"SELECT COUNT(*) FROM threads WHERE model_provider = ? AND {id_col} = ?",
+                    (provider, target_session_id),
+                ).fetchone()
+            else:
+                row = conn.execute("SELECT COUNT(*) FROM threads WHERE model_provider = ?", (provider,)).fetchone()
             return int(row[0]) if row is not None else 0
+        finally:
+            conn.close()
     except sqlite3.OperationalError as exc:
         if "unable to open database file" not in str(exc).casefold():
             raise
-        return _sqlite_count_provider_rows_via_copy(db_path, provider)
+        return _sqlite_count_provider_rows_via_copy(db_path, provider, target_session_id=target_session_id)
 
 
-def _update_sqlite_provider(db_path: Path, source_provider: str, target_provider: str) -> int:
+def _update_sqlite_provider(
+    db_path: Path, source_provider: str, target_provider: str, target_session_id: str | None = None
+) -> int:
     try:
-        return _update_sqlite_provider_in_place(db_path, source_provider, target_provider)
+        return _update_sqlite_provider_in_place(
+            db_path, source_provider, target_provider, target_session_id=target_session_id
+        )
     except sqlite3.OperationalError as exc:
         if "unable to open database file" not in str(exc).casefold():
             raise
         # Some bind mounts reject direct SQLite writes from inside a container.
         # Updating a sibling copy and moving it back keeps the operation scoped
         # to the mounted Codex home.
-        return _update_sqlite_provider_via_copy(db_path, source_provider, target_provider)
+        return _update_sqlite_provider_via_copy(
+            db_path, source_provider, target_provider, target_session_id=target_session_id
+        )
 
 
-def _update_sqlite_provider_in_place(db_path: Path, source_provider: str, target_provider: str) -> int:
-    with _connect_sqlite(db_path) as conn:
+def _update_sqlite_provider_in_place(
+    db_path: Path, source_provider: str, target_provider: str, target_session_id: str | None = None
+) -> int:
+    conn = _connect_sqlite(db_path)
+    try:
         if not _sqlite_has_threads_table(conn):
             return 0
-        cursor = conn.execute(
-            "UPDATE threads SET model_provider = ? WHERE model_provider = ?",
-            (target_provider, source_provider),
-        )
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(threads)").fetchall()}
+        id_col = "id" if "id" in cols else ("thread_id" if "thread_id" in cols else None)
+        if target_session_id and id_col:
+            cursor = conn.execute(
+                f"UPDATE threads SET model_provider = ? WHERE model_provider = ? AND {id_col} = ?",
+                (target_provider, source_provider, target_session_id),
+            )
+        else:
+            cursor = conn.execute(
+                "UPDATE threads SET model_provider = ? WHERE model_provider = ?",
+                (target_provider, source_provider),
+            )
         conn.commit()
         return int(cursor.rowcount if cursor.rowcount != -1 else 0)
+    finally:
+        conn.close()
 
 
-def _update_sqlite_provider_via_copy(db_path: Path, source_provider: str, target_provider: str) -> int:
+def _update_sqlite_provider_via_copy(
+    db_path: Path, source_provider: str, target_provider: str, target_session_id: str | None = None
+) -> int:
     temp_path = _copy_sqlite_to_temp(db_path)
     try:
-        updated = _update_sqlite_provider_in_place(temp_path, source_provider, target_provider)
+        updated = _update_sqlite_provider_in_place(
+            temp_path, source_provider, target_provider, target_session_id=target_session_id
+        )
         if updated:
             _replace_sqlite_db(temp_path, db_path)
         return updated
@@ -353,10 +433,12 @@ def _update_sqlite_provider_via_copy(db_path: Path, source_provider: str, target
         temp_path.unlink(missing_ok=True)
 
 
-def _sqlite_count_provider_rows_via_copy(db_path: Path, provider: str) -> int:
+def _sqlite_count_provider_rows_via_copy(
+    db_path: Path, provider: str, target_session_id: str | None = None
+) -> int:
     temp_path = _copy_sqlite_to_temp(db_path)
     try:
-        return _sqlite_count_provider_rows(temp_path, provider)
+        return _sqlite_count_provider_rows(temp_path, provider, target_session_id=target_session_id)
     finally:
         temp_path.unlink(missing_ok=True)
 
@@ -412,7 +494,8 @@ def _provider_counts(codex_home: Path) -> tuple[ProviderCount, ...]:
                 counts[provider] = counts.get(provider, 0) + 1
     for db_path in _find_state_dbs(codex_home):
         try:
-            with _connect_sqlite(db_path, read_only=True) as conn:
+            conn = _connect_sqlite(db_path, read_only=True)
+            try:
                 if not _sqlite_has_threads_table(conn):
                     continue
                 if not _sqlite_has_model_provider_column(conn):
@@ -423,6 +506,8 @@ def _provider_counts(codex_home: Path) -> tuple[ProviderCount, ...]:
                 for provider, count in rows:
                     if isinstance(provider, str):
                         counts[provider] = counts.get(provider, 0) + int(count)
+            finally:
+                conn.close()
         except sqlite3.OperationalError as exc:
             if "unable to open database file" not in str(exc).casefold():
                 raise
@@ -452,25 +537,38 @@ def _create_backup(codex_home: Path, jsonl_files: Sequence[Path], state_dbs: Seq
     for path in jsonl_files:
         destination = backup_dir / path.relative_to(codex_home)
         destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(path, destination)
+        try:
+            os.link(path, destination)
+        except OSError:
+            shutil.copy2(path, destination)
 
     return backup_dir
 
 
 def _backup_sqlite_db(source: Path, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with _connect_sqlite(source, read_only=True) as source_conn, sqlite3.connect(str(destination)) as backup_conn:
-        source_conn.backup(backup_conn)
-        backup_conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        backup_conn.execute("PRAGMA journal_mode=DELETE")
+    source_conn = _connect_sqlite(source, read_only=True)
+    try:
+        backup_conn = sqlite3.connect(str(destination))
+        try:
+            source_conn.backup(backup_conn)
+            backup_conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            backup_conn.execute("PRAGMA journal_mode=DELETE")
+        finally:
+            backup_conn.close()
+    finally:
+        source_conn.close()
     for sidecar in _sqlite_sidecar_paths(destination):
         sidecar.unlink(missing_ok=True)
 
 
 def _consolidate_sqlite_db(db_path: Path) -> None:
-    with _connect_sqlite(db_path) as conn:
+    conn = _connect_sqlite(db_path)
+    try:
         conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         conn.execute("PRAGMA journal_mode=DELETE")
+    finally:
+        conn.close()
 
 
 def _sqlite_sidecar_paths(db_path: Path) -> tuple[Path, Path]:

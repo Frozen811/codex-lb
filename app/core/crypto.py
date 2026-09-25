@@ -19,9 +19,16 @@ def _get_or_create_key(key_file: Path) -> bytes:
 
 class TokenEncryptor:
     def __init__(self, key: bytes | None = None, key_file: Path | None = None) -> None:
-        settings = get_settings()
-        resolved_file = key_file or settings.encryption_key_file
-        resolved_key = key or _get_or_create_key(resolved_file)
+        if key is not None:
+            resolved_key = key
+        elif key_file is not None:
+            resolved_key = _get_or_create_key(key_file)
+        else:
+            settings = get_settings()
+            if settings.encryption_key:
+                resolved_key = settings.encryption_key.encode("utf-8")
+            else:
+                resolved_key = _get_or_create_key(settings.encryption_key_file)
         self._fernet = Fernet(resolved_key)
 
     def encrypt(self, token: str) -> bytes:
@@ -32,6 +39,9 @@ class TokenEncryptor:
 
 
 def get_or_create_key(key_file: Path | None = None) -> bytes:
+    if key_file is not None:
+        return _get_or_create_key(key_file)
     settings = get_settings()
-    resolved_file = key_file or settings.encryption_key_file
-    return _get_or_create_key(resolved_file)
+    if settings.encryption_key:
+        return settings.encryption_key.encode("utf-8")
+    return _get_or_create_key(settings.encryption_key_file)

@@ -191,13 +191,20 @@ async def test_snapshot_serialized_field_set_matches_documented_schema(async_ses
 def test_client_mapping_table_and_unknown_family_are_allowlisted() -> None:
     for raw_group, expected_family in CLIENT_FAMILY_BY_RAW_GROUP.items():
         assert client_family(raw_group) == expected_family
+    assert client_family("codex_cli_rs") == "codex-cli"
+    assert client_family("codex") == "codex-cli"
+    assert client_family("codex-cli") == "codex-cli"
+    assert client_family("codex desktop") == "codex-desktop"
+    assert client_family("codex_chatgpt_desktop") == "codex-desktop"
+    assert client_family("codex_atlas") == "codex-desktop"
     assert client_family("senpi") == "other"
 
     shares, other_ratio = client_shares(
         [
+            ClientCount("codex_cli_rs", 5),
             ClientCount("codex_exec", 2),
             ClientCount("codex-tui", 3),
-            ClientCount("senpi", 1),
+            ClientCount("senpi", 2),
         ]
     )
     assert shares == {"codex-cli": 0.833333, "other": 0.166667}

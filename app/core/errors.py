@@ -118,7 +118,13 @@ PREVIOUS_RESPONSE_NOT_FOUND_MESSAGE = "Previous response was not found; retry wi
 PREVIOUS_RESPONSE_MALFORMED_PARAM_REASON = "previous_response_not_found_malformed_param"
 SYNTHETIC_TRANSPORT_FAILURE_MARKER = "_codex_lb_synthetic_transport_failure"
 SYNTHETIC_TRANSPORT_FAILURE_CODES = frozenset(
-    {"stream_incomplete", "stream_idle_timeout", "upstream_request_timeout", "upstream_unavailable"}
+    {
+        "stream_incomplete",
+        "stream_idle_timeout",
+        "upstream_request_timeout",
+        "upstream_unavailable",
+        "bridge_previous_response_not_found",
+    }
 )
 # Every sentence upstream uses to say the account's subscription window is
 # spent, written in the form ``is_upstream_usage_limit_message`` normalizes to:
@@ -135,6 +141,51 @@ _USAGE_LIMIT_MESSAGE_MARKERS = (
     "exceeded your usage limit",
 )
 _MESSAGE_WORD_SEPARATOR_RE = re.compile(r"[^a-z0-9]+")
+
+
+def is_upstream_usage_limit_message(message: str | None) -> bool:
+    """True when the message asserts the account's usage limit is spent.
+
+    Upstream delivers this rejection as an HTTP body and as a serialized
+    ``response.failed`` frame that carries no status and often no error code, so
+    neither the status nor the code table can be the gate and every path that
+    needs the answer has to read it from the same place. The words are matched
+    after folding each run of non-alphanumeric characters to a single space,
+    because the same sentence arrives with a straight apostrophe, a curly one,
+    a hyphen joining "usage" and "limit", or wrapped across a line break.
+    """
+    if message is None:
+        return False
+    normalized = _MESSAGE_WORD_SEPARATOR_RE.sub(" ", message.lower()).strip()
+    return any(marker in normalized for marker in _USAGE_LIMIT_MESSAGE_MARKERS)
+
+
+# The Codex CLI treats ``server_is_overloaded``/``slow_down`` as terminal
+# (zero retries), so once codex-lb gives up retrying internally for a
+# native Codex client, the give-up path must relabel the cause as the one
+# code Codex both retries on *and* parses a delay out of.
+NATIVE_GIVEUP_RETRYABLE_CODE = "rate_limit_exceeded"
+DEFAULT_NATIVE_GIVEUP_RETRY_AFTER_SECONDS = 5
+
+
+def native_giveup_retryable_message(
+    upstream_error_code: str | None,
+    message: str | None,
+    retry_after_seconds: float | int | None,
+) -> str:
+    """Build the ``rate_limit_exceeded`` message codex-rs's reconnect parses.
+
+    codex-rs matches ``(?i)try again in\\s*(\\d+(?:\\.\\d+)?)\\s*(s|ms|seconds?)``
+    against this message to size its reconnect backoff. Put the canonical
+    delay first so an upstream message containing its own stale retry hint
+    cannot change the client's backoff.
+    """
+    delay = retry_after_seconds if retry_after_seconds and retry_after_seconds > 0 else None
+    seconds = delay if delay is not None else DEFAULT_NATIVE_GIVEUP_RETRY_AFTER_SECONDS
+    seconds_text = str(int(seconds)) if float(seconds).is_integer() else str(seconds)
+    original = (message or "Upstream error").strip().rstrip(".")
+    code_text = upstream_error_code or "unavailable"
+    return f"Please try again in {seconds_text}s. codex-lb: upstream {code_text}; {original}."
 
 
 def openai_error(
@@ -198,23 +249,6 @@ def previous_response_stream_incomplete_error() -> OpenAIErrorEnvelope:
         PREVIOUS_RESPONSE_STREAM_INCOMPLETE_MESSAGE,
         error_type="server_error",
     )
-
-
-def is_upstream_usage_limit_message(message: str | None) -> bool:
-    """True when the message asserts the account's usage limit is spent.
-
-    Upstream delivers this rejection as an HTTP body and as a serialized
-    ``response.failed`` frame that carries no status and often no error code, so
-    neither the status nor the code table can be the gate and every path that
-    needs the answer has to read it from the same place. The words are matched
-    after folding each run of non-alphanumeric characters to a single space,
-    because the same sentence arrives with a straight apostrophe, a curly one,
-    a hyphen joining "usage" and "limit", or wrapped across a line break.
-    """
-    if message is None:
-        return False
-    normalized = _MESSAGE_WORD_SEPARATOR_RE.sub(" ", message.lower()).strip()
-    return any(marker in normalized for marker in _USAGE_LIMIT_MESSAGE_MARKERS)
 
 
 def is_previous_response_not_found_message(message: str | None) -> bool:

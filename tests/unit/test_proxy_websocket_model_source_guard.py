@@ -17,7 +17,7 @@ import json
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import anyio
 import pytest
@@ -152,8 +152,12 @@ async def _run_connect_guard(
 
 @pytest.mark.asyncio
 async def test_connect_guard_fails_session_for_source_owned_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    usage_share_guard = Mock(side_effect=AssertionError("source routing must precede usage-share admission"))
+    monkeypatch.setattr(proxy_service.ProxyService, "_enforce_api_key_usage_share", usage_share_guard)
+
     account, upstream, emitted, selection_calls, _ = await _run_connect_guard(monkeypatch, is_source_owned=True)
 
+    usage_share_guard.assert_not_called()
     assert account is None
     assert upstream is None
     assert selection_calls == 0, "the guard must short-circuit before account selection"
@@ -169,6 +173,23 @@ async def test_connect_guard_ignores_subscription_models(monkeypatch: pytest.Mon
     assert account is None  # the stubbed selector returns no account
     assert selection_calls >= 1, "subscription models must proceed to account selection"
     assert emitted == {}
+
+
+@pytest.mark.asyncio
+async def test_subscription_connect_admits_with_the_refreshed_request_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    session_key = _api_key()
+    refreshed_key = _api_key(enforced_model="gpt-5.4")
+    usage_share_guard = Mock()
+    monkeypatch.setattr(proxy_service.ProxyService, "_enforce_api_key_usage_share", usage_share_guard)
+
+    await _run_connect_guard(
+        monkeypatch,
+        is_source_owned=False,
+        api_key=session_key,
+        request_state_api_key=refreshed_key,
+    )
+
+    usage_share_guard.assert_called_once_with(refreshed_key, "req-ws-guard", "websocket")
 
 
 @pytest.mark.asyncio
@@ -333,7 +354,8 @@ async def test_reuse_guard_rejects_a_later_source_owned_turn(monkeypatch: pytest
     monkeypatch.setattr(proxy_service, "get_settings", lambda: settings)
     monkeypatch.setattr(proxy_service, "get_settings_cache", lambda: _SettingsCache(settings))
 
-    service = proxy_service.ProxyService(_repo_factory(_RequestLogsRecorder()))
+    request_logs = _RequestLogsRecorder()
+    service = proxy_service.ProxyService(_repo_factory(request_logs))
     account = _make_account("acc_ws_source_guard_reuse")
     upstream = _QueuedTestUpstreamWebSocket(_completed_turn("resp_turn_one"))
 
@@ -367,6 +389,11 @@ async def test_reuse_guard_rejects_a_later_source_owned_turn(monkeypatch: pytest
     )
     assert len(upstream.sent_text) == 1, "the rejected turn must not be forwarded upstream"
     assert released.await_count >= 1, "the rejected turn must release its usage reservation"
+    assert await service.drain_persistence_tasks(timeout_seconds=1)
+    refusal = next(
+        call for call in request_logs.calls if call.get("error_code") == "model_source_requires_http_transport"
+    )
+    assert refusal["account_id"] is None
 
 
 def _alias_allowlist_api_key() -> ApiKeyData:
@@ -1040,3 +1067,139 @@ async def test_reuse_guard_rejects_a_later_disabled_source_turn(monkeypatch: pyt
     )
     assert len(upstream.sent_text) == 1, "the rejected turn must not be forwarded upstream"
     assert released.await_count >= 1, "the rejected turn must release its usage reservation"
+
+
+@pytest.mark.asyncio
+async def test_connect_guard_skips_when_preferred_account_is_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = _make_proxy_settings()
+    monkeypatch.setattr(proxy_service, "get_settings", lambda: settings)
+    monkeypatch.setattr(proxy_service, "get_settings_cache", lambda: _SettingsCache(settings))
+
+    catalog = _AliasSourceCatalog(set(), disabled_source_models={"qwen3.8-max"})
+    catalog.install(monkeypatch)
+
+    emitted: dict[str, object] = {}
+    selection_calls = 0
+
+    async def fake_emit(self, websocket, **kwargs):  # noqa: ANN001, ANN003, ANN202
+        emitted.update(kwargs)
+
+    async def fake_select(self, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN202
+        nonlocal selection_calls
+        selection_calls += 1
+        return None
+
+    monkeypatch.setattr(proxy_service.ProxyService, "_emit_websocket_connect_failure", fake_emit)
+    monkeypatch.setattr(proxy_service.ProxyService, "_select_websocket_connect_account", fake_select)
+
+    service = proxy_service.ProxyService(_repo_factory(_RequestLogsRecorder()))
+
+    req_state = _request_state("qwen3.8-max")
+    req_state.preferred_account_id = "acc_owner_1"
+
+    account, upstream = await service._connect_proxy_websocket(
+        {},
+        sticky_key=None,
+        sticky_kind=None,
+        prefer_earlier_reset=False,
+        routing_strategy="capacity_weighted",
+        model="qwen3.8-max",
+        request_state=req_state,
+        api_key=None,
+        client_send_lock=anyio.Lock(),
+        websocket=AsyncMock(),
+    )
+
+    assert account is None
+    assert upstream is None
+    assert selection_calls == 1, (
+        "when preferred_account_id is set, it proceeds to account selection rather than short-circuiting"
+    )
+    assert "error_code" not in emitted, (
+        "must not emit model_source_requires_http_transport when preferred_account_id is set"
+    )
+
+
+@pytest.mark.asyncio
+async def test_reuse_guard_skips_when_preferred_account_is_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = _make_proxy_settings()
+    settings.stream_idle_timeout_seconds = 300.0
+    settings.proxy_downstream_websocket_idle_timeout_seconds = 120.0
+    monkeypatch.setattr(proxy_service, "get_settings", lambda: settings)
+    monkeypatch.setattr(proxy_service, "get_settings_cache", lambda: _SettingsCache(settings))
+
+    catalog = _AliasSourceCatalog(set(), disabled_source_models={"qwen3.8-max"})
+    catalog.install(monkeypatch)
+
+    service = proxy_service.ProxyService(_repo_factory(_RequestLogsRecorder()))
+    account = _make_account("acc_ws_source_guard_preferred_reuse")
+    upstream = _TurnDrivenUpstream([_completed_turn("resp_turn_one"), _completed_turn("resp_turn_two")])
+
+    async def fake_connect(self, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN202
+        return account, upstream
+
+    monkeypatch.setattr(proxy_service.ProxyService, "_connect_proxy_websocket", fake_connect)
+    monkeypatch.setattr(
+        service,
+        "_resolve_compact_turn_state_owner",
+        AsyncMock(return_value="acc_ws_source_guard_preferred_reuse"),
+    )
+
+    downstream = _TurnSerializedDownstream([_create_frame("gpt-5.6-sol"), _create_frame("qwen3.8-max")])
+
+    await service.proxy_responses_websocket(
+        cast(WebSocket, downstream),
+        {"x-codex-turn-state": "turn_ws_guard_test"},
+        codex_session_affinity=False,
+        openai_cache_affinity=False,
+        api_key=None,
+    )
+
+    assert not any("model_source_requires_http_transport" in text for text in downstream.sent_text), (
+        "turn state proving subscription account ownership must skip model source rejection"
+    )
+    assert len(upstream.sent_text) == 2, "both turns must be forwarded upstream"
+
+
+@pytest.mark.asyncio
+async def test_websocket_missing_previous_response_owner_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = _make_proxy_settings()
+    settings.stream_idle_timeout_seconds = 300.0
+    settings.proxy_downstream_websocket_idle_timeout_seconds = 120.0
+    monkeypatch.setattr(proxy_service, "get_settings", lambda: settings)
+    monkeypatch.setattr(proxy_service, "get_settings_cache", lambda: _SettingsCache(settings))
+
+    service = proxy_service.ProxyService(_repo_factory(_RequestLogsRecorder()))
+    account = _make_account("acc_ws_owner_unavailable")
+    upstream = _QueuedTestUpstreamWebSocket(_completed_turn("resp_turn_one"))
+
+    async def fake_connect(self, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN202
+        return account, upstream
+
+    monkeypatch.setattr(proxy_service.ProxyService, "_connect_proxy_websocket", fake_connect)
+    monkeypatch.setattr(service, "_resolve_websocket_previous_response_owner", AsyncMock(return_value=None))
+
+    followup_frame = json.dumps({
+        "type": "response.create",
+        "model": "gpt-5.6-sol",
+        "instructions": "",
+        "previous_response_id": "resp_missing_owner_ws",
+        "input": [{"role": "user", "content": [{"type": "input_text", "text": "continue"}]}],
+        "stream": True,
+    })
+
+    downstream = _Downstream([followup_frame])
+
+    await service.proxy_responses_websocket(
+        cast(WebSocket, downstream),
+        {},
+        codex_session_affinity=False,
+        openai_cache_affinity=False,
+        api_key=None,
+    )
+
+    assert any("previous_response_owner_unavailable" in text for text in downstream.sent_text), (
+        "missing previous_response_id owner must fail closed with previous_response_owner_unavailable"
+    )
+    assert len(upstream.sent_text) == 0, "must not dispatch turn to upstream socket when owner is missing"
+

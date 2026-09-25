@@ -7,6 +7,7 @@ import os
 import sqlite3
 import time
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, AsyncIterator, Awaitable, Callable, Protocol, TypeVar
@@ -375,6 +376,7 @@ SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSe
 _background_engine: AsyncEngine | None = None
 _background_session_factory: async_sessionmaker[AsyncSession] | None = None
 _sqlite_writer_lock: anyio.Lock | None = None
+_SQLITE_WRITER_SECTION_DEPTH: ContextVar[int] = ContextVar("_SQLITE_WRITER_SECTION_DEPTH", default=0)
 _sqlite_lifetime_lock: sqlite3.Connection | None = None
 _sqlite_lifetime_lock_path: Path | None = None
 
@@ -1057,10 +1059,18 @@ async def sqlite_writer_section() -> AsyncIterator[None]:
     if not _is_sqlite_url(database_url) or _is_sqlite_memory_url(database_url):
         yield
         return
+    depth = _SQLITE_WRITER_SECTION_DEPTH.get()
+    if depth > 0:
+        yield
+        return
     if _sqlite_writer_lock is None:
         _sqlite_writer_lock = anyio.Lock()
     async with _sqlite_writer_lock:
-        yield
+        token = _SQLITE_WRITER_SECTION_DEPTH.set(depth + 1)
+        try:
+            yield
+        finally:
+            _SQLITE_WRITER_SECTION_DEPTH.reset(token)
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:

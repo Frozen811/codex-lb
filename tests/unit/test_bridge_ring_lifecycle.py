@@ -5036,3 +5036,61 @@ async def test_claim_does_not_retry_takeover_against_a_live_foreign_owner(
     # Exactly one claim: the live foreign owner ends the retry instead of
     # issuing a second, permission-restoring claim.
     assert claims == [True]
+
+
+@pytest.mark.asyncio
+async def test_scheduled_purge_spares_row_when_generation_or_epoch_advances(
+    async_session_factory: Callable[[], AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Scheduled cleanup must not delete retry-circuit protection that a newer
+    request has changed (advancing admission_generation or updated_at_epoch)
+    between candidate selection and deletion (issue #2270)."""
+    session = async_session_factory()
+    try:
+        repository = DurableBridgeRepository(session)
+        cutoff = 100000.0
+        # Insert a row that matches stale_predicate
+        await repository.upsert_retry_circuit(
+            session_key_kind="session_header",
+            session_key_value="sid-race-purge",
+            api_key_scope="key-1",
+            consecutive_failures=2,
+            cooldown_until_epoch=0.0,
+            last_detail="stream_incomplete",
+            updated_at_epoch=cutoff - 100.0,
+            base_updated_at_epoch=0.0,
+            failure_threshold=2,
+            conflict_cooldown_until_epoch=cutoff - 40.0,
+        )
+
+        # Intercept execute before delete to simulate a concurrent replay claim
+        original_execute = session.execute
+        updated = False
+
+        async def intercepted_execute(statement, *args, **kwargs):
+            nonlocal updated
+            # Before the delete runs, bump admission_generation
+            if hasattr(statement, "is_delete") and statement.is_delete and not updated:
+                updated = True
+                await original_execute(
+                    update(HttpBridgeRetryCircuit)
+                    .where(HttpBridgeRetryCircuit.session_key_hash == durable_bridge_hash("sid-race-purge"))
+                    .values(admission_generation=1)
+                )
+            return await original_execute(statement, *args, **kwargs)
+
+        monkeypatch.setattr(session, "execute", intercepted_execute)
+
+        deleted = await repository.purge_retry_circuits_before(cutoff)
+        assert deleted == 0, "the row whose generation advanced between select and delete is spared"
+
+        surviving = await session.get(
+            HttpBridgeRetryCircuit,
+            ("session_header", durable_bridge_hash("sid-race-purge"), "key-1"),
+        )
+        assert surviving is not None
+        assert surviving.admission_generation == 1
+    finally:
+        await session.close()
+

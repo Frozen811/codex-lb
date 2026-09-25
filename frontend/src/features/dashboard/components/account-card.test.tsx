@@ -88,6 +88,52 @@ describe("AccountCard", () => {
     expect(screen.queryByText("Weekly")).not.toBeInTheDocument();
   });
 
+  it("shows Monthly for Team accounts with 30d quota window (issue #1367)", () => {
+    const account = createAccountSummary({
+      planType: "team",
+      usage: {
+        primaryRemainingPercent: null,
+        secondaryRemainingPercent: null,
+        monthlyRemainingPercent: 96,
+      },
+      windowMinutesPrimary: null,
+      windowMinutesSecondary: null,
+      windowMinutesMonthly: 43_200,
+      resetAtPrimary: null,
+      resetAtSecondary: null,
+      resetAtMonthly: "2026-02-15T00:00:00.000Z",
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByText("Monthly")).toBeInTheDocument();
+    expect(screen.queryByText("5h")).not.toBeInTheDocument();
+    expect(screen.queryByText("Weekly")).not.toBeInTheDocument();
+  });
+
+  it("shows Monthly for Team accounts when 30d window is mapped in primary slot (issue #1367)", () => {
+    const account = createAccountSummary({
+      planType: "team",
+      usage: {
+        primaryRemainingPercent: 96,
+        secondaryRemainingPercent: null,
+        monthlyRemainingPercent: null,
+      },
+      windowMinutesPrimary: 43_200,
+      windowMinutesSecondary: null,
+      windowMinutesMonthly: null,
+      resetAtPrimary: "2026-02-15T00:00:00.000Z",
+      resetAtSecondary: null,
+      resetAtMonthly: null,
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByText("Monthly")).toBeInTheDocument();
+    expect(screen.queryByText("5h")).not.toBeInTheDocument();
+    expect(screen.queryByText("Weekly")).not.toBeInTheDocument();
+  });
+
   it("labels staggered idle warm-up attempts as 5h", () => {
     const attemptedAt = new Date("2026-06-03T12:00:00Z").toISOString();
     const account = createAccountSummary({

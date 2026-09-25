@@ -652,3 +652,80 @@ async def test_internal_drain_status_rejects_non_loopback_clients():
         await internal_drain_status(cast(Any, request))
 
     assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_internal_drain_status_reports_persistence_activity():
+    from app.modules.health.api import internal_drain_status
+
+    proxy_service = SimpleNamespace(
+        request_persistence_activity_snapshot_nowait=MagicMock(
+            return_value={
+                "request_persistence_pending": 2,
+                "request_persistence_active": True,
+                "api_key_settlements_pending": 1,
+                "persistence_drain_active": True,
+            }
+        )
+    )
+    request = SimpleNamespace(
+        client=SimpleNamespace(host="127.0.0.1"),
+        app=SimpleNamespace(state=SimpleNamespace(proxy_service=proxy_service)),
+    )
+
+    with (
+        patch("app.core.shutdown.is_draining", return_value=True),
+        patch("app.core.shutdown.is_bridge_drain_active", return_value=False),
+        patch("app.core.shutdown.get_in_flight", return_value=0),
+    ):
+        response = await internal_drain_status(cast(Any, request))
+
+    assert response.checks is not None
+    assert response.checks["draining"] == "true"
+    assert response.checks["in_flight"] == "0"
+    assert response.checks["request_persistence_pending"] == "2"
+    assert response.checks["request_persistence_active"] == "true"
+    assert response.checks["api_key_settlements_pending"] == "1"
+    assert response.checks["persistence_drain_active"] == "true"
+
+
+@pytest.mark.asyncio
+async def test_request_persistence_activity_snapshot_nowait_real_tasks():
+    from app.modules.proxy._service.request_log import _RequestLogMixin
+
+    class DummyService(_RequestLogMixin):
+        def __init__(self) -> None:
+            self._request_log_tasks: set[asyncio.Task[None]] = set()
+            self._background_cleanup_tasks: set[asyncio.Task[None]] = set()
+
+    service = DummyService()
+    snapshot = service.request_persistence_activity_snapshot_nowait()
+    assert snapshot == {
+        "request_persistence_pending": 0,
+        "request_persistence_active": False,
+        "api_key_settlements_pending": 0,
+        "persistence_drain_active": False,
+    }
+
+    async def _dummy_task() -> None:
+        await asyncio.sleep(10)
+
+    t1 = asyncio.create_task(_dummy_task(), name="proxy-request-log-req1")
+    t2 = asyncio.create_task(_dummy_task(), name="proxy-stream-api-key-settle-req1")
+    t3 = asyncio.create_task(_dummy_task(), name="other-non-persistence-task")
+
+    try:
+        service._request_log_tasks.add(t1)
+        service._background_cleanup_tasks.add(t2)
+        service._background_cleanup_tasks.add(t3)
+
+        snapshot = service.request_persistence_activity_snapshot_nowait()
+        assert snapshot["request_persistence_pending"] == 2
+        assert snapshot["request_persistence_active"] is True
+        assert snapshot["api_key_settlements_pending"] == 1
+        assert snapshot["persistence_drain_active"] is True
+    finally:
+        t1.cancel()
+        t2.cancel()
+        t3.cancel()
+        await asyncio.gather(t1, t2, t3, return_exceptions=True)

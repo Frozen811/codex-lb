@@ -80,6 +80,7 @@ SETTING_TIERS: Final[dict[str, Tier]] = {
     "automations_scheduler_enabled": "T3",
     "telemetry_enabled": "T3",
     "telemetry_endpoint": "T1",
+    "encryption_key": "T0",
     "encryption_key_file": "T0",
     "encryption_key_fingerprint_mode": "T0",
     "database_migrations_fail_fast": "T0",

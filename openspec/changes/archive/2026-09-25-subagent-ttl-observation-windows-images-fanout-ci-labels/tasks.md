@@ -1,0 +1,24 @@
+# Tasks: subagent-ttl-observation-windows-images-fanout-ci-labels
+
+- [x] Implement Task 147: Subagent prompt-cache affinity TTL (Issue #1307) <!-- id: 0 -->
+  - [x] Add `SUBAGENT_PROMPT_CACHE_MAX_AGE_SECONDS = 300` and `_is_subagent_headers` in `app/modules/proxy/affinity.py` <!-- id: 1 -->
+  - [x] Apply `_effective_prompt_cache_max_age_seconds` in `affinity.py` and `compact.py` <!-- id: 2 -->
+  - [x] Add unit tests in `tests/unit/test_affinity_subagent_ttl.py` <!-- id: 3 -->
+- [x] Implement Task 148: Configurable longer observation windows for API key usage (Issue #1080) <!-- id: 4 -->
+  - [x] Add `ApiKeyUsageResponse` model in `app/modules/api_keys/schemas.py` <!-- id: 5 -->
+  - [x] Add `get_key_usage` and parameterize `get_key_trends` in `app/modules/api_keys/service.py` <!-- id: 6 -->
+  - [x] Add `GET /api/api-keys/{key_id}/usage` and update `trends` in `app/modules/api_keys/api.py` <!-- id: 7 -->
+  - [x] Add unit tests in `tests/unit/test_api_keys_usage_windows.py` <!-- id: 8 -->
+- [x] Implement Task 149: Images API fan-out and observability (Issue #620) <!-- id: 9 -->
+  - [x] Define `MAX_IMAGE_FANOUT = 10` and update parameter validation in `app/core/openai/images.py` <!-- id: 10 -->
+  - [x] Implement concurrent fan-out for `n > 1` non-streaming requests in `app/modules/proxy/images_service.py` and `api.py` <!-- id: 11 -->
+  - [x] Support fanout logging in `app/modules/proxy/images_observability.py` <!-- id: 12 -->
+  - [x] Add unit tests in `tests/unit/test_images_fanout.py` <!-- id: 13 -->
+- [x] Implement Task 150: Reconcile issue and PR status-label ownership and lifecycle (Issue #2314) <!-- id: 14 -->
+  - [x] Add `.github/workflows/reconcile-issue-activity.yml` workflow <!-- id: 15 -->
+  - [x] Add helper/verification script and unit tests in `tests/unit/test_label_reconciliation.py` <!-- id: 16 -->
+- [x] Verification and Quality Gates <!-- id: 17 -->
+  - [x] Run pytest on new and affected test suites <!-- id: 18 -->
+  - [x] Run ruff linter check <!-- id: 19 -->
+  - [x] Run OpenSpec validation <!-- id: 20 -->
+  - [x] Verify simplicity budget (settings_tiers: 97/97) <!-- id: 21 -->

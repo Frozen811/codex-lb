@@ -32,9 +32,8 @@ from app.core.balancer import (
     handle_quota_exceeded,
     handle_rate_limit,
     plausible_rate_limit_reset_at,
-)
-from app.core.balancer import (
-    select_account as select_account,
+    reauth_reason_blocks_routing,
+    select_account,
 )
 from app.core.balancer.types import UpstreamError
 from app.core.clock import REAL_CLOCK, Clock
@@ -64,6 +63,7 @@ from app.core.usage.refresh_policy import usage_freshness_horizon_seconds
 from app.core.utils.time import to_utc_naive, utcnow
 from app.db.models import Account, AccountStatus, AdditionalUsageHistory, StickySessionKind, UsageHistory
 from app.db.snapshot import clone_row
+from app.modules.proxy import account_cache
 from app.modules.proxy._load_balancer.error_rate import (
     ErrorRateWeightingPolicy,
     error_rate_weight_multiplier,
@@ -99,6 +99,7 @@ from app.modules.proxy._load_balancer.opportunistic_admission import (
     detached_runtime_snapshot,
     run_opportunistic_admission,
 )
+from app.modules.proxy._load_balancer.quarantine import apply_local_routing_quarantine
 from app.modules.proxy._load_balancer.sticky_selection import (
     _STICKY_EXISTING_UNSET,
     SelectionInputsProtocol,
@@ -150,7 +151,6 @@ from app.modules.proxy._load_balancer.unbound_selection import (
     UnboundSelectionRequest,
     run_unbound_selection_path,
 )
-from app.modules.proxy.account_cache import get_account_selection_cache, mark_account_routing_unavailable
 from app.modules.proxy.account_eligibility import (
     account_access_token_expires_at,
     all_accounts_require_reauthentication,
@@ -313,7 +313,7 @@ class LoadBalancer:
         self._runtime_lock = asyncio.Lock()
         self._account_locks: dict[str, asyncio.Lock] = {}
         self._account_locks_registry_lock = asyncio.Lock()
-        self._selection_inputs_cache = get_account_selection_cache()
+        self._selection_inputs_cache = account_cache.get_account_selection_cache()
         # C2-2 routing/overload: the most recent request-path snapshot; paths
         # without one (stream error funnel, unkeyed bridge reacquires) reuse it.
         self._routing_tunables: RoutingTunables | None = None
@@ -632,6 +632,7 @@ class LoadBalancer:
                 additional_limit_name=additional_limit_name,
                 account_ids=scoped_account_ids,
             )
+            apply_local_routing_quarantine(excluded_ids, selection_inputs.accounts)
             if require_security_work_authorized:
                 # Ownership scope and routing availability are separate. Even
                 # an already-empty routing pool must have its owner candidates
@@ -1674,6 +1675,7 @@ class LoadBalancer:
         allow_usage_exhaustion_error: bool = True,
         usage_exhaustion_states: Iterable[AccountState] | None = None,
         sticky_refresh_skip_deadline: datetime | None = None,
+        hard_owner_pool: bool = False,
         redact_sensitive_details: bool = False,
     ) -> _StickySelectionOutcome:
         return await _run_select_with_stickiness(
@@ -1702,6 +1704,7 @@ class LoadBalancer:
             usage_exhaustion_states=usage_exhaustion_states,
             sticky_refresh_skip_deadline=sticky_refresh_skip_deadline,
             overload_backoff_runtime=self._runtime,
+            hard_owner_pool=hard_owner_pool,
             clock=self._clock,
             redact_sensitive_details=redact_sensitive_details,
         )
@@ -1730,46 +1733,37 @@ class LoadBalancer:
             self._selection_inputs_cache.invalidate()
 
     async def mark_permanent_failure(self, account: Account, error_code: str) -> bool:
-        """Downgrade *account* to its permanent-failure status.
-
-        Returns whether the permanent downgrade applied (or was already in
-        effect). When the guarded status write MISSES because a peer replica
-        concurrently re-authed/imported and rotated ``refresh_token_encrypted``
-        (the DB row was repaired and left ACTIVE), the account keeps its
-        repaired state. A landed DEACTIVATED downgrade is excluded from local
-        routing; REAUTH_REQUIRED remains request-routable with its stored access
-        token while still blocking future refresh-token exchange.
-        """
+        """Downgrade current credentials, returning whether downgrade applied."""
         lock = await self._get_account_lock(account.id)
         async with lock:
             state = self._state_for(account)
             handle_permanent_failure(state, error_code)
+            if error_code == "account_auth_invalidated":
+                # Preserve persisted cooldown evidence, including on a cold replica.
+                state.reset_at, state.blocked_at = account.reset_at, account.blocked_at
             self._sync_runtime_state(account, state)
+            routing_generation = account_cache.get_routing_availability_cache().generation_for_account(account.id)
             async with self._repo_factory() as repos:
-                # Guard the DB permanent-status downgrade on the refresh-token
-                # ciphertext this replica currently holds so a concurrent peer
-                # re-auth/import rotation (which changes the ciphertext) is never
-                # clobbered back to a permanent-failure status. On the refresh
-                # path AuthManager._handle_permanent_refresh_failure is the
-                # PRIMARY guarded authority: it has already CAS-written the
-                # downgrade and, in the single-caller case, mutated THIS object's
-                # status to the failure status, so the predicate inside
-                # _persist_state_if_current sees no status change and issues no
-                # redundant write (exactly one guarded downgrade total). This
-                # guarded write covers only the callers whose in-memory object
-                # did not go through that CAS -- an intra-process singleflight
-                # joiner sharing the winner's permanent error, and non-refresh
-                # permanent failures -- without reintroducing the unguarded
-                # update_status that would clobber a peer's ACTIVE/rotated repair
-                # and tear down its live sticky/bridge sessions.
+                # Fence failure writes against credential repair, including singleflight joiners.
+                rejected_snapshot = _clone_account(account)
                 downgraded = await self._persist_state_if_current(
                     repos.accounts,
                     account,
                     state,
                     expected_refresh_token_encrypted=account.refresh_token_encrypted,
                 )
-            if downgraded and state.status == AccountStatus.DEACTIVATED:
-                mark_account_routing_unavailable(account.id)
+                if not downgraded and error_code == "account_auth_invalidated":
+                    rejected = await repos.accounts.persist_access_rejection(
+                        rejected_snapshot, encryptor=self._encryptor
+                    )
+                    downgraded = rejected is not None
+                    if rejected is not None:
+                        account.status, account.deactivation_reason = rejected.status, rejected.deactivation_reason
+                        account.reset_at, account.blocked_at = rejected.reset_at, rejected.blocked_at
+                        state.reset_at, state.blocked_at = rejected.reset_at, rejected.blocked_at
+                        self._sync_runtime_state(account, state)
+            if downgraded and state.blocks_routing:
+                account_cache.mark_account_routing_unavailable(account.id, generation=routing_generation)
             self._selection_inputs_cache.invalidate()
             return downgraded
 
@@ -1854,22 +1848,22 @@ class LoadBalancer:
             # Force Probe must interpret refreshed rows exactly like ordinary
             # routing: raw storage slots do not identify weekly/monthly meaning.
             effective_secondary_entry = _select_long_window_entry(
-                account=account,
-                monthly_entry=monthly_entry,
-                secondary_entry=secondary_entry,
+                account=account, monthly_entry=monthly_entry, secondary_entry=secondary_entry
             )
             now = self._clock.time()
             normalized_usage = _normalize_usage_inputs(
-                account=account,
-                primary_entry=primary_entry,
-                secondary_entry=effective_secondary_entry,
-                now_epoch=int(now),
+                account=account, primary_entry=primary_entry,
+                secondary_entry=effective_secondary_entry, now_epoch=int(now),
             )
             health_primary_used = _health_tier_primary_used(
-                plan_type=account.plan_type,
-                primary_used=normalized_usage.primary_used,
+                plan_type=account.plan_type, primary_used=normalized_usage.primary_used
             )
             routing_policy = _normalize_account_routing_policy(account.routing_policy)
+            account = _clone_account(account)
+            primary_entry = clone_row(primary_entry) if primary_entry is not None else None
+            effective_secondary_entry = (
+                clone_row(effective_secondary_entry) if effective_secondary_entry is not None else None
+            )
         # C2-3 resilience toggles: one dashboard snapshot before the lock.
         resilience = resolve_resilience_toggles(await get_settings_cache().get())
 
@@ -1884,17 +1878,19 @@ class LoadBalancer:
                 return
 
             normalized_state = _state_from_account(
-                account=account,
-                primary_entry=primary_entry,
-                secondary_entry=effective_secondary_entry,
-                runtime=replace(runtime),
-                routing_tunables=tunables,
-                now=now,
+                account=account, primary_entry=primary_entry,
+                secondary_entry=effective_secondary_entry, runtime=replace(runtime),
+                routing_tunables=tunables, now=now,
                 soft_drain_enabled=resilience.soft_drain_enabled,
             )
             account_status = normalized_state.status
             if account_status not in (AccountStatus.ACTIVE, AccountStatus.REAUTH_REQUIRED):
                 return
+
+            if account_status == AccountStatus.ACTIVE and (runtime.blocked_at or runtime.cooldown_until):
+                runtime.blocked_at = runtime.cooldown_until = None
+                runtime.version += 1
+                runtime.health_version += 1
 
             was_probe_eligible = runtime.health_tier == HEALTH_TIER_PROBING
             if was_probe_eligible and (runtime.error_count > 0 or runtime.last_error_at is not None):
@@ -2041,10 +2037,13 @@ class LoadBalancer:
                 reset_at_int,
                 blocked_at=blocked_at_int,
             )
-            account.status = state.status
-            account.deactivation_reason = state.deactivation_reason
-            account.reset_at = reset_at_int
-            account.blocked_at = blocked_at_int
+            stored = await accounts_repo.get_by_id_fresh(account.id)
+            if stored is not None:
+                account.status, account.deactivation_reason = stored.status, stored.deactivation_reason
+                account.reset_at, account.blocked_at = stored.reset_at, stored.blocked_at
+                state.status, state.deactivation_reason = stored.status, stored.deactivation_reason
+                state.reset_at, state.blocked_at = stored.reset_at, stored.blocked_at
+                self._sync_runtime_state(account, state)
 
     async def _persist_state_if_current(
         self,
@@ -2061,7 +2060,15 @@ class LoadBalancer:
         reset_changed = account.reset_at != reset_at_int
         blocked_changed = account.blocked_at != blocked_at_int
 
-        if status_changed or reason_changed or reset_changed or blocked_changed:
+        if (
+            status_changed
+            or reason_changed
+            or reset_changed
+            or blocked_changed
+            or (
+                expected_refresh_token_encrypted is not None and reauth_reason_blocks_routing(state.deactivation_reason)
+            )
+        ):
             updated = await accounts_repo.update_status_if_current(
                 account.id,
                 state.status,
@@ -2073,6 +2080,11 @@ class LoadBalancer:
                 expected_reset_at=account.reset_at,
                 expected_blocked_at=account.blocked_at,
                 expected_refresh_token_encrypted=expected_refresh_token_encrypted,
+                **(
+                    {"expected_access_token_encrypted": account.access_token_encrypted}
+                    if reauth_reason_blocks_routing(state.deactivation_reason)
+                    else {}
+                ),
             )
             if updated:
                 account.status = state.status
@@ -2231,9 +2243,7 @@ def _additional_quota_routing_policy_override(limit_name: str | None, policies: 
     if normalized_limit_name is None:
         return None
     policy = get_additional_quota_routing_policy(normalized_limit_name, overrides=policies)
-    if policy == "inherit":
-        return None
-    return policy
+    return None if policy in ("inherit", "disabled") else policy
 
 
 def _parse_additional_quota_routing_policies(raw_policies: str) -> dict[str, str]:
@@ -2241,9 +2251,9 @@ def _parse_additional_quota_routing_policies(raw_policies: str) -> dict[str, str
         return {}
     try:
         parsed = json.loads(raw_policies)
+        if not isinstance(parsed, dict):
+            return {}
     except json.JSONDecodeError:
-        return {}
-    if not isinstance(parsed, dict):
         return {}
     policies: dict[str, str] = {}
     for quota_key, policy in parsed.items():

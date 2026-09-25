@@ -17,19 +17,29 @@ from app.core.auth.refresh import (
     is_transient_refresh_contention,
     refresh_contention_kind,
 )
-from app.core.clients.proxy import ProxyResponseError, UpstreamProxyRouteTrace, filter_inbound_headers
+from app.core.balancer import reauth_reason_blocks_routing
+from app.core.clients.proxy import (
+    ProxyResponseError,
+    UpstreamProxyRouteTrace,
+    filter_inbound_headers,
+    override_stream_timeouts,
+)
 from app.core.clients.proxy import compact_responses as core_compact_responses
+from app.core.clients.proxy import stream_responses as core_stream_responses
+from app.core.clock import clock_for
 from app.core.config.dashboard_overrides import dashboard_overrides_bound, with_dashboard_overrides
 from app.core.config.settings import get_settings
 from app.core.config.settings_cache import get_settings_cache
 from app.core.exceptions import ProxyAuthError, ProxyRateLimitError
-from app.core.openai.models import CompactResponsePayload
-from app.core.openai.requests import ResponsesCompactRequest
+from app.core.openai.models import CompactResponsePayload, ResponseUsage
+from app.core.openai.parsing import parse_sse_event
+from app.core.openai.requests import ResponsesCompactRequest, ResponsesRequest
 from app.core.resilience.toggles import bind_resilience_toggles
 from app.core.upstream_proxy import UpstreamProxyRouteError
 from app.db.models import Account, AccountStatus
 from app.modules.api_keys.service import ApiKeyData, ApiKeyUsageReservationData
 from app.modules.proxy._service.support import _call_with_supported_optional_kwargs, _request_log_client_fields
+from app.modules.proxy.account_eligibility import reauth_credentials_are_unavailable, stored_access_token_expires_at
 from app.modules.proxy.helpers import _header_account_id, _normalize_error_code, _parse_openai_error
 from app.modules.proxy.request_policy import (
     apply_prohibit_fast_mode,
@@ -70,6 +80,13 @@ def _service_core_compact_responses() -> _CompactResponses:
     if service_module is not None:
         return cast(_CompactResponses, getattr(service_module, "core_compact_responses", core_compact_responses))
     return core_compact_responses
+
+
+def _service_core_stream_responses() -> Any:
+    service_module = sys.modules.get("app.modules.proxy.service")
+    if service_module is not None:
+        return getattr(service_module, "core_stream_responses", core_stream_responses)
+    return core_stream_responses
 
 
 @dataclass(frozen=True, slots=True)
@@ -295,8 +312,21 @@ class _WarmupMixin:
         *,
         api_key: ApiKeyData | None,
     ) -> list[_WarmupAccountSnapshot]:
+        proxy = cast(_WarmupServiceProtocol, self)
+        now = clock_for(proxy).time()
         active_accounts = [
-            account for account in accounts if account.status in (AccountStatus.ACTIVE, AccountStatus.REAUTH_REQUIRED)
+            account
+            for account in accounts
+            if account.status in (AccountStatus.ACTIVE, AccountStatus.REAUTH_REQUIRED)
+            and not reauth_reason_blocks_routing(account.deactivation_reason)
+            and not reauth_credentials_are_unavailable(
+                account.status,
+                stored_access_token_expires_at(account.access_token_encrypted, proxy._encryptor)
+                if account.status == AccountStatus.REAUTH_REQUIRED
+                else None,
+                now=now,
+                deactivation_reason=account.deactivation_reason,
+            )
         ]
         if api_key is None or not api_key.account_assignment_scope_enabled:
             return active_accounts
@@ -358,19 +388,39 @@ class _WarmupMixin:
                 prohibit_fast_mode=prohibit_fast_mode,
                 request_id=request_id,
             )
-            response = await _call_with_supported_optional_kwargs(
-                _service_core_compact_responses(),
-                payload,
-                upstream_headers,
-                access_token,
-                account_header_id,
-                optional_kwargs={
-                    "route": route,
-                    "allow_direct_egress": route is None,
-                    "route_trace": route_trace,
-                    "chatgpt_account_id": account_header_id,
-                },
-            )
+            try:
+                response = await _call_with_supported_optional_kwargs(
+                    _service_core_compact_responses(),
+                    payload,
+                    upstream_headers,
+                    access_token,
+                    account_header_id,
+                    optional_kwargs={
+                        "route": route,
+                        "allow_direct_egress": route is None,
+                        "route_trace": route_trace,
+                        "chatgpt_account_id": account_header_id,
+                    },
+                )
+            except ProxyResponseError as exc:
+                if exc.status_code == 404 or getattr(exc, "upstream_status_code", None) == 404:
+                    logger.info(
+                        "Warmup compact request returned 404 for account_id=%s request_id=%s; "
+                        "falling back to minimal plain responses request",
+                        live_account.id,
+                        request_id,
+                    )
+                    response = await self._send_warmup_fallback_plain_request(
+                        warmup_model=warmup_model,
+                        upstream_headers=upstream_headers,
+                        access_token=access_token,
+                        account_header_id=account_header_id,
+                        live_account=live_account,
+                        route=route,
+                        route_trace=route_trace,
+                    )
+                else:
+                    raise
             if route_trace.mode is not None:
                 upstream_proxy_route_mode = route_trace.mode
                 upstream_proxy_pool_id = route_trace.pool_id
@@ -480,4 +530,76 @@ class _WarmupMixin:
             request_id=request_id,
             error_code=error_code or "upstream_error",
             error_message=error_message or "Warmup request failed",
+        )
+
+    async def _send_warmup_fallback_plain_request(
+        self,
+        *,
+        warmup_model: str,
+        upstream_headers: Mapping[str, str],
+        access_token: str,
+        account_header_id: str | None,
+        live_account: Account,
+        route: Any,
+        route_trace: UpstreamProxyRouteTrace,
+    ) -> CompactResponsePayload:
+        plain_payload = ResponsesRequest.model_validate(
+            {
+                "model": warmup_model,
+                "instructions": "Warmup request.",
+                "input": [
+                    {
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": "warmup"}],
+                    }
+                ],
+                "tools": [],
+                "parallel_tool_calls": False,
+                "stream": True,
+                "store": False,
+                "max_output_tokens": 16,
+            }
+        )
+        usage: ResponseUsage | None = None
+        response_id: str | None = None
+        with override_stream_timeouts(
+            connect_timeout_seconds=5.0,
+            idle_timeout_seconds=10.0,
+            total_timeout_seconds=30.0,
+        ):
+            async for event_block in _service_core_stream_responses()(
+                plain_payload,
+                upstream_headers,
+                access_token,
+                account_header_id,
+                upstream_stream_transport_override="http",
+                route=route,
+                route_trace=route_trace,
+                allow_direct_egress=route is None,
+                codex_lb_account_id=live_account.id,
+            ):
+                event = parse_sse_event(event_block)
+                if event is None:
+                    continue
+                if event.response is not None:
+                    if event.response.id:
+                        response_id = event.response.id
+                    if event.response.usage is not None:
+                        usage = event.response.usage
+                if event.type == "response.completed":
+                    break
+                if event.type in {"response.failed", "response.incomplete", "error"}:
+                    error_payload = event.error or (event.response.error if event.response is not None else None)
+                    fallback_err_msg = f"Warmup fallback plain stream failed: {event.type}"
+                    raise ProxyResponseError(
+                        status_code=502,
+                        payload=error_payload or {"error": {"message": fallback_err_msg}},
+                    )
+        return CompactResponsePayload.model_validate(
+            {
+                "object": "response.compact",
+                "id": response_id or f"resp-fallback-{uuid4().hex[:12]}",
+                "status": "completed",
+                "usage": usage.model_dump() if usage is not None else {"input_tokens": 1, "output_tokens": 1},
+            }
         )

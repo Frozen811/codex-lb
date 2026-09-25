@@ -1,8 +1,10 @@
 # Machine-local Codex configuration: ~/.codex/config.toml
 # The default provider remains ordinary codex-lb traffic.
-model = "gpt-5.6-sol"
+model = "gpt-6-astra"
 model_reasoning_effort = "xhigh"
 model_provider = "codex-lb"
+# Optional: make /status report the pool's limits instead of one local account.
+# chatgpt_base_url = "http://127.0.0.1:2455"
 
 [model_providers.codex-lb]
 name = "openai"
@@ -10,6 +12,12 @@ base_url = "http://127.0.0.1:2455/backend-api/codex"
 wire_api = "responses"
 supports_websockets = true
 requires_openai_auth = true
+
+# Alternative: Preserve built-in OpenAI provider (Codex Desktop)
+# To preserve the built-in provider identity and keep web/mobile conversations in sync:
+# model_provider = "openai"
+# [model_providers.openai]
+# base_url = "http://127.0.0.1:2455/backend-api/codex"
 
 # Opt-in only. ~/.codex/daybreak-blue.config.toml selects this provider.
 [model_providers.codex-lb-daybreak-blue]

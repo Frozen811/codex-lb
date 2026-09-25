@@ -389,4 +389,32 @@ describe("ModelSourceEditDialog", () => {
 
     expect(onSubmit.mock.calls[0][1].apiKey).toBe("sk-new-token");
   });
+
+  it("exposes accessible names for all capability checkboxes", () => {
+    renderWithProviders(
+      <ModelSourceEditDialog
+        open
+        busy={false}
+        source={createModelSource()}
+        onOpenChange={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    const expectedCapabilities = [
+      "Chat completions",
+      "Responses",
+      "Audio transcriptions",
+      "Embeddings",
+      "Streaming",
+      "Tools",
+      "Vision",
+      "Reasoning",
+    ];
+
+    for (const name of expectedCapabilities) {
+      const checkbox = screen.getByRole("checkbox", { name });
+      expect(checkbox).toBeInTheDocument();
+    }
+  });
 });

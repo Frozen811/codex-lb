@@ -366,6 +366,46 @@ class _HTTPBridgeRetryCircuitMixin:
         finally:
             key_lock.release()
 
+    async def _release_http_bridge_retry_circuit_claim(
+        self: Any,
+        *,
+        key: _HTTPBridgeSessionKey,
+        generation: tuple[int, float, int, float, int, float, float] | None,
+    ) -> bool:
+        """Release a claimed retry circuit generation if the probe never flew upstream."""
+        release_claim = getattr(self._durable_bridge, "release_retry_circuit_claim", None)
+        released = False
+        if callable(release_claim) and generation is not None:
+            expected_admission_generation = generation[0]
+            expected_persisted_updated_at = generation[1]
+            if expected_admission_generation >= 0 and expected_persisted_updated_at > 0:
+                try:
+                    released = bool(
+                        await scheduler_for(self).wait_for(
+                            release_claim(
+                                session_key_kind=key.affinity_kind,
+                                session_key_value=key.affinity_key,
+                                api_key_id=key.api_key_id,
+                                expected_updated_at_epoch=expected_persisted_updated_at,
+                                expected_admission_generation=expected_admission_generation + 1,
+                            ),
+                            timeout=_HTTP_BRIDGE_RETRY_CIRCUIT_CLAIM_TIMEOUT_SECONDS,
+                        )
+                    )
+                except Exception:
+                    logger.warning(
+                        "Failed to release HTTP bridge retry circuit claim bridge_kind=%s bridge_key=%s",
+                        key.affinity_kind,
+                        _hash_identifier(key.affinity_key),
+                        exc_info=True,
+                    )
+        async with self._http_bridge_retry_circuit_lock:
+            state = self._http_bridge_retry_circuits.get(key)
+            if state is not None and state.half_open_until > 0.0:
+                state.half_open_until = 0.0
+                state.cooldown_until = clock_for(self).monotonic() - 1.0
+        return released
+
     async def _ensure_http_bridge_retry_circuit_loaded_for_key(
         self: Any,
         key: _HTTPBridgeSessionKey,
@@ -538,7 +578,9 @@ class _HTTPBridgeRetryCircuitMixin:
                 raise
             key_lock.release()
 
-    async def _load_http_bridge_retry_circuit(self: Any, session: _HTTPBridgeSession) -> bool:
+    async def _load_http_bridge_retry_circuit(
+        self: Any, session: _HTTPBridgeSession, *, local_failure_fence: int | None = None
+    ) -> bool:
         key = session.key
         if key.strength != "hard":
             return True
@@ -617,6 +659,8 @@ class _HTTPBridgeRetryCircuitMixin:
                             self,
                             key,
                             generation=_http_bridge_quarantine_clear_fence(self, key),
+                            local_failure_fence=local_failure_fence,
+                            session=session,
                         )
             return True
 
@@ -724,11 +768,13 @@ class _HTTPBridgeRetryCircuitMixin:
                                 self,
                                 key,
                                 generation=_http_bridge_quarantine_clear_fence(self, key),
+                                local_failure_fence=local_failure_fence,
+                                session=session,
                             )
                 return True
 
         cooldown_remaining = max(0.0, persisted.cooldown_until_epoch - now_epoch)
-        persisted_cooldown_until = now_monotonic + cooldown_remaining
+        persisted_cooldown_until = now_monotonic + cooldown_remaining if cooldown_remaining > 0.0 else 0.0
         arm_poison_quarantine = False
         poison_cooldown_remaining = 0.0
         async with self._http_bridge_retry_circuit_lock:
@@ -797,7 +843,8 @@ class _HTTPBridgeRetryCircuitMixin:
                     state.poison_anchor_cleared = False
                     state.owed_poison_detail = None
                 state.consecutive_failures = max(0, persisted.consecutive_failures)
-                state.cooldown_until = persisted_cooldown_until
+                if persisted_cooldown_until > 0.0 or episode_replaced:
+                    state.cooldown_until = persisted_cooldown_until
                 state.last_detail = persisted.last_detail
                 if state.consecutive_failures == 0:
                     # A zero-failure row is a durable reset: the episode the
@@ -893,12 +940,15 @@ class _HTTPBridgeRetryCircuitMixin:
                 session,
                 reason=_HTTP_BRIDGE_QUARANTINE_POISONED_ANCHOR_REASON,
                 minimum_seconds=_http_bridge_poison_quarantine_minimum_seconds(poison_cooldown_remaining),
+                durable_adoption=True,
             )
         elif revoke_stale_poison_quarantine and _http_bridge_session_key_poison_quarantined(self, key):
             _revoke_http_bridge_poison_quarantine(
                 self,
                 key,
                 generation=_http_bridge_quarantine_clear_fence(self, key),
+                local_failure_fence=local_failure_fence,
+                session=session,
             )
         return True
 
@@ -1003,7 +1053,10 @@ class _HTTPBridgeRetryCircuitMixin:
                     ),
                 )
             if persisted is not None:
-                persisted_cooldown_until = now_monotonic + max(0.0, persisted.cooldown_until_epoch - now_wall)
+                cooldown_remaining = max(0.0, persisted.cooldown_until_epoch - now_wall)
+                persisted_cooldown_until = (
+                    now_monotonic + cooldown_remaining if cooldown_remaining > 0.0 else 0.0
+                )
                 async with self._http_bridge_retry_circuit_lock:
                     current = self._http_bridge_retry_circuits.get(session.key)
                     if current is state:
@@ -2144,6 +2197,7 @@ class _HTTPBridgeRetryCircuitMixin:
         settled_detail: str | None = None,
         settled_detail_authoritative: bool = False,
         expected_episode: tuple[float, int, int] | None = None,
+        local_failure_fence: int | None = None,
     ) -> bool:
         """Settle a hard key's retry circuit; ``True`` when settlement held.
 
@@ -2165,6 +2219,7 @@ class _HTTPBridgeRetryCircuitMixin:
                 settled_detail=settled_detail,
                 settled_detail_authoritative=settled_detail_authoritative,
                 expected_episode=expected_episode,
+                local_failure_fence=local_failure_fence,
             )
         finally:
             key_lock.release()
@@ -2176,9 +2231,12 @@ class _HTTPBridgeRetryCircuitMixin:
         settled_detail: str | None = None,
         settled_detail_authoritative: bool = False,
         expected_episode: tuple[float, int, int] | None = None,
+        local_failure_fence: int | None = None,
     ) -> bool:
         key = session.key
-        durable_load_succeeded = await self._load_http_bridge_retry_circuit(session)
+        durable_load_succeeded = await self._load_http_bridge_retry_circuit(
+            session, local_failure_fence=local_failure_fence
+        )
         if expected_episode is not None:
             # The caller settles a specific authorized episode — an
             # abandonment clears only the circuit its abandonment
@@ -2377,8 +2435,13 @@ class _HTTPBridgeRetryCircuitMixin:
                                     state.poison_anchor_cleared = False
                                     state.owed_poison_detail = None
                                 state.consecutive_failures = max(0, surviving.consecutive_failures)
-                                state.cooldown_until = clock_for(self).monotonic() + max(
+                                surviving_cooldown_remaining = max(
                                     0.0, surviving.cooldown_until_epoch - clock_for(self).time()
+                                )
+                                state.cooldown_until = (
+                                    clock_for(self).monotonic() + surviving_cooldown_remaining
+                                    if surviving_cooldown_remaining > 0.0
+                                    else 0.0
                                 )
                                 state.last_detail = surviving.last_detail
                                 if state.cooldown_until > clock_for(self).monotonic():

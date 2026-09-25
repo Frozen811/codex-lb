@@ -565,7 +565,7 @@ from app.modules.proxy._service.support import (
     _WEBSOCKET_FULL_REPLAY_WAIT_MIN_ITEMS,  # noqa: F401
     _WEBSOCKET_FULL_REPLAY_WAIT_POLL_SECONDS,  # noqa: F401
     _ApiKeyReservationTouchState,  # noqa: F401
-    _call_with_supported_optional_kwargs,
+    _call_with_supported_optional_kwargs,  # noqa: F401
     _clear_websocket_request_error_overrides,  # noqa: F401
     _DownstreamWebSocketActivity,  # noqa: F401
     _event_type_from_payload,  # noqa: F401
@@ -709,6 +709,7 @@ from app.modules.proxy._service.websocket.helpers import (
     _websocket_event_error_param,  # noqa: F401
     _websocket_event_error_payload,  # noqa: F401
     _websocket_event_error_type,  # noqa: F401
+    _websocket_event_upstream_error,  # noqa: F401
     _websocket_full_resend_conflicts_with_visible_pending,  # noqa: F401
     _websocket_input_item_type,  # noqa: F401
     _websocket_owner_pinned_quota_error_code,  # noqa: F401
@@ -766,11 +767,13 @@ from app.modules.proxy.load_balancer import (
     effective_account_concurrency_caps,
     effective_routing_tunables,
 )
+from app.modules.proxy.model_account_routing import apply_model_account_routing
 from app.modules.proxy.repo_bundle import ProxyRepoFactory
 from app.modules.proxy.ring_membership import (
     RingMembershipService,
 )
 from app.modules.proxy.selection_errors import selection_failure_response
+from app.modules.proxy.subagent_preference import select_account_with_subagent_preference
 from app.modules.proxy.work_admission import (
     ADMISSION_WAIT_TIMEOUT_SECONDS,
     COMPACT_RESPONSE_CREATE_LIMIT,
@@ -828,42 +831,24 @@ _REQUEST_TRANSPORT_HTTP = "http"
 _COMPACT_SAME_CONTRACT_RETRY_BUDGET = 1
 _ACCOUNT_RECOVERY_RETRY_CODES = frozenset(
     {
-        "rate_limit_exceeded",
-        "usage_limit_reached",
-        "insufficient_quota",
-        "usage_not_included",
-        "quota_exceeded",
-        *PERMANENT_FAILURE_CODES.keys(),
+        "rate_limit_exceeded", "usage_limit_reached", "insufficient_quota",
+        "usage_not_included", "quota_exceeded", *PERMANENT_FAILURE_CODES.keys(),
     }
 )
 
 _TRANSIENT_RETRY_CODES = frozenset(
     {
-        "overloaded_error",
-        "server_error",
-        "server_is_overloaded",
-        "stream_incomplete",
-        "stream_idle_timeout",
-        "upstream_request_timeout",
+        "overloaded_error", "server_error", "server_is_overloaded",
+        "stream_incomplete", "stream_idle_timeout", "upstream_request_timeout",
     }
 )
 _UPSTREAM_UNAVAILABLE_TRANSIENT_MESSAGE_MARKERS = (
-    "broken pipe",
-    "cannot connect",
-    "connection aborted",
-    "connection closed",
-    "connection reset",
-    "keepalive ping timeout",
-    "no close frame",
-    "server disconnected",
-    "timed out",
-    "timeout",
-    "upstream closed",
+    "broken pipe", "cannot connect", "connection aborted", "connection closed",
+    "connection reset", "keepalive ping timeout", "no close frame",
+    "server disconnected", "timed out", "timeout", "upstream closed",
 )
 _UPSTREAM_UNAVAILABLE_NON_TRANSIENT_MESSAGE_MARKERS = (
-    "certificate verify failed",
-    "clientconnectorcertificateerror",
-    "sslcertverificationerror",
+    "certificate verify failed", "clientconnectorcertificateerror", "sslcertverificationerror",
 )
 _UPSTREAM_CLOSE_CODES_SKIP_SAME_ACCOUNT_RETRY = frozenset({1011})
 _MAX_TRANSIENT_SAME_ACCOUNT_RETRIES = 3
@@ -872,23 +857,13 @@ _STREAM_MAX_ACCOUNT_ATTEMPTS = 3
 _WEBSOCKET_MAX_ACCOUNT_ATTEMPTS = 3
 _WEBSOCKET_TRANSPARENT_REPLAY_ERROR_CODES = frozenset(
     {
-        "rate_limit_exceeded",
-        "usage_limit_reached",
-        "insufficient_quota",
-        "usage_not_included",
-        "quota_exceeded",
-        "overloaded_error",
-        "server_is_overloaded",
+        "rate_limit_exceeded", "usage_limit_reached", "insufficient_quota",
+        "usage_not_included", "quota_exceeded", "overloaded_error", "server_is_overloaded",
     }
 )
 _WEBSOCKET_AUTH_FAILURE_CODES = frozenset({"invalid_api_key", "invalid_authentication", "token_invalidated"})
 _WEBSOCKET_REAUTH_REQUIRED_MESSAGE_MARKERS = (
-    "session has ended",
-    "session expired",
-    "log in again",
-    "login again",
-    "reauth",
-    "re-auth",
+    "session has ended", "session expired", "log in again", "login again", "reauth", "re-auth",
 )
 _WEBSOCKET_SESSION_EXPIRED_FAILURE_CODE = "account_session_expired"
 _WEBSOCKET_AUTH_INVALIDATED_FAILURE_CODE = "account_auth_invalidated"
@@ -1259,6 +1234,7 @@ class ProxyService(
                 error_code=log_error_code,
                 error_message=log_error_message,
                 transport=_REQUEST_TRANSPORT_HTTP,
+                request_kind=request_kind,
                 failure_phase=failure_metadata.failure_phase,
                 failure_detail=failure_metadata.failure_detail,
                 failure_exception_type=failure_metadata.failure_exception_type,
@@ -1446,16 +1422,10 @@ class ProxyService(
         if isinstance(affinity_policy, _AffinityPolicy):
             # Expand once at the compatibility edge so transport callers cannot drift.
             kwargs.update(affinity_policy.selection_kwargs())
-        required_capability_kwargs = {}
-        if kwargs.get("require_security_work_authorized") is True:
-            required_capability_kwargs["require_security_work_authorized"] = kwargs.pop(
-                "require_security_work_authorized"
-            )
-        return await _call_with_supported_optional_kwargs(
-            self._select_account_with_budget,
-            deadline,
-            optional_kwargs=kwargs,
-            **required_capability_kwargs,
+        else:
+            affinity_policy = None
+        return await select_account_with_subagent_preference(
+            self._select_account_with_budget, deadline, self._repo_factory, affinity_policy, kwargs
         )
 
     @asynccontextmanager
@@ -1754,6 +1724,7 @@ class ProxyService(
         fallback_on_preferred_account_unavailable: bool = True,
         traffic_class: TrafficClass = TRAFFIC_CLASS_FOREGROUND,
         redact_sensitive_details: bool = False,
+        headers: Mapping[str, str] | None = None,
     ) -> AccountSelection:
         remaining_budget = self._remaining_budget_seconds(deadline)
         if remaining_budget <= 0:
@@ -1821,6 +1792,25 @@ class ProxyService(
                 )
                 required_continuity = required_preferred_account and preferred_account_is_continuity_owner
                 single_account_routing_id: str | None = None
+                _mro = await apply_model_account_routing(
+                    model=model,
+                    headers=headers,
+                    preferred_account_id=preferred_account_id,
+                    fallback_on_preferred_account_unavailable=fallback_on_preferred_account_unavailable,
+                    required_preferred_account=required_preferred_account,
+                    single_account_routing_id=single_account_routing_id,
+                    routing_strategy=routing_strategy,
+                    repo_factory=self._repo_factory,
+                    excluded_account_ids_set=excluded_account_ids_set,
+                    scoped_account_ids=scoped_account_ids,
+                )
+                if _mro.error is not None:
+                    return _mro.error
+                preferred_account_id = _mro.preferred_account_id
+                fallback_on_preferred_account_unavailable = _mro.fallback
+                required_preferred_account = _mro.required
+                single_account_routing_id = _mro.single_id
+                routing_strategy = _mro.strategy
                 if _routing_strategy(settings) == "single_account" and (
                     not required_preferred_account
                     or (required_continuity and not preferred_account_overrides_single_account_routing)
@@ -2237,6 +2227,7 @@ _LOCAL_PROXY_ERROR_CODES = frozenset(
         "no_accounts",
         "no_plan_support_for_model",
         "additional_quota_data_unavailable",
+        "additional_quota_routing_disabled",
         "no_additional_quota_eligible_accounts",
         "payload_too_large",
         "proxy_overloaded",
@@ -2445,10 +2436,11 @@ def _should_failover_previsible_unary_proxy_error(exc: ProxyResponseError) -> bo
         return False
     error = _parse_openai_error(exc.payload)
     error_code = _normalize_error_code(error.code if error else None, error.type if error else None)
-    error_message = error.message if error else None
-    return error_code == "upstream_unavailable" and _should_retry_transient_stream_error(
-        "upstream_unavailable",
-        error_message,
+    # Typed transport provenance takes precedence over sanitized message text.
+    return error_code == "upstream_unavailable" and (
+        exc.retryable_same_contract
+        if exc.failure_detail == "transport_error"
+        else _should_retry_transient_stream_error("upstream_unavailable", error.message if error else None)
     )
 
 

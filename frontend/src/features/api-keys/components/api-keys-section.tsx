@@ -1,5 +1,5 @@
 import { KeySquare } from "lucide-react";
-import { lazy, useMemo } from "react";
+import { lazy, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -46,12 +46,16 @@ export function ApiKeysSection({
     updateMutation,
     deleteMutation,
     regenerateMutation,
+    resetUsageMutation,
+    bulkResetUsageMutation,
   } = useApiKeys();
 
   const createDialog = useDialogState();
   const editDialog = useDialogState<ApiKey>();
   const deleteDialog = useDialogState<ApiKey>();
   const createdDialog = useDialogState<string>();
+  const resetDialog = useDialogState<ApiKey[]>();
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const keys = apiKeysQuery.data ?? [];
   const busy =
@@ -60,15 +64,26 @@ export function ApiKeysSection({
     createMutation.isPending ||
     updateMutation.isPending ||
     deleteMutation.isPending ||
-    regenerateMutation.isPending;
+    regenerateMutation.isPending ||
+    resetUsageMutation.isPending ||
+    bulkResetUsageMutation.isPending;
 
   const mutationError = useMemo(
     () =>
       getErrorMessageOrNull(createMutation.error) ||
       getErrorMessageOrNull(updateMutation.error) ||
       getErrorMessageOrNull(deleteMutation.error) ||
-      getErrorMessageOrNull(regenerateMutation.error),
-    [createMutation.error, deleteMutation.error, regenerateMutation.error, updateMutation.error],
+      getErrorMessageOrNull(regenerateMutation.error) ||
+      getErrorMessageOrNull(resetUsageMutation.error) ||
+      getErrorMessageOrNull(bulkResetUsageMutation.error),
+    [
+      createMutation.error,
+      deleteMutation.error,
+      regenerateMutation.error,
+      updateMutation.error,
+      resetUsageMutation.error,
+      bulkResetUsageMutation.error,
+    ],
   );
 
   const handleCreate = async (payload: ApiKeyCreateRequest) => {
@@ -81,6 +96,16 @@ export function ApiKeysSection({
       return;
     }
     await updateMutation.mutateAsync({ keyId: editDialog.data.id, payload });
+  };
+
+  const handleResetUsage = async () => {
+    if (!resetDialog.data || resetDialog.data.length === 0) {
+      return;
+    }
+    const keyIds = resetDialog.data.map((k) => k.id);
+    await bulkResetUsageMutation.mutateAsync(keyIds);
+    setSelectedIds(new Set());
+    resetDialog.hide();
   };
 
   return (
@@ -117,6 +142,8 @@ export function ApiKeysSection({
       <ApiKeyTable
         keys={keys}
         busy={busy}
+        selectedIds={selectedIds}
+        onSelectedIdsChange={setSelectedIds}
         onEdit={(apiKey) => editDialog.show(apiKey)}
         onDelete={(apiKey) => deleteDialog.show(apiKey)}
         onRegenerate={(apiKey) => {
@@ -124,6 +151,7 @@ export function ApiKeysSection({
             createdDialog.show(result.key);
           });
         }}
+        onResetUsage={(apiKeys) => resetDialog.show(apiKeys)}
       />
 
       <ApiKeyCreateDialog
@@ -162,6 +190,36 @@ export function ApiKeysSection({
           });
         }}
       />
+
+      <ConfirmDialog
+        open={resetDialog.open}
+        title={
+          resetDialog.data && resetDialog.data.length === 1
+            ? t("apiKeys.resetDialog.title_one")
+            : t("apiKeys.resetDialog.title_other", { count: resetDialog.data?.length ?? 0 })
+        }
+        description={
+          resetDialog.data && resetDialog.data.length === 1
+            ? t("apiKeys.resetDialog.description_one", { name: resetDialog.data[0].name })
+            : t("apiKeys.resetDialog.description_other", { count: resetDialog.data?.length ?? 0 })
+        }
+        confirmLabel={t("apiKeys.actions.resetUsage")}
+        onOpenChange={resetDialog.onOpenChange}
+        onConfirm={handleResetUsage}
+      >
+        {resetDialog.data && resetDialog.data.length > 1 ? (
+          <div className="max-h-36 overflow-y-auto rounded-md border bg-muted/40 p-2 text-xs space-y-1">
+            <p className="font-medium text-foreground">{t("apiKeys.resetDialog.affectedKeys")}</p>
+            <ul className="list-disc pl-4 space-y-0.5 text-muted-foreground">
+              {resetDialog.data.map((key) => (
+                <li key={key.id} className="truncate">
+                  {key.name} <span className="font-mono text-[10px]">({key.keyPrefix})</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </ConfirmDialog>
     </section>
   );
 }
