@@ -16,6 +16,29 @@ Load balancer for ChatGPT accounts. Pool multiple accounts, track usage, manage 
 
 **Documentation: <https://soju06.github.io/codex-lb/>** — getting started, client setup, configuration, deployment, troubleshooting, and more screenshots.
 
+> [!NOTE]
+> ### 🛡️ Hardened Community Edition (by [@Frozen811](https://github.com/Frozen811))
+> This fork includes **100% verified in-code fixes for all 132 tracked issues and 85 community PRs**:
+> - Fixes HTTP/2 Native Egress cascade stream drops and stream-cap exhaustion ([#2471](https://github.com/Soju06/codex-lb/issues/2471), [#2470](https://github.com/Soju06/codex-lb/issues/2470))
+> - Delivers terminal error frames on injected anchor rejection ([#2493](https://github.com/Soju06/codex-lb/issues/2493))
+> - Integrates Replay Relocation engine and account-neutral transcript rebuilding ([PR #2428](https://github.com/Soju06/codex-lb/pull/2428))
+> - Removes unsupported `max_output_tokens` from Force Probe to prevent upstream HTTP 400 errors ([PR #2496](https://github.com/Soju06/codex-lb/pull/2496))
+> - Adds dashboard single & bulk API key usage reset ([#2492](https://github.com/Soju06/codex-lb/issues/2492))
+> 
+> Detailed release documentation: [COMMUNITY_RELEASE.md](COMMUNITY_RELEASE.md)
+> 
+> **Quick clone & run:**
+> ```bash
+> git clone https://github.com/Frozen811/codex-lb.git
+> cd codex-lb
+> uv run codex-lb
+> ```
+> Or with Docker:
+> ```bash
+> docker build -t codex-lb:hardened .
+> docker run -d -p 2455:2455 -p 1455:1455 -v codex-lb-data:/var/lib/codex-lb codex-lb:hardened
+> ```
+
 ## Features
 
 <table>
