@@ -145,18 +145,22 @@ In this edition, **every single reported defect was verified and resolved direct
 
 ### 1. Локальный запуск через `uv` (Local run)
 ```bash
+git clone https://github.com/Frozen811/codex-lb.git
+cd codex-lb
 uv run codex-lb
 ```
 Панель управления и прокси доступны по адресу: **`http://localhost:2455`**.
 
 ### 2. Запуск в Docker (Docker run)
 ```bash
-docker build -t codex-lb:local .
+git clone https://github.com/Frozen811/codex-lb.git
+cd codex-lb
+docker build -t codex-lb:hardened .
 docker volume create codex-lb-data
 docker run -d --name codex-lb \
   -p 2455:2455 -p 1455:1455 \
   -v codex-lb-data:/var/lib/codex-lb \
-  codex-lb:local
+  codex-lb:hardened
 ```
 
 ### 3. Настройка клиента Codex CLI (`~/.codex/config.toml`)
