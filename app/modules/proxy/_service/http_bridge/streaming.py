@@ -1043,7 +1043,7 @@ class _HTTPBridgeStreamingMixin:
         inline_image_admission = (
             _inline_input_image_request_admission(payload)
             if runtime_config.enabled
-            and runtime_config.inline_images_enabled
+            and getattr(runtime_config, "inline_images_enabled", True)
             and image_request
             and not image_generation_request
             else _HTTPBridgeInlineImageAdmission(_HTTP_BRIDGE_INLINE_IMAGE_UNSUPPORTED, 0)

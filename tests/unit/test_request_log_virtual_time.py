@@ -273,5 +273,6 @@ async def test_write_request_log_persists_latency_upstream_terminal_ms() -> None
     await scheduler.drain()
 
     (row,) = request_logs.rows
-    assert row["latency_ms"] == 1100
+    assert row["latency_upstream_terminal_ms"] == 1100
+    assert row["latency_ms"] == 1500
     assert row["status"] == "success"

@@ -38,10 +38,13 @@ async def test_commit_user_uses_sqlite_writer_section(monkeypatch) -> None:
 @pytest.mark.asyncio
 async def test_purge_expired_invited_users_uses_sqlite_writer_section(monkeypatch) -> None:
     session = MagicMock()
+    session.rollback = AsyncMock()
     scalars_mock = MagicMock()
     scalars_mock.all.return_value = ["u_expired"]
     res_mock = MagicMock()
     res_mock.scalars.return_value = scalars_mock
+    res_mock.first.return_value = ("u_expired",)
+    res_mock.all.return_value = [("u_expired",)]
     session.execute = AsyncMock(return_value=res_mock)
     session.commit = AsyncMock()
 
@@ -63,7 +66,9 @@ async def test_purge_expired_invited_users_uses_sqlite_writer_section(monkeypatc
 @pytest.mark.asyncio
 async def test_reactivate_owner_disabled_keys_uses_sqlite_writer_section(monkeypatch) -> None:
     session = MagicMock()
+    session.rollback = AsyncMock()
     res_mock = MagicMock()
+    res_mock.all.return_value = [("hash1",)]
     res_mock.scalars.return_value.all.return_value = ["hash1"]
     session.execute = AsyncMock(return_value=res_mock)
     session.commit = AsyncMock()
@@ -86,7 +91,9 @@ async def test_reactivate_owner_disabled_keys_uses_sqlite_writer_section(monkeyp
 @pytest.mark.asyncio
 async def test_delete_user_uses_sqlite_writer_section(monkeypatch) -> None:
     session = MagicMock()
+    session.rollback = AsyncMock()
     del_mock = MagicMock()
+    del_mock.all.return_value = [("u1",)]
     del_mock.scalar_one_or_none.return_value = "u1"
     session.execute = AsyncMock(return_value=del_mock)
     session.commit = AsyncMock()

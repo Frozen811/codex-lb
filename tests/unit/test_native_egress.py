@@ -52,6 +52,7 @@ print(json.dumps({
         "websocket_responses_events_v1",
         "websocket_responses_routing_v1",
         "websocket_send_ack",
+        "websocket_text_chunking_v1",
     ],
 }), flush=True)
 """

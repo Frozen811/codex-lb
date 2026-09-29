@@ -260,6 +260,8 @@ def _response_create_text(
         upstream_payload["type"] = "response.create"
     if client_metadata:
         upstream_payload["client_metadata"] = client_metadata
+    if payload.parallel_tool_calls is not None:
+        upstream_payload["parallel_tool_calls"] = payload.parallel_tool_calls
     _finalize_responses_lite_reasoning_context(
         upstream_payload,
         responses_lite=(

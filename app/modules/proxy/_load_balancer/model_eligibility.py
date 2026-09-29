@@ -48,13 +48,15 @@ def _filter_accounts_for_model_with_catalog_evidence(
     service_tier: str | None = None,
     additional_quota_can_override_account_catalog: bool = False,
 ) -> _ModelAccountFilterResult:
-    account_indexes_cover_selection = True
+    account_indexes_cover_selection = False
     get_snapshot = getattr(registry, "get_snapshot", None)
     if callable(get_snapshot):
         snapshot = get_snapshot()
         account_indexes_cover_selection = snapshot is not None and all(
             account.id in snapshot.account_plans for account in accounts
         )
+    elif getattr(registry, "account_ids_for_model_service_tier", None) is not None:
+        account_indexes_cover_selection = True
     account_ids_for_model = getattr(registry, "account_ids_for_model", None)
     general_model_account_ids = (
         account_ids_for_model(model) if callable(account_ids_for_model) and account_indexes_cover_selection else None
