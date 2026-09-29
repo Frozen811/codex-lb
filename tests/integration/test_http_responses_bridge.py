@@ -209,7 +209,16 @@ def _make_app_settings(
     codex_prewarm_enabled: bool = False,
     instance_id: str = "instance-a",
     instance_ring: list[str] | None = None,
+    inline_images_enabled: bool | None = None,
 ) -> Settings:
+    # ``inline_images_enabled=None`` (the default) OMITS the field so the
+    # production default (True, allow-bounded-inline-images-on-bridge)
+    # applies; passing an explicit bool pins the field (False = rollback).
+    overrides: dict[str, Any] = (
+        {}
+        if inline_images_enabled is None
+        else {"http_responses_session_bridge_inline_images_enabled": inline_images_enabled}
+    )
     return Settings(
         http_responses_session_bridge_enabled=enabled,
         http_responses_session_bridge_codex_prewarm_enabled=codex_prewarm_enabled,
@@ -221,6 +230,7 @@ def _make_app_settings(
         compact_request_budget_seconds=75.0,
         transcription_request_budget_seconds=120.0,
         stream_idle_timeout_seconds=300.0,
+        **overrides,
     )
 
 
@@ -4948,8 +4958,11 @@ async def test_v1_responses_http_bridge_reuses_quota_admitted_spark_then_rejects
     async def fail_legacy_stream(*args, **kwargs):
         raise AssertionError("legacy core_stream_responses path must not be used when HTTP bridge is enabled")
 
+    monkeypatch.setattr("app.core.openai.model_registry.get_model_registry", lambda: registry)
     monkeypatch.setattr("app.modules.proxy.load_balancer.get_model_registry", lambda: registry)
     monkeypatch.setattr("app.modules.proxy._service.support.get_model_registry", lambda: registry)
+    monkeypatch.setattr("app.modules.proxy.request_policy.get_model_registry", lambda: registry)
+    monkeypatch.setattr("app.modules.proxy.api.get_model_registry", lambda: registry)
     monkeypatch.setattr(proxy_module.ProxyService, "_ensure_fresh_with_budget", fake_ensure_fresh_with_budget)
     monkeypatch.setattr(proxy_module, "connect_responses_websocket", fake_connect_responses_websocket)
     monkeypatch.setattr(proxy_module, "core_stream_responses", fail_legacy_stream)
@@ -9197,8 +9210,8 @@ async def test_http_bridge_usage_limit_preserves_reset_and_retires_unavailable_o
         json={**body, "input": "continue", "previous_response_id": "resp_reset_owner_1"},
         headers=headers,
     )
-    assert explicit.status_code == 502
-    assert explicit.json()["error"]["code"] == "previous_response_owner_unavailable"
+    assert explicit.status_code == 404
+    assert explicit.json()["error"]["code"] == "bridge_previous_response_not_found"
     assert replacement_upstream.sent_text == []
 
     resumed = await _collect_sse_events(async_client, path, json_body={**body, "input": "continue"}, headers=headers)

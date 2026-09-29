@@ -1136,6 +1136,17 @@ class _WebSocketRequestState:
     usage_share_admitted: bool = False
     request_usage_budget: ApiKeyRequestUsageBudget | None = None
     request_text: str | None = None
+    # Whole-frame response.create budget override for admitted inline-image
+    # bridge requests (allow-bounded-inline-images-on-bridge): the 64 MiB
+    # complete-frame cap. When set, every response.create size guard this
+    # request passes through — prepare, installation-id stamping, URL
+    # inlining, and the exact final send after operation/cache-identity
+    # stamping — measures the complete serialized frame against this bound
+    # instead of the global cap, and historical slimming must not run:
+    # oversize fails with the explicit 400 ``payload_too_large`` anti-retry
+    # error before upstream dispatch. ``None`` (default) keeps the stock
+    # global budget and slimming behavior everywhere.
+    response_create_max_bytes_override: int | None = None
     replay_count: int = 0
     # Counts only the one extra replay permitted after the initial recovery
     # replay when the replacement upstream socket also closes cleanly before
@@ -1588,7 +1599,9 @@ def _http_bridge_session_supports_service_tier(
         if callable(account_ids_for_model) and account_indexes_cover_owner
         else None
     )
-    model_catalog_omits_account = model_account_ids is not None and session.account.id not in model_account_ids
+    model_catalog_omits_account = (model_account_ids is not None and session.account.id not in model_account_ids) or (
+        session.catalog_omission_quota_admission is not None
+    )
     quota_admission_matches = (
         session.catalog_omission_quota_admission is not None
         and session.catalog_omission_quota_admission.matches(

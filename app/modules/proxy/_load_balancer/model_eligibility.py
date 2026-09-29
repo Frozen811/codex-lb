@@ -37,6 +37,7 @@ class _ModelAccountFilterResult:
     # not advertise. Set only when the tier narrowed the pool, so an empty
     # result can say the tier excluded the accounts rather than the model.
     applied_service_tier: str | None = None
+    account_indexes_cover_selection: bool = False
 
 
 def _filter_accounts_for_model_with_catalog_evidence(
@@ -72,11 +73,11 @@ def _filter_accounts_for_model_with_catalog_evidence(
             else None
         )
         if allowed_account_ids is not None:
-            if additional_quota_can_override_account_catalog and general_model_account_ids is not None:
+            if additional_quota_can_override_account_catalog:
                 allowed_plans = registry.plan_types_for_model_service_tier(model, effective_service_tier)
                 tier_filtered_accounts: list[Account] = []
                 for account in accounts:
-                    if account.id in general_model_account_ids:
+                    if general_model_account_ids is not None and account.id in general_model_account_ids:
                         if account.id in allowed_account_ids:
                             tier_filtered_accounts.append(account)
                     elif allowed_plans is None or account_plan_matches_allowed(account.plan_type, allowed_plans):
@@ -88,6 +89,7 @@ def _filter_accounts_for_model_with_catalog_evidence(
                 accounts=model_accounts,
                 general_model_account_ids=general_model_account_ids,
                 applied_service_tier=effective_service_tier,
+                account_indexes_cover_selection=account_indexes_cover_selection,
             )
         allowed_plans = registry.plan_types_for_model_service_tier(model, effective_service_tier)
     else:
@@ -100,6 +102,7 @@ def _filter_accounts_for_model_with_catalog_evidence(
         accounts=model_accounts,
         general_model_account_ids=general_model_account_ids,
         applied_service_tier=effective_service_tier,
+        account_indexes_cover_selection=account_indexes_cover_selection,
     )
 
 

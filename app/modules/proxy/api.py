@@ -10824,8 +10824,6 @@ def _sanitize_public_error_envelope(envelope: OpenAIErrorEnvelopeModel) -> OpenA
 def _is_previous_response_not_found_public_error(error_value: OpenAIError | None) -> bool:
     if error_value is None:
         return False
-    if error_value.code == "bridge_previous_response_not_found":
-        return True
     return is_previous_response_not_found_public_shape(
         code=error_value.code,
         param=_openai_error_param(error_value),

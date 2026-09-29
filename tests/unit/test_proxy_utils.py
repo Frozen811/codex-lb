@@ -4895,6 +4895,10 @@ async def test_stream_http_bridge_or_retry_bypasses_bridge_for_input_image(monke
             queue_limit=16,
             prompt_cache_idle_ttl_seconds=30.0,
             gateway_safe_mode=False,
+            # This stock test asserts the blanket image bypass, which is the
+            # documented explicit-false rollback of the default-on
+            # inline-image bridge contract.
+            inline_images_enabled=False,
         ),
     )
     payload = ResponsesRequest.model_validate(
@@ -5110,6 +5114,10 @@ async def test_native_image_bypass_emits_capacity_keepalive_before_upstream_star
             queue_limit=16,
             prompt_cache_idle_ttl_seconds=30.0,
             gateway_safe_mode=False,
+            # Image-bypass regression: explicit rollback of the default-on
+            # inline-image bridge contract so the bypass keepalive path under
+            # test is the one this stock test has always exercised.
+            inline_images_enabled=False,
         ),
     )
     monkeypatch.setattr(service, "_resolve_file_account_for_responses", AsyncMock(return_value=None))

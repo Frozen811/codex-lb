@@ -99,6 +99,7 @@ fn sse_request(
         timeout_ms: Some(2_000),
         connect_timeout_ms: Some(2_000),
         proxy_url: None,
+        pool_key: None,
         sse: Some(NativeSseOptions {
             idle_timeout_ms,
             max_event_bytes,
@@ -175,6 +176,7 @@ async fn gzip_response_relay_crosses_native_helper_boundary() {
             timeout_ms: Some(2_000),
             connect_timeout_ms: Some(2_000),
             proxy_url: None,
+            pool_key: None,
             sse: None,
         }),
     )
@@ -283,6 +285,7 @@ async fn request_without_accept_encoding_reaches_origin_without_accept_encoding(
             timeout_ms: Some(2_000),
             connect_timeout_ms: Some(2_000),
             proxy_url: None,
+            pool_key: None,
             sse: None,
         }),
     )

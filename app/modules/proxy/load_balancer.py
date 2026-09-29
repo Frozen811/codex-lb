@@ -1246,10 +1246,13 @@ class LoadBalancer:
                 accounts = model_filter.accounts
                 general_model_account_ids = model_filter.general_model_account_ids
                 applied_service_tier = model_filter.applied_service_tier
-                if canonical_quota_can_override_account_catalog and general_model_account_ids is not None:
-                    model_catalog_omitted_account_ids = frozenset(
-                        account.id for account in accounts if account.id not in general_model_account_ids
-                    )
+                if canonical_quota_can_override_account_catalog:
+                    if general_model_account_ids is not None:
+                        model_catalog_omitted_account_ids = frozenset(
+                            account.id for account in accounts if account.id not in general_model_account_ids
+                        )
+                    elif model_filter.account_indexes_cover_selection:
+                        model_catalog_omitted_account_ids = frozenset(account.id for account in accounts)
             else:
                 # Administrative/runtime status affects routability, not who
                 # may own account-scoped upstream state. Capture this pool

@@ -49,4 +49,60 @@ Limit warm-up sends **one small real request** (using the configured warm-up mod
 
 ---
 
-*Specs: [account-routing](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/account-routing) · [frontend-architecture](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/frontend-architecture) · [usage-refresh-policy](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/usage-refresh-policy)*
+## HTTP to WebSocket promotion
+
+Owning spec: [Responses API compatibility](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/responses-api-compat).
+
+With automatic upstream transport and the default `smart` HTTP policy, Responses
+and subscription-backed Chat Completions can reuse upstream WebSocket connections
+when requests carry response/cache/session identifiers, a `conversation`, tool
+results, or an assistant response followed by new user input. A first request
+containing only a user message remains HTTP. Native Codex HTTP callers follow
+this policy too; their User-Agent alone does not indicate a WebSocket failure.
+
+Real recent upstream WS failures temporarily keep requests on HTTP (the existing
+60-second cooldown). Explicit HTTP policy and oversized payloads also bypass
+the bridge. Bypassing the bridge does not force upstream HTTP: an `input_image`
+request keeps upstream HTTP only when its payload exceeds the WebSocket frame
+budget or still carries an external image URL, and otherwise follows the
+ordinary transport precedence. Source-routed Chat requests keep their source.
+
+Inline images ride the bridge by default
+(`CODEX_LB_HTTP_RESPONSES_SESSION_BRIDGE_INLINE_IMAGES_ENABLED`, default on,
+[T4](reference/settings.md)): a request whose *every* `input_image` part is an
+inline `data:image/jpeg|png;base64` URL within the per-image budget keeps using
+the bridge under two explicit budgets — each image's decoded payload at most
+5,000,000 bytes (inclusive), and the complete serialized `response.create`
+frame (metadata included) at most 64 MiB, exactly enforced at the final send.
+The total budget permits several legal images plus history locally; it is not
+an upstream acceptance guarantee or a model token-context setting. An
+over-budget image or frame is rejected with an explicit 400 `payload_too_large`
+before any upstream send — no history slimming, no silent raw-HTTP fallback for
+size (the operator HTTP pin and the recent-WS-failure health fallback keep
+their documented, logged behavior). Every other image shape (external URL,
+`file_id`/`sediment://`, malformed base64, `image_generation` tool) keeps the
+blank image bypass, and setting the flag explicitly to `false` restores that
+bypass for every image request. If the upstream itself closes the websocket
+with close code 1009 (message too big), that close is classified as the same
+terminal 400 `payload_too_large` client error — HTTP 400 when the response has
+not started, the SSE `response.failed` envelope when it has — with no retry,
+account exclusion, rotation or health penalty; see the
+[responses spec](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/responses-api-compat).
+
+Clients resending full history need not retain response headers to reuse a
+connection. Inferred locality uses complete initial user input and instructions,
+scoped to the API key. It remains a connection preference: the full history is
+preserved, and an inferred key never authorizes response-anchor injection.
+
+The dashboard's HTTP badge describes client-to-LB transport; the upstream field
+shows the LB-to-provider transport. `codex_lb_http_bridge_routing_total` separates
+`admission` from `bypass` with bounded reasons such as `smart_history`,
+`smart_tool_result`, `smart_single_turn`, `recent_ws_failure`, `payload_size` and
+`image`. Structured `http_bridge_routing` logs include the request ID.
+`codex_lb_http_bridge_connections_total{event="reuse"}` measures actual connection
+reuse; admission counts are not successful-connection counts. Existing TTFT and
+queue latency metrics should be compared alongside reuse when measuring benefits.
+
+---
+
+*Specs: [account-routing](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/account-routing) · [frontend-architecture](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/frontend-architecture) · [responses-api-compat](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/responses-api-compat) · [usage-refresh-policy](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/usage-refresh-policy)*
