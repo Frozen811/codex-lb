@@ -66,7 +66,7 @@ export function TotpDialog({ open }: TotpDialogProps) {
               name="code"
               render={({ field }) => (
                 <FormItem className="flex flex-col items-center gap-2">
-                  <FormLabel className="sr-only">{t("auth.totp.codeLabel")}</FormLabel>
+                  <FormLabel className="sr-only" htmlFor="totp-code">{t("auth.totp.codeLabel")}</FormLabel>
                   <FormControl>
                     <InputOTP
                       id="totp-code"

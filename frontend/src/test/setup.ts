@@ -8,6 +8,28 @@ import { LANGUAGE_STORAGE_KEY } from "@/i18n";
 import { resetMockState } from "@/test/mocks/handlers";
 import { server, startMockServer } from "@/test/mocks/server";
 
+if (typeof window !== "undefined") {
+  if (typeof globalThis.FormData !== "undefined") {
+    window.FormData = globalThis.FormData;
+  }
+  if (typeof globalThis.File !== "undefined") {
+    window.File = globalThis.File;
+  }
+  if (typeof globalThis.Blob !== "undefined") {
+    window.Blob = globalThis.Blob;
+  }
+}
+
+if (typeof globalThis.Request !== "undefined") {
+  const superRequest = Object.getPrototypeOf(globalThis.Request);
+  if (superRequest && typeof superRequest === "function" && superRequest.name === "Request") {
+    globalThis.Request = superRequest;
+    if (typeof window !== "undefined") {
+      window.Request = superRequest;
+    }
+  }
+}
+
 if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
   Object.defineProperty(window, "matchMedia", {
     writable: true,
