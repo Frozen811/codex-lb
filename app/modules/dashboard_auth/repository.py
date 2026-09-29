@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth.dashboard_access import PRESET_ROLE_IDS, PresetRoleSlug
 from app.core.exceptions import DashboardSettingsConflictError
 from app.core.utils.time import utcnow
+from app.db.dialect_sql import statement_matched
 from app.db.models import (
     COMPAT_ADMIN_USER_ID,
     COMPAT_ADMIN_USERNAME,
@@ -116,28 +117,28 @@ class DashboardAuthRepository:
     async def store_bootstrap_token_if_absent(self, token_encrypted: bytes, token_hash: bytes) -> bool:
         await self._settings_repository.get_or_create()
         async with sqlite_writer_section():
-            result = await self._session.execute(
+            stmt = (
                 update(DashboardSettings)
                 .where(DashboardSettings.id == _SETTINGS_ID)
                 .where(DashboardSettings.bootstrap_token_hash.is_(None))
                 .values(bootstrap_token_encrypted=token_encrypted, bootstrap_token_hash=token_hash)
-                .returning(DashboardSettings.id)
             )
+            matched = await statement_matched(self._session, stmt, DashboardSettings.id)
             await self._session.commit()
-            return result.scalar_one_or_none() is not None
+            return matched
 
     async def clear_bootstrap_token(self) -> bool:
         await self._settings_repository.get_or_create()
         async with sqlite_writer_section():
-            result = await self._session.execute(
+            stmt = (
                 update(DashboardSettings)
                 .where(DashboardSettings.id == _SETTINGS_ID)
                 .where(DashboardSettings.bootstrap_token_hash.is_not(None))
                 .values(bootstrap_token_encrypted=None, bootstrap_token_hash=None)
-                .returning(DashboardSettings.id)
             )
+            matched = await statement_matched(self._session, stmt, DashboardSettings.id)
             await self._session.commit()
-            return result.scalar_one_or_none() is not None
+            return matched
 
     # --- users: reads ---
 
@@ -263,9 +264,10 @@ class DashboardAuthRepository:
                         role_id=PRESET_ROLE_IDS[PresetRoleSlug.ADMIN],
                         role_source=DashboardUserRoleSource.MANUAL.value,
                     )
-                    .returning(DashboardUser.id)
                 )
-                if armed.scalar_one_or_none() is None:
+                # Verdict via rowcount: RETURNING is not available on MySQL and
+                # the affected-row count is equivalent on every dialect here.
+                if (armed.rowcount or 0) == 0:
                     await self._session.rollback()
                     return None
                 user_id = existing.id
@@ -325,11 +327,12 @@ class DashboardAuthRepository:
                 mutate_user(user)
                 if bump_generation:
                     await self._session.flush()
+                    # The bumped generation is observed by later reads, not by this
+                    # statement: no RETURNING, so MySQL compiles it unchanged.
                     await self._session.execute(
                         update(DashboardUser)
                         .where(DashboardUser.id == user_id)
                         .values(session_generation=DashboardUser.session_generation + 1)
-                        .returning(DashboardUser.session_generation)
                     )
                 if mutate_settings is not None:
                     row = await self._settings_repository.get_or_create()
@@ -404,7 +407,7 @@ class DashboardAuthRepository:
         """
 
         async with sqlite_writer_section():
-            result = await self._session.execute(
+            stmt = (
                 update(DashboardUser)
                 .where(DashboardUser.id == user_id)
                 .where(
@@ -414,9 +417,9 @@ class DashboardAuthRepository:
                     )
                 )
                 .values(totp_last_verified_step=step)
-                .returning(DashboardUser.id)
             )
-            if result.scalar_one_or_none() is None:
+            matched = await statement_matched(self._session, stmt, DashboardUser.id)
+            if not matched:
                 await self._session.rollback()
                 return False
             await self._session.commit()

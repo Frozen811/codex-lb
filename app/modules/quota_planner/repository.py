@@ -16,10 +16,12 @@ from sqlalchemy import (
     text,
     update,
 )
-from sqlalchemy.dialects import postgresql, sqlite
+from sqlalchemy.dialects import mysql, postgresql, sqlite
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.utils.time import to_utc_naive, utcnow
+from app.db.dialect_sql import is_mysql
 from app.db.models import (
     Account,
     QuotaPlannerDecision,
@@ -89,6 +91,10 @@ _SQLITE_NOW = "(strftime('%Y-%m-%d %H:%M:%f', 'now') || '000')"
 def _db_now_expr(dialect_name: str) -> ColumnElement[datetime]:
     if dialect_name == "postgresql":
         return typing_cast(ColumnElement[datetime], func.clock_timestamp())
+    if is_mysql(dialect_name):
+        # MySQL evaluates NOW(6) per statement, the same execution-time clock
+        # the PostgreSQL and SQLite forms use.
+        return typing_cast(ColumnElement[datetime], literal_column("NOW(6)"))
     return typing_cast(ColumnElement[datetime], literal_column(_SQLITE_NOW))
 
 
@@ -98,6 +104,12 @@ def _db_now_plus_seconds_expr(dialect_name: str, *, ttl_seconds: float) -> Colum
         return typing_cast(
             ColumnElement[datetime],
             literal_column(f"(clock_timestamp() + make_interval(secs => {ttl_seconds:.3f}))"),
+        )
+    if is_mysql(dialect_name):
+        ttl_us = max(1, int(round(ttl_seconds * 1_000_000)))
+        return typing_cast(
+            ColumnElement[datetime],
+            literal_column(f"(NOW(6) + INTERVAL {ttl_us} MICROSECOND)"),
         )
     return typing_cast(
         ColumnElement[datetime],
@@ -233,14 +245,33 @@ class QuotaPlannerRepository:
         # Idempotency-key upsert: concurrent writers (e.g. overlapping planner
         # leaders during a leadership handover) converge on the surviving row
         # instead of raising IntegrityError and aborting the planning tick.
-        if self._dialect_name() == "postgresql":
-            insert_stmt = postgresql.insert(QuotaPlannerDecision).values(**values)
-        else:
-            insert_stmt = sqlite.insert(QuotaPlannerDecision).values(**values)
-        stmt = insert_stmt.on_conflict_do_nothing(index_elements=["idempotency_key"]).returning(QuotaPlannerDecision.id)
+        dialect = self._dialect_name()
         async with sqlite_writer_section():
-            inserted_id = await self._session.scalar(stmt)
-            await self._session.commit()
+            if is_mysql(dialect):
+                # MySQL has neither ON CONFLICT DO NOTHING nor RETURNING: a
+                # plain INSERT whose duplicate-key error means another writer
+                # already owns the idempotency key, and the driver-reported
+                # primary key identifies our row when the insert did win.
+                try:
+                    insert_result = await self._session.execute(mysql.insert(QuotaPlannerDecision).values(**values))
+                except IntegrityError:
+                    await self._session.rollback()
+                    inserted_id = None
+                else:
+                    primary_key = insert_result.inserted_primary_key
+                    inserted_id = primary_key[0] if primary_key else None
+                    await self._session.commit()
+            else:
+                insert_stmt = (
+                    postgresql.insert(QuotaPlannerDecision)
+                    if dialect == "postgresql"
+                    else sqlite.insert(QuotaPlannerDecision)
+                ).values(**values)
+                stmt = insert_stmt.on_conflict_do_nothing(index_elements=["idempotency_key"]).returning(
+                    QuotaPlannerDecision.id
+                )
+                inserted_id = await self._session.scalar(stmt)
+                await self._session.commit()
         if inserted_id is not None:
             row = await self._session.get(QuotaPlannerDecision, inserted_id)
             if row is not None:
@@ -299,11 +330,24 @@ class QuotaPlannerRepository:
         """
         since = to_utc_naive(since)
         dialect_name = self._dialect_name()
-        active_warmups = (
-            select(func.count(QuotaPlannerDecision.id))
-            .where(_active_warmup_budget_clause(since, dialect_name=dialect_name))
-            .scalar_subquery()
-        )
+        if is_mysql(dialect_name):
+            # MySQL refuses a subquery that reads the UPDATE target table
+            # (error 1093, "You can't specify target table ... for update in
+            # FROM clause"). Wrapping the count in an aggregate derived table
+            # forces materialisation, so the outer UPDATE reads the budget from
+            # a derived table instead of the target table directly.
+            budget = (
+                select(func.count(QuotaPlannerDecision.id).label("active_warmups"))
+                .where(_active_warmup_budget_clause(since, dialect_name=dialect_name))
+                .subquery()
+            )
+            active_warmups = select(budget.c.active_warmups).scalar_subquery()
+        else:
+            active_warmups = (
+                select(func.count(QuotaPlannerDecision.id))
+                .where(_active_warmup_budget_clause(since, dialect_name=dialect_name))
+                .scalar_subquery()
+            )
         warmup_cost = (
             select(func.coalesce(func.sum(RequestLog.cost_usd), 0.0))
             .where(
@@ -338,7 +382,6 @@ class QuotaPlannerRepository:
                 executed_at=claim_now,
                 lease_expires_at=claim_expires_at,
             )
-            .returning(QuotaPlannerDecision.id)
         )
         async with sqlite_writer_section():
             # Issue the claim at the start of a fresh transaction so its
@@ -350,11 +393,25 @@ class QuotaPlannerRepository:
                     text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
                     {"key": _WARMUP_BUDGET_LOCK_KEY},
                 )
-            claimed_id = await self._session.scalar(stmt)
+            elif is_mysql(dialect_name):
+                # MySQL has no transaction-scoped advisory lock; a fixed
+                # sentinel row (created on demand) gives the same serialization
+                # — the no-op upsert takes an exclusive row lock that is held
+                # until this transaction commits.
+                await self._session.execute(
+                    text(
+                        "INSERT INTO runtime_sentinels (name, value) "
+                        "VALUES ('warmup_budget_lock', '') "
+                        "ON DUPLICATE KEY UPDATE value = value"
+                    )
+                )
+            result = await self._session.execute(stmt)
             await self._session.commit()
-        if claimed_id is None:
+        # rowcount is the dialect-neutral verdict (MySQL has no RETURNING); the
+        # claim pins the decision id, which is the id to read back.
+        if (result.rowcount or 0) == 0:
             return None
-        return await self._session.get(QuotaPlannerDecision, claimed_id, populate_existing=True)
+        return await self._session.get(QuotaPlannerDecision, decision_id, populate_existing=True)
 
     async def list_expired_warmup_claims(self, *, limit: int = 100) -> list[QuotaPlannerDecision]:
         dialect_name = self._dialect_name()
@@ -402,13 +459,17 @@ class QuotaPlannerRepository:
             stmt = stmt.where(QuotaPlannerDecision.executed_at == _to_db_naive_utc(expected_executed_at))
         if expected_lease_expires_at is not None:
             stmt = stmt.where(QuotaPlannerDecision.lease_expires_at == _to_db_naive_utc(expected_lease_expires_at))
-        stmt = stmt.returning(QuotaPlannerDecision.id)
         async with sqlite_writer_section():
-            updated_id = await self._session.scalar(stmt)
+            if is_mysql(self._dialect_name()):
+                result = await self._session.execute(stmt)
+                updated = (result.rowcount or 0) > 0
+            else:
+                updated = (await self._session.scalar(stmt.returning(QuotaPlannerDecision.id))) is not None
             await self._session.commit()
-        if updated_id is None:
+        # the guarded update pins the decision id, which is the id to read back.
+        if not updated:
             return None
-        row = await self._session.get(QuotaPlannerDecision, updated_id)
+        row = await self._session.get(QuotaPlannerDecision, decision_id)
         if row is None:
             return None
         await self._session.refresh(row)
@@ -438,14 +499,15 @@ class QuotaPlannerRepository:
                 _expired_warmup_claim_clause(dialect_name=dialect_name),
             )
             .values(**values)
-            .returning(QuotaPlannerDecision.id)
         )
         async with sqlite_writer_section():
-            updated_id = await self._session.scalar(stmt)
+            result = await self._session.execute(stmt)
             await self._session.commit()
-        if updated_id is None:
+        # rowcount is the dialect-neutral verdict (MySQL has no RETURNING); the
+        # guarded update pins the row id, which is the id to read back.
+        if (result.rowcount or 0) == 0:
             return None
-        row = await self._session.get(QuotaPlannerDecision, updated_id)
+        row = await self._session.get(QuotaPlannerDecision, decision_id)
         if row is None:
             return None
         await self._session.refresh(row)
@@ -665,6 +727,7 @@ class QuotaPlannerRepository:
             )
             for row in result.all()
         ]
+
 
 
 def _settings_from_row(row: QuotaPlannerSettings) -> PlannerSettings:

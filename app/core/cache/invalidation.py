@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 from inspect import isawaitable
 
 from sqlalchemy import select, update
+from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import OperationalError
@@ -17,6 +18,7 @@ from app.core.metrics.prometheus import (
     cache_invalidation_poll_failures_total,
 )
 from app.core.scheduling.task_shutdown import stop_task_after_grace
+from app.db.dialect_sql import is_mysql
 from app.db.models import CacheInvalidation
 from app.db.session import close_session
 
@@ -252,6 +254,16 @@ class CacheInvalidationPoller:
                         index_elements=[CacheInvalidation.namespace],
                         set_={"version": CacheInvalidation.version + 1},
                     )
+                )
+                await session.execute(stmt)
+            elif is_mysql(dialect):
+                # Native upsert: the single statement bumps an existing row or
+                # seeds it, so concurrent replicas can neither lose a bump nor
+                # collide on a read-then-insert race.
+                stmt = (
+                    mysql_insert(CacheInvalidation)
+                    .values(namespace=namespace, version=1)
+                    .on_duplicate_key_update(version=CacheInvalidation.version + 1)
                 )
                 await session.execute(stmt)
             else:
