@@ -7,7 +7,7 @@
 
 ### Executive Summary
 
-**codex-lb Hardened Community Edition** is a comprehensive, production-grade release of `codex-lb` incorporating **100% verified solutions for all 132 tracked issues and 85 community Pull Requests**.
+**codex-lb Hardened Community Edition (v1.25.1)** is a comprehensive, production-grade release of `codex-lb` incorporating **100% verified solutions for all 156 tracked issues and 101 community Pull Requests**.
 
 While the upstream repository established powerful load-balancing and account-pooling concepts, production environments at scale suffered from critical failure modes:
 1. **HTTP/2 Transport Cascades**: A single dropped stream in Native Egress severed the underlying HTTP/2 connection, abruptly terminating all concurrent streams across all accounts.
@@ -82,7 +82,7 @@ In this edition, **every single reported defect was verified and resolved direct
 
 ### Общий обзор и назначение
 
-**codex-lb Hardened Community Edition** — это производственная, максимально стабилизированная сборка балансировщика и прокси `codex-lb`, включающая **100% проверенные по коду исправления всех 132 зарегистрированных проблем и 85 открытых Pull Requests сообщества**.
+**codex-lb Hardened Community Edition (v1.25.1)** — это производственная, максимально стабилизированная сборка балансировщика и прокси `codex-lb`, включающая **100% проверенные по коду исправления всех 156 зарегистрированных проблем и 101 открытого Pull Request сообщества**.
 
 При эксплуатации оригинального репозитория под реальной нагрузкой возникали критические отказы:
 1. **Разрывы HTTP/2 соединений**: Сетевой сбой на одном активном стриме Native Egress приводил к закрытию всего HTTP/2 мультиплексированного соединения и обрыву стримов всех остальных аккаунтов.
