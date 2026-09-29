@@ -2391,7 +2391,7 @@ Add a "Redeem all eligible reset credits" action to the Accounts surface that:
 
 ---
 
-### [🟢 OPEN] [#2515: fix(chat): keep the JSON instruction in input for json_object requests](https://github.com/Soju06/codex-lb/pull/2515)
+### [✅ RESOLVED / MERGED IN FORK] [#2515: fix(chat): keep the JSON instruction in input for json_object requests](https://github.com/Soju06/codex-lb/pull/2515)
 
 - **Тип:** Pull Request
 - **Автор:** @vitalNohj
@@ -3080,7 +3080,7 @@ The first command passed 88 tests; the second passed 6. Coverage includes v1/v2 
 
 ---
 
-### [🟢 OPEN] [#2528: fix(proxy): advertise GPT-6 max output tokens](https://github.com/Soju06/codex-lb/pull/2528)
+### [✅ RESOLVED / MERGED IN FORK] [#2528: fix(proxy): advertise GPT-6 max output tokens](https://github.com/Soju06/codex-lb/pull/2528)
 
 - **Тип:** Pull Request
 - **Автор:** @elmakus
@@ -3204,7 +3204,7 @@ Change folder: `openspec/changes/fix-multiline-websocket-json/` (strict validati
 
 ---
 
-### [🟢 OPEN] [#2531: fix(proxy): normalize parallel_tool_calls for Responses-Lite upstream](https://github.com/Soju06/codex-lb/pull/2531)
+### [✅ RESOLVED / MERGED IN FORK] [#2531: fix(proxy): normalize parallel_tool_calls for Responses-Lite upstream](https://github.com/Soju06/codex-lb/pull/2531)
 
 - **Тип:** Pull Request
 - **Автор:** @SantaDiegoKairos
