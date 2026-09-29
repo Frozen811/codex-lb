@@ -19,7 +19,7 @@ function formatFactor(value: number): string {
 }
 
 function formatCount(value: number): string {
-  return value.toLocaleString();
+  return value.toLocaleString("en-US");
 }
 
 type MetricRow = {

@@ -158,7 +158,7 @@ export function ModelCatalogueSettings({ disabled = false }: ModelCatalogueSetti
               {overrides.map((override) => (
                 <TableRow key={override.slug}>
                   <TableCell className="font-mono text-xs">{override.slug}</TableCell>
-                  <TableCell className="text-xs tabular-nums">{override.contextWindow.toLocaleString()}</TableCell>
+                  <TableCell className="text-xs tabular-nums">{override.contextWindow.toLocaleString("en-US")}</TableCell>
                   <TableCell>
                     {override.source === "dashboard" ? (
                       <span className="flex flex-col gap-1">
@@ -168,14 +168,14 @@ export function ModelCatalogueSettings({ disabled = false }: ModelCatalogueSetti
                         {override.envValue !== null ? (
                           <span className="text-[11px] text-muted-foreground">
                             {t("settings.modelCatalogue.source.environmentValue", {
-                              value: override.envValue.toLocaleString(),
+                              value: override.envValue.toLocaleString("en-US"),
                             })}
                           </span>
                         ) : null}
                       </span>
                     ) : (
                       <Badge variant="outline" className="text-[10px] font-normal">
-                        {t("settings.inherit.environment", { value: override.contextWindow.toLocaleString() })}
+                        {t("settings.inherit.environment", { value: override.contextWindow.toLocaleString("en-US") })}
                       </Badge>
                     )}
                   </TableCell>
@@ -232,7 +232,7 @@ export function ModelCatalogueSettings({ disabled = false }: ModelCatalogueSetti
           removeDialog.data?.envValue != null
             ? t("settings.modelCatalogue.removeDialog.resetDescription", {
                 slug: removeDialog.data?.slug ?? "",
-                value: removeDialog.data?.envValue.toLocaleString() ?? "",
+                value: removeDialog.data?.envValue.toLocaleString("en-US") ?? "",
               })
             : t("settings.modelCatalogue.removeDialog.description", { slug: removeDialog.data?.slug ?? "" })
         }
