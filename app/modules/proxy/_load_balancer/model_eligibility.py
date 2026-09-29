@@ -55,7 +55,9 @@ def _filter_accounts_for_model_with_catalog_evidence(
         account_indexes_cover_selection = snapshot is not None and all(
             account.id in snapshot.account_plans for account in accounts
         )
-    elif getattr(registry, "account_ids_for_model_service_tier", None) is not None:
+    elif callable(getattr(registry, "account_ids_for_model", None)) or callable(
+        getattr(registry, "account_ids_for_model_service_tier", None)
+    ):
         account_indexes_cover_selection = True
     account_ids_for_model = getattr(registry, "account_ids_for_model", None)
     general_model_account_ids = (

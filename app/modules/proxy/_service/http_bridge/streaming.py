@@ -1506,27 +1506,21 @@ class _HTTPBridgeStreamingMixin:
             *,
             reservation: ApiKeyUsageReservationData | None = api_key_reservation,
         ) -> tuple[_WebSocketRequestState, str]:
+            prepare_kwargs: dict[str, Any] = {
+                "api_key": api_key,
+                "api_key_reservation": reservation,
+                "request_id": request_id,
+                "client_ip": client_ip,
+            }
             if bridge_uses_responses_lite:
-                request_state, text_data = self._prepare_http_bridge_request(
-                    request_payload,
-                    headers,
-                    api_key=api_key,
-                    api_key_reservation=reservation,
-                    request_id=request_id,
-                    client_ip=client_ip,
-                    preserve_responses_lite_client_metadata=True,
-                    response_create_max_bytes=bridge_response_create_max_bytes,
-                )
-            else:
-                request_state, text_data = self._prepare_http_bridge_request(
-                    request_payload,
-                    headers,
-                    api_key=api_key,
-                    api_key_reservation=reservation,
-                    request_id=request_id,
-                    client_ip=client_ip,
-                    response_create_max_bytes=bridge_response_create_max_bytes,
-                )
+                prepare_kwargs["preserve_responses_lite_client_metadata"] = True
+            if bridge_response_create_max_bytes is not None:
+                prepare_kwargs["response_create_max_bytes"] = bridge_response_create_max_bytes
+            request_state, text_data = self._prepare_http_bridge_request(
+                request_payload,
+                headers,
+                **prepare_kwargs,
+            )
             request_state.capacity_startup_wait_event = capacity_startup_wait_event
             request_state.capacity_startup_ready_event = capacity_startup_ready_event
             lifecycle = begin_bridge_lifecycle(request_state.api_key_reservation)

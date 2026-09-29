@@ -3004,7 +3004,6 @@ class _StreamingRetryMixin:
                                     current_account_lease = None
                                     if not keep_account_in_walk:
                                         excluded_account_ids.add(account.id)
-                                    affinity = replace(affinity, reallocate_sticky=True)
                                     _move_verified_fresh_replay_from_owner(
                                         account_id=account.id,
                                         outcome="owner_previsible_failure",

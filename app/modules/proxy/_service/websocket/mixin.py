@@ -6074,7 +6074,7 @@ class _WebSocketMixin:
             and retry_error_code in _facade()._WEBSOCKET_TRANSPARENT_REPLAY_ERROR_CODES
             and request_state.previous_response_id is not None
             and request_state.preferred_account_id is not None
-            and request_state.preferred_account_id != account.id
+            and event_type != "response.failed"
             and not retry_safe_previous_response_not_found
             and not retry_safe_owner_replay
         ):
@@ -6588,7 +6588,7 @@ class _WebSocketMixin:
 
         # Only a received final terminal supplies generation evidence. Total
         # latency below retains settlement and downstream completion time.
-        if request_state.upstream_terminal_at is None:
+        if request_state.upstream_terminal_at is None and event is not None:
             request_state.upstream_terminal_at = clock_for(proxy).monotonic()
         upstream_terminal_at = request_state.upstream_terminal_at
         # First-token clock start: the TTFT cohort sample is measured from the

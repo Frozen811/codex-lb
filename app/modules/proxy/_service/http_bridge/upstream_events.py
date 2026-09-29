@@ -2627,7 +2627,7 @@ class _HTTPBridgeUpstreamEventsMixin:
             payload = parse_websocket_event_payload(text)
             event_type = classify_event_type(payload)
             routing = None
-        event_block = format_sse_event_from_text(payload, text) if payload is not None else f"data: {text}\n\n"
+        event_block = f"data: {text}\n\n"
         event = parse_sse_event_payload(payload) if event_type in _LIFECYCLE_EVENT_TYPES else None
         completed_delivery_scope = _HTTPBridgeCompletedDeliveryScope() if event_type == "response.completed" else None
         claimed_terminal_request_states: list[_WebSocketRequestState] = []
