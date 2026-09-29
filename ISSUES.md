@@ -23,6 +23,7 @@
 | [8. Dashboard, UI и Prometheus метрики](#dashboard_metrics_ui) | **7** | **9** (✅ #1870, PR #2489, PR #2464, PR #2377, #2492, #2444, #2443, #2426, #2418) | Неработающий автофилл TOTP в macOS/Chrome, искажение TPS из-за reasoning-токенов, неактуальные prometheus-метрики аккаунтов, UI баги, сброс лимитов API-ключей, видимость model sources в логах. |
 | [9. Предложения пользователей и фичи (Feature Requests / RFC)](#feature_requests) | **11** | **11** (✅ PR #2473 (#2413), PR #2448, #2304, #2343, #850, #631, #1979, #1959, #1636, #1595, #1307, #1080, #956, #620, #578) | Новые возможности, предлагаемые пользователями в Issues: диверсификация субагентов, бэкап/восстановление, Luna Reserve fallback, поддержка PAT, OIDC, drain persistence exposure, re-login lifecycle, fuzzing, pace-aware routing, health-tier dominance. |
 | [10. Прочие ошибки и регрессии](#other_bugs) | **7** | **7** (✅ #2029, PR #2255, #2291, #1924, #1707, #2410, #2314) | Остальные замеченные пользователями проблемы. |
+| [14. Новые обращения, баги и PR из апстрима (#2497–#2537)](#upstream_recent_2497_2537) | **41** | **41** | Все 41 новое обращение (Issues, предложения, фичи, PR) из оригинального репозитория Soju06/codex-lb со скриншотами, анализом и компонентами. |
 
 ---
 
@@ -1480,3 +1481,2043 @@
       - **#2038:** В `app/modules/proxy/api.py:1853` добавлен маршрут `@v1_router.get("/models/{model_id:path}")` с вызовом `_build_model_response(api_key, model_id)`, восстановивший полную совместимость с Visual Studio Copilot и официальными SDK OpenAI.
       - **#2076:** В `app/modules/oauth/service.py` реализован контроль жизненного цикла фонового локального callback-сервера с задачей `_expire_browser_flows:624` и 15-минутным TTL для сессий Browser (PKCE) авторизации, предотвращающий перехват коллбэков нативного Codex Desktop на порту 1455.
     - *Тесты:* `tests/integration/test_v1_models.py`, `tests/integration/test_oauth_flow.py`.
+
+<a id="upstream_recent_2497_2537"></a>
+---
+
+## 14. Новые проблемы, баги, предложения и Pull Requests из оригинального репозитория (Upstream #2497–#2537)
+
+> В данный раздел включены все **41 новых обращений** (Issues, Feature Requests, Pull Requests), поступивших в оригинальный репозиторий `Soju06/codex-lb` с момента последнего релиза (номера #2497–#2537), со всеми подробностями, описанием багов, ссылками на код, прикрепленными скриншотами и решениями.
+
+### [🟢 OPEN] [#2497: feat(accounts): show reset credits for paused accounts](https://github.com/Soju06/codex-lb/pull/2497)
+
+- **Тип:** Pull Request
+- **Автор:** @codemoo
+- **Дата создания:** 2026-09-25
+- **Метки:** `documentation, frontend, python`
+
+**Описание проблемы и предложенные изменения:**
+
+## Summary
+
+Allow operators to inspect a paused account's reset-credit count without resuming request routing. The selected-account read uses the existing credential refresh and account-bound proxy path; cached counts remain visible, while polling and both manual/automatic redemption remain blocked.
+
+## Type of change
+
+- [x] `feat:` — new user-facing capability
+
+Linked issue: None. This is a focused operator-requested visibility improvement, not a claim to resolve a broader issue.
+
+## OpenSpec
+
+- [x] Includes a verified, archived OpenSpec change and synchronized main specs.
+
+Change directory: `openspec/changes/archive/2026-09-25-allow-paused-account-reset-credit-visibility/`
+
+Upstream request/response formats and OAuth exchange behavior are unchanged; this changes local dashboard read eligibility only.
+
+## Changes
+
+- Allow the selected paused account's count GET, preserving identity checks, token refresh/401 retry, proxy-route resolution and error envelopes.
+- Preserve paused cached count/expiry in account summaries and the cached-detail GET. Weekly reset timestamps similarly remain last-observed data; cached credit badges are not a freshness guarantee.
+- Keep request routing, background credit polling, and manual/automatic redemption disabled for paused accounts. Preserve existing deactivated/reauth policies.
+- Add API/UI regression coverage and document the observation policy.
+
+## Simplicity
+
+- [x] Works with zero configuration; no new required setup.
+- New settings / tiers / migrations: none.
+- [x] No README, environment-variable or navigation budget changes.
+- [x] Feature documentation lives in `docs/usage-reporting.md` and links to the owning OpenSpec capability.
+
+## Test plan
+
+On upstream main `09a140fa9` plus this change:
+
+```text
+make lint                                      passed
+make typecheck                                 passed
+pytest accounts/reset-credit API+mapper+scheduler suites  123 passed
+pytest auth_manager/auth_guardian -k paused       2 passed
+vitest account-detail/account-actions/use-accounts       24 passed
+git diff --check                               passed
+```
+
+The change and reset-credit main spec passed strict OpenSpec validation. Full `openspec validate --specs --strict` reports **49 passed / 17 failed**; these are pre-existing failures (the original base comparison had the identical error map). No new validation errors were introduced. This PR remains draft pending CI/review and resolution or maintainer disposition of th
+
+*(описание сокращено, см. полный текст по ссылке на GitHub)*
+
+**Прикрепленные изображения и скриншоты:**
+
+- **Скриншот 1:**
+  ![Скриншот 1](https://raw.githubusercontent.com/codemoo/codex-lb/9a9232cff0daeac504fc1e41d3a416569c11a254/docs/screenshots/paused-reset-credits/before.png)
+
+- **Скриншот 2:**
+  ![Скриншот 2](https://raw.githubusercontent.com/codemoo/codex-lb/9a9232cff0daeac504fc1e41d3a416569c11a254/docs/screenshots/paused-reset-credits/after.png)
+
+
+---
+
+### [🟢 OPEN] [#2498: docs: add `supports_standalone_web_search` to the Codex provider example](https://github.com/Soju06/codex-lb/issues/2498)
+
+- **Тип:** Issue / Предложение
+- **Автор:** @solid-pixel
+- **Дата создания:** 2026-09-25
+- **Метки:** `bug, documentation, good first issue`
+
+**Описание проблемы и предложенные изменения:**
+
+## Problem
+
+The Codex provider examples in the [README](https://github.com/Soju06/codex-lb#client-setup) and [client setup guide](https://github.com/Soju06/codex-lb/blob/main/docs/client-setup.md) omit `supports_standalone_web_search = true`.
+
+With my setup, native web search was unavailable through the documented custom provider, even with `--search`. Codex used browser automation instead. Adding the capability setting restored native web search without changing or restarting codex-lb.
+
+## Tested environment
+
+- Codex CLI: `0.157.0`
+- Model: `gpt-6-astra`, Low reasoning
+- Authentication: ChatGPT login, with a codex-lb API key for the local proxy
+- codex-lb: `1.24.0`, Docker image `ghcr.io/soju06/codex-lb:latest`, revision `84fde5a1ed5e0d5a58ccb3ec4b82938b059bf8c5`
+- Platform: macOS with Docker Desktop
+- Provider base URL: `http://127.0.0.1:2455/backend-api/codex`
+
+## Reproduction and comparison
+
+Using the documented provider configuration, run:
+
+```sh
+codex --search -c 'model_provider="codex-lb"' \
+  -m gpt-6-astra -c 'model_reasoning_effort="low"' \
+  "Search today's top news"
+```
+
+In my test, Codex opened Google News through computer use instead of invoking native search. The same command with `model_provider="openai"` used native web search successfully.
+
+Then run with the provider capability explicitly enabled:
+
+```sh
+codex --search -c 'model_provider="codex-lb"' \
+  -c 'model_providers.codex-lb.supports_standalone_web_search=true' \
+  -m gpt-6-astra -c 'model_reasoning_effort="low"' \
+  "Search today's top news"
+```
+
+This restored native web search through codex-lb.
+
+A separate authenticated request to the running proxy's `/backend-api/codex/alpha/search` endpoint also returned HTTP 200, valid JSON, and actual search results, confirming that this deployment already supports the endpoint.
+
+## Suggested documentation change
+
+Add the following line inside the existing `[model_providers.codex-lb]` block in both setup examples:
+
+```toml
+supports_standalone_web_search = true
+```
+
+Explain that `--search` / `web_search = "live"` selects the search mode, while this provider setting declares support for the standalone search endpoint. OpenAI's [web-search documentation](https://learn.chatgpt.com/docs/web-search) says custom providers default this capability to `false`; provider, model, and runtime support are also required. Please document any minimum supported versions rather than assuming this applies to all older clients/proxy releases.
+
+This report concerns
+
+*(описание сокращено, см. полный текст по ссылке на GitHub)*
+
+
+---
+
+### [🟢 OPEN] [#2499: bug(model-sources): multi-agent capability does not preserve client collaboration tools](https://github.com/Soju06/codex-lb/issues/2499)
+
+- **Тип:** Issue / Предложение
+- **Автор:** @nhdong1993
+- **Дата создания:** 2026-09-25
+- **Метки:** `bug, help wanted`
+
+**Описание проблемы и предложенные изменения:**
+
+Codex can complete ordinary requests through an OpenAI-compatible Model Source while failing to use subagents. A source can advertise `multi_agent_version: "v2"` to the client, yet codex-lb still removes the client-supplied `collaboration` namespace from the upstream Responses request. Source-provided base instructions are also lost in the catalog projection.
+
+### Environment and scope
+
+- Observed on a self-built fork based on `1.25.0-beta.6`, before fork commit `00164ab0`; Docker Compose deployment, Codex CLI `0.156.1`.
+- Enabled OpenAI-compatible Model Source with Responses, streaming, and tools support; custom model slug (`custom/coder` below is an anonymized example).
+- HTTP Responses transport. The successful fix does not require WebSocket support or changing the source credential.
+- Inspected upstream `main` at [`09a140fa`](https://github.com/Soju06/codex-lb/commit/09a140fa9979a908e60acc97232367e0a08ef32c): the same catalog projection and tool-filter behavior are still present. The deployed end-to-end verification below was on the fork, not a clean upstream-main deployment.
+
+### Reproduction
+
+1. Configure a Responses-capable source backed by a model whose own Codex catalog advertises multi-agent support.
+2. Store the upstream capability metadata on its source model. The relevant excerpt is:
+
+   ```json
+   {
+     "tool_mode": "code_mode_only",
+     "multi_agent_version": "v2",
+     "base_instructions": "Example upstream coding instructions",
+     "experimental_supported_tools": [],
+     "use_responses_lite": false
+   }
+   ```
+
+3. Fetch `GET /backend-api/codex/models` or `GET /v1/models?client_version=0.156.1`. The source entry's `base_instructions` is empty despite being declared. The other raw capability fields can pass through when actually stored.
+4. Refresh the client's catalog, select the custom model with `supports_websockets = false`, and ask Codex to spawn one child using the same model. Use a normal persisted session.
+5. Observe the source-bound request: the client-supplied `type: "namespace"`, `name: "collaboration"` tool declaration is removed unless `namespace` was separately added to `experimental_supported_tools`. Ordinary `function` tools still survive.
+
+For a deterministic route test, use a recording upstream stub to inspect `tools`. For an end-to-end test against a real Codex-compatible backend, use Codex's actual reserved collaboration schema; an abbreviated hand-written `spawn_agent` schema may itself be rejected by the backend.
+
+##
+
+*(описание сокращено, см. полный текст по ссылке на GitHub)*
+
+
+---
+
+### [🟢 OPEN] [#2500: bug: #1968 shield-loop livelock still ships in latest stable 1.24.0; please cut a stable patch with #1969](https://github.com/Soju06/codex-lb/issues/2500)
+
+- **Тип:** Issue / Предложение
+- **Автор:** @nikhilshinday
+- **Дата создания:** 2026-09-26
+- **Метки:** `bug, triage`
+
+**Описание проблемы и предложенные изменения:**
+
+### Pre-flight checklist
+
+- [x] I searched existing issues and confirmed this is not a duplicate.
+- [x] I am running a supported codex-lb version (see Releases).
+- [x] I can reproduce the problem with the steps below.
+
+### codex-lb version
+
+1.24.0 (`ghcr.io/soju06/codex-lb:1.24.0`, revision `84fde5a1`), the current **Latest** stable release.
+
+### Deployment method
+
+Docker (ghcr.io/Soju06/codex-lb), single instance, SQLite, 2 vCPU / 2 GB VM.
+
+### Client used against codex-lb
+
+Codex CLI and Codex app (desktop).
+
+### ChatGPT account plan(s) involved
+
+Mixed pool (5 accounts).
+
+### Model(s) involved
+
+gpt-6-sol, gpt-5.6-sol
+
+### What happened?
+
+The #1968 livelock hit our deployment on 1.24.0 after about 15 days of uptime. #1969 fixed it on main on 2026-08-30, but that fix has only shipped in `1.25.0-beta.*`. `1.24.0` is still the latest stable release, so stable users keep hitting it.
+
+What we observed, all consistent with the #1968 autopsy:
+
+- The app process pinned about 115% CPU on a 2-core box. Its lifetime average was about 5%.
+- Across a 20-second py-spy profile, the main thread sat at `_outer_done_callback (asyncio/tasks.py:996/998)` in nearly every sample.
+- RSS grew to 1.3 GB, mostly anonymous memory. The box has no swap, so SQLite page cache was squeezed out and I/O wait rose to about 40%.
+- `/health/ready` took about 8 s. Request latency went from about 10 s to 85–240 s, and time to first token went from about 5 s to 50–110 s or never.
+- Clients mostly saw `stream_incomplete` / `previous_response_not_found` ("Upstream websocket closed before response.completed"). That made it look like an upstream OpenAI failure. Upstream was healthy: direct and egress-proxied requests from the same host completed in about 0.1 s.
+- The onset matched the first `http_bridge_session_close_timeout reason=retire_stale_pending` warnings. There were none in the prior 48 h, and 19 appeared in the first hour.
+- A container restart cleared it immediately: health went to about 10 ms, CPU to about 1.5%, and RSS to about 225 MB.
+
+A standalone reproduction confirms the mechanism is the one #1969 fixed. It copies the 1.24.0 `http_bridge/helpers.py::_await_task_deferring_cancellation` and awaits a never-finishing task under `anyio.move_on_after`:
+
+| Python | callbacks on inner task after 6 s | CPU |
+|---|---|---|
+| 3.14 (the image's runtime) | about 23,000, still growing | one full core |
+| 3.13 | 1 | about 30% (retry loop still spins) |
+
+### What did you expect to happen?
+
+A stable 
+
+*(описание сокращено, см. полный текст по ссылке на GitHub)*
+
+
+---
+
+### [🟢 OPEN] [#2501: bug: native HTTP upstream regressed in 1.25.0-beta.7 with native upstream request failures](https://github.com/Soju06/codex-lb/issues/2501)
+
+- **Тип:** Issue / Предложение
+- **Автор:** @milad2golnia
+- **Дата создания:** 2026-09-26
+- **Метки:** `bug, needs-info`
+
+**Описание проблемы и предложенные изменения:**
+
+### Pre-flight checklist
+
+- [x] I searched existing issues and confirmed this is not a duplicate.
+- [x] I am running a supported codex-lb version (see Releases).
+- [x] I can reproduce the problem with the steps below.
+
+### codex-lb version
+
+1.25.0-beta.7
+
+### Deployment method
+
+Helm chart (oci://ghcr.io/soju06/charts/codex-lb)
+
+### Client used against codex-lb
+
+Codex app (desktop / web)
+
+### ChatGPT account plan(s) involved
+
+Pro
+
+### Model(s) involved
+
+gpt-5.6-sol, gpt-5.6-luna, gpt-5.6-terra, gpt-6-sol, gpt-6-astra
+
+### What happened?
+
+After upgrading a production deployment from `1.24.0-beta.2` to `1.25.0-beta.7`, the native HTTP upstream path became unreliable.
+
+This HTTP failure pattern was not observed on `1.24.0-beta.2` under the same deployment topology and egress route.
+
+With beta.7 and **Settings → Routing → Upstream stream transport = HTTP**, a similarly sized production window recorded:
+
+- 687 successful HTTP-upstream requests
+- 22 × `upstream_error: native upstream request failed`
+- 48 × `upstream_unavailable: Upstream circuit breaker is open` following the native failures
+
+All 70 HTTP transport/circuit-breaker errors had `upstream_transport=http`.
+
+We changed the dashboard setting to `auto` during the incident. Overall failures decreased because most traffic was no longer forced through HTTP, but requests subsequently logged with `upstream_transport=http` still recorded **201 successes and 14 `native upstream request failed` errors**. No matching native-request failure appeared under another logged upstream transport.
+
+### Observed error messages and their source
+
+1. codex-lb dashboard / persisted request log: `native upstream request failed`
+2. Codex Desktop UI: `stream disconnected before completion: idle timeout waiting for SSE`
+3. Codex Desktop UI: `stream disconnected before completion: Transport error: network error: error decoding response body`
+
+The two Codex Desktop disconnect messages were not present in codex-lb's persisted request logs or pod stdout.
+
+### Persisted request-log evidence
+
+The following fields come from codex-lb's persisted `request_logs` records, not pod stdout:
+
+- `transport=http`
+- `upstream_transport=http`
+- `upstream_status_code=null` for the native failures
+- native failure latency ranged from about 18.9 s to 279.8 s
+- affected requests were spread across multiple models and reasoning efforts, not one model or one account
+
+For the correlated failed requests, pod stdout only recorded a generic `upstream_error` / 
+
+*(описание сокращено, см. полный текст по ссылке на GitHub)*
+
+
+---
+
+### [🟢 OPEN] [#2502: MySQL / MariaDB support](https://github.com/Soju06/codex-lb/pull/2502)
+
+- **Тип:** Pull Request
+- **Автор:** @snajpa
+- **Дата создания:** 2026-09-26
+- **Метки:** `documentation, db migration, ci, docker, python`
+
+**Описание проблемы и предложенные изменения:**
+
+# MySQL / MariaDB support
+
+Runs the schema, the migrations and the runtime write paths on MySQL and MariaDB
+as well as SQLite and PostgreSQL, keeping the existing backends behaviour-identical.
+
+Base: `origin/main` at the time of posting (rebased: no merge commits).
+Branch: `snajpa/mariadb-pr-20260926` (21 commits). The deployed instance on this machine also carries four fixes from another workstream (Astra pricing, a 420 s compact budget, and the `stream_incomplete` sticky reallocation fix with its test); they are deliberately not part of this PR and live on the deployment branch instead.
+
+## What's in it
+
+* `app/db/mysql_compat.py` — MySQL/MariaDB type rendering: unbounded `String` →
+  `VARCHAR(255)`, `Text` → `MEDIUMTEXT`, `DateTime` → `DATETIME(6)`, `Float` →
+  `DOUBLE`, keyed `LargeBinary` → `VARBINARY`. The compilers are registered for
+  **both** the `mysql` and `mariadb` dialect names: MariaDB raises on a
+  length-less `VARCHAR` where MySQL silently defaults it (this broke 121 columns).
+* `app/db/dialect_sql.py` — one predicate/capability layer (`is_mariadb`,
+  `epoch_seconds`, upsert and locking helpers) so call sites stop re-spelling
+  dialect checks.
+* Dialect-neutral writes across accounts, usage/rollups, API keys, dashboard,
+  quota planning, sticky sessions, the HTTP bridge, file pins and request logs.
+* Migrations that run on both engines, including MariaDB's refusal to index an
+  expression (functional key parts become `VIRTUAL` generated columns) and
+  `error 1832` when altering an FK parent's type.
+* `migrate.py` tolerances for what MariaDB reflects differently: computed
+  columns, boolean default synonyms, and the `now()` vs `current_timestamp(6)`
+  default family (the default tokeniser folded precision but not family, which
+  produced spurious `modify_default` drift on every `DATETIME(6)` column).
+* Test harness: builds the schema once per test **file** on servers that keep
+  tables. Rebuilding per test made the MySQL leg a multi-hour job; the first
+  per-session fix was fast but leaked rows across files, so the shipped version
+  resets rows per file and re-creates the ordered indexes `create_all` cannot
+  emit. Also seeds engine-neutral datetimes (MariaDB strict mode rejects `+00:00`
+  literals with 1292).
+* `make test-mysql`, a compose service for a MySQL target, and a CI job.
+
+## Performance work carried in this PR
+
+The production instance logs every query over 0.5 s with plans
+(`log_slow_verbosity=query_plan`). `request_logs` was the 
+
+*(описание сокращено, см. полный текст по ссылке на GitHub)*
+
+
+---
+
+### [🟢 OPEN] [#2503: fix(http-bridge): keep replayed history images on the bridge](https://github.com/Soju06/codex-lb/pull/2503)
+
+- **Тип:** Pull Request
+- **Автор:** @Komzpa
+- **Дата создания:** 2026-09-27
+- **Метки:** `documentation, python`
+
+**Описание проблемы и предложенные изменения:**
+
+## Summary
+
+Any inline `data:` image anywhere in the input made a request bypass the HTTP bridge. Agent clients replay the whole history every turn, so one screenshot attached early in a session kept every later turn off the bridge and cold on the prompt cache for the rest of the conversation.
+
+Images now bypass the bridge only when they sit in the current-turn input suffix (after the last assistant message or model-output item), when an external `http(s)` image URL survives anywhere in the input, or when an `image_generation` tool is requested. Replayed inline images from earlier turns stay bridge-eligible and are forwarded unchanged below the size budget.
+
+A second commit fixes the request log and transport decision counters: bypassed requests recorded the configured `auto` mode instead of the transport the attempt actually used. The client-side mode stays `auto` so the 426 fallback still works.
+
+## Type of change
+
+- [x] `fix:` — bug fix (no behavior change beyond the bug)
+
+## OpenSpec
+
+- `keep-replayed-history-images-on-http-bridge`
+- `record-resolved-upstream-transport-label`
+
+`docs/routing.md` describes the new bypass rule.
+
+## Validation
+
+- New unit and integration cases cover a current-turn image (bypasses), a replayed history image (stays on the bridge), a surviving external URL at depth with an upper-case scheme (bypasses) and the recorded transport label.
+- `tests/unit/test_proxy_utils.py` and `tests/integration/test_http_promotion_accounting.py`: 1458 passed.
+
+
+---
+
+### [🟢 OPEN] [#2504: fix(usage): account for cache-write tokens](https://github.com/Soju06/codex-lb/pull/2504)
+
+- **Тип:** Pull Request
+- **Автор:** @mastertyko
+- **Дата создания:** 2026-09-27
+- **Метки:** `documentation, db migration, python`
+
+**Описание проблемы и предложенные изменения:**
+
+## Summary
+
+Account for upstream cache-write tokens separately from ordinary input and cached
+reads. The existing pricing/catalog PRs intentionally deferred this usage
+dimension; this does not duplicate the model additions in #2459.
+
+- Preserve explicit write prices from models.dev/LiteLLM for the applicable
+  service tier and context window. Extend existing snapshot entries only.
+- Carry native Codex write counts through streaming, WebSocket, compact, warmup,
+  request logs and API-key settlement. Charge writes instead of ordinary input.
+- Persist nullable counts in request logs and reservations. Preserve historical
+  unknown counts, recorded costs and settled limits.
+- Keep request-log cost components consistent with the persisted total.
+
+The change adds no setting, service, dashboard control or retry mechanism.
+Existing reservation ownership/CAS and explicit external-model pricing are
+unchanged. Missing write prices retain ordinary input pricing rather than
+guessing a surcharge.
+
+## Evidence
+
+With Astra usage of 100000 input/write tokens and zero output, real local
+`POST /v1/responses` previously recorded **$1.00** and settled **1000000**
+microdollars. It now records **$1.25** in the input-cost component and total and
+settles **1250000** microdollars. Direct WebSocket gives the same result after a
+101 handshake.
+
+Mixed input (100000 input, 20000 reads, 50000 writes, 1000 output) records
+**$0.995** and settles **995000** microdollars. Duplicate terminal handling and
+repeated finalization do not double charge. Real HTTP cases also cover absent,
+negative/excessive and malformed counts, 272000/272001 context boundaries,
+priority/flex, and unchanged GPT-5.1 usage. Owned test servers/databases were
+cleaned up.
+
+## Verification
+
+- 456 affected cost, persistence, API-key and migration tests passed.
+- 45 selected stream/bridge/WebSocket/cancellation regressions passed.
+- After the final read-side fix, all 148 affected read-side cases passed again.
+- New streaming/non-streaming and direct-WS regressions fail on the unchanged
+  base, then pass with the fix.
+- Migration upgrade/downgrade/re-upgrade, historical-row preservation and schema
+  drift checks passed.
+- `make lint`, `uv run ty check`, changed-file diagnostics and strict scoped
+  OpenSpec validation passed.
+
+Nine existing PostgreSQL-only migration tests were skipped in the local SQLite
+run. Full local CI was not run; required GitHub checks remain the integration
+gate. Whole-spec validation has the same 49 p
+
+*(описание сокращено, см. полный текст по ссылке на GitHub)*
+
+
+---
+
+### [🟢 OPEN] [#2505: bug: shutdown cancels schedulers and the leader-lease keeper mid-DB-work (SQLite pool CancelledError, unreleased lease, unclean run-state)](https://github.com/Soju06/codex-lb/issues/2505)
+
+- **Тип:** Issue / Предложение
+- **Автор:** @ngallodev
+- **Дата создания:** 2026-09-28
+- **Метки:** `bug`
+
+**Описание проблемы и предложенные изменения:**
+
+### Pre-flight checklist
+
+- [x] I searched existing issues and confirmed this is not a duplicate. Closest are #1682 (leader-lease loss during runtime on single-instance SQLite) and #1981 (the wedged-teardown reclaim path). This report is about **shutdown ordering**: background tasks and the lease keeper are cancelled while inside DB work.
+- [x] I am running a supported codex-lb version (built from `main`).
+- [x] I can reproduce the problem with the steps below.
+
+### codex-lb version
+
+Source at `main` @ `09a140fa`.
+
+### Deployment method
+
+From source (`python -m app.cli`), single instance, file-backed SQLite (`sqlite+aiosqlite`, so the engine uses `NullPool`). Linux, Python 3.13, SQLAlchemy async + aiosqlite from `uv.lock`.
+
+### Client used against codex-lb
+
+Not client-dependent. This is server lifecycle (startup, then SIGTERM).
+
+### ChatGPT account plan(s) involved
+
+Not relevant. It reproduces on an empty database with no accounts.
+
+### Model(s) involved
+
+Not relevant.
+
+### What happened?
+
+When the server receives SIGTERM shortly after startup, shutdown cancels background scheduler tasks and the leader-lease keeper **while they are inside database work**. Two symptoms follow.
+
+1. **Pool errors on SQLite.** SQLAlchemy logs `ERROR sqlalchemy.pool.impl.NullPool Exception closing connection …` (sometimes `Exception during reset or similar`), with a `CancelledError` traceback through the aiosqlite adapter's `rollback()` or `close()`.
+2. **Unreleased leader lease and unclean SQLite run-state.** In `LeaderElection`, shutdown sets the keeper's stop event and then **unconditionally cancels it** (`app/core/scheduling/leader_election.py` around line 536). If the keeper is mid-renew, the lease row is not released. Shutdown then waits out the lease-release deadline (the process took about 10.5s to exit instead of about 0.5s), and the SQLite run-state stays `running`, so the next startup runs the integrity check.
+
+Tasks observed holding a connection when cancelled, attributed by stamping the current task/coroutine onto the `sqlalchemy.pool` log records across 20 runs:
+
+| Owner (coroutine) | Pool error records |
+|---|---|
+| `LeaderElection._run_release_keeper` | 6 |
+| `ModelRefreshScheduler._refresh_as_leader` | 4 |
+| `CacheInvalidationPoller._run` | 2 |
+| `StickySessionCleanupScheduler._cleanup_as_leader` | 1 |
+| `AccountUsageRollupScheduler._fold_as_leader` | 1 |
+| `MetadataRefreshScheduler._run_loop` (missing-cost backfill) | 1 |
+
+A separate instrumentation method (a 
+
+*(описание сокращено, см. полный текст по ссылке на GitHub)*
+
+
+---
+
+### [🟢 OPEN] [#2506: fix(shutdown): let DB-owning background tasks finish before cancelling them](https://github.com/Soju06/codex-lb/pull/2506)
+
+- **Тип:** Pull Request
+- **Автор:** @ngallodev
+- **Дата создания:** 2026-09-28
+- **Метки:** `documentation, python`
+
+**Описание проблемы и предложенные изменения:**
+
+## Summary
+
+On shutdown, background scheduler tasks and the leader-lease keeper are cancelled while they are still inside database work. On SQLite this logs `Exception closing connection` / `Exception during reset` pool errors, and cancelling the lease keeper mid-renew leaves the leader lease unreleased and the SQLite run-state `running`. That makes shutdown wait out the ~10s lease-release deadline and forces an integrity check on the next start. This PR lets each task finish the unit of work it's in, within a 2s grace, before falling back to cancellation.
+
+> [!IMPORTANT]
+> **PostgreSQL was not tested.** Every measurement below is on file-backed SQLite (`NullPool` + aiosqlite), where the pool-error symptom is specific. The code change is backend-independent, and so is the lease-keeper fix, but I did not reproduce the symptom or measure the fix on Postgres. The CI PostgreSQL job exercises the changed paths, but it is not a targeted reproduction.
+
+## Type of change
+
+- [x] `fix:` — bug fix (no behavior change beyond the bug)
+
+Linked issue: Fixes #2505
+
+## OpenSpec
+
+- [x] This PR includes / updates an OpenSpec change
+
+Change directory: `openspec/changes/drain-database-schedulers-on-shutdown/`. It adds a requirement to `graceful-shutdown`: "Background database tasks finish in-flight work before cancellation". The change is **not archived**, so review can happen before the spec is synced.
+
+## Changes
+
+- New `app/core/scheduling/task_shutdown.py` with `stop_task_after_grace(task)`:
+  - waits up to `DATABASE_TASK_STOP_GRACE_SECONDS = 2.0` for the task to finish;
+  - only after that cancels it, logging a WARNING that names the task's coroutine.
+  - It waits through `wait_on_shared_future`, as `scripts/check_cancellation_safety.py` requires for tasks it cannot prove non-deferring. So it never cancels the task on a timeout, and it propagates a cancellation of the *caller* instead of swallowing it.
+- The leader-lease keeper (`LeaderElection._stop_release_keeper`) now awaits the keeper after `stop.set()` instead of cancelling it immediately. This matches what the method's docstring already said it did: "Signals the keeper to exit and awaits it … Cancels as a fallback".
+- The same stop behavior is applied, each after setting its existing stop event, to:
+  - model refresh;
+  - cache-invalidation poller;
+  - sticky-session cleanup;
+  - usage rollup;
+  - metadata refresh (its missing-cost backfill);
+  - quota planner.
+- Idle tasks are unaffected: every one of these loops a
+
+*(описание сокращено, см. полный текст по ссылке на GitHub)*
+
+
+---
+
+### [🟢 OPEN] [#2507: feat(cli): add --log-level and --log-file; stop the metrics server resetting logging](https://github.com/Soju06/codex-lb/pull/2507)
+
+- **Тип:** Pull Request
+- **Автор:** @ngallodev
+- **Дата создания:** 2026-09-28
+- **Метки:** `documentation, python`
+
+**Описание проблемы и предложенные изменения:**
+
+## Summary
+
+codex-lb's runtime log level is hard-coded to INFO, and logs go only to stderr. So there's no way to turn on DEBUG without a code change, and in Docker the only copy of the logs is the container's json-file log, which is lost whenever the container is recreated. `CODEX_LB_LOG_LEVEL` looks like it should work, but no such setting exists. This PR adds `--log-level` and `--log-file` server flags. It also fixes the in-process metrics server resetting process-wide logging, which silently removed every access-log line when metrics were enabled.
+
+## Type of change
+
+- [x] `feat:` — new user-facing feature or capability
+
+Linked issue: none. I found no upstream issue covering the logging flags or the metrics reset.
+
+## OpenSpec
+
+- [x] This PR includes / updates an OpenSpec change
+
+Change directory: `openspec/changes/add-cli-log-level-and-file/`. It adds requirements to `proxy-runtime-observability`. The change is **not archived**.
+
+## Changes
+
+- **`--log-level {critical,error,warning,info,debug}`** (default `info`, unchanged behavior) sets the level for codex-lb's own `app.*` loggers.
+  - uvicorn and third-party libraries stay at `info`, or at the chosen level when that's stricter. This applies both in the dictConfig and in the level passed to `uvicorn.Config`, which uvicorn applies to its own loggers.
+  - As a result, `debug` covers codex-lb's records rather than protocol-level tracing: uvicorn's WebSocket frames and handshakes, and aiosqlite's per-cursor operations.
+- **`--log-file PATH`** also writes everything printed to stderr/stdout, including access lines, to `PATH`.
+  - It uses the same formatters, and rotates at 50 MiB × 10 backups through a **single** `RotatingFileHandler`. A `FileLogFormatter` picks the access or default formatter per record, so rotation has one owner.
+  - The parent directory is created if needed, and an unwritable path fails startup instead of running without the file.
+- **One startup record** from `app.cli` states the configured level, the file and the rotation, e.g. `Logging configured level=debug file=/var/lib/codex-lb/logs/codex-lb.log rotation=50MiBx10`. It's logged at INFO, or at the configured level when stricter, so it appears at every level.
+- **Metrics fix:**
+  - The Prometheus metrics server built its `uvicorn.Config` with uvicorn's stock `log_config` and `log_level="warning"`. uvicorn applies both **process-wide**.
+  - So with `CODEX_LB_METRICS_ENABLED=true`, starting the metrics server dropped every access-log l
+
+*(описание сокращено, см. полный текст по ссылке на GitHub)*
+
+
+---
+
+### [🟢 OPEN] [#2508: fix(proxy): reuse bridge sessions for inline images](https://github.com/Soju06/codex-lb/pull/2508)
+
+- **Тип:** Pull Request
+- **Автор:** @McHersheys
+- **Дата создания:** 2026-09-28
+- **Метки:** `documentation, python`
+
+**Описание проблемы и предложенные изменения:**
+
+Fixes #2425. Related: #2465, #2503.
+
+## Summary
+Reuse bridge sessions for eligible inline images. Preserve fallbacks; do not replay images after an unacknowledged-create timeout. Reduce new cases from 22 to 11.
+
+## OpenSpec
+`reuse-http-bridge-inline-images`: active; overlapping delta rebased.
+
+## Tests
+474 selected tests passed; Ruff, scoped types, architecture and strict OpenSpec passed. Silent-image error: 0.214s with a 0.1s test deadline; the production 60s cap is unchanged.
+
+**Held:** maintainer current-turn policy decision and authentic invalid-image upstream capture. Synthetic frames are not #903 evidence.
+
+
+---
+
+### [🟢 OPEN] [#2509: chore(deps): bump the frontend-minor-patch group across 1 directory with 16 updates](https://github.com/Soju06/codex-lb/pull/2509)
+
+- **Тип:** Pull Request
+- **Автор:** @dependabot[bot]
+- **Дата создания:** 2026-09-28
+- **Метки:** `dependencies, frontend`
+
+**Описание проблемы и предложенные изменения:**
+
+Bumps the frontend-minor-patch group with 16 updates in the /frontend directory:
+
+| Package | From | To |
+| --- | --- | --- |
+| [@tanstack/react-query](https://github.com/TanStack/query/tree/HEAD/packages/react-query) | `5.102.8` | `5.103.2` |
+| [lucide-react](https://github.com/lucide-icons/lucide/tree/HEAD/packages/lucide-react) | `1.45.0` | `1.48.0` |
+| [react-hook-form](https://github.com/react-hook-form/react-hook-form) | `7.87.0` | `7.88.0` |
+| [react-i18next](https://github.com/i18next/react-i18next) | `17.0.13` | `17.0.15` |
+| [react-router-dom](https://github.com/remix-run/react-router/tree/HEAD/packages/react-router-dom) | `7.18.3` | `7.18.4` |
+| [tailwind-merge](https://github.com/dcastil/tailwind-merge/tree/HEAD/packages/tailwind-merge) | `3.6.0` | `3.7.0` |
+| [zod](https://github.com/colinhacks/zod) | `4.6.2` | `4.6.5` |
+| [@types/node](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/HEAD/types/node) | `26.5.1` | `26.6.2` |
+| [@vitest/coverage-v8](https://github.com/vitest-dev/vitest/tree/HEAD/packages/coverage-v8) | `5.0.0` | `5.0.2` |
+| [eslint](https://github.com/eslint/eslint) | `10.10.0` | `10.11.0` |
+| [eslint-plugin-react-refresh](https://github.com/ArnaudBarre/eslint-plugin-react-refresh) | `0.5.6` | `0.5.7` |
+| [jsdom](https://github.com/jsdom/jsdom) | `30.0.1` | `30.1.1` |
+| [react-doctor](https://github.com/millionco/react-doctor/tree/HEAD/packages/react-doctor) | `0.9.13` | `0.9.14` |
+| [typescript-eslint](https://github.com/typescript-eslint/typescript-eslint/tree/HEAD/packages/typescript-eslint) | `8.70.0` | `8.70.1` |
+| [vite](https://github.com/vitejs/vite/tree/HEAD/packages/vite) | `8.3.0` | `8.3.1` |
+| [vitest](https://github.com/vitest-dev/vitest/tree/HEAD/packages/vitest) | `5.0.0` | `5.0.2` |
+
+
+Updates `@tanstack/react-query` from 5.102.8 to 5.103.2
+<details>
+<summary>Release notes</summary>
+<p><em>Sourced from <a href="https://github.com/TanStack/query/releases">@​tanstack/react-query's releases</a>.</em></p>
+<blockquote>
+<h2><code>@​tanstack/react-query-devtools</code><a href="https://github.com/5"><code>@​5</code></a>.103.2</h2>
+<h3>Patch Changes</h3>
+<ul>
+<li>Updated dependencies []:
+<ul>
+<li><code>@​tanstack/query-devtools</code><a href="https://github.com/5"><code>@​5</code></a>.103.2</li>
+<li><code>@​tanstack/react-query</code><a href="https://github.com/5"><code>@​5</code></a>.103.2</li>
+</ul>
+</li>
+</ul>
+<h2><code>@​tanstack/react-query-next-experimental</code><a href="https://github.com/5"><code>@​5</code
+
+*(описание сокращено, см. полный текст по ссылке на GitHub)*
+
+
+---
+
+### [🟣 MERGED/CLOSED] [#2510: chore(deps): bump the python-minor-patch group across 1 directory with 11 updates](https://github.com/Soju06/codex-lb/pull/2510)
+
+- **Тип:** Pull Request
+- **Автор:** @dependabot[bot]
+- **Дата создания:** 2026-09-28
+- **Метки:** `dependencies, python`
+
+**Описание проблемы и предложенные изменения:**
+
+Bumps the python-minor-patch group with 11 updates in the / directory:
+
+| Package | From | To |
+| --- | --- | --- |
+| [alembic](https://github.com/sqlalchemy/alembic) | `1.19.2` | `1.20.0` |
+| [greenlet](https://github.com/python-greenlet/greenlet) | `3.5.5` | `3.5.6` |
+| [mako](https://github.com/sqlalchemy/mako) | `1.4.1` | `1.4.3` |
+| [sqlalchemy](https://github.com/sqlalchemy/sqlalchemy) | `2.0.52` | `2.1.0` |
+| [urllib3](https://github.com/urllib3/urllib3) | `2.7.0` | `2.8.0` |
+| [uvicorn](https://github.com/Kludex/uvicorn) | `0.52.4` | `0.54.0` |
+| [ruff](https://github.com/astral-sh/ruff) | `0.16.6` | `0.16.9` |
+| [ty](https://github.com/astral-sh/ty) | `0.0.78` | `0.0.84` |
+| [openai](https://github.com/openai/openai-python) | `3.8.0` | `3.19.2` |
+| [hypothesis](https://github.com/HypothesisWorks/hypothesis) | `6.167.1` | `6.168.1` |
+| [hatchling](https://github.com/pypa/hatch) | `1.32.0` | `1.32.4` |
+
+
+Updates `alembic` from 1.19.2 to 1.20.0
+<details>
+<summary>Release notes</summary>
+<p><em>Sourced from <a href="https://github.com/sqlalchemy/alembic/releases">alembic's releases</a>.</em></p>
+<blockquote>
+<h1>1.20.0</h1>
+<p>Released: September 11, 2026</p>
+<h2>usecase</h2>
+<ul>
+<li>
+<p><strong>[usecase] [batch]</strong> Added a warning for the case where an unnamed CHECK constraint on a
+reflected table is omitted from a batch &quot;recreate&quot; operation.  An unnamed
+CHECK constraint can't be reliably carried over in a batch recreate
+as it may refer to columns that are being dropped or changed.  This
+omission was previously a silent operation.   The presence of any
+<code>~sqlalchemy.schema.CheckConstraint</code> in
+<code>Operations.batch_alter_table.table_args</code> is taken to indicate
+that the case has been accommodated, and no warning is emitted.</p>
+<p>References: <a href="https://redirect.github.com/sqlalchemy/alembic/issues/1846">#1846</a></p>
+</li>
+<li>
+<p><strong>[usecase] [autogenerate]</strong> Autogenerate now renders a warning comment above any rendered
+<code>Operations.drop_constraint()</code> directive for which the constraint name
+is <code>None</code>, as is the case when a constraint that has no name in the model
+is dropped, most typically within the <code>downgrade()</code> function of a
+migration that adds an unnamed constraint.  A warning is also emitted on
+the console when the migration script is generated.   The directive
+requires a non-None name in order to be able to emit a &quot;DROP CONSTRAINT&quot;
+command.</p>
+<p>Refer
+
+*(описание сокращено, см. полный текст по ссылке на GitHub)*
+
+
+---
+
+### [🟢 OPEN] [#2511: bug(accounts): self_serve_business_prolite usage plan is rejected as unknown](https://github.com/Soju06/codex-lb/issues/2511)
+
+- **Тип:** Issue / Предложение
+- **Автор:** @h4zardi
+- **Дата создания:** 2026-09-28
+- **Метки:** `bug, triage`
+
+**Описание проблемы и предложенные изменения:**
+
+### Summary
+
+OpenAI usage responses can report `plan_type=self_serve_business_prolite`. Codex-lb does not currently recognize that identifier, so a workspace-less account whose stored plan differs is rejected by the usage-refresh identity guard. The usage sample and plan update are both skipped.
+
+### Reproduction
+
+1. Start with a workspace-less account whose stored plan is a recognized paid plan such as `team`.
+2. Refresh usage with a payload containing `plan_type=self_serve_business_prolite` and a valid rate-limit window.
+3. Observe `Usage refresh payload identity mismatch; skipping account mutation`.
+
+### Expected behavior
+
+The upstream identifier should canonicalize to codex-lb's existing `prolite` tier before identity validation. The usage sample should be written, the stored plan should become `prolite`, Pro-equivalent model eligibility should apply, and existing Prolite capacity values should be used.
+
+### Current main
+
+Reproduced against `main` at `4dcf8f751b9b8ee8b55012eda7d459832f3ec51c`. A focused patch and product-path regression test are ready.
+
+
+---
+
+### [🟢 OPEN] [#2512: fix(accounts): normalize business prolite plan alias](https://github.com/Soju06/codex-lb/pull/2512)
+
+- **Тип:** Pull Request
+- **Автор:** @h4zardi
+- **Дата создания:** 2026-09-28
+- **Метки:** `documentation, python`
+
+**Описание проблемы и предложенные изменения:**
+
+## Summary
+
+- canonicalize OpenAI's `self_serve_business_prolite` plan identifier to codex-lb's existing `prolite` tier
+- apply the canonical value consistently to usage refresh, rate-limit metadata, capacity lookup, and Pro-equivalent model eligibility
+- add product-path regression coverage for a workspace-less `team` account receiving the upstream alias
+- document the compatibility behavior in an OpenSpec change
+
+Closes #2511
+
+## Why
+
+The usage refresh identity guard only trusts recognized paid plans. Because the upstream identifier was unknown, codex-lb treated a legitimate paid-plan transition as an identity mismatch and discarded both the usage sample and account metadata update.
+
+This is an alias for the existing local `prolite` tier, so the patch keeps one canonical stored value rather than adding a duplicate account plan. Unknown future identifiers retain their current behavior.
+
+## Validation
+
+- `pytest -q tests/unit/test_plan_types.py tests/unit/test_usage.py tests/unit/test_usage_updater.py` — 171 passed
+- `ruff check` and `ruff format --check` on touched Python files
+- `ty check`
+- `openspec validate normalize-self-serve-business-prolite --strict`
+- `openspec validate --specs --strict` — 66 passed
+- full Docker image build from this commit
+- network-isolated packaged-image probe confirmed `prolite`, Pro eligibility, and capacities 1125 / 37800
+
+## Simplicity
+
+No setting, migration, new tier, dashboard navigation, or setup step is introduced. The change is a single shared alias consumed by existing normalization paths.
+
+
+---
+
+### [🟣 MERGED/CLOSED] [#2513: fix(proxy): send a single Content-Type on codex control requests](https://github.com/Soju06/codex-lb/pull/2513)
+
+- **Тип:** Pull Request
+- **Автор:** @Soju06
+- **Дата создания:** 2026-09-28
+- **Метки:** `documentation, python`
+
+**Описание проблемы и предложенные изменения:**
+
+## Summary
+
+Extracted from #2065 (commit a7888982c by @nhdong1993) so the one-line fix can land without the rest of that branch.
+
+`codex_control_request` built the upstream headers and then wrote the inbound media type as a second `Content-Type` field, so standalone search (`/backend-api/codex/alpha/search`) and realtime control calls reached upstream with two content-type headers. This replaces the header case-insensitively and in place (`_replace_header_preserving_position`, already used for `accept`), and drops every spelling when the request has no body.
+
+Refs #2128 (the Content-Type half; the `/v1` alias question on that issue is a separate decision).
+
+## Design impact
+
+- No policy, default, setting or schema change. The control request keeps forwarding the inbound media type; it just stops emitting it twice.
+- Contract recorded in `openspec/changes/preserve-codex-control-content-type/` (ADDED requirement under `responses-api-compat`: at most one case-insensitive `Content-Type` on unary Codex control requests, spelling and position preserved for native callers, bodyless requests omit it).
+- Main spec files are not edited in this PR; the delta syncs at archive time.
+
+## Verification
+
+- `tests/unit/test_codex_upstream_paths.py::test_codex_control_request_preserves_single_media_type` (48 parametrized cases: direct/routed transport, three header spellings, JSON and SDP, native and SDK user agents) fails on main and passes here. Full file: 85 passed.
+- `openspec validate preserve-codex-control-content-type --strict` passes; ruff check/format clean.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+
+---
+
+### [🟢 OPEN] [#2514: feat(accounts): redeem all eligible reset credits in one action](https://github.com/Soju06/codex-lb/issues/2514)
+
+- **Тип:** Issue / Предложение
+- **Автор:** @Soju06
+- **Дата создания:** 2026-09-28
+- **Метки:** `enhancement, triage`
+
+**Описание проблемы и предложенные изменения:**
+
+## Problem / motivation
+
+Operators with many pooled accounts currently redeem banked reset credits one account at a time from the Accounts page, or opt in to automatic redemption shortly before expiry (#1357 / #1358). There is no way to redeem every currently eligible credit in one action. Requested by a user via email (2026-09-17).
+
+## Proposed change
+
+Add a "Redeem all eligible reset credits" action to the Accounts surface that:
+
+- redeems each account's own credits only (no cross-account pooling; see the decision on #2289),
+- reuses the existing per-account redeem helper, durable ledger and per-account serialization,
+- shows a confirmation listing the accounts and credit counts that will be consumed, and reports per-account success/failure,
+- stays default-off in behaviour (it is an explicit operator click, never automatic).
+
+## Out of scope
+
+- Pooling credits across accounts (declined in #2289).
+- Changing the auto-redeem scheduler semantics.
+
+
+---
+
+### [🟢 OPEN] [#2515: fix(chat): keep the JSON instruction in input for json_object requests](https://github.com/Soju06/codex-lb/pull/2515)
+
+- **Тип:** Pull Request
+- **Автор:** @vitalNohj
+- **Дата создания:** 2026-09-28
+- **Метки:** `documentation, python`
+
+**Описание проблемы и предложенные изменения:**
+
+## Summary
+
+JSON mode (`response_format: {"type": "json_object"}`) breaks whenever the client asks for JSON only in the system message, which is how most clients do it. Every one of those requests comes back as:
+
+```
+Response input messages must contain the word 'json' in some form to use 'text.format' of type 'json_object'.
+```
+
+The upstream only counts the word "json" if it's in an input message. Top-level `instructions` don't count. #731 fixed this by keeping system and developer messages in `input` for JSON mode. #950 moved them back out into `instructions`, which brought the bug back (and #731's test was updated to expect the new output).
+
+The upstream does accept a JSON mention in a `developer` message in `input` (it rejects `system` messages there). So for a `json_object` request, a system or developer message that mentions JSON now stays in `input` in its original position, sent as a developer message. Other system and developer messages still move into `instructions` like before.
+
+## Type of change
+
+- [x] `fix:` - bug fix (no behavior change beyond the bug)
+
+Linked issue: Refs #730 (same bug, came back after #950)
+
+## OpenSpec
+
+- [x] This PR includes / updates an OpenSpec change
+
+Change directory: `openspec/changes/keep-json-mode-mention-in-input/`
+
+The `chat-completions-compat` spec still says JSON mode keeps these messages in `input` with their original role. That hasn't been true since #950, and the upstream rejects the `system` role there anyway, so the change says they're kept as developer messages.
+
+## Changes
+
+- `app/core/openai/requests.py`: when a request uses `json_object`, a system or developer message that mentions JSON stays in `input` with the developer role instead of moving into `instructions`.
+- Nothing changes for:
+  - requests without `json_object`
+  - instruction messages that don't mention JSON
+  - compact requests (they drop `text` anyway)
+  - Responses Lite input
+- The kept message doesn't depend on later user messages, so `input` is the same on every turn and the prompt cache and the derived prompt-cache key stay stable.
+
+## Test plan
+
+```
+uv run pytest -n 2 tests/unit/test_chat_request_mapping.py tests/unit/test_openai_requests.py \
+  tests/unit/test_prompt_cache_key_derivation.py tests/integration/test_openai_compat_features.py \
+  tests/integration/test_proxy_chat_completions.py
+375 passed
+
+uv run pytest -n 2 tests/unit
+10370 passed, 96 skipped
+```
+
+The new tests fail on current `main` (7 of them, including the `/v1/chat
+
+*(описание сокращено, см. полный текст по ссылке на GitHub)*
+
+
+---
+
+### [🟢 OPEN] [#2516: docs: declare native web search support in Codex examples](https://github.com/Soju06/codex-lb/pull/2516)
+
+- **Тип:** Pull Request
+- **Автор:** @solid-pixel
+- **Дата создания:** 2026-09-28
+- **Метки:** `documentation`
+
+**Описание проблемы и предложенные изменения:**
+
+## Summary
+
+The Codex examples omit the provider capability needed to expose standalone web search with supported custom-provider setups. Add `supports_standalone_web_search = true` to all five ordinary `codex-lb` provider blocks across the English and Chinese READMEs, client setup guide, and downloadable configuration, with a codex-lb >= 1.22.0 note.
+
+Closes #2498
+
+## Type of change
+
+- [x] `docs:` — documentation only
+
+## OpenSpec
+
+- [x] Not applicable — docs / CI / chore only
+
+Documents existing endpoint support. The setup explanation links to the existing Responses compatibility specification; no proxy runtime or protocol changes.
+
+## Changes
+
+- Keep README edits to one configuration line each; translate the minimum-version comment in the Chinese README.
+- Explain the provider capability, live-search mode, and distinction from the experimental feature flag in `docs/client-setup.md`.
+- Preserve all other configuration values, including the separate Daybreak provider, which does not use the ordinary control-route path.
+
+## Test plan
+
+- `mkdocs build --strict`: passed using a temporary environment with the project's `mkdocs-material>=9.6` documentation dependency.
+- Python `tomllib`: parsed the TOML snippets and downloadable configuration in all four changed files; verified all five ordinary provider blocks enable search and every other parsed value matches the base revision.
+- `git diff --check`: passed.
+- Runtime tests and the full application CI suite were not run for this documentation-only change.
+
+## Coordination
+
+#2312 was still open and unmerged when this branch was published. This PR is based on current `main` and leaves model selections unchanged.
+
+## Checklist
+
+- [x] Title follows Conventional Commits.
+- [x] Linked the related issue.
+- [x] Reviewed simplicity gates P1–P6: this documents an existing Codex client setting; no new server setting, README section, dashboard item, or runtime default.
+- [x] CHANGELOG is not edited by hand.
+
+
+---
+
+### [🟢 OPEN] [#2517: fix(telemetry): map codex_cli_rs user agent to codex-cli family](https://github.com/Soju06/codex-lb/pull/2517)
+
+- **Тип:** Pull Request
+- **Автор:** @drakeo338
+- **Дата создания:** 2026-09-28
+- **Метки:** `documentation, python`
+
+**Описание проблемы и предложенные изменения:**
+
+## Summary
+
+`CLIENT_FAMILY_BY_RAW_GROUP` never mapped the `codex_cli_rs` user-agent group from the interactive Codex CLI, so those requests counted as `other` instead of `codex-cli`, skewing the telemetry client mix. This adds the mapping, syncs the spec, and extends the covering test.
+
+## Type of change
+
+- [x] `fix:` — bug fix (no behavior change beyond the bug)
+- [ ] `feat:` — new user-facing feature or capability
+- [ ] `refactor:` — internal refactor (no behavior change, no API change)
+- [ ] `docs:` — documentation only
+- [ ] `chore:` / `ci:` / `build:` — tooling, CI, packaging
+- [ ] `test:` — test-only change
+- [ ] **Breaking change** (also append `!` after the type, e.g. `feat!:` or include `BREAKING CHANGE:` footer)
+
+Linked issue: Fixes #1843
+
+## OpenSpec
+
+- [ ] This PR includes / updates an OpenSpec change
+- [x] Not applicable — bug fix that matches the existing spec (spec.md already documents this family collapse)
+- [ ] Not applicable — docs / CI / chore only
+- [ ] This PR touches a codex-faithful path (image pipeline, request/response
+      shape, SSE framing, OAuth flow) and preserves upstream-equivalent behavior
+
+Change directory: n/a
+
+## Changes
+
+- Add `codex_cli_rs` → `codex-cli` to `CLIENT_FAMILY_BY_RAW_GROUP`
+- Sync the mapping table in `openspec/specs/telemetry/spec.md`
+- Extend `test_client_mapping_table_and_unknown_family_are_allowlisted` to cover `codex_cli_rs`
+
+## Simplicity
+
+No new setting, config, or user-visible surface.
+
+- [x] New feature defaults to **off** or works with **zero config**
+- [x] No new required setup step (or maintainer approval via `simplicity-budget-approved` label)
+- New setting(s) and why each can't be a default: none
+- Tier of each new setting (T0-T4 per PRINCIPLES P6) and, for T3, its `dashboard_settings` column: none
+- [x] README sections / `.env.example` / dashboard nav within budget (or `simplicity-budget-approved` label requested)
+
+## Test plan
+
+```
+# uv run pytest tests/unit/test_<area>.py -q
+uv run pytest tests/unit/test_telemetry_snapshot.py -k test_client_mapping_table_and_unknown_family_are_allowlisted -v
+# 1 passed
+uv run pytest tests/unit/test_telemetry_snapshot.py -q
+# 22 passed
+# uv run pytest tests/integration/test_<area>.py -q
+# not applicable — no integration surface touched
+```
+
+## Screenshots / output
+
+Not applicable — no dashboard- or proxy-visible surface changes.
+
+## Checklist
+
+- [x] Title is in Conventional Commits format (`<type>(<scope>)?: <subject>`).
+- [x] Linked the related issue / dis
+
+*(описание сокращено, см. полный текст по ссылке на GitHub)*
+
+
+---
+
+### [🟢 OPEN] [#2518: test(db): cover the SCIM/overflow merge revision's single-head convergence](https://github.com/Soju06/codex-lb/pull/2518)
+
+- **Тип:** Pull Request
+- **Автор:** @aacarcrash
+- **Дата создания:** 2026-09-28
+- **Метки:** `python`
+
+**Описание проблемы и предложенные изменения:**
+
+## Summary
+
+Adds regression coverage for the alembic merge at
+`20260918_000000_merge_scim_and_overflow_heads`, which converged the SCIM-token
+(#2431) and subscription-overflow-retirement (#2422) migration histories.
+#2461 shipped the merge revision but no test asserted the graph has a single
+head or that both parent branches converge and round-trip through it.
+
+## Type of change
+
+- [x] `test:` — test-only change
+
+Linked issue: relates to #2461, follow-up to #2462 (closed; see maintainer's
+comment there for the scope of this PR)
+
+## OpenSpec
+
+- [x] Not applicable — bug fix that matches the existing spec
+
+This PR adds test coverage only. No behavior, schema, or migration change.
+
+## Changes
+
+- `tests/integration/test_migrations.py`: add
+  `test_scim_and_overflow_retirement_lineage_is_single_and_round_trips`, which
+  asserts `ScriptDirectory.get_heads()` is the single merge revision, that its
+  `down_revision` tuple is exactly the SCIM and overflow-retirement heads, that
+  upgrading to head from a DB stamped at either parent converges on the same
+  schema, and that downgrading from head back to either parent demultiplexes
+  the merge into both parent revisions as current heads (proven via the
+  `alembic_version` table) before a second upgrade reconverges.
+- `.all-contributorsrc`: add `aacarcrash` (`code`), following the append-only
+  convention and JSON shape of recent adds (e.g. #2453).
+
+## Simplicity
+
+Section removed: no new setting, README section, dashboard nav item, or
+default changed.
+
+## Test plan
+
+```
+uv run pytest tests/integration/test_migrations.py -k test_scim_and_overflow_retirement_lineage_is_single_and_round_trips -q
+uv run pytest tests/integration/test_migrations.py -q
+uv run ruff check .
+uv run ruff format --check .
+uv run ty check
+python scripts/check_migration_topology.py
+python3 .github/scripts/check_all_contributors.py
+npx --yes @fission-ai/openspec@1.11.0 validate --specs
+python3 .github/scripts/check_simplicity_budgets.py
+```
+
+Also verified the test is load-bearing: temporarily changed the merge
+revision's `down_revision` to a single parent (breaking the graph) and
+confirmed the new test fails with a real `AssertionError` on
+`script.get_heads() == [merge_revision]`, not a collection error. Reverted
+cleanly (`git diff` on the migration file is empty).
+
+Not run locally: `migration-check-postgres` (no local PostgreSQL) and
+`validate_changed_openspec.py` (requires a GitHub Actions `pull_request`
+event payload; no OpenSpec files were changed
+
+*(описание сокращено, см. полный текст по ссылке на GitHub)*
+
+
+---
+
+### [🟢 OPEN] [#2519: fix(http-bridge): parse multi-line upstream websocket frames](https://github.com/Soju06/codex-lb/pull/2519)
+
+- **Тип:** Pull Request
+- **Автор:** @vitalNohj
+- **Дата создания:** 2026-09-28
+- **Метки:** `documentation, python`
+
+**Описание проблемы и предложенные изменения:**
+
+## Summary
+
+When the upstream rejects a request that goes through the HTTP bridge, some errors come back as pretty-printed JSON spread over several lines. The bridge only read the first line of each websocket frame, so those errors never reached the waiting request. The client waited for the idle timeout and got a 502 about a minute later, instead of the upstream's 400 right away.
+
+The JSON-mode error from #2515 is one of these:
+
+```
+{
+  "type": "error",
+  "error": {
+    "type": "invalid_request_error",
+    "code": null,
+    "message": "Response input messages must contain the word 'json' in some form to use 'text.format' of type 'json_object'.",
+    "param": "input"
+  },
+  "status": 400
+}
+```
+
+The bridge runs each frame through `parse_sse_data_json_text`, which keeps SSE rules for multi-line text. It frames the text as `data: {text}`, so only the first line (`{`) counts as data and the frame parses to `None`. The direct websocket path already parses each frame as one JSON document, which is why it isn't affected.
+
+## Type of change
+
+- [x] `fix:` - bug fix (no behavior change beyond the bug)
+
+Linked issue: none, found while testing #2515.
+
+## OpenSpec
+
+- [x] This PR includes / updates an OpenSpec change
+
+Change directory: `openspec/changes/parse-multi-line-bridge-websocket-frames/`
+
+## Changes
+
+- `app/core/utils/sse.py`: new `parse_websocket_json_text`, which decodes a websocket frame as one JSON document.
+- `app/modules/proxy/_service/http_bridge/upstream_events.py`: the bridge uses it for frames the native egress didn't already interpret. A multi-line frame gets re-encoded as a single `data:` line before it's relayed, so the downstream SSE stays well-formed. Single-line frames keep the existing path and are relayed unchanged.
+- `tests/integration/test_native_websocket_events.py`: the probe now expects the parsed payload for the `multiline` fixture (it expected `None` before) and the re-encoded block. It needs the native binary, so I couldn't run it here. I ran the same bridge checks against all 56 fixture frames in Python and they all pass.
+
+## Test plan
+
+```
+uv run pytest -n 2 tests/unit/test_proxy_http_bridge.py tests/unit/test_http_bridge_cancel_drain.py \
+  tests/unit/test_sse.py tests/integration/test_http_responses_bridge.py \
+  tests/integration/test_native_websocket_events.py
+1376 passed, 6 skipped
+
+uv run pytest -n 2 tests/unit
+10404 passed, 96 skipped
+```
+
+New tests:
+
+- a pretty-printed error frame with LF, CRLF and CR line breaks settles the w
+
+*(описание сокращено, см. полный текст по ссылке на GitHub)*
+
+
+---
+
+### [🟢 OPEN] [#2520: refactor(proxy): extract streaming response entrypoint](https://github.com/Soju06/codex-lb/pull/2520)
+
+- **Тип:** Pull Request
+- **Автор:** @627444640
+- **Дата создания:** 2026-09-28
+- **Метки:** `documentation, python`
+
+**Описание проблемы и предложенные изменения:**
+
+Moves the public `stream_responses` wrapper into `streaming/helpers.py` while preserving its signature defaults, header filtering, payload logging, lazy iterator return and retry ownership. `_StreamingMixin` binds the helper as its existing entrypoint.
+
+This is the standalone relocation requested in [#2444's review](https://github.com/Soju06/codex-lb/pull/2444#issuecomment-5866465282). Related to #2444; this PR does not resolve #2443. Timing instrumentation and model-source usage changes are excluded. Contributor attribution is included to satisfy the repository gate.
+
+Validation on `10598df24f371d3c3c6bd31764015acfa7be772b`:
+- Existing proxy-utils and TTFT regression suites: **1,434 passed**.
+- Ruff, Python type checks, proxy architecture, cancellation safety and clock-seam checks passed.
+- The helper preserves the original wrapper body; no behavior/schema change, so this pure refactor is exempt from an OpenSpec change.
+
+Cloud CI and independent maintainer review remain merge gates. No new settings or dependencies.
+
+
+---
+
+### [🟢 OPEN] [#2521: fix(model-sources): validate optional usage and preserve streamed telemetry](https://github.com/Soju06/codex-lb/pull/2521)
+
+- **Тип:** Pull Request
+- **Автор:** @627444640
+- **Дата создания:** 2026-09-28
+- **Метки:** `documentation, python`
+
+**Описание проблемы и предложенные изменения:**
+
+Optional model-source telemetry can overflow request-log integers, accept booleans as token counts, lose reasoning usage, or misread UTF-8/SSE framing split across network chunks. This change validates optional numeric metadata and preserves reported reasoning usage through both logging entrypoints while forwarding the original response bytes.
+
+Extracted as requested in [#2444's review](https://github.com/Soju06/codex-lb/pull/2444#issuecomment-5866465282). Related to #2444; this PR does not resolve #2443. It changes no TPS threshold, report cohort, source classification, schema or stream timing state.
+
+OpenSpec: `openspec/changes/archive/2026-09-28-harden-model-source-usage/` (verified and synchronized to `proxy-runtime-observability`).
+
+Validation on `17e5d93a`:
+- **306 passed** across source parser/forwarding and real API-path integration suites, using synthetic local upstreams.
+- Invalid int32 values, boolean counts, finite-operand timing overflow, missing/known reasoning, fragmented UTF-8, multi-line SSE and split CRLF are covered.
+- Ruff and full Python type checks passed; architecture/cancellation checks and contributor attribution passed.
+- All **67** main specs plus the change passed strict validation with CI-pinned OpenSpec **1.11.0**.
+
+Tests have no dependency on #2444's new timing columns. No new settings or dependencies. Cloud CI and independent review remain merge gates.
+
+
+---
+
+### [🟢 OPEN] [#2522: perf(db): request_logs facet indexes and loose-scan probes (stacked on #2502)](https://github.com/Soju06/codex-lb/pull/2522)
+
+- **Тип:** Pull Request
+- **Автор:** @snajpa
+- **Дата создания:** 2026-09-28
+- **Метки:** `documentation, db migration, ci, docker, python`
+
+**Описание проблемы и предложенные изменения:**
+
+Stacked on #2502 (the dialect/DDL change). After that lands, this PR's diff is exactly the three `perf(db)` commits:
+
+- `perf(db): index and reshape the dashboard's request_logs facets` — adds `idx_logs_facet_accounts` and `idx_logs_min_requested`, built `CREATE INDEX CONCURRENTLY` with invalid-index repair on PostgreSQL and through the dialect index helper on MySQL/MariaDB.
+- `perf(db): loose-scan the facet enumeration on MySQL/MariaDB` — the facet pager enumerates distinct account ids without the recursive `min()` scan.
+- `perf(db): probe the earliest row before the filtered aggregate` — the rollup fold probes the index-reachable earliest row before falling back to the scanning `MIN` aggregate.
+
+Evidence on the rebased stack: migration checks green on SQLite, MariaDB 11.8 and MySQL 8.4 (`migration_policy=ok`, `schema_drift=none`); `tests/test_request_logs_options_api.py` → 13 passed, 1 skipped.
+
+Please do not merge before #2502 — this branch is based on it.
+
+
+---
+
+### [🟢 OPEN] [#2523: fix(metrics): publish fresh account pool gauges on scrape](https://github.com/Soju06/codex-lb/pull/2523)
+
+- **Тип:** Pull Request
+- **Автор:** @Abaddollyon
+- **Дата создания:** 2026-09-28
+- **Метки:** `documentation, python`
+
+**Описание проблемы и предложенные изменения:**
+
+## Summary
+
+`codex_lb_accounts_total` was declared but never populated, so operators had no account counts to alert on. It now reports a count for every status, including zeroes. The new `codex_lb_accounts_available` gauge counts accounts eligible by status and reauthentication-token expiry.
+
+Fixes #2426.
+
+## Type of change
+
+- [x] `fix:` — bug fix
+
+## OpenSpec
+
+- [x] Includes an archived OpenSpec change and updated owning spec.
+
+Change directory: `openspec/changes/archive/2026-09-28-publish-account-pool-metrics/`.
+Owning spec: `proxy-runtime-observability`.
+
+## Changes
+
+- Refresh the existing account-cache snapshot before each scrape, so quiet pools, deletions and token expiry appear without proxy traffic. Failed refreshes return HTTP 503.
+- Use the shared status and reauthentication-token expiry rules for availability. Pending deletions are excluded. The count is taken before model, API-key, affinity, live quota, cooldown, health and concurrency checks.
+- Use the latest live-worker observation in multiprocess mode, avoiding duplicate pool counts and PID labels.
+- Document metric scope and alert examples. Install Prometheus in the development group so exporter tests run in CI; runtime support remains optional.
+
+The existing metrics listener has no application authentication. Restrict network access to trusted scrapers: each scrape performs one account query, and overlapping refreshes wait in an unbounded queue. Overload behavior was not benchmarked.
+
+## Test plan
+
+The regression scraped the real metrics app and failed on the original code because it returned no account series. After the fix:
+
+```sh
+uv run pytest tests/integration/test_account_pool_metrics.py \
+  tests/integration/test_cache_invalidation_bus.py \
+  tests/unit/test_metrics.py tests/unit/test_metrics_bind_guardrail.py \
+  tests/unit/test_account_metrics_multiprocess.py -q --tb=short
+```
+
+All 54 tests passed on SQLite and PostgreSQL 18. They cover startup wiring, empty pools, every status, deletion, token expiry, failed scrapes, running without Prometheus, overlapping refreshes and multiprocess aggregation.
+
+- `make lint` and `uv run ty check` passed.
+- `uv run --group docs mkdocs build --strict` passed.
+- Strict OpenSpec validation passed for the change and all 67 main specifications.
+- Independent source review found no actionable issues.
+
+Hosted CI and CodeRabbit passed on `5be4f58e`. The full local `make ci` gate was not run.
+
+## Screenshots / output
+
+Output from the metrics app created du
+
+*(описание сокращено, см. полный текст по ссылке на GitHub)*
+
+
+---
+
+### [🟢 OPEN] [#2524: fix(accounts): snapshot force probe state before session cleanup](https://github.com/Soju06/codex-lb/pull/2524)
+
+- **Тип:** Pull Request
+- **Автор:** @Abaddollyon
+- **Дата создания:** 2026-09-28
+- **Метки:** `documentation, python`
+
+**Описание проблемы и предложенные изменения:**
+
+## Summary
+
+Force Probe could return HTTP 200 while leaving an account in the `probing` health tier. `record_probe_result` read account and usage rows after its repository session had rolled back and closed, raising `DetachedInstanceError`.
+
+The fix copies those rows with the existing snapshot helpers before closing the session. An older successful probe still cannot clear a newer failure, and lease activity does not invalidate the probe result.
+
+Fixes #2410. The unsupported `max_output_tokens` field was already removed by #2496, which is included in this branch's base.
+
+## Type of change
+
+- [x] `fix:` — bug fix
+
+## OpenSpec
+
+- [x] Includes an archived OpenSpec change and updated owning spec.
+
+Change: `openspec/changes/archive/2026-09-28-snapshot-force-probe-settlement/`.
+Owning spec: `usage-refresh-policy`.
+
+## Changes
+
+- Snapshot the account, primary usage and selected long-window usage before repository teardown.
+- Test the dashboard route with real sessions. Cases cover missing or partial usage, monthly windows, exhausted free-plan primary usage, concurrent health changes, lease activity and failed probes.
+
+## Test plan
+
+The six new successful-probe cases failed on the original code: the endpoint returned 200, logged `DetachedInstanceError`, and left the runtime error count unchanged. They pass with the fix.
+
+```sh
+uv run pytest tests/integration/test_accounts_api_probe.py \
+  tests/unit/test_accounts_service_probe.py \
+  tests/unit/test_load_balancer_concurrency.py -q
+```
+
+All 200 tests passed on SQLite and PostgreSQL 18.
+
+- `make lint` and `uv run ty check` passed.
+- Strict OpenSpec validation passed for the change and all 67 main specifications.
+- Independent source review found no actionable issues.
+
+Hosted CI and CodeRabbit passed on `0b29bfa7`. The full local `make ci` gate was not run.
+
+<details>
+<summary>Broader local test run</summary>
+
+```sh
+uv run pytest tests/unit tests/simulation tests/test_request_logs_options_api.py -q
+```
+
+The initial run had 10,441 passed, 94 failed, 5 skipped and 1 xfailed. All 94 failures passed on targeted reruns after correcting the local environment: 92 Helm cases needed Helm 4.3's supported Kubernetes default; two optional-dependency cases needed the branch's normal development environment. The full suite was not rerun.
+
+</details>
+
+## Screenshots / output
+
+The regression calls `POST /api/accounts/{account_id}/probe` through the real route and database sessions, with synthetic upstream responses. The account star
+
+*(описание сокращено, см. полный текст по ссылке на GitHub)*
+
+
+---
+
+### [🟢 OPEN] [#2525: fix(model-sources): preserve source base instructions in catalogs](https://github.com/Soju06/codex-lb/pull/2525)
+
+- **Тип:** Pull Request
+- **Автор:** @Abaddollyon
+- **Дата создания:** 2026-09-28
+- **Метки:** `documentation, python`
+
+**Описание проблемы и предложенные изменения:**
+
+## Summary
+
+Source models could store `base_instructions`, but both Codex catalog routes returned an empty string. Copy the supplied string into the existing registry field so clients receive the source's instructions unchanged.
+
+Refs #2499. This covers the catalog-projection bug; deriving namespace support from `multi_agent_version` is a separate contract proposal. Credit to nhdong1993 for the [report and reference fix](https://github.com/Soju06/codex-lb/issues/2499).
+
+## Type of change
+
+- [x] `fix:` — bug fix
+
+## OpenSpec
+
+- [x] Includes an archived OpenSpec change and updated owning spec.
+
+Change directory: `openspec/changes/archive/2026-09-28-preserve-source-base-instructions/`.
+Owning spec: `model-catalog-compat`.
+
+## Changes
+
+- Preserve string instructions exactly, including whitespace and Unicode.
+- Keep the existing empty-string default for missing or non-string metadata.
+- Test both Codex catalog routes and preserve existing capability metadata.
+- Document source metadata imports and pinned client catalog refresh in the spec context.
+
+## Test plan
+
+The new regression selection failed on the original code in four cases: two string-preservation unit cases and both catalog routes. All four returned empty instructions.
+
+```sh
+uv run pytest tests/unit/test_model_sources_catalog.py \
+  tests/integration/test_v1_models.py -q --tb=short
+```
+
+All 107 tests passed after the fix. `make lint`, `uv run ty check`, strict change validation and strict validation of all 67 main specifications passed. Independent source and contract review found no actionable issues.
+
+An additional `make test-unit` run finished with 10,452 passed, 6 skipped, 1 xfailed and 92 Helm rendering failures. The installed Helm 4.0.0 defaulted to Kubernetes 1.20, below the chart's 1.32 minimum. Rerunning both affected test files with a temporary `helm template --kube-version 1.35.0` wrapper passed all 106 tests. The chart and those tests are unchanged from upstream.
+
+The [hosted unit job](https://github.com/Soju06/codex-lb/actions/runs/36437005870/job/108977471867) reached 98% without a reported test failure before its 20-minute limit cancelled it. All other selected hosted jobs passed, but `CI Required` remains failed pending a maintainer rerun; the fork account could not rerun the cancelled job. CodeRabbit reviewed `6cba34d` and found no actionable issues.
+
+The full local `make ci` gate was not run; this host lacks `trivy`, `kubeconform` and `kind`.
+
+## Screenshots / output
+
+For source met
+
+*(описание сокращено, см. полный текст по ссылке на GitHub)*
+
+
+---
+
+### [🟢 OPEN] [#2526: fix(model-sources): preserve declared collaboration namespaces](https://github.com/Soju06/codex-lb/pull/2526)
+
+- **Тип:** Pull Request
+- **Автор:** @Abaddollyon
+- **Дата создания:** 2026-09-28
+- **Метки:** `documentation, python`
+
+**Описание проблемы и предложенные изменения:**
+
+## Summary
+
+A Model Source could advertise multi-agent support while codex-lb dropped the client's collaboration namespace. Treat a nonblank string `multi_agent_version` as namespace support and let the existing capability filter preserve the complete tool definitions and matching choices.
+
+Refs #2499. The base-instructions fix is separate in #2525. Credit to nhdong1993 for the [report and reference implementation](https://github.com/Soju06/codex-lb/issues/2499).
+
+This is a draft pending the maintainer agreement requested on the issue. The proposed contract accepts any nonblank version string, including future versions. The OpenSpec change remains active until that decision, then its delta and context can be synchronized and archived.
+
+## Type of change
+
+- [x] `fix:` — bug fix with a source capability contract change
+
+## OpenSpec
+
+- [x] Includes an active OpenSpec change with a MODIFIED delta for the existing source-tool-filtering requirement.
+
+Change directory: `openspec/changes/preserve-model-source-collaboration-tools/`.
+Owning spec: `responses-api-compat`.
+
+## Changes
+
+- Derive namespace support from nonblank `multi_agent_version` metadata.
+- Retain conservative filtering for absent, blank or non-string declarations and preserve explicit `experimental_supported_tools` opt-ins.
+- Test both Responses endpoints and their trailing-slash forms against a recording upstream.
+- Document capability imports, pinned catalog refresh and transport limits in the client guide.
+
+## Test plan
+
+The new catalog and route regressions failed before the fix because namespace support was absent and the source received no collaboration tools.
+
+```sh
+uv run pytest tests/unit/test_model_sources_catalog.py \
+  tests/integration/test_model_source_collaboration.py -q
+uv run pytest tests/integration/test_api_keys_api.py -q \
+  -k 'source and (tool or search or namespaces)'
+```
+
+The first command passed 88 tests; the second passed 6. Coverage includes v1/v2 declarations, malformed values, explicit opt-in, nested schemas, three choice shapes, unsupported-tool pruning and existing replay behavior.
+
+`make lint`, full `uv run ty check`, the strict docs build, strict change validation and all 67 main specifications passed. Independent source and contract review found no actionable issues. The full local `make ci` gate was not run; this host lacks `trivy`, `kubeconform` and `kind`. Hosted CI, including `CI Required`, passed on `94104a4`. CodeRabbit skipped the draft and still needs to rev
+
+*(описание сокращено, см. полный текст по ссылке на GitHub)*
+
+
+---
+
+### [🟣 MERGED/CLOSED] [#2527: fix(routing): recover weekly-only Pro reserve accounts](https://github.com/Soju06/codex-lb/pull/2527)
+
+- **Тип:** Pull Request
+- **Автор:** @Concord-Devops
+- **Дата создания:** 2026-09-28
+- **Метки:** `documentation, frontend, python`
+
+**Описание проблемы и предложенные изменения:**
+
+## Summary
+- Treat weekly-only Pro usage in the upstream primary slot as the weekly recovery window without synthesizing a 5h quota.
+- Clear stale replica-local quota cooldown after persisted recovery and fresh post-block weekly evidence, preserving unrelated rate-limit holds and sticky ownership.
+- Expose manual Resume for quota-exceeded accounts and add backend/dashboard regression coverage.
+
+## Validation
+- 516 focused unit and integration tests passed after rebasing on current main.
+- 17 dashboard action tests passed.
+- Ruff passed; strict OpenSpec validation passed (67 specs).
+- Full Windows suite cannot collect two existing Unix-only modules (`uvloop`, `fcntl`).
+
+## Simplicity
+- Zero-config behavior correction; no new settings, navigation items, or README sections.
+- No issue is closed by this PR.
+
+## Dashboard screenshots
+- Pending before/after screenshots for dashboard-visible Resume control.
+
+
+---
+
+### [🟢 OPEN] [#2528: fix(proxy): advertise GPT-6 max output tokens](https://github.com/Soju06/codex-lb/pull/2528)
+
+- **Тип:** Pull Request
+- **Автор:** @elmakus
+- **Дата создания:** 2026-09-28
+- **Метки:** `documentation, python`
+
+**Описание проблемы и предложенные изменения:**
+
+## Summary
+
+- advertise `max_output_tokens=128000` for `gpt-6-astra`, `gpt-6-sol`, and `gpt-6-luna` when the upstream Codex catalog omits the field
+- preserve explicit upstream integer `max_output_tokens` as higher priority than the fallback
+- add `/v1/models` regression coverage for the GPT-6 fallbacks and upstream precedence
+- add the required OpenSpec change for `model-catalog-compat`
+
+## Why
+
+The upstream Codex model registry currently exposes GPT-6 context/reasoning metadata but omits `max_output_tokens`. `/v1/models` therefore returns `null` for the max-output fields even though OpenAI documents a 128K maximum output for these GPT-6 models. OpenAI-compatible clients that require a numeric capability then fall back to their own arbitrary local default.
+
+## Verification
+
+- `uv run pytest -q tests/integration/test_v1_models.py` -> 62 passed
+- targeted GPT-6/raw-precedence tests -> 2 passed
+- `openspec validate advertise-gpt6-max-output-tokens --strict --no-interactive` -> valid
+- `openspec validate --specs` -> pass
+- `git diff --check upstream/main..HEAD` -> pass
+
+This only corrects advertised compatibility metadata. It does not alter request routing, context-window semantics, native Codex catalog behavior, or generation settings.
+
+
+---
+
+### [🟢 OPEN] [#2529: fix(metrics): stop the metrics server from reconfiguring process logging](https://github.com/Soju06/codex-lb/pull/2529)
+
+- **Тип:** Pull Request
+- **Автор:** @ngallodev
+- **Дата создания:** 2026-09-28
+- **Метки:** `documentation, python`
+
+**Описание проблемы и предложенные изменения:**
+
+Split out of #2507, as requested there.
+
+## Problem
+
+With `CODEX_LB_METRICS_ENABLED=true`, the metrics server is built with `uvicorn.Config(metrics_app, ..., log_level="warning")` (`app/main.py`). uvicorn applies a Config's logging to the whole process. It re-runs `dictConfig` with its stock `LOGGING_CONFIG` and sets `uvicorn.error` and `uvicorn.access` to WARNING. After the metrics server starts:
+
+- the main server writes no more access lines;
+- `uvicorn` and `uvicorn.access` use uvicorn's own formatters, so `uvicorn.error` records skip codex-lb's redaction.
+
+## Fix
+
+Pass `log_config=None, log_level=None` to the metrics server's `uvicorn.Config`, so it leaves the logging from the server command alone.
+
+**Behavior note:** metrics scrapes (`GET /metrics` on the metrics port) now show up in the access log, because both servers log through the same `uvicorn.access` logger. This is intended, and the new test checks for it. I didn't use `access_log=False` for the metrics server, because uvicorn implements it by clearing that shared logger's handlers, which would switch off the main server's access log too. If you'd rather keep scrapes out of the log, a logging filter on the metrics port could go in a follow-up.
+
+## Tests
+
+- `tests/integration/test_metrics_server_logging.py` runs `python -m app.cli` as a subprocess with metrics enabled. After `/metrics` answers, it requests `/health` with a credentialed URL in the query, then checks three things: the access line is written, the credential is redacted, and the scrape is logged.
+- On current `main` the test fails because the access line is missing. With this change it passes.
+- It skips if `prometheus_client` (the optional `metrics` extra) isn't installed.
+
+## Checks
+
+- `openspec validate fix-metrics-server-logging-config --strict`: pass.
+- `make lint`: pass.
+- `ty check`: pass.
+- A local CodeRabbit CLI review found nothing.
+
+The `Contributors attribution` check will fail until #2506 lands, since that PR adds me to `.all-contributorsrc`. I'll rebase once it does.
+
+OpenSpec: `openspec/changes/fix-metrics-server-logging-config/` (delta on `proxy-runtime-observability`).
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+
+---
+
+### [🟢 OPEN] [#2530: fix(http-bridge): parse multiline websocket JSON messages](https://github.com/Soju06/codex-lb/pull/2530)
+
+- **Тип:** Pull Request
+- **Автор:** @SantaDiegoKairos
+- **Дата создания:** 2026-09-28
+- **Метки:** `documentation, python`
+
+**Описание проблемы и предложенные изменения:**
+
+## Summary
+
+The HTTP bridge WebSocket parser treats multi-line (pretty-printed) JSON messages as a single SSE `data:` line, losing all content after the first newline. When upstream returns a pretty-printed error response, `type=error` is never seen by the bridge, the request stays pending, and the client eventually receives a misleading `upstream_request_timeout` instead of the actual error.
+
+This was diagnosed via the conversation archive on a production deployment: upstream responded with a 400 error in ~2 seconds, but the panel reported 121 seconds of "eventless" silence followed by a timeout. The error message contained literal newlines, causing the parser to silently discard it.
+
+**Fix**: parse the complete WebSocket text message as a JSON document regardless of LF/CRLF/indentation. When converting to SSE, serialize the parsed object correctly instead of wrapping raw multi-line text in a single `data:` prefix.
+
+Fixes #2465 (Blocker 1: the "eventless" component)
+Refs #2388 (bridge refusals as empty 200), #2493 (stream closed without terminal)
+
+## Root cause
+
+In `upstream_events.py`, native payload was only used when the text contained no LF/CR characters. Otherwise, `parse_sse_data_json_text()` wrapped the entire text in a single `data:` line. For compact JSON this worked; for pretty JSON (which OpenAI returns for some error types), everything after the first newline was lost:
+
+```python
+# Before: multi-line JSON wrapped as single SSE data line
+# "data: {\"type\":\"error\",\n  \"code\":..." → only first line parsed
+# After: full JSON document parsed regardless of formatting
+```
+
+## Test plan
+
+- [x] New unit tests: pretty JSON error → correctly parsed, `type=error` delivered to client
+- [x] Compact JSON behavior unchanged
+- [x] SSE serialization of parsed multi-line objects produces valid SSE
+- [x] Integration: upstream error response reaches client as error, not timeout
+- [x] 157 targeted checks passed
+
+## OpenSpec
+
+Change folder: `openspec/changes/fix-multiline-websocket-json/` (strict validation passed)
+
+
+---
+
+### [🟢 OPEN] [#2531: fix(proxy): normalize parallel_tool_calls for Responses-Lite upstream](https://github.com/Soju06/codex-lb/pull/2531)
+
+- **Тип:** Pull Request
+- **Автор:** @SantaDiegoKairos
+- **Дата создания:** 2026-09-28
+- **Метки:** `documentation, python`
+
+**Описание проблемы и предложенные изменения:**
+
+## Summary
+
+When the Responses-Lite upstream path is selected, the panel sends `parallel_tool_calls=true` in the outgoing request. The Lite endpoint requires `parallel_tool_calls=false` and responds with an immediate 400:
+
+```
+code: unsupported_value
+type: invalid_request_error
+param: parallel_tool_calls
+message: X-OpenAI-Internal-Codex-Responses-Lite requires `parallel_tool_calls` to be false.
+```
+
+This 400 error was then compounded by the multiline JSON parsing issue (#2530): the error was silently swallowed, and the client received a two-minute timeout instead of the actual error. Together, these two bugs produced the "permanently eventless sticky lineage" described in #2465.
+
+**Fix**: the Responses-Lite finalizer now sets `parallel_tool_calls=false` when the Lite upstream path is selected. Non-Lite paths are unchanged.
+
+Fixes #2465 (Blocker 1: the Lite normalization component)
+Refs #2530 (multiline JSON parsing fix — the other half of Blocker 1)
+
+## Root cause
+
+In `proxy.py`, the Lite finalizer already provided `reasoning.context=all_turns` but did not set `parallel_tool_calls=false`. The compact-payload path had this normalization; the general Lite path did not.
+
+## Test plan
+
+- [x] New unit tests: Lite path → `parallel_tool_calls=false`; non-Lite → unchanged
+- [x] Integration: request to Lite upstream no longer receives 400
+- [x] 66 targeted checks passed
+
+## OpenSpec
+
+Change folder: `openspec/changes/fix-responses-lite-parallel-calls/` (strict validation passed)
+
+
+---
+
+### [🟢 OPEN] [#2532: chore(docker): bump rust from 1.96.0-slim-bookworm to 1.98.1-slim-bookworm](https://github.com/Soju06/codex-lb/pull/2532)
+
+- **Тип:** Pull Request
+- **Автор:** @dependabot[bot]
+- **Дата создания:** 2026-09-28
+- **Метки:** `dependencies, docker`
+
+**Описание проблемы и предложенные изменения:**
+
+Bumps rust from 1.96.0-slim-bookworm to 1.98.1-slim-bookworm.
+
+
+[![Dependabot compatibility score](https://dependabot-badges.githubapp.com/badges/compatibility_score?dependency-name=rust&package-manager=docker&previous-version=1.96.0-slim-bookworm&new-version=1.98.1-slim-bookworm)](https://docs.github.com/en/github/managing-security-vulnerabilities/about-dependabot-security-updates#about-compatibility-scores)
+
+Dependabot will resolve any conflicts with this PR as long as you don't alter it yourself. You can also trigger a rebase manually by commenting `@dependabot rebase`.
+
+[//]: # (dependabot-automerge-start)
+[//]: # (dependabot-automerge-end)
+
+---
+
+<details>
+<summary>Dependabot commands and options</summary>
+<br />
+
+You can trigger Dependabot actions by commenting on this PR:
+- `@dependabot rebase` will rebase this PR
+- `@dependabot recreate` will recreate this PR, overwriting any edits that have been made to it
+- `@dependabot show <dependency name> ignore conditions` will show all of the ignore conditions of the specified dependency
+- `@dependabot ignore this major version` will close this PR and stop Dependabot creating any more for this major version (unless you reopen the PR or upgrade to it yourself)
+- `@dependabot ignore this minor version` will close this PR and stop Dependabot creating any more for this minor version (unless you reopen the PR or upgrade to it yourself)
+- `@dependabot ignore this dependency` will close this PR and stop Dependabot creating any more for this dependency (unless you reopen the PR or upgrade to it yourself)
+
+
+</details>
+
+**Прикрепленные изображения и скриншоты:**
+
+- **Скриншот 1:**
+  ![Скриншот 1](https://dependabot-badges.githubapp.com/badges/compatibility_score?dependency-name=rust&package-manager=docker&previous-version=1.96.0-slim-bookworm&new-version=1.98.1-slim-bookworm)
+
+
+---
+
+### [🟢 OPEN] [#2533: chore(deps): bump the python-minor-patch group across 1 directory with 17 updates](https://github.com/Soju06/codex-lb/pull/2533)
+
+- **Тип:** Pull Request
+- **Автор:** @dependabot[bot]
+- **Дата создания:** 2026-09-28
+- **Метки:** `dependencies, python`
+
+**Описание проблемы и предложенные изменения:**
+
+Bumps the python-minor-patch group with 17 updates in the / directory:
+
+| Package | From | To |
+| --- | --- | --- |
+| [alembic](https://github.com/sqlalchemy/alembic) | `1.19.2` | `1.20.0` |
+| [greenlet](https://github.com/python-greenlet/greenlet) | `3.5.5` | `3.5.6` |
+| [mako](https://github.com/sqlalchemy/mako) | `1.4.1` | `1.4.3` |
+| [sqlalchemy](https://github.com/sqlalchemy/sqlalchemy) | `2.0.52` | `2.1.1` |
+| [urllib3](https://github.com/urllib3/urllib3) | `2.7.0` | `2.8.0` |
+| [uvicorn](https://github.com/Kludex/uvicorn) | `0.52.4` | `0.54.0` |
+| [opentelemetry-api](https://github.com/open-telemetry/opentelemetry-python) | `1.44.0` | `1.45.0` |
+| [opentelemetry-sdk](https://github.com/open-telemetry/opentelemetry-python) | `1.44.0` | `1.45.0` |
+| [opentelemetry-exporter-otlp](https://github.com/open-telemetry/opentelemetry-python) | `1.44.0` | `1.45.0` |
+| [opentelemetry-instrumentation-fastapi](https://github.com/open-telemetry/opentelemetry-python-contrib) | `0.65b0` | `0.66b0` |
+| [opentelemetry-instrumentation-aiohttp-client](https://github.com/open-telemetry/opentelemetry-python-contrib) | `0.65b0` | `0.66b0` |
+| [opentelemetry-instrumentation-sqlalchemy](https://github.com/open-telemetry/opentelemetry-python-contrib) | `0.65b0` | `0.66b0` |
+| [ruff](https://github.com/astral-sh/ruff) | `0.16.6` | `0.16.9` |
+| [ty](https://github.com/astral-sh/ty) | `0.0.78` | `0.0.84` |
+| [openai](https://github.com/openai/openai-python) | `3.8.0` | `3.19.2` |
+| [hypothesis](https://github.com/HypothesisWorks/hypothesis) | `6.167.1` | `6.168.1` |
+| [hatchling](https://github.com/pypa/hatch) | `1.32.0` | `1.32.4` |
+
+
+Updates `alembic` from 1.19.2 to 1.20.0
+<details>
+<summary>Release notes</summary>
+<p><em>Sourced from <a href="https://github.com/sqlalchemy/alembic/releases">alembic's releases</a>.</em></p>
+<blockquote>
+<h1>1.20.0</h1>
+<p>Released: September 11, 2026</p>
+<h2>usecase</h2>
+<ul>
+<li>
+<p><strong>[usecase] [batch]</strong> Added a warning for the case where an unnamed CHECK constraint on a
+reflected table is omitted from a batch &quot;recreate&quot; operation.  An unnamed
+CHECK constraint can't be reliably carried over in a batch recreate
+as it may refer to columns that are being dropped or changed.  This
+omission was previously a silent operation.   The presence of any
+<code>~sqlalchemy.schema.CheckConstraint</code> in
+<code>Operations.batch_alter_table.table_args</code> is taken to indicate
+that the case has been accommodated, and no warning is em
+
+*(описание сокращено, см. полный текст по ссылке на GitHub)*
+
+
+---
+
+### [🟢 OPEN] [#2534: feat(proxy): admit bounded inline images on the HTTP responses bridge](https://github.com/Soju06/codex-lb/pull/2534)
+
+- **Тип:** Pull Request
+- **Автор:** @SantaDiegoKairos
+- **Дата создания:** 2026-09-28
+- **Метки:** `documentation, ci, python`
+
+**Описание проблемы и предложенные изменения:**
+
+# feat(proxy): bounded inline JPEG/PNG through the HTTP responses bridge
+
+<!--
+Commit title candidate: feat(proxy): admit bounded inline images on the HTTP responses bridge
+Refs #2465 (partial: Blocker 2 only), Refs #2409, Refs #2425, Refs #2455
+Do NOT use "Fixes #2465" — that issue has a second blocker this PR does not address.
+-->
+
+## What
+
+Every `/v1/responses` request carrying an `input_image` part bypasses the HTTP
+responses bridge today, so each image-bearing turn loses the thread's bridge
+connection and prompt-cache reuse. Meanwhile an inline image the upstream
+websocket rejects for size surfaces as a retryable `stream_incomplete` with
+account exclusion — the observed close-1009 masking (#2465 Blocker 2).
+
+This PR admits bounded inline images onto the bridge by default under two
+explicit budgets, turns every oversize outcome into an explicit client error,
+and classifies upstream websocket close 1009 as terminal payload evidence:
+
+- **Admission (default on).** A request whose *every* `input_image` part is an
+  inline `data:image/(jpeg|png);base64,` URL decoding to at most **5,000,000
+  bytes (inclusive)** keeps using the bridge. A pre-decode fast path rejects
+  encoded segments longer than 6,666,668 characters without decoding.
+- **Whole-frame budget.** The complete serialized `response.create` frame —
+  envelope, bridge operation id, thread-cache identity and installation
+  metadata included — must stay at or below **64 MiB**, measured exactly at
+  the final send (an early estimate rejects clear oversize sooner). The total
+  budget deliberately permits several legal images plus long history; it is a
+  local bound, **not** an upstream acceptance guarantee.
+- **Explicit errors, never silent fallback.** An over-budget image or frame
+  fails with the pre-send 400 `payload_too_large` (`param=input`,
+  `invalid_request_error`). Size alone never selects the raw-HTTP bypass, and
+  historical slimming never runs for image-bearing bridge requests. The
+  operator HTTP pin and the recent-WS-failure health fallback keep their
+  documented, logged behavior.
+- **Fail-closed shapes.** External URLs, non-JPEG/PNG media, malformed
+  base64, `file_id`/`sediment` references and `image_generation` requests
+  keep today's blanket bypass/reject behavior — including when mixed with an
+  over-budget inline sibling (unsupported shape wins).
+- **Close 1009 is a terminal client error.** HTTP 400 when the response is
+  uncommitted, the SSE `response.failed` envelope once events
+
+*(описание сокращено, см. полный текст по ссылке на GitHub)*
+
+
+---
+
+### [🟣 MERGED/CLOSED] [#2535: feat: show pooled quota in Codex /status by serving and forwarding /backend-api calls](https://github.com/Soju06/codex-lb/issues/2535)
+
+- **Тип:** Issue / Предложение
+- **Автор:** @ngallodev
+- **Дата создания:** 2026-09-29
+- **Метки:** `enhancement, triage`
+
+**Описание проблемы и предложенные изменения:**
+
+### Pre-flight checklist
+
+- [x] I searched existing issues and discussions for similar proposals.
+- [x] This is a concrete proposal, not an open-ended question.
+
+### Problem / motivation
+
+Codex reads the quota it shows in `/status` and the status line from `<chatgpt_base_url>/wham/usage`. With the default base URL that request goes to chatgpt.com, so Codex shows only the account it is logged into. codex-lb routes model traffic across the whole pool, so what Codex shows and what the pool is doing disagree. With two accounts at 25% and 6% used, Codex reported 75% left when the pool actually had 85% left.
+
+codex-lb already serves pooled usage at `/api/codex/usage`, but pointing `chatgpt_base_url` at codex-lb doesn't work today. Codex sends every other ChatGPT-backend call to the same base URL (account checks, user settings, plugins, cloud tasks, conversations), and codex-lb has no route for them, so those features break.
+
+### Proposed change
+
+Codex users can set `chatgpt_base_url = "<codex-lb>/backend-api"`. codex-lb then:
+
+- serves `/backend-api/wham/usage` (and `wham/rate-limit-reset-credits/consume`) from the same handlers as the existing `/api/codex` routes, so `/status` shows pooled quota;
+- forwards every other `/backend-api/*` call to upstream unchanged (method, path, query, body, streamed response). It uses the caller's own ChatGPT token and account id, never a pool account's token. The matched pool account supplies only its egress route (direct or upstream proxy pool).
+
+Safety rules:
+
+- Before anything leaves codex-lb, the caller's token is checked against the account it names, with the same check `/api/codex/usage` already uses. The confirmed pair is cached for 60 seconds, and each call still rechecks that the account is active.
+- codex-lb API keys (`sk-clb-`), requests with no ChatGPT bearer, and paths under pool-routed namespaces (`codex/`, `files`, `transcribe`) are never forwarded. They get the normal 404/405, so model traffic can't bypass the pool.
+- Redirects are relayed, not followed, and cookies are stripped both ways.
+
+There are no new settings. Nothing changes unless a client is pointed at `/backend-api`, and rollback is removing that one line from the client config.
+
+Known limit: connectors (`/backend-api/ps/mcp`) don't work with this setting. Codex's MCP client sends no credentials to non-chatgpt.com hosts, so there is no caller identity to forward, and substituting a pool account's identity would be wrong. Codex logs the failure and car
+
+*(описание сокращено, см. полный текст по ссылке на GitHub)*
+
+
+---
+
+### [🟣 MERGED/CLOSED] [#2536: feat(proxy): show pooled quota in Codex /status by serving and forwarding /backend-api calls](https://github.com/Soju06/codex-lb/pull/2536)
+
+- **Тип:** Pull Request
+- **Автор:** @ngallodev
+- **Дата создания:** 2026-09-29
+- **Метки:** `documentation, python`
+
+**Описание проблемы и предложенные изменения:**
+
+## Summary
+
+Point Codex's `chatgpt_base_url` at codex-lb's `/backend-api` and Codex's `/status` shows quota pooled across all accounts instead of only the account it is logged into. codex-lb serves `/backend-api/wham/usage` itself and forwards the other ChatGPT-backend calls Codex makes (account checks, user settings, plugins, cloud tasks) to upstream unchanged, under the caller's own identity.
+
+Why: codex-lb already routes model turns across the pool, but Codex reads its status-line quota from `<chatgpt_base_url>/wham/usage`. With the default base URL that goes straight to chatgpt.com and covers one account. With two accounts at 25% and 6% used, `/status` showed 75% left before this change and 85% left after (pooled).
+
+## Type of change
+
+- [x] `feat:` new user-facing feature or capability
+
+Closes #2535. Related to #2262 (partial overlap; this does not close it).
+
+## OpenSpec
+
+- [x] This PR includes / updates an OpenSpec change
+- [x] This PR touches a codex-faithful path (request/response shape, SSE framing) and preserves upstream-equivalent behavior: forwarded paths, bodies, query strings and event streams reach upstream unchanged.
+
+Change directory: `openspec/changes/archive/2026-09-28-forward-codex-chatgpt-backend-calls/` (archived in this PR; requirements are in `openspec/specs/codex-backend-passthrough/spec.md`, rationale in `context.md` next to it).
+
+## Changes
+
+- `/backend-api/wham/usage` and `/backend-api/wham/rate-limit-reset-credits/consume` are served by the same handlers as their `/api/codex` twins.
+- A `/backend-api/{rest:path}` catch-all forwards unserved paths (GET/HEAD/POST/PUT/PATCH/DELETE) to upstream, streaming the response, using the caller's token and account id and the matched account's egress route (including upstream proxy pools).
+- The raw percent-encoded path and query are forwarded byte for byte; a mismatch between raw and decoded path gets a 400. A mount prefix (`root_path`) is stripped before matching.
+- One stream-end log record per forwarded call; DEBUG records for declines and identity checks.
+- `docs/client-setup.md` documents the setting and its limits.
+
+## Security model
+
+- The caller's identity is verified before anything is sent out. The bearer token is checked against the account named in `chatgpt-account-id` with the same check `/api/codex/usage` uses. The confirmed binding is cached for 60 seconds; every call still rechecks that the account is active and resolves its current route.
+- No pool token is forwarded. The p
+
+*(описание сокращено, см. полный текст по ссылке на GitHub)*
+
+
+---
+
+### [🟢 OPEN] [#2537: fix(images): route image requests through compatible host](https://github.com/Soju06/codex-lb/pull/2537)
+
+- **Тип:** Pull Request
+- **Автор:** @pkhadson
+- **Дата создания:** 2026-09-29
+- **Метки:** `documentation, python`
+
+**Описание проблемы и предложенные изменения:**
+
+## Problem
+The Images adapter selected `gpt-5.6-luna` as its internal Responses host. In the current account pool, that host rejects the forced `image_generation` tool choice, while `gpt-5.6-sol` accepts it. This broke both image generation and edits, including reference-image edits.
+
+## Change
+- Add a dedicated ordered Images host resolver preferring `gpt-5.6-sol`, then compatible fallbacks.
+- Keep default account-probe host selection unchanged.
+- Route `/v1/images/generations` and `/v1/images/edits` through the Images resolver.
+- Preserve the public `gpt-image-*` model and existing multipart `input_image` translation.
+- Add OpenSpec context/spec delta and regression coverage for generation and edit routes.
+
+## Validation
+- `37 passed` unit tests for host selection and image translation.
+- `63 passed` integration tests in `tests/integration/test_proxy_images.py`.
+- Ruff check and format check passed.
+- OpenSpec validation passed for `images-api-compat`; unrelated pre-existing repository spec failures remain.
+- Docker image `codex-lb:latest` built successfully and passed `/health/ready` smoke test.
+
+
+---
