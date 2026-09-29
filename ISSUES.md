@@ -1670,7 +1670,7 @@ For a deterministic route test, use a recording upstream stub to inspect `tools`
 
 ---
 
-### [🟢 OPEN] [#2500: bug: #1968 shield-loop livelock still ships in latest stable 1.24.0; please cut a stable patch with #1969](https://github.com/Soju06/codex-lb/issues/2500)
+### [✅ RESOLVED / MERGED IN FORK] [#2500: bug: #1968 shield-loop livelock still ships in latest stable 1.24.0; please cut a stable patch with #1969](https://github.com/Soju06/codex-lb/issues/2500)
 
 - **Тип:** Issue / Предложение
 - **Автор:** @nikhilshinday
@@ -1901,7 +1901,7 @@ A second commit fixes the request log and transport decision counters: bypassed 
 
 ---
 
-### [🟢 OPEN] [#2504: fix(usage): account for cache-write tokens](https://github.com/Soju06/codex-lb/pull/2504)
+### [✅ RESOLVED / MERGED IN FORK] [#2504: fix(usage): account for cache-write tokens](https://github.com/Soju06/codex-lb/pull/2504)
 
 - **Тип:** Pull Request
 - **Автор:** @mastertyko
@@ -2074,7 +2074,7 @@ Change directory: `openspec/changes/drain-database-schedulers-on-shutdown/`. It 
 
 ---
 
-### [🟢 OPEN] [#2507: feat(cli): add --log-level and --log-file; stop the metrics server resetting logging](https://github.com/Soju06/codex-lb/pull/2507)
+### [✅ RESOLVED / MERGED IN FORK] [#2507: feat(cli): add --log-level and --log-file; stop the metrics server resetting logging](https://github.com/Soju06/codex-lb/pull/2507)
 
 - **Тип:** Pull Request
 - **Автор:** @ngallodev

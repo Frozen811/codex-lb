@@ -1047,6 +1047,7 @@ class RequestLogsRepository:
         latency_upstream_terminal_ms: int | None = None,
         output_delta_count: int | None = None,
         latency_first_output_ms: int | None = None,
+        cache_write_input_tokens: int | None = None,
     ) -> RequestLog:
         if account_id is not None and model_source_id is not None:
             raise ValueError("request log cannot belong to both an account and a model source")
@@ -1094,6 +1095,7 @@ class RequestLogsRepository:
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 cached_input_tokens=cached_input_tokens,
+                cache_write_input_tokens=cache_write_input_tokens,
                 reasoning_tokens=reasoning_tokens,
                 cost_usd=None,
                 reasoning_effort=reasoning_effort,

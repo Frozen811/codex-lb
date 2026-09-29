@@ -215,6 +215,7 @@ class ApiKeysRepositoryProtocol(Protocol):
         output_tokens: int | None,
         cached_input_tokens: int | None,
         cost_microdollars: int | None,
+        cache_write_input_tokens: int | None = None,
     ) -> None: ...
 
     async def touch_usage_reservation(self, reservation_id: str) -> bool: ...
@@ -1158,6 +1159,7 @@ class ApiKeysService:
         cached_input_tokens: int = 0,
         service_tier: str | None = None,
         cost_microdollars: int | None = None,
+        cache_write_input_tokens: int = 0,
     ) -> None:
         for attempt in range(_SQLITE_BUSY_RETRY_ATTEMPTS):
             try:
@@ -1169,6 +1171,7 @@ class ApiKeysService:
                     cached_input_tokens=cached_input_tokens,
                     service_tier=service_tier,
                     status="finalized",
+                    cache_write_input_tokens=cache_write_input_tokens,
                     cost_microdollars_override=cost_microdollars,
                 )
                 return
@@ -1194,6 +1197,7 @@ class ApiKeysService:
         output_tokens: int | None = None,
         cached_input_tokens: int | None = None,
         service_tier: str | None = None,
+        cache_write_input_tokens: int | None = None,
     ) -> None:
         for attempt in range(_SQLITE_BUSY_RETRY_ATTEMPTS):
             try:
@@ -1205,6 +1209,7 @@ class ApiKeysService:
                     cached_input_tokens=cached_input_tokens,
                     service_tier=service_tier,
                     status="failed",
+                    cache_write_input_tokens=cache_write_input_tokens,
                 )
                 return
             except OperationalError as exc:
@@ -1231,6 +1236,7 @@ class ApiKeysService:
         service_tier: str | None,
         status: str,
         cost_microdollars_override: int | None = None,
+        cache_write_input_tokens: int | None = None,
     ) -> None:
         async with sqlite_writer_section():
             reservation = await self._repository.get_usage_reservation(reservation_id)
@@ -1258,6 +1264,7 @@ class ApiKeysService:
                     effective_output_tokens,
                     effective_cached_input_tokens,
                     service_tier,
+                    cache_write_input_tokens=cache_write_input_tokens or 0,
                 )
             )
 
@@ -1289,6 +1296,7 @@ class ApiKeysService:
                     output_tokens=output_tokens,
                     cached_input_tokens=cached_input_tokens,
                     cost_microdollars=cost_microdollars,
+                    cache_write_input_tokens=cache_write_input_tokens,
                 )
                 await self._repository.commit()
             except Exception:
@@ -1506,6 +1514,7 @@ class ApiKeysService:
         output_tokens: int,
         cached_input_tokens: int = 0,
         service_tier: str | None = None,
+        cache_write_input_tokens: int = 0,
     ) -> None:
         cost_microdollars = _calculate_cost_microdollars(
             model,
@@ -1513,6 +1522,7 @@ class ApiKeysService:
             output_tokens,
             cached_input_tokens,
             service_tier,
+            cache_write_input_tokens=cache_write_input_tokens,
         )
         await self._repository.increment_limit_usage(
             key_id,
@@ -2339,6 +2349,8 @@ def _calculate_cost_microdollars(
     output_tokens: int,
     cached_input_tokens: int,
     service_tier: str | None = None,
+    *,
+    cache_write_input_tokens: int = 0,
 ) -> int:
     resolved = get_pricing_for_model(model)
     if resolved is None:
@@ -2348,6 +2360,7 @@ def _calculate_cost_microdollars(
         input_tokens=float(input_tokens),
         output_tokens=float(output_tokens),
         cached_input_tokens=float(cached_input_tokens),
+        cache_write_input_tokens=float(cache_write_input_tokens),
     )
     cost_usd = calculate_cost_from_usage(usage, price, service_tier=service_tier)
     if cost_usd is None:
