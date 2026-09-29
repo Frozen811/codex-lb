@@ -1558,7 +1558,7 @@ The change and reset-credit main spec passed strict OpenSpec validation. Full `o
 
 ---
 
-### [🟢 OPEN] [#2498: docs: add `supports_standalone_web_search` to the Codex provider example](https://github.com/Soju06/codex-lb/issues/2498)
+### [✅ RESOLVED / MERGED IN FORK] [#2498: docs: add `supports_standalone_web_search` to the Codex provider example](https://github.com/Soju06/codex-lb/issues/2498)
 
 - **Тип:** Issue / Предложение
 - **Автор:** @solid-pixel
@@ -2455,7 +2455,7 @@ The new tests fail on current `main` (7 of them, including the `/v1/chat
 
 ---
 
-### [🟢 OPEN] [#2516: docs: declare native web search support in Codex examples](https://github.com/Soju06/codex-lb/pull/2516)
+### [✅ RESOLVED / MERGED IN FORK] [#2516: docs: declare native web search support in Codex examples](https://github.com/Soju06/codex-lb/pull/2516)
 
 - **Тип:** Pull Request
 - **Автор:** @solid-pixel
@@ -2584,7 +2584,7 @@ Not applicable — no dashboard- or proxy-visible surface changes.
 
 ---
 
-### [🟢 OPEN] [#2518: test(db): cover the SCIM/overflow merge revision's single-head convergence](https://github.com/Soju06/codex-lb/pull/2518)
+### [✅ RESOLVED / MERGED IN FORK] [#2518: test(db): cover the SCIM/overflow merge revision's single-head convergence](https://github.com/Soju06/codex-lb/pull/2518)
 
 - **Тип:** Pull Request
 - **Автор:** @aacarcrash
@@ -2753,7 +2753,7 @@ Cloud CI and independent maintainer review remain merge gates. No new settings o
 
 ---
 
-### [🟢 OPEN] [#2521: fix(model-sources): validate optional usage and preserve streamed telemetry](https://github.com/Soju06/codex-lb/pull/2521)
+### [✅ RESOLVED / MERGED IN FORK] [#2521: fix(model-sources): validate optional usage and preserve streamed telemetry](https://github.com/Soju06/codex-lb/pull/2521)
 
 - **Тип:** Pull Request
 - **Автор:** @627444640

@@ -1513,7 +1513,17 @@
       "avatar_url": "https://avatars.githubusercontent.com/u/104075208?v=4",
       "profile": "https://github.com/uniskela",
       "contributions": [
-        "doc"      ]
+        "doc"
+      ]
+    },
+    {
+      "login": "aacarcrash",
+      "name": "aacarcrash",
+      "avatar_url": "https://avatars.githubusercontent.com/u/29751759?v=4",
+      "profile": "https://github.com/aacarcrash",
+      "contributions": [
+        "code"
+      ]
     }
   ],
   "contributorsPerLine": 7,
