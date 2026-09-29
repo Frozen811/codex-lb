@@ -2730,7 +2730,7 @@ New tests:
 
 ---
 
-### [🟢 OPEN] [#2520: refactor(proxy): extract streaming response entrypoint](https://github.com/Soju06/codex-lb/pull/2520)
+### [✅ RESOLVED / MERGED IN FORK] [#2520: refactor(proxy): extract streaming response entrypoint](https://github.com/Soju06/codex-lb/pull/2520)
 
 - **Тип:** Pull Request
 - **Автор:** @627444640
@@ -2801,7 +2801,7 @@ Please do not merge before #2502 — this branch is based on it.
 
 ---
 
-### [🟢 OPEN] [#2523: fix(metrics): publish fresh account pool gauges on scrape](https://github.com/Soju06/codex-lb/pull/2523)
+### [✅ RESOLVED / MERGED IN FORK] [#2523: fix(metrics): publish fresh account pool gauges on scrape](https://github.com/Soju06/codex-lb/pull/2523)
 
 - **Тип:** Pull Request
 - **Автор:** @Abaddollyon
@@ -3493,7 +3493,7 @@ Change directory: `openspec/changes/archive/2026-09-28-forward-codex-chatgpt-bac
 
 ---
 
-### [🟢 OPEN] [#2537: fix(images): route image requests through compatible host](https://github.com/Soju06/codex-lb/pull/2537)
+### [✅ RESOLVED / MERGED IN FORK] [#2537: fix(images): route image requests through compatible host](https://github.com/Soju06/codex-lb/pull/2537)
 
 - **Тип:** Pull Request
 - **Автор:** @pkhadson

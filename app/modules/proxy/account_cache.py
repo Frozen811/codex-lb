@@ -14,8 +14,17 @@ from app.core.cache.invalidation import (
     NAMESPACE_ACCOUNT_SELECTION,
     get_cache_invalidation_poller,
 )
+from app.core.clock import REAL_CLOCK, Clock
+from app.core.config.settings import get_settings
+from app.core.crypto import TokenEncryptor
+from app.core.metrics import prometheus as metrics
 from app.db.models import Account, AccountStatus
 from app.db.session import SessionLocal, close_session
+from app.modules.proxy.account_eligibility import (
+    ROUTABLE_STATUSES,
+    reauth_access_token_is_expired,
+    stored_access_token_expires_at,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -119,13 +128,15 @@ class RoutingAvailabilityCache:
     to the historical process-local set semantics.
     """
 
-    def __init__(self, session_factory: Callable[[], AsyncSession] | None = None) -> None:
+    def __init__(self, session_factory: Callable[[], AsyncSession] | None = None, *, clock: Clock = REAL_CLOCK) -> None:
         self._session_factory = session_factory
+        self._clock = clock
         self._snapshot: dict[str, tuple[AccountStatus, str | None]] | None = None
         self._local_marks: set[str] = set()
         self._pending_persist_marks: set[str] = set()
         self._generation = 0
         self._repair_generations: dict[str, int] = {}
+        self._refresh_lock = anyio.Lock()
 
     def generation_for_account(self, account_id: str) -> int:
         return self._repair_generations.get(account_id, 0)
@@ -172,6 +183,13 @@ class RoutingAvailabilityCache:
         return account_id in self._local_marks
 
     async def refresh_from_db(self) -> None:
+        """Publish cache and metric observations in database-read order."""
+        # Scrapes and invalidations can overlap. Serialize their reads and
+        # publication so a slower old read cannot overwrite a newer snapshot.
+        async with self._refresh_lock:
+            await self._refresh_from_db()
+
+    async def _refresh_from_db(self) -> None:
         """Rebuild the snapshot from committed account statuses.
 
         Local overlay marks whose committed status became routable again are dropped —
@@ -194,11 +212,53 @@ class RoutingAvailabilityCache:
         marks_before_refresh = frozenset(self._local_marks)
         factory = self._session_factory or SessionLocal
         session = factory()
+        publish_metrics = metrics.PROMETHEUS_AVAILABLE and get_settings().metrics_enabled
+        counts = dict.fromkeys(AccountStatus, 0)
+        available = 0
         try:
-            result = await session.execute(select(Account.id, Account.status, Account.deactivation_reason))
-            snapshot: dict[str, tuple[AccountStatus, str | None]] = {
-                account_id: (status, reason) for account_id, status, reason in result.all()
-            }
+            if publish_metrics:
+                result = await session.execute(
+                    select(
+                        Account.id,
+                        Account.status,
+                        Account.deactivation_reason,
+                        Account.access_token_encrypted,
+                        Account.delete_requested_at,
+                    )
+                )
+                rows = result.all()
+                snapshot: dict[str, tuple[AccountStatus, str | None]] = {
+                    (row.id if hasattr(row, "id") else row[0]): (
+                        (row.status if hasattr(row, "status") else row[1]),
+                        (
+                            row.deactivation_reason
+                            if hasattr(row, "deactivation_reason")
+                            else (row[2] if len(row) > 2 else None)
+                        ),
+                    )
+                    for row in rows
+                }
+                encryptor: TokenEncryptor | None = None
+                now = self._clock.time()
+                for row in rows:
+                    if getattr(row, "delete_requested_at", None) is not None:
+                        continue
+                    status = row.status if hasattr(row, "status") else row[1]
+                    counts[status] += 1
+                    if status not in ROUTABLE_STATUSES:
+                        continue
+                    expires_at = None
+                    if status == AccountStatus.REAUTH_REQUIRED:
+                        if encryptor is None:
+                            encryptor = TokenEncryptor()
+                        enc = getattr(row, "access_token_encrypted", None)
+                        expires_at = stored_access_token_expires_at(enc, encryptor)
+                    available += not reauth_access_token_is_expired(status, expires_at, now=now)
+            else:
+                result = await session.execute(select(Account.id, Account.status, Account.deactivation_reason))
+                snapshot = {
+                    account_id: (status, reason) for account_id, status, reason in result.all()
+                }
         finally:
             await close_session(session)
         self._snapshot = snapshot
@@ -215,14 +275,24 @@ class RoutingAvailabilityCache:
             or account_id not in marks_before_refresh
             or _routing_entry_unavailable(snapshot.get(account_id))
         }
-        self._record_metrics()
+        if publish_metrics:
+            assert metrics.accounts_total is not None
+            assert metrics.accounts_available is not None
+            for status, count in counts.items():
+                metrics.accounts_total.labels(status=status.value).set(count)
+            metrics.accounts_available.set(available)
 
     def reset(self) -> None:
         """Drop snapshot and marks without forgetting in-flight repair fences."""
         self._snapshot = None
         self._local_marks.clear()
         self._pending_persist_marks.clear()
-        self._record_metrics()
+        if metrics.PROMETHEUS_AVAILABLE and get_settings().metrics_enabled:
+            if metrics.accounts_total is not None:
+                for status in AccountStatus:
+                    metrics.accounts_total.labels(status=status.value).set(0)
+            if metrics.accounts_available is not None:
+                metrics.accounts_available.set(0)
 
     def _record_metrics(self) -> None:
         try:

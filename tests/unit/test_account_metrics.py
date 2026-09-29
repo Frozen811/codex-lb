@@ -56,13 +56,26 @@ def test_record_account_metrics_with_accounts_and_unavailable_marks(prometheus_e
 
 
 @pytest.mark.asyncio
-async def test_routing_availability_cache_updates_metrics(prometheus_env: Any) -> None:
+async def test_routing_availability_cache_updates_metrics(prometheus_env: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.core.config.settings import get_settings
+
+    monkeypatch.setattr(get_settings(), "metrics_enabled", True)
+    monkeypatch.setattr("app.modules.proxy.account_cache.metrics", prometheus_env)
     cache = RoutingAvailabilityCache()
 
+    def _mock_account(aid: str, status: AccountStatus) -> SimpleNamespace:
+        return SimpleNamespace(
+            id=aid,
+            status=status,
+            deactivation_reason=None,
+            access_token_encrypted=None,
+            delete_requested_at=None,
+        )
+
     mock_db_accounts = [
-        ("acc-1", AccountStatus.ACTIVE, None),
-        ("acc-2", AccountStatus.ACTIVE, None),
-        ("acc-3", AccountStatus.PAUSED, None),
+        _mock_account("acc-1", AccountStatus.ACTIVE),
+        _mock_account("acc-2", AccountStatus.ACTIVE),
+        _mock_account("acc-3", AccountStatus.PAUSED),
     ]
 
     mock_session = AsyncMock()

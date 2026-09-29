@@ -132,13 +132,13 @@ if PROMETHEUS_AVAILABLE:
         "Total accounts by status",
         ["status"],
         registry=REGISTRY,
-        **({"multiprocess_mode": "livemax"} if MULTIPROCESS_MODE else {}),
+        **({"multiprocess_mode": "livemostrecent"} if MULTIPROCESS_MODE else {}),
     )
     accounts_available = Gauge(
         "codex_lb_accounts_available",
-        "Total accounts currently available for routing",
+        "Accounts eligible by stored status and reauthentication token expiry, excluding request-specific constraints",
         registry=REGISTRY,
-        **({"multiprocess_mode": "livemax"} if MULTIPROCESS_MODE else {}),
+        **({"multiprocess_mode": "livemostrecent"} if MULTIPROCESS_MODE else {}),
     )
 
     def record_account_metrics(
