@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from typing import cast
+
 from pydantic import TypeAdapter, ValidationError
 
 from app.core.openai.models import (
@@ -32,6 +35,15 @@ _LIFECYCLE_EVENT_TYPES = frozenset(
         "error",
     }
 )
+
+
+def parse_websocket_event_payload(text: str) -> dict[str, JsonValue] | None:
+    """Decode a complete WebSocket JSON object, not an SSE data line."""
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    return cast(dict[str, JsonValue], payload) if isinstance(payload, dict) else None
 
 
 def classify_event_type(payload: JsonValue | None) -> str | None:

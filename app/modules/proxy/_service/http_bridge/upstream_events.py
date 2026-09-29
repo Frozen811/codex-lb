@@ -44,13 +44,14 @@ from app.core.openai.parsing import (
     _LIFECYCLE_EVENT_TYPES,
     classify_event_type,
     parse_sse_event_payload,
+    parse_websocket_event_payload,
 )
 from app.core.types import JsonValue
 from app.core.usage.live_hub import publish_live_usage
 from app.core.usage.live_snapshots import EVENT_MARKER, parse_rate_limit_event_text
 from app.core.utils.request_id import reset_request_id, set_request_id
 from app.core.utils.shared_future import wait_on_shared_future
-from app.core.utils.sse import format_sse_event, format_sse_event_from_text, parse_sse_data_json_text
+from app.core.utils.sse import format_sse_event, format_sse_event_from_text
 from app.db.models import Account
 from app.modules.proxy._service.api_key_usage import (
     _API_KEY_RESERVATION_HEARTBEAT_SECONDS as _API_KEY_RESERVATION_HEARTBEAT_SECONDS,
@@ -2589,27 +2590,17 @@ class _HTTPBridgeUpstreamEventsMixin:
             clock = clock_for(self)
         if observed_at is None:
             observed_at = clock.monotonic()
-        # One JSON document per websocket text frame: parse it directly instead
-        # of framing it as SSE and running the line parser over it. The
-        # data-only block is what unmatched events relay.
-        event_block = f"data: {text}\n\n"
-        if (
-            message is not None
-            and message.responses_interpreted
-            and message.payload is not None
-            and text.startswith("{")
-            and "\n" not in text
-            and "\r" not in text
-        ):
-            # Only this shape uses the direct JSON path in the legacy bridge.
-            # Preserve its SSE-field semantics for whitespace/multiline text.
+        # A websocket text frame is one JSON document, including pretty JSON.
+        # SSE data-line extraction would discard its unprefixed continuation lines.
+        if message is not None and message.responses_interpreted and message.payload is not None:
             payload = message.payload
             event_type = message.event_type
             routing = message.routing
         else:
-            payload = parse_sse_data_json_text(text)
+            payload = parse_websocket_event_payload(text)
             event_type = classify_event_type(payload)
             routing = None
+        event_block = format_sse_event_from_text(payload, text) if payload is not None else f"data: {text}\n\n"
         event = parse_sse_event_payload(payload) if event_type in _LIFECYCLE_EVENT_TYPES else None
         completed_delivery_scope = _HTTPBridgeCompletedDeliveryScope() if event_type == "response.completed" else None
         claimed_terminal_request_states: list[_WebSocketRequestState] = []

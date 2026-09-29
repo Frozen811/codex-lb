@@ -2257,7 +2257,7 @@ command.</p>
 
 ---
 
-### [🟢 OPEN] [#2511: bug(accounts): self_serve_business_prolite usage plan is rejected as unknown](https://github.com/Soju06/codex-lb/issues/2511)
+### [✅ RESOLVED / MERGED IN FORK] [#2511: bug(accounts): self_serve_business_prolite usage plan is rejected as unknown](https://github.com/Soju06/codex-lb/issues/2511)
 
 - **Тип:** Issue / Предложение
 - **Автор:** @h4zardi
@@ -2287,7 +2287,7 @@ Reproduced against `main` at `4dcf8f751b9b8ee8b55012eda7d459832f3ec51c`. A focus
 
 ---
 
-### [🟢 OPEN] [#2512: fix(accounts): normalize business prolite plan alias](https://github.com/Soju06/codex-lb/pull/2512)
+### [✅ RESOLVED / MERGED IN FORK] [#2512: fix(accounts): normalize business prolite plan alias](https://github.com/Soju06/codex-lb/pull/2512)
 
 - **Тип:** Pull Request
 - **Автор:** @h4zardi
@@ -2661,7 +2661,7 @@ event payload; no OpenSpec files were changed
 
 ---
 
-### [🟢 OPEN] [#2519: fix(http-bridge): parse multi-line upstream websocket frames](https://github.com/Soju06/codex-lb/pull/2519)
+### [✅ RESOLVED / SUPERSEDED BY #2530] [#2519: fix(http-bridge): parse multi-line upstream websocket frames](https://github.com/Soju06/codex-lb/pull/2519)
 
 - **Тип:** Pull Request
 - **Автор:** @vitalNohj
@@ -3159,7 +3159,7 @@ OpenSpec: `openspec/changes/fix-metrics-server-logging-config/` (delta on `proxy
 
 ---
 
-### [🟢 OPEN] [#2530: fix(http-bridge): parse multiline websocket JSON messages](https://github.com/Soju06/codex-lb/pull/2530)
+### [✅ RESOLVED / MERGED IN FORK] [#2530: fix(http-bridge): parse multiline websocket JSON messages](https://github.com/Soju06/codex-lb/pull/2530)
 
 - **Тип:** Pull Request
 - **Автор:** @SantaDiegoKairos

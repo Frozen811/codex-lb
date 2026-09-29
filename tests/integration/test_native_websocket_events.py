@@ -17,8 +17,13 @@ from websockets.asyncio.server import serve
 from app.core.clients.native_egress import NativeWebSocketRequest, SubprocessNativeEgressClient
 from app.core.clients.proxy_websocket import NativeUpstreamWebSocket
 from app.core.clock import REAL_CLOCK, REAL_SCHEDULER
-from app.core.openai.parsing import _LIFECYCLE_EVENT_TYPES, classify_event_type, parse_sse_event_payload
-from app.core.utils.sse import parse_sse_data_json_text
+from app.core.openai.parsing import (
+    _LIFECYCLE_EVENT_TYPES,
+    classify_event_type,
+    parse_sse_event_payload,
+    parse_websocket_event_payload,
+)
+from app.core.utils.sse import format_sse_event_from_text
 from app.modules.proxy import service as proxy_service
 from app.modules.proxy._service.http_bridge import upstream_events as bridge
 from app.modules.proxy._service.websocket import mixin
@@ -174,10 +179,10 @@ async def test_native_websocket_values_and_policy_match_python(monkeypatch: pyte
                         assert actual.sequence_number == expected.sequence_number, case["name"]
                         process = AsyncMock()
                         harness = SimpleNamespace(_process_parsed_http_bridge_upstream_event=process)
-                        expected_bridge_payload = parse_sse_data_json_text(text)
+                        expected_bridge_payload = parse_websocket_event_payload(text)
                         with monkeypatch.context() as patch:
-                            if interpreted and text.startswith("{") and "\n" not in text and "\r" not in text:
-                                patch.setattr(bridge, "parse_sse_data_json_text", reject_decode)
+                            if interpreted:
+                                patch.setattr(bridge, "parse_websocket_event_payload", reject_decode)
                             await bridge._HTTPBridgeUpstreamEventsMixin._process_http_bridge_upstream_text(
                                 harness,
                                 cast(Any, None),
@@ -190,7 +195,11 @@ async def test_native_websocket_values_and_policy_match_python(monkeypatch: pyte
                         processed = process.await_args.kwargs
                         assert json.dumps(processed["payload"]) == json.dumps(expected_bridge_payload), case["name"]
                         assert processed["text"] == text
-                        assert processed["event_block"] == f"data: {text}\n\n"
+                        assert processed["event_block"] == (
+                            format_sse_event_from_text(expected_bridge_payload, text)
+                            if expected_bridge_payload is not None
+                            else f"data: {text}\n\n"
+                        )
                         bridge_type = classify_event_type(expected_bridge_payload)
                         bridge_event = (
                             parse_sse_event_payload(expected_bridge_payload)
