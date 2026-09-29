@@ -1865,8 +1865,12 @@ The production instance logs every query over 0.5 s with plans
 
 ---
 
-### [🟢 OPEN] [#2503: fix(http-bridge): keep replayed history images on the bridge](https://github.com/Soju06/codex-lb/pull/2503)
+### [✅ RESOLVED / MERGED IN FORK] [#2503: fix(http-bridge): keep replayed history images on the bridge](https://github.com/Soju06/codex-lb/pull/2503)
 
+- **Статус:** ✅ **РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ**
+  - **Решение:** Объединено с PR #2534 и #2508: разрешен пропуск повторно отправленных изображений из истории диалога на HTTP-мосте, логирование конкретного разрешенного транспорта (`resolved_upstream_transport`), сохранение `auto` для клиента.
+  - **Компоненты:** `app/modules/proxy/_service/streaming/retry.py, mixin.py, tests/integration/test_proxy_responses.py`
+  - **Тесты:** `tests/integration/test_proxy_responses.py`
 - **Тип:** Pull Request
 - **Автор:** @Komzpa
 - **Дата создания:** 2026-09-27
@@ -2117,8 +2121,12 @@ Change directory: `openspec/changes/add-cli-log-level-and-file/`. It adds requir
 
 ---
 
-### [🟢 OPEN] [#2508: fix(proxy): reuse bridge sessions for inline images](https://github.com/Soju06/codex-lb/pull/2508)
+### [✅ RESOLVED / MERGED IN FORK] [#2508: fix(proxy): reuse bridge sessions for inline images](https://github.com/Soju06/codex-lb/pull/2508)
 
+- **Статус:** ✅ **РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ**
+  - **Решение:** Повторное использование сессий моста для инлайн-изображений, вошедшее как каноническая часть PR #2534 и PR #2503.
+  - **Компоненты:** `app/modules/proxy/_service/http_bridge/`
+  - **Тесты:** `tests/integration/test_http_bridge_inline_images.py, tests/unit/test_http_bridge_inline_image_admission.py`
 - **Тип:** Pull Request
 - **Автор:** @McHersheys
 - **Дата создания:** 2026-09-28
@@ -3348,8 +3356,12 @@ that the case has been accommodated, and no warning is em
 
 ---
 
-### [🟢 OPEN] [#2534: feat(proxy): admit bounded inline images on the HTTP responses bridge](https://github.com/Soju06/codex-lb/pull/2534)
+### [✅ RESOLVED / MERGED IN FORK] [#2534: feat(proxy): admit bounded inline images on the HTTP responses bridge](https://github.com/Soju06/codex-lb/pull/2534)
 
+- **Статус:** ✅ **РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ**
+  - **Решение:** Допуск ограниченных по размеру инлайн-изображений JPEG/PNG на HTTP Responses Bridge (до 5 МБ на изображение, до 64 МиБ на весь фрейм), нативная фрагментация (chunking) для egress helper, классификация ws close 1009 как терминальной ошибки `payload_too_large` без штрафования аккаунта (#2465 Blocker 2), OpenSpec спецификация `allow-bounded-inline-images-on-bridge`.
+  - **Компоненты:** `app/core/config/settings.py, app/modules/proxy/_service/http_bridge/, crates/codex-lb-egress/, crates/codex-lb-protocol/`
+  - **Тесты:** `tests/integration/test_http_bridge_inline_images.py, tests/unit/test_http_bridge_inline_image_admission.py, tests/unit/test_ws_close_1009_classification.py, tests/unit/test_native_egress_websocket_chunking.py`
 - **Тип:** Pull Request
 - **Автор:** @SantaDiegoKairos
 - **Дата создания:** 2026-09-28
