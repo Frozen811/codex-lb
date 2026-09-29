@@ -1965,7 +1965,7 @@ gate. Whole-spec validation has the same 49 p
 
 ---
 
-### [🟢 OPEN] [#2505: bug: shutdown cancels schedulers and the leader-lease keeper mid-DB-work (SQLite pool CancelledError, unreleased lease, unclean run-state)](https://github.com/Soju06/codex-lb/issues/2505)
+### [✅ RESOLVED / MERGED IN FORK] [#2505: bug: shutdown cancels schedulers and the leader-lease keeper mid-DB-work (SQLite pool CancelledError, unreleased lease, unclean run-state)](https://github.com/Soju06/codex-lb/issues/2505)
 
 - **Тип:** Issue / Предложение
 - **Автор:** @ngallodev
@@ -2025,7 +2025,7 @@ A separate instrumentation method (a
 
 ---
 
-### [🟢 OPEN] [#2506: fix(shutdown): let DB-owning background tasks finish before cancelling them](https://github.com/Soju06/codex-lb/pull/2506)
+### [✅ RESOLVED / MERGED IN FORK] [#2506: fix(shutdown): let DB-owning background tasks finish before cancelling them](https://github.com/Soju06/codex-lb/pull/2506)
 
 - **Тип:** Pull Request
 - **Автор:** @ngallodev
@@ -2865,7 +2865,7 @@ Output from the metrics app created du
 
 ---
 
-### [🟢 OPEN] [#2524: fix(accounts): snapshot force probe state before session cleanup](https://github.com/Soju06/codex-lb/pull/2524)
+### [✅ RESOLVED / MERGED IN FORK] [#2524: fix(accounts): snapshot force probe state before session cleanup](https://github.com/Soju06/codex-lb/pull/2524)
 
 - **Тип:** Pull Request
 - **Автор:** @Abaddollyon
@@ -3113,7 +3113,7 @@ This only corrects advertised compatibility metadata. It does not alter request 
 
 ---
 
-### [🟢 OPEN] [#2529: fix(metrics): stop the metrics server from reconfiguring process logging](https://github.com/Soju06/codex-lb/pull/2529)
+### [✅ RESOLVED / MERGED IN FORK] [#2529: fix(metrics): stop the metrics server from reconfiguring process logging](https://github.com/Soju06/codex-lb/pull/2529)
 
 - **Тип:** Pull Request
 - **Автор:** @ngallodev
