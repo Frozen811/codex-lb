@@ -7,7 +7,7 @@
 - **Всего открытых Issues:** 109
 - **Всего открытых Дискуссий:** 49
 - **Всего открытых PR (включая фиксы от комьюнити):** 101
-- **Решено в текущей ветке (проверено кодом и тестами):** **154 Issues / PRs**
+- **Решено в текущей ветке (проверено кодом и тестами):** **156 Issues / PRs**
 - **Осталось в очереди:** **0 задач** (Все задачи и предложения из реестра решены на 100%!)
 
 ### Распределение проблем по категориям
@@ -2150,8 +2150,12 @@ Reuse bridge sessions for eligible inline images. Preserve fallbacks; do not rep
 
 ---
 
-### [🟢 OPEN] [#2509: chore(deps): bump the frontend-minor-patch group across 1 directory with 16 updates](https://github.com/Soju06/codex-lb/pull/2509)
+### [✅ RESOLVED / MERGED IN FORK] [#2509: chore(deps): bump the frontend-minor-patch group across 1 directory with 16 updates](https://github.com/Soju06/codex-lb/pull/2509)
 
+- **Статус:** ✅ **РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ**
+  - **Решение:** Обновлены 16 пакетов фронтенда (Vite 8.3.1, Vitest 5.0.2, JSDOM 30.1.1, TanStack Query 5.103.2, Lucide React 1.48.0, TypeScript-ESLint 8.70.1, React-i18next 17.0.15, Tailwind-Merge 3.7.0, Zod 4.6.5 и др.). Исправлена совместимость Vitest Request/FormData в `frontend/src/test/setup.ts`, восстановлены недостающие ключи локализации (`en.json`, `ko.json`, `zh-CN.json`), исправлен `htmlFor` в TOTP-диалоге и независимые разделители чисел в `thread-identity-card` и `model-catalogue-settings`. Все 185 файлов тестов (1679 тестов) и линтер проходят успешно.
+  - **Компоненты:** `frontend/package.json, frontend/bun.lock, frontend/src/test/setup.ts, frontend/src/features/auth/components/totp-dialog.tsx, frontend/src/features/reports/components/thread-identity-card.tsx, frontend/src/features/settings/components/model-catalogue-settings.tsx, frontend/src/i18n/locales/*.json`
+  - **Тесты:** `bun run test` (185 test files, 1679 passed, 0 failed), `bun run lint`, `bun run build`.
 - **Тип:** Pull Request
 - **Автор:** @dependabot[bot]
 - **Дата создания:** 2026-09-28
@@ -3300,8 +3304,12 @@ You can trigger Dependabot actions by commenting on this PR:
 
 ---
 
-### [🟢 OPEN] [#2533: chore(deps): bump the python-minor-patch group across 1 directory with 17 updates](https://github.com/Soju06/codex-lb/pull/2533)
+### [✅ RESOLVED / MERGED IN FORK] [#2533: chore(deps): bump the python-minor-patch group across 1 directory with 17 updates](https://github.com/Soju06/codex-lb/pull/2533)
 
+- **Статус:** ✅ **РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ**
+  - **Решение:** Обновлены 17 пакетов Python-зависимостей (Alembic 1.20.0, SQLAlchemy 2.1.1, OpenTelemetry 1.45.0/0.66b0, Ruff 0.16.9, Uvicorn 0.54.0, Greenlet 3.5.6, Mako 1.4.3, Urllib3 2.8.0, OpenAI 3.20.0, Hypothesis 6.168.3, Ty 0.0.84, Hatchling 1.32.4). Проверена топология миграций (271 ревизия, 1 голова, 0 нарушений), пройдены линтеры Ruff, сьюты миграционных тестов и интеграционные тесты.
+  - **Компоненты:** `pyproject.toml, uv.lock`
+  - **Тесты:** `tests/integration/test_migrations.py` (51 passed, 11 skipped), `tests/unit/test_check_migration_topology.py`, `tests/test_request_logs_options_api.py`, `uv run ruff check`.
 - **Тип:** Pull Request
 - **Автор:** @dependabot[bot]
 - **Дата создания:** 2026-09-28
