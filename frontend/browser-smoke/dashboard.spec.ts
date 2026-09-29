@@ -152,6 +152,7 @@ test("the built dashboard accepts real backend responses", async ({ page }) => {
   // the dashboard underneath.
   const consentDialog = page.getByRole("dialog", { name: "Anonymous telemetry" });
   await expect(consentDialog).toBeVisible();
+  await consentDialog.getByRole("button", { name: "View what is sent" }).click();
   await expect(consentDialog.getByText('"instance_id"').first()).toBeVisible();
   await acceptTelemetryConsent(page, consentDialog);
 

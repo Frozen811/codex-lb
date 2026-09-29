@@ -1600,9 +1600,7 @@ def _http_bridge_session_supports_service_tier(
         if callable(account_ids_for_model) and account_indexes_cover_owner
         else None
     )
-    model_catalog_omits_account = (model_account_ids is not None and session.account.id not in model_account_ids) or (
-        session.catalog_omission_quota_admission is not None
-    )
+    model_catalog_omits_account = model_account_ids is not None and session.account.id not in model_account_ids
     quota_admission_matches = (
         session.catalog_omission_quota_admission is not None
         and session.catalog_omission_quota_admission.matches(

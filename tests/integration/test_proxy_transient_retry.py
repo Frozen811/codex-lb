@@ -1146,7 +1146,7 @@ async def test_stream_windows_transport_recovery_preserves_replay_safety(
 ):
     account_id = await _import_account(async_client, "acc_windows_transport", "windows-transport@example.com")
     error = OSError("Windows network transport failed")
-    error.winerror = winerror
+    setattr(error, "winerror", winerror)
     if pre_dispatch:
         error = aiohttp.ClientConnectorError(ConnectionKey("example.invalid", 443, True, True, None, None, None), error)
 

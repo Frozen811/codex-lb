@@ -9289,7 +9289,7 @@ async def test_stream_responses_raw_route_oserror_is_neutral_but_not_replayed(mo
             if winerror is None:
                 raise OSError(errno.ENETUNREACH, "Network is unreachable")
             error = OSError("Windows transport failure")
-            error.winerror = winerror
+            setattr(error, "winerror", winerror)
             raise error
 
     session = _AmbiguousRouteFailureSession()

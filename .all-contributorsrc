@@ -1533,6 +1533,25 @@
       "contributions": [
         "code"
       ]
+    },
+    {
+      "login": "Frozen811",
+      "name": "Frozen811",
+      "avatar_url": "https://avatars.githubusercontent.com/u/127193329?v=4",
+      "profile": "https://github.com/Frozen811",
+      "contributions": [
+        "code",
+        "maintenance"
+      ]
+    },
+    {
+      "login": "SantaDiegoKairos",
+      "name": "SantaDiegoKairos",
+      "avatar_url": "https://avatars.githubusercontent.com/u/200135200?v=4",
+      "profile": "https://github.com/SantaDiegoKairos",
+      "contributions": [
+        "code"
+      ]
     }
   ],
   "contributorsPerLine": 7,

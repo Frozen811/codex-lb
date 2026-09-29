@@ -69,7 +69,7 @@ def test_process_network_error_requires_stable_code_not_message_text() -> None:
 @pytest.mark.parametrize("winerror", [64, 121])
 def test_windows_transport_failure_requires_typed_provenance(winerror: int) -> None:
     error = OSError("Windows transport failure")
-    error.winerror = winerror
+    setattr(error, "winerror", winerror)
     assert network_recovery.is_process_network_failure(error)
     assert not network_recovery.is_pre_dispatch_connection_failure(error)
 
@@ -82,7 +82,7 @@ def test_windows_transport_failure_requires_typed_provenance(winerror: int) -> N
 @pytest.mark.parametrize("winerror", [5, 32, 10061])
 def test_unrelated_windows_errors_do_not_enter_network_recovery(winerror: int) -> None:
     error = OSError("not a recognized transport failure")
-    error.winerror = winerror
+    setattr(error, "winerror", winerror)
     assert not network_recovery.is_process_network_failure(error)
 
 
