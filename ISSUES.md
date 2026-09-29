@@ -1811,7 +1811,7 @@ For the correlated failed requests, pod stdout only recorded a generic `upstream
 
 ---
 
-### [🟢 OPEN] [#2502: MySQL / MariaDB support](https://github.com/Soju06/codex-lb/pull/2502)
+### [✅ RESOLVED / MERGED IN FORK] [#2502: MySQL / MariaDB support](https://github.com/Soju06/codex-lb/pull/2502)
 
 - **Тип:** Pull Request
 - **Автор:** @snajpa
@@ -2787,7 +2787,7 @@ Tests have no dependency on #2444's new timing columns. No new settings or depen
 
 ---
 
-### [🟢 OPEN] [#2522: perf(db): request_logs facet indexes and loose-scan probes (stacked on #2502)](https://github.com/Soju06/codex-lb/pull/2522)
+### [✅ RESOLVED / MERGED IN FORK] [#2522: perf(db): request_logs facet indexes and loose-scan probes (stacked on #2502)](https://github.com/Soju06/codex-lb/pull/2522)
 
 - **Тип:** Pull Request
 - **Автор:** @snajpa
@@ -3256,7 +3256,7 @@ Change folder: `openspec/changes/fix-responses-lite-parallel-calls/` (strict val
 
 ---
 
-### [🟢 OPEN] [#2532: chore(docker): bump rust from 1.96.0-slim-bookworm to 1.98.1-slim-bookworm](https://github.com/Soju06/codex-lb/pull/2532)
+### [✅ RESOLVED / MERGED IN FORK] [#2532: chore(docker): bump rust from 1.96.0-slim-bookworm to 1.98.1-slim-bookworm](https://github.com/Soju06/codex-lb/pull/2532)
 
 - **Тип:** Pull Request
 - **Автор:** @dependabot[bot]
