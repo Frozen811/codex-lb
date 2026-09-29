@@ -84,10 +84,7 @@ def normalize_rate_limit_windows(
     primary_window: UsageWindow | None,
     secondary_window: UsageWindow | None,
 ) -> NormalizedRateLimitWindows:
-    has_placeholder_secondary = (
-        secondary_window is None
-        or secondary_window.limit_window_seconds == 0
-    )
+    has_placeholder_secondary = secondary_window is None or secondary_window.limit_window_seconds == 0
     if (
         primary_window is not None
         and primary_window.limit_window_seconds is not None

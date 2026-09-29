@@ -2345,18 +2345,20 @@ async def test_process_upstream_websocket_text_preserves_authentic_owner_termina
     )
     handle_stream_error = AsyncMock()
 
-    upstream_text = json.dumps({
-        "type": "response.failed",
-        "response": {
-            "id": "resp_test",
-            "status": "failed",
-            "error": {
-                "code": "rate_limit_exceeded",
-                "message": "Rate limit reached. Try again in 20s.",
-                "type": "requests",
+    upstream_text = json.dumps(
+        {
+            "type": "response.failed",
+            "response": {
+                "id": "resp_test",
+                "status": "failed",
+                "error": {
+                    "code": "rate_limit_exceeded",
+                    "message": "Rate limit reached. Try again in 20s.",
+                    "type": "requests",
+                },
             },
-        },
-    })
+        }
+    )
 
     @asynccontextmanager
     async def repo_factory() -> AsyncIterator[SimpleNamespace]:
@@ -2383,5 +2385,3 @@ async def test_process_upstream_websocket_text_preserves_authentic_owner_termina
     assert parsed_result["response"]["error"]["message"] == "Rate limit reached. Try again in 20s."
     assert "previous_response_owner_unavailable" not in result
     handle_stream_error.assert_awaited_once()
-
-

@@ -423,7 +423,7 @@ class AutomationsRepository:
         result = await self._session.execute(delete(AutomationJob).where(AutomationJob.id == job_id))
         await self._session.commit()
         # rowcount is the dialect-neutral verdict (MySQL has no RETURNING).
-        return (result.rowcount or 0) > 0
+        return (getattr(result, "rowcount", 0) or 0) > 0
 
     async def list_existing_account_ids(self, account_ids: Sequence[str]) -> set[str]:
         if not account_ids:
@@ -978,7 +978,7 @@ class AutomationsRepository:
             # re-select the claimed row in the same transaction.
             result = await self._session.execute(stmt)
             run = None
-            if (result.rowcount or 0) > 0:
+            if (getattr(result, "rowcount", 0) or 0) > 0:
                 run = (
                     await self._session.execute(select(AutomationRun).where(AutomationRun.id == run_id))
                 ).scalar_one_or_none()
@@ -1020,7 +1020,7 @@ class AutomationsRepository:
             # re-select the claimed row in the same transaction.
             result = await self._session.execute(stmt)
             run = None
-            if (result.rowcount or 0) > 0:
+            if (getattr(result, "rowcount", 0) or 0) > 0:
                 run = (
                     await self._session.execute(select(AutomationRun).where(AutomationRun.id == run_id))
                 ).scalar_one_or_none()
@@ -1058,7 +1058,7 @@ class AutomationsRepository:
                 error_message=None,
             )
         )
-        if (result.rowcount or 0) == 0:
+        if (getattr(result, "rowcount", 0) or 0) == 0:
             await self._session.commit()
             return False
 
@@ -1078,7 +1078,7 @@ class AutomationsRepository:
             .where(AutomationRunCycleAccount.cycle_key == cycle_key)
             .where(AutomationRunCycleAccount.account_id == account_id)
         )
-        deleted = (result.rowcount or 0) > 0
+        deleted = (getattr(result, "rowcount", 0) or 0) > 0
         if deleted:
             await self._sync_run_cycle_expected_accounts(cycle_key=cycle_key)
         await self._session.commit()

@@ -6,7 +6,7 @@ import inspect
 from collections.abc import AsyncIterator, Callable
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
@@ -3412,7 +3412,6 @@ async def test_durable_bridge_release_retry_circuit_claim(
     assert reclaimed.admission_generation == 1
 
 
-
 def _lookup_with_lease(lease_expires_at):
     from app.db.models import HttpBridgeSessionState
     from app.modules.proxy.durable_bridge_coordinator import DurableBridgeLookup
@@ -3949,7 +3948,7 @@ async def test_durable_bridge_retry_circuit_cooldown_uses_the_pre_update_failure
     threshold = 3
     base_backoff = 60.0
     key = "key-cooldown"
-    common = {
+    common: dict[str, Any] = {
         "session_key_kind": "session_header",
         "api_key_id": key,
         "last_detail": "stream_incomplete",

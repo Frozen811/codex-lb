@@ -3075,8 +3075,9 @@ class _HTTPBridgeRequestSubmitMixin:
             # completed handler that wins first keeps its local queue reference;
             # a detach that wins first leaves no queue for that handler to claim.
             if request_state.event_queue is not None:
-                if hasattr(request_state.event_queue, "close"):
-                    request_state.event_queue.close()
+                close_cb = getattr(request_state.event_queue, "close", None)
+                if callable(close_cb):
+                    close_cb()
                 request_state.event_queue = None
         await _release_websocket_response_create_gate(
             request_state, session.response_create_gate, scheduler=scheduler_for(self)

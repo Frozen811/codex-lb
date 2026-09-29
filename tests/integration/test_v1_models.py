@@ -2173,4 +2173,3 @@ async def test_gpt_53_codex_spark_survives_authoritative_refresh_in_v1_models(as
     single = await async_client.get("/v1/models/gpt-5.3-codex-spark")
     assert single.status_code == 200
     assert single.json()["id"] == "gpt-5.3-codex-spark"
-

@@ -2406,4 +2406,3 @@ async def test_proxy_compact_refuses_model_source_with_compaction_unsupported(as
     error = compact_response.json()["error"]
     assert error["code"] == "compaction_unsupported"
     assert error["type"] == "invalid_request_error"
-

@@ -305,7 +305,7 @@ async def _pending_state(session: AsyncSession, account_id: str) -> tuple[bool, 
         delete(ApiKeyAccountAssignment).where(ApiKeyAccountAssignment.account_id == account_id)
     )
     # rowcount is the dialect-neutral row count (MySQL has no RETURNING).
-    if (assignment_rows.rowcount or 0) > 0:
+    if (getattr(assignment_rows, "rowcount", 0) or 0) > 0:
         drift_repaired = True
     return bool(row[1]), drift_repaired
 
@@ -391,7 +391,7 @@ async def _usage_history_chunk(session: AsyncSession, account_id: str, *, delete
         _usage_history_batch(account_id, batch_size), UsageHistory.id, dialect=db_dialect_name(session)
     )
     result = await session.execute(delete(UsageHistory).where(UsageHistory.id.in_(batch)))
-    return int(result.rowcount or 0)
+    return int(getattr(result, "rowcount", 0) or 0)
 
 
 async def _additional_usage_history_chunk(
@@ -403,7 +403,7 @@ async def _additional_usage_history_chunk(
         dialect=db_dialect_name(session),
     )
     result = await session.execute(delete(AdditionalUsageHistory).where(AdditionalUsageHistory.id.in_(batch)))
-    return int(result.rowcount or 0)
+    return int(getattr(result, "rowcount", 0) or 0)
 
 
 async def _request_logs_chunk(session: AsyncSession, account_id: str, *, delete_history: bool, batch_size: int) -> int:
@@ -421,7 +421,7 @@ async def _request_logs_chunk(session: AsyncSession, account_id: str, *, delete_
         result = await session.execute(
             update(RequestLog).where(RequestLog.id.in_(batch)).values(account_id=None, deleted_at=utcnow())
         )
-    return int(result.rowcount or 0)
+    return int(getattr(result, "rowcount", 0) or 0)
 
 
 async def _invalidate_account_caches() -> None:

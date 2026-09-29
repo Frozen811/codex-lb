@@ -11,7 +11,7 @@ from __future__ import annotations
 import inspect
 from typing import Any, Mapping, Sequence
 
-from sqlalchemy import ColumnElement, Integer, String, case, func, select
+from sqlalchemy import Integer, String, case, func, select
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql.functions import FunctionElement
 
@@ -126,9 +126,9 @@ def dialect_upsert(
 
 def conditional_count(
     session: Any,
-    expression: ColumnElement[Any],
-    condition: ColumnElement[bool],
-) -> ColumnElement[int]:
+    expression: Any,
+    condition: Any,
+) -> Any:
     """``count(expression) FILTER (WHERE condition)`` for every dialect.
 
     PostgreSQL and SQLite get the native ``FILTER`` clause; MySQL/MariaDB get
@@ -200,7 +200,7 @@ async def statement_matched(session: Any, statement: Any, identity_column: Any) 
     """
     if dialect_name(session) in MYSQL_DIALECT_NAMES:
         result = await session.execute(statement)
-        return (result.rowcount or 0) > 0
+        return (getattr(result, "rowcount", 0) or 0) > 0
     row = (await session.execute(statement.returning(identity_column))).scalar_one_or_none()
     return row is not None
 
@@ -331,8 +331,8 @@ class least(FunctionElement):
         return list(self.clauses)[0].type
 
 
-def _render_arguments(element: object, compiler: object, kw: dict) -> str:  # type: ignore[no-untyped-def]
-    return ", ".join(compiler.process(clause, **kw) for clause in element.clauses)  # type: ignore[attr-defined]
+def _render_arguments(element: Any, compiler: Any, kw: dict[str, Any]) -> str:
+    return ", ".join(compiler.process(clause, **kw) for clause in element.clauses)
 
 
 @compiles(greatest, "mysql")

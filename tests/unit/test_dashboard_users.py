@@ -83,8 +83,6 @@ async def test_reactivate_owner_disabled_keys_uses_sqlite_writer_section(monkeyp
     assert order == ["lock-enter", "lock-exit"]
 
 
-
-
 @pytest.mark.asyncio
 async def test_delete_user_uses_sqlite_writer_section(monkeypatch) -> None:
     session = MagicMock()
@@ -141,4 +139,3 @@ async def test_acquire_write_intent_executes_begin_immediate_on_sqlite() -> None
     await repo.acquire_write_intent()
     session.execute.assert_awaited_once()
     assert "BEGIN IMMEDIATE" in str(session.execute.call_args[0][0])
-

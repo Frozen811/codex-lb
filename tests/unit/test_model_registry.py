@@ -205,7 +205,9 @@ async def test_quota_only_reserve_survives_authoritative_catalog_refresh():
     # gpt-5.3-codex-spark is also preserved and available in pro plan
     assert registry.is_suppressed_model("gpt-5.3-codex-spark") is False
     assert "gpt-5.3-codex-spark" in registry.get_models_with_fallback()
-    assert "pro" in registry.plan_types_for_model("gpt-5.3-codex-spark")
+    spark_plans = registry.plan_types_for_model("gpt-5.3-codex-spark")
+    assert spark_plans is not None
+    assert "pro" in spark_plans
     assert registry.account_ids_for_model("gpt-5.3-codex-spark") is None
     # ...while an ordinary bootstrap-only model omitted by the catalog is not.
     assert "gpt-5.6-sol" not in registry.get_models_with_fallback()

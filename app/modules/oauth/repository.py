@@ -201,7 +201,7 @@ class OAuthFlowRepository:
         else:  # pragma: no cover - sqlite/postgres/mysql are the supported backends
             raise RuntimeError(f"device-flow slot unsupported for dialect={dialect!r}")
         values = dict(slot_key=DEVICE_FLOW_SLOT_KEY, flow_id=flow_id, generation=1, updated_at=now)
-        statement = insert_stmt.values(**values)
+        statement: Any = insert_stmt.values(**values)
         if is_mysql(dialect):
             # MySQL targets the slot_key primary key directly; the generation
             # bump uses the existing row's value, mirroring the ON CONFLICT form.

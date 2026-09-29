@@ -18,12 +18,14 @@ import sqlalchemy as sa
 from alembic.ddl.mysql import MariaDBImpl, MySQLImpl
 
 
-class _IndexExistenceCompat:
+class _IndexExistenceCompat(MySQLImpl):
     def _index_exists(self, index: Any) -> bool:
         table = getattr(index, "table", None)
         if table is None:
             return False
-        inspector = sa.inspect(self.connection)  # type: ignore[attr-defined]
+        inspector = sa.inspect(self.connection)
+        if inspector is None:
+            return False
         schema = table.schema
         if not inspector.has_table(table.name, schema=schema):
             return False

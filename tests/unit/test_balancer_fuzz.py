@@ -14,6 +14,7 @@ from app.core.balancer.logic import (
     ROUTING_POLICY_NORMAL,
     ROUTING_POLICY_PRESERVE,
     AccountState,
+    RoutingStrategy,
     select_account,
 )
 from app.db.models import AccountStatus
@@ -90,7 +91,7 @@ account_state_strategy = st.builds(
 @settings(max_examples=100, deadline=None)
 def test_fuzz_select_account_never_crashes(
     states: list[AccountState],
-    strategy: str,
+    strategy: RoutingStrategy,
     now: float,
 ) -> None:
     # Invoking select_account must handle any arbitrary permutation of states safely
@@ -141,7 +142,7 @@ def test_fuzz_select_account_inactive_invariant(
 @settings(max_examples=75, deadline=None)
 def test_fuzz_budget_safe_selection_invariants(
     states: list[AccountState],
-    strategy: str,
+    strategy: RoutingStrategy,
     threshold: float,
 ) -> None:
     active_states = []

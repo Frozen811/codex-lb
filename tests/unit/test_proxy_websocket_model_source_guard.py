@@ -1179,14 +1179,16 @@ async def test_websocket_missing_previous_response_owner_fails_closed(monkeypatc
     monkeypatch.setattr(proxy_service.ProxyService, "_connect_proxy_websocket", fake_connect)
     monkeypatch.setattr(service, "_resolve_websocket_previous_response_owner", AsyncMock(return_value=None))
 
-    followup_frame = json.dumps({
-        "type": "response.create",
-        "model": "gpt-5.6-sol",
-        "instructions": "",
-        "previous_response_id": "resp_missing_owner_ws",
-        "input": [{"role": "user", "content": [{"type": "input_text", "text": "continue"}]}],
-        "stream": True,
-    })
+    followup_frame = json.dumps(
+        {
+            "type": "response.create",
+            "model": "gpt-5.6-sol",
+            "instructions": "",
+            "previous_response_id": "resp_missing_owner_ws",
+            "input": [{"role": "user", "content": [{"type": "input_text", "text": "continue"}]}],
+            "stream": True,
+        }
+    )
 
     downstream = _Downstream([followup_frame])
 
@@ -1202,4 +1204,3 @@ async def test_websocket_missing_previous_response_owner_fails_closed(monkeypatc
         "missing previous_response_id owner must fail closed with previous_response_owner_unavailable"
     )
     assert len(upstream.sent_text) == 0, "must not dispatch turn to upstream socket when owner is missing"
-

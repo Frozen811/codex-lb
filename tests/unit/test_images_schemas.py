@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from pydantic import ValidationError
 
@@ -174,7 +176,7 @@ class TestValidateImageSize:
 
 def _validate_default(**overrides: object) -> None:
     """Convenience wrapper that fills in every required argument."""
-    kwargs: dict[str, object] = {
+    kwargs: dict[str, Any] = {
         "model": "gpt-image-2",
         "quality": "auto",
         "size": "auto",
@@ -188,7 +190,7 @@ def _validate_default(**overrides: object) -> None:
         "output_compression": 100,
     }
     kwargs.update(overrides)
-    validate_image_request_parameters(**kwargs)  # type: ignore[arg-type]
+    validate_image_request_parameters(**kwargs)
 
 
 class TestValidateImageRequestParameters:

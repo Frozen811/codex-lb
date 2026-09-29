@@ -986,9 +986,7 @@ class RequestLogsRepository:
         # back to the filtered aggregate only for the rare excluded earliest row.
         # The probe must not filter ``deleted_at``: soft-deleted rows count here.
         probe = (
-            select(RequestLog.requested_at, RequestLog.request_kind)
-            .order_by(RequestLog.requested_at.asc())
-            .limit(1)
+            select(RequestLog.requested_at, RequestLog.request_kind).order_by(RequestLog.requested_at.asc()).limit(1)
         )
         earliest_row = (await self._session.execute(probe)).first()
         if earliest_row is not None and earliest_row[1] not in (RequestKind.WARMUP.value, "limit_warmup"):

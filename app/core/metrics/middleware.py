@@ -1,5 +1,5 @@
 from __future__ import annotations
- 
+
 import logging
 import time
 from collections.abc import Awaitable, Callable
@@ -37,7 +37,6 @@ class MetricsRefreshMiddleware:
                 await PlainTextResponse("Metrics snapshot unavailable\n", status_code=503)(scope, receive, send)
                 return
         await self.app(scope, receive, send)
-
 
 
 def _normalize_path(path: str) -> str:

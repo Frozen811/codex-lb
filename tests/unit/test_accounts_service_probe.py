@@ -369,4 +369,4 @@ async def test_probe_account_passes_probe_verified_to_usage_updater(monkeypatch)
 
     await service.probe_account(_ACCOUNT_ID)
 
-    service._usage_updater.force_refresh_result.assert_awaited_once_with(account, probe_verified=True)
+    cast(AsyncMock, service._usage_updater).force_refresh_result.assert_awaited_once_with(account, probe_verified=True)

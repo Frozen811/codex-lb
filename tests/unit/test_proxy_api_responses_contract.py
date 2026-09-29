@@ -408,7 +408,7 @@ async def test_normalize_reasoning_summary_stream_closes_inner_stream_on_aclose(
     stream = proxy_api_module._normalize_reasoning_summary_stream(sample_stream())
     await stream.__anext__()
     assert inner_closed is False
-    await stream.aclose()
+    await cast(Any, stream).aclose()
     assert inner_closed is True
 
 

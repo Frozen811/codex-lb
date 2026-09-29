@@ -19,9 +19,7 @@ from app.modules.accounts.service import AccountsService
 async def test_accounts_service_export_backup():
     repo = AsyncMock()
     encryptor = MagicMock()
-    encryptor.decrypt.side_effect = lambda val: (
-        "decrypted-" + val.decode() if isinstance(val, bytes) else "decrypted"
-    )
+    encryptor.decrypt.side_effect = lambda val: "decrypted-" + val.decode() if isinstance(val, bytes) else "decrypted"
 
     acc1 = MagicMock(spec=Account)
     acc1.id = "acc-active"

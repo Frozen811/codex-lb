@@ -145,6 +145,9 @@ def test_forked_children_get_distinct_claimant_ids_after_preload() -> None:
     composed ``claimed_by`` values."""
     import os
 
+    if not hasattr(os, "fork"):
+        pytest.skip("os.fork is not supported on this platform")
+
     from app.modules.accounts.refresh_claims import _compose_claimed_by
 
     # Resolve the claimant id in the parent BEFORE forking to model a preloaded
@@ -153,7 +156,8 @@ def test_forked_children_get_distinct_claimant_ids_after_preload() -> None:
 
     def _child_claimant_id() -> str:
         read_fd, write_fd = os.pipe()
-        pid = os.fork()
+        os_fork = getattr(os, "fork")
+        pid = os_fork()
         if pid == 0:  # pragma: no cover - runs in the forked child
             os.close(read_fd)
             try:
@@ -206,6 +210,9 @@ def test_process_default_coordinator_yields_distinct_claimants_across_fork() -> 
     repeated reads within one process are stable."""
     import os
 
+    if not hasattr(os, "fork"):
+        pytest.skip("os.fork is not supported on this platform")
+
     from app.modules.accounts.refresh_claims import (
         RefreshClaimCoordinator,
         _compose_claimed_by,
@@ -233,7 +240,8 @@ def test_process_default_coordinator_yields_distinct_claimants_across_fork() -> 
 
         def _child_ids() -> tuple[str, str]:
             read_fd, write_fd = os.pipe()
-            pid = os.fork()
+            os_fork = getattr(os, "fork")
+            pid = os_fork()
             if pid == 0:  # pragma: no cover - runs in the forked child
                 os.close(read_fd)
                 try:

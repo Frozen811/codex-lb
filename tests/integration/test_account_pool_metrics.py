@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
-from typing import cast
+from typing import Any, cast
 
 import jwt
-import prometheus_client
 import pytest
 from httpx import ASGITransport, AsyncClient
-from prometheus_client.parser import text_string_to_metric_families
 from sqlalchemy import delete, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,10 +18,14 @@ from app.db.session import SessionLocal
 from app.modules.proxy.account_cache import RoutingAvailabilityCache
 from tests.simulation.virtual_time import VirtualClock
 
+prometheus_client: Any = pytest.importorskip("prometheus_client")  # optional ``metrics`` extra; CI installs --dev only
+prometheus_parser: Any = pytest.importorskip("prometheus_client.parser")
+text_string_to_metric_families: Any = prometheus_parser.text_string_to_metric_families
+
 pytestmark = pytest.mark.integration
 
 
-def _scrape_registry() -> prometheus_client.CollectorRegistry:
+def _scrape_registry() -> Any:
     """Require a real Prometheus collector at the integration-test boundary."""
     registry = metrics.make_scrape_registry()
     assert isinstance(registry, prometheus_client.CollectorRegistry)

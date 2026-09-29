@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import collections
+from typing import Callable
 
 # Limits for the HTTP bridge stream event queue
 _HTTP_BRIDGE_STREAM_QUEUE_LIMIT = 4096
@@ -21,6 +23,11 @@ class _HTTPBridgeEventQueue(asyncio.Queue[str | None]):
     A zero-byte item (such as ``None``) is always accepted if the event cap has room.
     An event arriving at an empty queue is always accepted so a lone large chunk never fails.
     """
+
+    _putters: collections.deque[asyncio.Future[None]]
+    _getters: collections.deque[asyncio.Future[None]]
+    _clean_up_cancelled_putter: Callable[[asyncio.Future[None]], None]
+    _wakeup_next: Callable[[collections.deque[asyncio.Future[None]]], None]
 
     def __init__(
         self,
@@ -43,16 +50,13 @@ class _HTTPBridgeEventQueue(asyncio.Queue[str | None]):
 
     async def put(self, item: str | None) -> None:
         size = _http_bridge_event_payload_size(item)
-        while (
-            (self._maxsize > 0 and self.qsize() >= self._maxsize)
-            or (self._max_bytes > 0 and not self.empty() and size and self.queued_bytes + size > self._max_bytes)
+        while (self.maxsize > 0 and self.qsize() >= self.maxsize) or (
+            self._max_bytes > 0 and not self.empty() and size and self.queued_bytes + size > self._max_bytes
         ):
             if self._closed:
                 raise asyncio.CancelledError("HTTP bridge event queue is closed")
             loop = (
-                getattr(self, "_loop", None)
-                or getattr(self, "_get_loop", lambda: None)()
-                or asyncio.get_running_loop()
+                getattr(self, "_loop", None) or getattr(self, "_get_loop", lambda: None)() or asyncio.get_running_loop()
             )
             getter = loop.create_future()
             self._putters.append(getter)
@@ -62,7 +66,7 @@ class _HTTPBridgeEventQueue(asyncio.Queue[str | None]):
                 self._clean_up_cancelled_putter(getter)
                 raise
             if self._putters and (
-                (self._maxsize > 0 and self.qsize() >= self._maxsize)
+                (self.maxsize > 0 and self.qsize() >= self.maxsize)
                 or (self._max_bytes > 0 and not self.empty() and size and self.queued_bytes + size > self._max_bytes)
             ):
                 self._wakeup_next(self._putters)

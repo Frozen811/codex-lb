@@ -522,7 +522,6 @@ async def test_codex_control_request_removes_content_type_when_no_payload(route:
     assert len(content_type_headers) == 0
 
 
-
 @pytest.mark.asyncio
 async def test_compact_responses_uses_codex_client_when_route_is_resolved(route: ResolvedUpstreamRoute) -> None:
     client = _CodexClient(_CompactStreamResponse())
@@ -1808,4 +1807,3 @@ def test_codex_desktop_builtin_openai_provider_config() -> None:
     base_url = provider_config["model_providers"]["openai"]["base_url"]
     assert base_url.endswith("/backend-api/codex")
     assert provider_config["model_provider"] == "openai"
-

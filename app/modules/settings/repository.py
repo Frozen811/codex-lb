@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.mysql import insert as mysql_insert
@@ -600,7 +601,7 @@ class ModelContextWindowOverridesRepository:
         if insert_fn is None:
             raise RuntimeError(f"model_context_window_overrides upsert unsupported for dialect={dialect!r}")
         async with sqlite_writer_section():
-            statement = insert_fn(ModelContextWindowOverride).values(slug=slug, context_window=context_window)
+            statement: Any = insert_fn(ModelContextWindowOverride).values(slug=slug, context_window=context_window)
             if is_mysql(dialect):
                 # MySQL targets the slug primary key directly.
                 await self._session.execute(

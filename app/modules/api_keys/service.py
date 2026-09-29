@@ -206,6 +206,25 @@ class ApiKeysRepositoryProtocol(Protocol):
         actual_delta: int,
     ) -> None: ...
 
+    async def update_reservation_item_reserved_delta(
+        self,
+        reservation_id: str,
+        limit_id: int,
+        *,
+        reserved_delta: int,
+        expected_reset_at: datetime,
+    ) -> None: ...
+
+    async def add_usage_reservation_item(
+        self,
+        reservation_id: str,
+        *,
+        limit_id: int,
+        limit_type: str,
+        reserved_delta: int,
+        expected_reset_at: datetime,
+    ) -> None: ...
+
     async def settle_usage_reservation(
         self,
         reservation_id: str,

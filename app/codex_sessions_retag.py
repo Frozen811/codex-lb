@@ -347,9 +347,7 @@ def _retag_jsonl_record_provider(record: JsonObject, source_provider: str, targe
     return True
 
 
-def _sqlite_count_provider_rows(
-    db_path: Path, provider: str, target_session_id: str | None = None
-) -> int:
+def _sqlite_count_provider_rows(db_path: Path, provider: str, target_session_id: str | None = None) -> int:
     try:
         conn = _connect_sqlite(db_path, read_only=True)
         try:
@@ -433,9 +431,7 @@ def _update_sqlite_provider_via_copy(
         temp_path.unlink(missing_ok=True)
 
 
-def _sqlite_count_provider_rows_via_copy(
-    db_path: Path, provider: str, target_session_id: str | None = None
-) -> int:
+def _sqlite_count_provider_rows_via_copy(db_path: Path, provider: str, target_session_id: str | None = None) -> int:
     temp_path = _copy_sqlite_to_temp(db_path)
     try:
         return _sqlite_count_provider_rows(temp_path, provider, target_session_id=target_session_id)

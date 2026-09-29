@@ -170,7 +170,6 @@ class RoutingAvailabilityCache:
         self._record_metrics()
         _request_account_routing_bump()
 
-
     def is_unavailable(self, account_id: str) -> bool:
         if account_id in self._local_marks:
             return True
@@ -256,17 +255,14 @@ class RoutingAvailabilityCache:
                     available += not reauth_access_token_is_expired(status, expires_at, now=now)
             else:
                 result = await session.execute(select(Account.id, Account.status, Account.deactivation_reason))
-                snapshot = {
-                    account_id: (status, reason) for account_id, status, reason in result.all()
-                }
+                snapshot = {account_id: (status, reason) for account_id, status, reason in result.all()}
         finally:
             await close_session(session)
         self._snapshot = snapshot
         self._pending_persist_marks = {
             account_id
             for account_id in self._pending_persist_marks
-            if (entry := snapshot.get(account_id)) is not None
-            and not _routing_entry_unavailable(entry)
+            if (entry := snapshot.get(account_id)) is not None and not _routing_entry_unavailable(entry)
         }
         self._local_marks = {
             account_id

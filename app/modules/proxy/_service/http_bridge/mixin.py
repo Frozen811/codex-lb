@@ -542,7 +542,11 @@ class _HTTPBridgeMixin(
                                 key=alias_key.affinity_key,
                             ):
                                 if alias_session is None:
-                                    raise ProxyResponseError(502, _http_bridge_continuity_lost_error_envelope(), local_pre_dispatch_refusal=True)  # noqa: E501
+                                    raise ProxyResponseError(
+                                        502,
+                                        _http_bridge_continuity_lost_error_envelope(),
+                                        local_pre_dispatch_refusal=True,
+                                    )  # noqa: E501
                                 bind_account_neutral_recovery_owner(alias_session)
                                 continue
                             self._http_bridge_turn_state_index.pop(alias_index_key, None)
@@ -573,7 +577,9 @@ class _HTTPBridgeMixin(
                             preferred_account_id=preferred_account_id,
                             require_preferred_account=require_preferred_account,
                         ):
-                            raise ProxyResponseError(502, _http_bridge_continuity_lost_error_envelope(), local_pre_dispatch_refusal=True)  # noqa: E501
+                            raise ProxyResponseError(
+                                502, _http_bridge_continuity_lost_error_envelope(), local_pre_dispatch_refusal=True
+                            )  # noqa: E501
                         else:
                             self._promote_http_bridge_session_to_codex_affinity(
                                 alias_session,
@@ -640,7 +646,9 @@ class _HTTPBridgeMixin(
                                 not _http_bridge_alias_target_is_stale(previous_session)
                                 and not previous_session.handoff_in_progress
                             ):
-                                raise ProxyResponseError(502, _http_bridge_continuity_lost_error_envelope(), local_pre_dispatch_refusal=True)  # noqa: E501
+                                raise ProxyResponseError(
+                                    502, _http_bridge_continuity_lost_error_envelope(), local_pre_dispatch_refusal=True
+                                )  # noqa: E501
                             elif previous_key is not None:
                                 self._http_bridge_previous_response_index.pop(previous_alias_key, None)
                         if model_transition_rebind:
@@ -1214,7 +1222,9 @@ class _HTTPBridgeMixin(
                             previous_response_id=previous_response_id,
                             session_id=incoming_turn_state or incoming_session_key,
                         )
-                        continuity_error = ProxyResponseError(502, _http_bridge_continuity_lost_error_envelope(), local_pre_dispatch_refusal=True)  # noqa: E501
+                        continuity_error = ProxyResponseError(
+                            502, _http_bridge_continuity_lost_error_envelope(), local_pre_dispatch_refusal=True
+                        )  # noqa: E501
                     elif missing_turn_state_alias and inflight_future is None and durable_lookup is None:
                         turn_state_scope_conflict = incoming_turn_state is not None and any(
                             alias == incoming_turn_state and alias_api_key != api_key_id

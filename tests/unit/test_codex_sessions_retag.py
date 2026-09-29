@@ -426,4 +426,3 @@ def test_retag_codex_sessions_targeted_session_id(tmp_path: Path) -> None:
         rows = dict(conn.execute("SELECT id, model_provider FROM threads").fetchall())
     assert rows["target-session-123"] == "codex-lb"
     assert rows["other-session-456"] == "openai"
-

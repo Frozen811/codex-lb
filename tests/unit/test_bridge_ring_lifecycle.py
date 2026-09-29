@@ -5093,4 +5093,3 @@ async def test_scheduled_purge_spares_row_when_generation_or_epoch_advances(
         assert surviving.admission_generation == 1
     finally:
         await session.close()
-

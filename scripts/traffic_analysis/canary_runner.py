@@ -186,7 +186,11 @@ def run_canary(
     descriptor = os.open(lock_file, os.O_RDWR | os.O_CREAT, 0o600)
     try:
         try:
-            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            flock = getattr(fcntl, "flock", None)
+            if callable(flock):
+                lock_ex = getattr(fcntl, "LOCK_EX", 2)
+                lock_nb = getattr(fcntl, "LOCK_NB", 4)
+                flock(descriptor, lock_ex | lock_nb)
         except BlockingIOError:
             return {"status": "overlap", "ran": False, "passed": None, "state_updated": False}
         version = _detect_version(config.version_command)

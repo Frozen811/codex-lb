@@ -1287,4 +1287,3 @@ async def test_warmup_falls_back_to_plain_responses_on_compact_404(async_client,
     assert payload["submitted"][0]["account_id"] == account_id
     assert payload["failed"] == []
     assert len(fallback_called) == 1
-

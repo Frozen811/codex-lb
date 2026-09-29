@@ -4513,4 +4513,3 @@ async def test_source_multiline_stream_preserves_route_framing_usage_and_timings
     assert log.reasoning_tokens == 3
     assert log.latency_first_token_ms == 20
     assert log.latency_ms == 200
-

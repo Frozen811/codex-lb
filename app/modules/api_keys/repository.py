@@ -834,7 +834,7 @@ class ApiKeysRepository:
         )
         await self._session.commit()
         # rowcount is the dialect-neutral verdict (MySQL has no RETURNING).
-        return (result.rowcount or 0) > 0
+        return (getattr(result, "rowcount", 0) or 0) > 0
 
     async def reset_expired_limits(self, *, now: datetime) -> int:
         reset_count = 0
@@ -896,7 +896,7 @@ class ApiKeysRepository:
             # read the row back for its POST-update values.
             update_result = await self._session.execute(update_stmt)
             row = None
-            if (update_result.rowcount or 0) > 0:
+            if (getattr(update_result, "rowcount", 0) or 0) > 0:
                 row = (
                     await self._session.execute(
                         select(
@@ -954,7 +954,7 @@ class ApiKeysRepository:
         if delta < 0:
             stmt = stmt.where(ApiKeyLimit.current_value >= -delta)
         result = await self._session.execute(stmt.values(current_value=ApiKeyLimit.current_value + delta))
-        return (result.rowcount or 0) > 0
+        return (getattr(result, "rowcount", 0) or 0) > 0
 
     async def create_usage_reservation(
         self,
@@ -1064,7 +1064,7 @@ class ApiKeysRepository:
             .where(ApiKeyUsageReservation.status == expected_status)
             .values(status=new_status)
         )
-        return (result.rowcount or 0) > 0
+        return (getattr(result, "rowcount", 0) or 0) > 0
 
     async def upsert_reservation_item_actual(
         self,
@@ -1166,7 +1166,7 @@ class ApiKeysRepository:
             .where(ApiKeyUsageReservation.status == "reserved")
             .values(updated_at=utcnow())
         )
-        return (result.rowcount or 0) > 0
+        return (getattr(result, "rowcount", 0) or 0) > 0
 
     async def release_stale_usage_reservations(
         self,
@@ -1247,7 +1247,7 @@ class ApiKeysRepository:
                                 cost_microdollars=None,
                             )
                         )
-                        if (claimed.rowcount or 0) == 0:
+                        if (getattr(claimed, "rowcount", 0) or 0) == 0:
                             continue
 
                         for item in items_by_reservation_id[reservation_id]:

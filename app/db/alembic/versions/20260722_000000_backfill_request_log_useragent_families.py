@@ -31,8 +31,7 @@ def upgrade() -> None:
         bind=bind,
         table_name="request_logs",
         update_statement=(
-            f"UPDATE request_logs SET {set_expr} "
-            f"WHERE {where_cond} AND id >= :start_id AND id < :end_id"
+            f"UPDATE request_logs SET {set_expr} WHERE {where_cond} AND id >= :start_id AND id < :end_id"
         ),
         batch_size=5000,
     )

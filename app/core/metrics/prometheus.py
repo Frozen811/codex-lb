@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from importlib import import_module
 from typing import Protocol
 
@@ -142,7 +142,7 @@ if PROMETHEUS_AVAILABLE:
     )
 
     def record_account_metrics(
-        account_statuses: dict[str, object],
+        account_statuses: Mapping[str, object],
         *,
         routing_unavailable_ids: Collection[str] = (),
     ) -> None:
@@ -153,17 +153,19 @@ if PROMETHEUS_AVAILABLE:
         unavailable_set = frozenset(routing_unavailable_ids)
 
         for account_id, status in account_statuses.items():
-            status_val = status.value if hasattr(status, "value") else str(status)
+            status_val = str(status.value) if hasattr(status, "value") else str(status)
             counts[status_val] = counts.get(status_val, 0) + 1
             if (
                 status_val == AccountStatus.ACTIVE.value or status == AccountStatus.ACTIVE
             ) and account_id not in unavailable_set:
                 available_count += 1
 
-        for status_val, count in counts.items():
-            accounts_total.labels(status=status_val).set(count)
+        if accounts_total is not None:
+            for status_val, count in counts.items():
+                accounts_total.labels(status=status_val).set(count)
 
-        accounts_available.set(available_count)
+        if accounts_available is not None:
+            accounts_available.set(available_count)
 
     bridge_instance_mismatch_total = Counter(
         "codex_lb_bridge_instance_mismatch_total",
@@ -572,7 +574,7 @@ else:
         pass
 
     def record_account_metrics(
-        account_statuses: dict[str, object],
+        account_statuses: Mapping[str, object],
         *,
         routing_unavailable_ids: Collection[str] = (),
     ) -> None:

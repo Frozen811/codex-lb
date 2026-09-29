@@ -1008,7 +1008,7 @@ class AccountsRepository:
             insert_fn = mysql_insert
         else:
             raise RuntimeError(f"Hard-sticky outage grace seeding sentinel unsupported for dialect={dialect!r}")
-        stamp_stmt = insert_fn(RuntimeSentinel).values(
+        stamp_stmt: Any = insert_fn(RuntimeSentinel).values(
             name=_HARD_STICKY_OUTAGE_GRACE_SEEDED_SENTINEL, value=utcnow().isoformat()
         )
         if not mysql:

@@ -1087,4 +1087,3 @@ def test_issue_2028_auth_param_lists_and_whitespace_tokens():
 
     basic_tokens = "Basic user password"
     assert runtime_logging.redact_rendered_log_text(basic_tokens) == "Basic [REDACTED]"
-

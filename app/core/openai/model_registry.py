@@ -604,10 +604,7 @@ class ModelRegistry:
         if (
             bootstrap_model is not None
             and normalized_slug not in self._snapshot.suppressed_model_slugs
-            and (
-                self._snapshot.bootstrap_floor_active
-                or normalized_slug in self._quota_only_bootstrap_slugs
-            )
+            and (self._snapshot.bootstrap_floor_active or normalized_slug in self._quota_only_bootstrap_slugs)
         ):
             return bootstrap_model.available_in_plans
         snapshot_plans = frozenset()

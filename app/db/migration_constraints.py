@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Iterator
+from typing import Any, Iterator
 
 import sqlalchemy as sa
 from sqlalchemy.engine import Connection
@@ -81,7 +81,7 @@ def foreign_keys_using_column(
         {"table_name": table_name},
     ).fetchall()
 
-    grouped: dict[str, dict[str, object]] = {}
+    grouped: dict[str, dict[str, Any]] = {}
     for constraint_name, column, referenced_table, referenced_column, update_rule, delete_rule in rows:
         entry = grouped.setdefault(
             str(constraint_name),

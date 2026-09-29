@@ -32,8 +32,9 @@ from app.core.auth import generate_unique_account_id
 from app.core.balancer import PERMANENT_FAILURE_CODES
 from app.core.clients.proxy import ProxyResponseError
 from app.core.clock import RealScheduler
-from app.core.errors import openai_error
-from app.core.openai.models import CompactResponsePayload, OpenAIErrorEnvelope
+from app.core.errors import OpenAIErrorEnvelope, openai_error
+from app.core.openai.models import CompactResponsePayload
+from app.core.types import JsonValue
 from app.core.usage.models import RateLimitPayload, UsagePayload, UsageWindow
 from app.core.utils.request_id import get_request_id
 from app.db.models import Account, AccountStatus, StickySession, StickySessionKind
@@ -1219,7 +1220,7 @@ async def test_http_bypass_quota_failover_requires_verified_full_history(async_c
 
         monkeypatch.setattr(service, "_resolve_forwarded_file_account_for_responses", resolve_file_owner)
 
-    prior_input = [{"role": "user", "content": [{"type": "input_text", "text": "first question"}]}]
+    prior_input: list[JsonValue] = [{"role": "user", "content": [{"type": "input_text", "text": "first question"}]}]
     turn_state = "http_turn_bypass_quota"
     claimed = await service._durable_bridge.claim_live_session(
         session_key_kind="session_header",
@@ -1355,9 +1356,7 @@ async def test_stream_connect_phase_429_usage_limit_transparent_failover(async_c
 
 
 @pytest.mark.asyncio
-async def test_stream_connect_phase_429_with_prompt_cache_fails_over_to_available_account(
-    async_client, monkeypatch
-):
+async def test_stream_connect_phase_429_with_prompt_cache_fails_over_to_available_account(async_client, monkeypatch):
     """Regression #1924: inline-image request with prompt_cache_key receiving 429
     reallocates sticky affinity so failover reaches an eligible healthy account.
     """
@@ -2872,4 +2871,3 @@ async def test_stream_reasoning_replay_rejection_counted_once_for_status_and_ter
         assert len(terminal) == 1
 
     assert counter.inc.call_count == expected_increments
-

@@ -231,3 +231,39 @@ async def apply_model_account_routing(
         single_id=target_account.id,
         strategy="single_account",
     )
+
+
+async def resolve_model_account_override(
+    model: str | None,
+    headers: Mapping[str, str] | None,
+    repo_factory: Any,
+    excluded_accounts: set[str],
+    scoped_accounts: set[str] | None,
+) -> tuple[str | None, AccountSelection | None]:
+    if not model:
+        return None, None
+    target_spec = resolve_model_account_target(model, headers=headers)
+    if target_spec is None:
+        return None, None
+    async with repo_factory() as repos:
+        all_pool_accounts = await repos.accounts.list_accounts()
+    target = find_matching_account(target_spec, all_pool_accounts)
+    if target is None:
+        return None, AccountSelection(
+            account=None,
+            error_message=f"Configured strict model routing account '{target_spec}' for model '{model}' does not exist",
+            error_code="model_account_not_found",
+        )
+    if target.id in excluded_accounts:
+        return None, AccountSelection(
+            account=None,
+            error_message=f"Strict model routing target account '{target_spec}' for model '{model}' is unavailable",
+            error_code="model_account_unavailable",
+        )
+    if scoped_accounts is not None and target.id not in scoped_accounts:
+        return None, AccountSelection(
+            account=None,
+            error_message=f"Strict model routing target account '{target_spec}' is outside the API key account scope",
+            error_code="model_account_scope_mismatch",
+        )
+    return target.id, None

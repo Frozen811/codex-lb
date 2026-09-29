@@ -511,7 +511,6 @@ class SettingsService:
 _RETENTION_DISABLED_DAYS = 0
 
 
-
 # Inheritable settings with an environment fallback: the ``dashboard_settings``
 # column, the ``Settings`` field and the provenance key share one name.
 _ENVIRONMENT_INHERITABLE_SETTINGS = (

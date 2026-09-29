@@ -6,9 +6,13 @@ import json
 import os
 import statistics
 import time
+from importlib import import_module
 from pathlib import Path
 
-import uvloop
+try:
+    uvloop = import_module("uvloop")
+except ImportError:
+    uvloop = None
 from websockets.asyncio.server import serve
 
 from app.core.clients.native_egress import NativeWebSocketRequest, SubprocessNativeEgressClient
@@ -95,7 +99,14 @@ def _cpu(client):
     if process is None:
         return 0.0
     fields = Path(f"/proc/{process.pid}/stat").read_text().split(") ", 1)[1].split()
-    return (int(fields[11]) + int(fields[12])) / os.sysconf("SC_CLK_TCK")
+    clk_tck = getattr(os, "sysconf", lambda _: 100)("SC_CLK_TCK") if hasattr(os, "sysconf") else 100
+    return (int(fields[11]) + int(fields[12])) / clk_tck
 
 
-uvloop.run(main())
+if __name__ == "__main__":
+    if uvloop is not None:
+        getattr(uvloop, "run")(main())
+    else:
+        import asyncio
+
+        asyncio.run(main())

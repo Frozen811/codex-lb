@@ -208,7 +208,7 @@ async def _native_usage_json(response: NativeEgressResponse) -> JsonObject:
 async def consume_rate_limit_reset_credit(
     *,
     access_token: str,
-    account_id: str,
+    account_id: str | None = None,
     redeem_request_id: str,
     base_url: str | None = None,
     timeout_seconds: float | None = None,

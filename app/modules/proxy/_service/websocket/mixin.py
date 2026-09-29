@@ -1796,9 +1796,7 @@ class _WebSocketMixin:
                                 downstream_activity=downstream_activity,
                                 idle_timeout_seconds=downstream_idle_timeout_seconds,
                             ):
-                                done_idle, _ = await scheduler_for(proxy).wait(
-                                    {downstream_receive_task}, timeout=0.05
-                                )
+                                done_idle, _ = await scheduler_for(proxy).wait({downstream_receive_task}, timeout=0.05)
                                 if downstream_receive_task in done_idle:
                                     try:
                                         message = await downstream_receive_task

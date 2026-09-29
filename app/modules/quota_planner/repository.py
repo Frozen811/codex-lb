@@ -258,7 +258,7 @@ class QuotaPlannerRepository:
                     await self._session.rollback()
                     inserted_id = None
                 else:
-                    primary_key = insert_result.inserted_primary_key
+                    primary_key = getattr(insert_result, "inserted_primary_key", None)
                     inserted_id = primary_key[0] if primary_key else None
                     await self._session.commit()
             else:
@@ -409,7 +409,7 @@ class QuotaPlannerRepository:
             await self._session.commit()
         # rowcount is the dialect-neutral verdict (MySQL has no RETURNING); the
         # claim pins the decision id, which is the id to read back.
-        if (result.rowcount or 0) == 0:
+        if (getattr(result, "rowcount", 0) or 0) == 0:
             return None
         return await self._session.get(QuotaPlannerDecision, decision_id, populate_existing=True)
 
@@ -462,7 +462,7 @@ class QuotaPlannerRepository:
         async with sqlite_writer_section():
             if is_mysql(self._dialect_name()):
                 result = await self._session.execute(stmt)
-                updated = (result.rowcount or 0) > 0
+                updated = (getattr(result, "rowcount", 0) or 0) > 0
             else:
                 updated = (await self._session.scalar(stmt.returning(QuotaPlannerDecision.id))) is not None
             await self._session.commit()
@@ -505,7 +505,7 @@ class QuotaPlannerRepository:
             await self._session.commit()
         # rowcount is the dialect-neutral verdict (MySQL has no RETURNING); the
         # guarded update pins the row id, which is the id to read back.
-        if (result.rowcount or 0) == 0:
+        if (getattr(result, "rowcount", 0) or 0) == 0:
             return None
         row = await self._session.get(QuotaPlannerDecision, decision_id)
         if row is None:
@@ -727,7 +727,6 @@ class QuotaPlannerRepository:
             )
             for row in result.all()
         ]
-
 
 
 def _settings_from_row(row: QuotaPlannerSettings) -> PlannerSettings:

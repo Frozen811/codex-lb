@@ -211,9 +211,7 @@ def _response_failed_event_from_upstream_error(
     error_type: str = "server_error",
 ) -> Any:
     message = (
-        str(upstream_error.get("message"))
-        if upstream_error and upstream_error.get("message")
-        else "Upstream error"
+        str(upstream_error.get("message")) if upstream_error and upstream_error.get("message") else "Upstream error"
     )
     resets_at = upstream_error.get("resets_at") if upstream_error else None
     error_param = upstream_error.get("param") if upstream_error else None
@@ -225,7 +223,6 @@ def _response_failed_event_from_upstream_error(
         error_param=error_param,
         resets_at=resets_at,
     )
-
 
 
 def _effective_http_downstream_transport_policy(

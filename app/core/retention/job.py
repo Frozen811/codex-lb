@@ -149,7 +149,7 @@ async def _prune_request_logs(cutoff: datetime, *, now: datetime) -> int:
                 )
                 result = await session.execute(delete(RequestLog).where(RequestLog.id.in_(batch_ids)))
                 await session.commit()
-        deleted = int(result.rowcount or 0)
+        deleted = int(getattr(result, "rowcount", 0) or 0)
         total += deleted
         if deleted < BATCH_SIZE:
             return total
@@ -240,7 +240,7 @@ async def _batched_prune(model, *, cutoff_condition, protected_stmt) -> int:
                 )
                 result = await session.execute(delete(model).where(model.id.in_(batch_ids)))
                 await session.commit()
-        deleted = int(result.rowcount or 0)
+        deleted = int(getattr(result, "rowcount", 0) or 0)
         total += deleted
         if deleted < BATCH_SIZE:
             return total

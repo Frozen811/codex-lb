@@ -244,7 +244,7 @@ class FileAccountPinRepository:
                     build_file_account_pin_refresh(dialect_name=dialect_name),
                     params,
                 )
-                refreshed_account_id = account_id if (refreshed.rowcount or 0) > 0 else None
+                refreshed_account_id = account_id if (getattr(refreshed, "rowcount", 0) or 0) > 0 else None
             else:
                 refreshed_account_id = (
                     await self._session.execute(

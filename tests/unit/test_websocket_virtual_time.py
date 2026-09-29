@@ -76,6 +76,7 @@ class _OpenHarness(websocket_mixin._WebSocketMixin):
         *,
         request_state: Any = None,
         connect_progress: Any = None,
+        max_message_bytes: int | None = None,
     ) -> Any:
         del account, headers, request_state
         if connect_progress is not None:

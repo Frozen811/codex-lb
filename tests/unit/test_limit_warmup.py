@@ -2378,4 +2378,3 @@ async def test_staggered_idle_warmup_fires_for_sliding_reset_at(monkeypatch) -> 
     assert repo.rows[0].account_id == "acc_2"
     assert repo.rows[0].window == "primary_idle"
     assert repo.rows[0].status == "succeeded"
-

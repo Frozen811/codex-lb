@@ -244,7 +244,7 @@ async def _mysql_renew_remaining(session: AsyncSession, *, leader_id: str, ttl: 
         ),
         {"leader_id": leader_id},
     )
-    if not result.rowcount:
+    if not getattr(result, "rowcount", 0):
         return None
     remaining = (await session.execute(_MYSQL_REMAINING_SQL)).scalar_one_or_none()
     return None if remaining is None else float(remaining) / 1_000_000.0
@@ -267,7 +267,7 @@ def _dialect_name(session: AsyncSession) -> str:
     return session.get_bind().dialect.name
 
 
-def _returned_remaining(result: Result[Any]) -> float | None:
+def _returned_remaining(result: Result[Any] | _EmulatedRemaining) -> float | None:
     """Return the DB-computed remaining lease seconds, or ``None`` on no-match.
 
     The acquire/renew statements ``RETURNING`` the affected row's remaining

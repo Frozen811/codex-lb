@@ -77,10 +77,7 @@ def upgrade() -> None:
             for name, columns in _INDEXES:
                 _drop_invalid_postgres_index(name)
                 op.execute(
-                    sa.text(
-                        f"CREATE INDEX CONCURRENTLY IF NOT EXISTS {name} "
-                        f"ON request_logs ({', '.join(columns)})"
-                    )
+                    sa.text(f"CREATE INDEX CONCURRENTLY IF NOT EXISTS {name} ON request_logs ({', '.join(columns)})")
                 )
         return
 

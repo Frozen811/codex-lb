@@ -1054,9 +1054,7 @@ class _HTTPBridgeRetryCircuitMixin:
                 )
             if persisted is not None:
                 cooldown_remaining = max(0.0, persisted.cooldown_until_epoch - now_wall)
-                persisted_cooldown_until = (
-                    now_monotonic + cooldown_remaining if cooldown_remaining > 0.0 else 0.0
-                )
+                persisted_cooldown_until = now_monotonic + cooldown_remaining if cooldown_remaining > 0.0 else 0.0
                 async with self._http_bridge_retry_circuit_lock:
                     current = self._http_bridge_retry_circuits.get(session.key)
                     if current is state:

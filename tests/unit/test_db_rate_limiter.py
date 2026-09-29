@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import pytest
 import sqlalchemy as sa
@@ -219,7 +219,7 @@ async def test_mysql_admission_takes_the_sentinel_row_lock_before_the_guarded_in
     session = _RecordingSession("mysql")
     limiter = DatabaseRateLimiter(max_attempts=8, window_seconds=60, type="password")
 
-    await limiter.check_and_increment("user:alice", session)  # type: ignore[arg-type]
+    await limiter.check_and_increment("user:alice", cast(AsyncSession, session))
 
     assert len(session.statements) == 2
     assert "runtime_sentinels" in session.statements[0]
@@ -235,7 +235,7 @@ async def test_sqlite_admission_issues_no_sentinel_lock() -> None:
     session = _RecordingSession("sqlite")
     limiter = DatabaseRateLimiter(max_attempts=8, window_seconds=60, type="password")
 
-    await limiter.check_and_increment("user:alice", session)  # type: ignore[arg-type]
+    await limiter.check_and_increment("user:alice", cast(AsyncSession, session))
 
     assert len(session.statements) == 1
     assert "runtime_sentinels" not in session.statements[0]

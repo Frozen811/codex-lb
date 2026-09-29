@@ -16,6 +16,7 @@ permissions:
 jobs:
   publish-beta-release:
     if: >-
+      github.repository == 'Soju06/codex-lb' &&
       github.event.pull_request.merged == true &&
       startsWith(github.event.pull_request.head.ref, 'release/beta-')
     runs-on: ubuntu-24.04

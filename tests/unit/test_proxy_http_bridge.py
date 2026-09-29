@@ -4244,8 +4244,6 @@ async def test_evict_http_bridge_inflight_waiter_cancels_creator_task() -> None:
     assert creator_cancelled is True
 
 
-
-
 async def _wait_for_close_await(close_session: AsyncMock, session: proxy_service._HTTPBridgeSession) -> None:
     for _ in range(10):
         if any(call.args == (session,) for call in close_session.await_args_list):
@@ -9136,6 +9134,7 @@ def test_mask_bridge_previous_response_not_found_error() -> None:
     )
     status_code, masked = _mask_previous_response_not_found_error(envelope)
     assert status_code == 502
+    assert masked.error is not None
     assert masked.error.code == "stream_incomplete"
     assert masked.error.message == PREVIOUS_RESPONSE_STREAM_INCOMPLETE_MESSAGE
 
@@ -27867,6 +27866,7 @@ async def test_http_bridge_response_incomplete_strikes_retry_circuit_from_incomp
     )
 
     assert record_circuit_failure.await_count == 1
+    assert record_circuit_failure.await_args is not None
     assert record_circuit_failure.await_args.kwargs["detail"] == "stream_incomplete"
     assert record_circuit_failure.await_args.kwargs["terminal_pre_response_frame"] is True
 
@@ -35476,6 +35476,7 @@ async def test_http_bridge_reader_failure_strikes_retry_circuit_for_missing_resp
     )
 
     assert record_circuit_failure.await_count == 1
+    assert record_circuit_failure.await_args is not None
     assert record_circuit_failure.await_args.kwargs["detail"] == "missing_response_created_timeout"
     assert retired is False  # deferred for admission waiter on first strike below threshold
 
@@ -36912,9 +36913,7 @@ def test_http_bridge_quarantine_monotonic_generations_prevent_stale_session_clea
         session_a,
         reason="repeated_eventless_timeout",
     )
-    captured_generation_a = http_bridge_quarantine_module._http_bridge_quarantine_clear_fence(
-        service, session_a.key
-    )
+    captured_generation_a = http_bridge_quarantine_module._http_bridge_quarantine_clear_fence(service, session_a.key)
     assert captured_generation_a == 1
 
     # 2. Entry is removed from registry (e.g. by cleanup or prune)
@@ -36929,9 +36928,7 @@ def test_http_bridge_quarantine_monotonic_generations_prevent_stale_session_clea
         reason="repeated_eventless_timeout",
     )
     # Monotonic generation ensures Session B gets a higher generation, not generation 1
-    generation_b = http_bridge_quarantine_module._http_bridge_quarantine_clear_fence(
-        service, session_b.key
-    )
+    generation_b = http_bridge_quarantine_module._http_bridge_quarantine_clear_fence(service, session_b.key)
     assert generation_b == 2
     assert http_bridge_quarantine_module._http_bridge_session_key_quarantined(service, session_b.key) is True
 
@@ -48457,6 +48454,7 @@ async def test_reconcile_websocket_request_state_reservation_calls_service() -> 
     from contextlib import asynccontextmanager
 
     from app.modules.api_keys.service import ApiKeyRequestUsageBudget, ApiKeyUsageReservationData
+
     service = proxy_service.ProxyService(cast(Any, nullcontext()))
     request_state = proxy_service._WebSocketRequestState(
         request_id="req-reconcile-test",
@@ -48506,6 +48504,7 @@ async def test_reconcile_websocket_request_state_reservation_translates_rate_lim
         ApiKeyRequestUsageBudget,
         ApiKeyUsageReservationData,
     )
+
     service = proxy_service.ProxyService(cast(Any, nullcontext()))
     request_state = proxy_service._WebSocketRequestState(
         request_id="req-reconcile-test",
@@ -48689,8 +48688,3 @@ async def test_http_bridge_unattempted_send_releases_claimed_durable_generation(
         generation=(0, 1000.0, 2, 1100.0, 2, 0.0, 0.0),
     )
     assert request_state.claimed_durable_circuit_key is None
-
-
-
-
-

@@ -1227,4 +1227,3 @@ async def test_backend_files_routed_transport_failover(async_client, monkeypatch
         assert len(calls) == 1
         expected_code = "proxy_network_unavailable" if failure == "process_network" else "upstream_unavailable"
         assert response.json()["error"]["code"] == expected_code
-

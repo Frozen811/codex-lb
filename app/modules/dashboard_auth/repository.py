@@ -267,7 +267,7 @@ class DashboardAuthRepository:
                 )
                 # Verdict via rowcount: RETURNING is not available on MySQL and
                 # the affected-row count is equivalent on every dialect here.
-                if (armed.rowcount or 0) == 0:
+                if (getattr(armed, "rowcount", 0) or 0) == 0:
                     await self._session.rollback()
                     return None
                 user_id = existing.id

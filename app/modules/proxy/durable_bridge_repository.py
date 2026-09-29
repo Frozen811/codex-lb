@@ -1694,7 +1694,7 @@ class DurableBridgeRepository:
                 )
                 .values(**values)
             )
-            if (cleared.rowcount or 0) == 0:
+            if (getattr(cleared, "rowcount", 0) or 0) == 0:
                 await self._session.rollback()
                 return None
             await self._session.execute(
@@ -3447,7 +3447,7 @@ class DurableBridgeRepository:
                 # then read the snapshot columns back for their new values.
                 update_result = await self._session.execute(update_stmt)
                 updated_row = None
-                if (update_result.rowcount or 0) > 0:
+                if (getattr(update_result, "rowcount", 0) or 0) > 0:
                     updated_row = (
                         await self._session.execute(
                             select(*_SNAPSHOT_COLUMNS).where(HttpBridgeSessionRecord.id == session_id)
@@ -3780,7 +3780,7 @@ class DurableBridgeRepository:
                     )
                 )
                 await self._session.commit()
-            deleted_count += int(deleted.rowcount or 0)
+            deleted_count += int(getattr(deleted, "rowcount", 0) or 0)
 
     async def retire_continuity_owner_if_unavailable(
         self,
@@ -3845,7 +3845,7 @@ class DurableBridgeRepository:
                 await self._session.commit()
                 return False
             result = await self._session.execute(statement)
-            if (result.rowcount or 0) > 0:
+            if (getattr(result, "rowcount", 0) or 0) > 0:
                 await self._session.commit()
                 return True
             # The CAS also matches nothing when a racing duplicate retired this
@@ -3935,7 +3935,7 @@ class DurableBridgeRepository:
         )
         async with sqlite_writer_section():
             tombstone_result = await self._session.execute(tombstone_stmt)
-            tombstoned = int(tombstone_result.rowcount or 0)
+            tombstoned = int(getattr(tombstone_result, "rowcount", 0) or 0)
             # Aliases first, matching ``purge_closed_before``: the FK cascade
             # would cover it, but SQLite builds without foreign-key enforcement
             # would leave orphans that later resolve to a deleted session.
@@ -3949,7 +3949,7 @@ class DurableBridgeRepository:
             tombstone_delete = await self._session.execute(
                 delete(HttpBridgeSessionRecord).where(*expired_tombstone_filter)
             )
-            deleted = int(tombstone_delete.rowcount or 0)
+            deleted = int(getattr(tombstone_delete, "rowcount", 0) or 0)
             await self._session.commit()
         return tombstoned + deleted
 
@@ -3998,7 +3998,7 @@ class DurableBridgeRepository:
                     .where(*abandoned_filter)
                 )
                 await self._session.commit()
-            deleted_count += int(deleted.rowcount or 0)
+            deleted_count += int(getattr(deleted, "rowcount", 0) or 0)
 
     async def purge_retry_circuits_before(
         self,
@@ -4105,7 +4105,7 @@ class DurableBridgeRepository:
                         .where(HttpBridgeRetryCircuit.admission_generation == admission_generation)
                         .where(stale_predicate)
                     )
-                    batch_deleted_count += int(deleted.rowcount or 0)
+                    batch_deleted_count += int(getattr(deleted, "rowcount", 0) or 0)
                 await self._session.commit()
             if batch_deleted_count == 0:
                 return deleted_count
@@ -4181,7 +4181,7 @@ class DurableBridgeRepository:
                 # read the target row back when it matched.
                 fenced_result = await self._session.execute(fenced_stmt)
                 target = None
-                if (fenced_result.rowcount or 0) > 0:
+                if (getattr(fenced_result, "rowcount", 0) or 0) > 0:
                     target = (
                         await self._session.execute(
                             select(
@@ -4253,7 +4253,7 @@ class DurableBridgeRepository:
             if is_mysql(self._session):
                 fenced_lock_result = await self._session.execute(fenced_lock_stmt)
                 target = None
-                if (fenced_lock_result.rowcount or 0) > 0:
+                if (getattr(fenced_lock_result, "rowcount", 0) or 0) > 0:
                     target = (
                         await self._session.execute(
                             select(
@@ -4429,7 +4429,7 @@ class DurableBridgeRepository:
                     )
                 )
             )
-            if (fenced_restore.rowcount or 0) == 0:
+            if (getattr(fenced_restore, "rowcount", 0) or 0) == 0:
                 await self._session.rollback()
                 return False
 
@@ -4579,7 +4579,7 @@ class DurableBridgeRepository:
             for column in key_columns:
                 probe = probe.where(getattr(HttpBridgeSessionAlias, column) == values[column])
             updated = await self._session.execute(probe.values(**values))
-            if updated.rowcount:
+            if getattr(updated, "rowcount", 0):
                 return True
             base = mysql_insert(HttpBridgeSessionAlias).values(**values)
             await self._session.execute(base.on_duplicate_key_update(alias_kind=base.inserted.alias_kind))
@@ -4593,11 +4593,7 @@ class DurableBridgeRepository:
                     )
                 )
             ).first()
-            return (
-                stored is not None
-                and stored[0] == values["session_id"]
-                and stored[1] == values["alias_value"]
-            )
+            return stored is not None and stored[0] == values["session_id"] and stored[1] == values["alias_value"]
         else:
             raise RuntimeError(f"DurableBridgeRepository alias upsert unsupported for dialect={dialect!r}")
         result = await self._session.execute(statement)

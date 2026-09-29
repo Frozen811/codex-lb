@@ -89,9 +89,7 @@ def upgrade() -> None:
                 bind,
                 index_name=index_name,
                 table_name="additional_usage_history",
-                columns_sql=(
-                    "{alias_key}, `window`, `account_id`, `recorded_at` DESC, `used_percent` DESC, `id` DESC"
-                ),
+                columns_sql=("{alias_key}, `window`, `account_id`, `recorded_at` DESC, `used_percent` DESC, `id` DESC"),
                 generated_parts=(_generated_alias_part(expression),),
             )
     else:

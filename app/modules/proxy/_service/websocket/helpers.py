@@ -2511,4 +2511,3 @@ def _is_account_neutral_transport_drop(
     """
 
     return close_code in (None, 1006)
-

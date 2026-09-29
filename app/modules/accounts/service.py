@@ -32,7 +32,7 @@ from app.core.clients.usage import (
 from app.core.config.settings import get_settings
 from app.core.crypto import TokenEncryptor
 from app.core.openai.host_models import resolve_default_host_model
-from app.core.openai.requests import _strip_unsupported_fields
+from app.core.openai.requests import MutableJsonObject, _strip_unsupported_fields
 from app.core.plan_types import coerce_account_plan_type
 from app.core.upstream_proxy import ResolvedUpstreamRoute, UpstreamProxyRouteError, resolve_upstream_route
 from app.core.upstream_proxy.cache import get_upstream_route_cache
@@ -877,7 +877,7 @@ class AccountsService:
         }
         if chatgpt_account_id and not chatgpt_account_id.startswith(("email_", "local_")):
             headers["chatgpt-account-id"] = chatgpt_account_id
-        body = {
+        body: MutableJsonObject = {
             "model": model,
             "instructions": "Respond with a single dot.",
             "input": [

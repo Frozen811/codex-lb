@@ -947,4 +947,3 @@ async def test_run_drains_queued_burst_without_sleeping_between_batches() -> Non
     assert all_events == [f"event-{i}" for i in range(30)]
 
     await batcher.close()
-

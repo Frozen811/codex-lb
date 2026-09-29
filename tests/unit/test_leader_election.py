@@ -1740,4 +1740,3 @@ async def test_release_waits_for_the_keeper_to_finish_when_no_drain_time_left(
     await election.release()
 
     assert events == ["renew-start", "renew-session-closed", "release-continues"]
-

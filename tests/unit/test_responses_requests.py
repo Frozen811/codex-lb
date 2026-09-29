@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any, cast
+
 import pytest
 
 from app.core.openai.chat_requests import ChatCompletionsRequest
@@ -63,7 +65,7 @@ def test_responses_requests_image_plus_tools_strips_parallel_tool_calls() -> Non
         }
     )
 
-    upstream_wire = req.to_payload()
+    upstream_wire = cast(dict[str, Any], req.to_payload())
     assert "parallel_tool_calls" not in upstream_wire
     assert len(upstream_wire["tools"]) == 1
     assert upstream_wire["tools"][0]["name"] == "search_docs"
@@ -109,7 +111,7 @@ def test_chat_completions_converts_to_responses_and_strips_parallel_tool_calls(
         }
     )
     responses_req = chat_req.to_responses_request()
-    payload = responses_req.to_payload()
+    payload = cast(dict[str, Any], responses_req.to_payload())
     assert "parallel_tool_calls" not in payload
     assert len(payload["tools"]) == 1
 

@@ -801,4 +801,3 @@ async def test_usage_configurable_windows(async_client):
     resp_trends = await async_client.get(f"/api/api-keys/{key_id}/trends?days=14")
     assert resp_trends.status_code == 200
     assert "tokens" in resp_trends.json()
-

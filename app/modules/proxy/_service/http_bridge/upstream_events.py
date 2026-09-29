@@ -1966,7 +1966,8 @@ class _HTTPBridgeUpstreamEventsMixin:
                         (
                             detail
                             for detail in (retire_detail, error_code)
-                            if detail in {
+                            if detail
+                            in {
                                 "stream_incomplete",
                                 "stream_idle_timeout",
                                 "upstream_keepalive_timeout",

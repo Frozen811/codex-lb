@@ -14,7 +14,7 @@ import base64
 import inspect
 import os
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 from unittest import mock
 from unittest.mock import AsyncMock
 
@@ -164,10 +164,12 @@ def test_runtime_config_maps_the_flag_with_default_true() -> None:
         http_responses_session_bridge_prompt_cache_idle_ttl_seconds=3600,
         http_responses_session_bridge_gateway_safe_mode=False,
     )
-    default_config = http_bridge_helpers._http_bridge_runtime_config(dashboard_settings, Settings(_env_file=None))
+    default_config = http_bridge_helpers._http_bridge_runtime_config(
+        cast(Any, dashboard_settings), Settings(_env_file=None)
+    )
     assert default_config.inline_images_enabled is True
     rollback_config = http_bridge_helpers._http_bridge_runtime_config(
-        dashboard_settings,
+        cast(Any, dashboard_settings),
         Settings(_env_file=None, http_responses_session_bridge_inline_images_enabled=False),
     )
     assert rollback_config.inline_images_enabled is False

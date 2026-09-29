@@ -227,6 +227,7 @@ def test_account_to_summary_maps_team_30d_primary_window_to_monthly() -> None:
         include_auth=False,
     )
 
+    assert summary.usage is not None
     assert summary.usage.monthly_remaining_percent == 96.0
     assert summary.usage.primary_remaining_percent is None
     assert summary.usage.secondary_remaining_percent is None

@@ -10477,7 +10477,7 @@ async def test_stream_response_error_events_closes_inner_stream_on_aclose() -> N
     assert "response.created" in first_item
     assert inner_closed is False
 
-    await generator.aclose()
+    await cast(Any, generator).aclose()
     assert inner_closed is True
 
 

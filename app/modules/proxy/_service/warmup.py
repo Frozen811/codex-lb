@@ -30,8 +30,12 @@ from app.core.clock import clock_for
 from app.core.config.dashboard_overrides import dashboard_overrides_bound, with_dashboard_overrides
 from app.core.config.settings import get_settings
 from app.core.config.settings_cache import get_settings_cache
+from app.core.errors import OpenAIErrorEnvelope as CoreOpenAIErrorEnvelope
 from app.core.exceptions import ProxyAuthError, ProxyRateLimitError
-from app.core.openai.models import CompactResponsePayload, ResponseUsage
+from app.core.openai.models import (
+    CompactResponsePayload,
+    ResponseUsage,
+)
 from app.core.openai.parsing import parse_sse_event
 from app.core.openai.requests import ResponsesCompactRequest, ResponsesRequest
 from app.core.resilience.toggles import bind_resilience_toggles
@@ -596,9 +600,13 @@ class _WarmupMixin:
                 if event.type in {"response.failed", "response.incomplete", "error"}:
                     error_payload = event.error or (event.response.error if event.response is not None else None)
                     fallback_err_msg = f"Warmup fallback plain stream failed: {event.type}"
+                    msg = fallback_err_msg
+                    if hasattr(error_payload, "message") and getattr(error_payload, "message"):
+                        msg = str(getattr(error_payload, "message"))
+                    err_envelope: CoreOpenAIErrorEnvelope = {"error": {"message": msg}}
                     raise ProxyResponseError(
                         status_code=502,
-                        payload=error_payload or {"error": {"message": fallback_err_msg}},
+                        payload=err_envelope,
                     )
         return CompactResponsePayload.model_validate(
             {

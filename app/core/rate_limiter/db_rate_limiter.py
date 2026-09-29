@@ -135,7 +135,7 @@ class DatabaseRateLimiter:
         )
         # rowcount is the dialect-neutral verdict (MySQL has no RETURNING): the
         # guarded INSERT ... SELECT changes no rows when the window is full.
-        inserted = (raw_result.rowcount or 0) > 0
+        inserted = (getattr(raw_result, "rowcount", 0) or 0) > 0
         await session.commit()
 
         if not inserted:

@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Literal
+from typing import Any, Literal
 
 from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.dialects.mysql import insert as mysql_insert
@@ -549,7 +549,7 @@ class StickySessionsRepository:
                     )
                     changed = stored_owner == restore_account_id
                 else:
-                    changed = (result.rowcount or 0) > 0
+                    changed = (getattr(result, "rowcount", 0) or 0) > 0
             await self._session.commit()
         return changed
 
@@ -807,7 +807,7 @@ class StickySessionsRepository:
             insert_fn = mysql_insert
         else:
             raise RuntimeError(f"StickySession upsert unsupported for dialect={dialect!r}")
-        statement = insert_fn(StickySession).values(key=key, account_id=account_id, kind=kind)
+        statement: Any = insert_fn(StickySession).values(key=key, account_id=account_id, kind=kind)
         if is_mysql(dialect):
             # MySQL targets the (key, kind) primary key directly.
             return statement.on_duplicate_key_update(
@@ -840,7 +840,7 @@ class StickySessionsRepository:
             insert_fn = mysql_insert
         else:
             raise RuntimeError(f"StickySession insert unsupported for dialect={dialect!r}")
-        statement = insert_fn(StickySession).values(key=key, account_id=account_id, kind=kind)
+        statement: Any = insert_fn(StickySession).values(key=key, account_id=account_id, kind=kind)
         if is_mysql(dialect):
             # "Do nothing" is a no-op update of the key to its inserted value.
             return statement.on_duplicate_key_update(key=statement.inserted.key)

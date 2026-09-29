@@ -20,7 +20,7 @@ import base64
 import json
 import time
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 from unittest.mock import Mock
 
 import pytest
@@ -724,7 +724,7 @@ async def test_client_cancellation_while_image_pending_settles(app_instance, asy
     # still pending upstream.
     first_frame = await asyncio.wait_for(stream.__anext__(), timeout=_TEST_SYNC_TIMEOUT_SECONDS)
     assert "keepalive" in first_frame
-    await stream.aclose()
+    await cast(Any, stream).aclose()
 
     session_key = proxy_module._HTTPBridgeSessionKey(
         affinity_kind="prompt_cache",

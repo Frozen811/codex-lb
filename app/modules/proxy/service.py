@@ -518,11 +518,15 @@ from app.modules.proxy._service.streaming.helpers import (
 from app.modules.proxy._service.streaming.helpers import (
     _call_stream_with_supported_optional_kwargs as _call_stream_with_supported_optional_kwargs,
 )
-from app.modules.proxy._service.streaming.helpers import _classify_upstream_close as _classify_upstream_close
+from app.modules.proxy._service.streaming.helpers import (
+    _classify_upstream_close as _classify_upstream_close,
+)
 from app.modules.proxy._service.streaming.helpers import (
     _is_account_neutral_transport_drop as _is_account_neutral_transport_drop,
 )
-from app.modules.proxy._service.streaming.helpers import _is_background_json_ack as _is_background_json_ack
+from app.modules.proxy._service.streaming.helpers import (
+    _is_background_json_ack as _is_background_json_ack,
+)
 from app.modules.proxy._service.streaming.helpers import (
     _push_stream_attempt_timeout_overrides as _push_stream_attempt_timeout_overrides,
 )
@@ -768,7 +772,7 @@ from app.modules.proxy.load_balancer import (
     effective_account_concurrency_caps,
     effective_routing_tunables,
 )
-from app.modules.proxy.model_account_routing import apply_model_account_routing
+from app.modules.proxy.model_account_routing import resolve_model_account_override
 from app.modules.proxy.repo_bundle import ProxyRepoFactory
 from app.modules.proxy.ring_membership import (
     RingMembershipService,
@@ -832,24 +836,42 @@ _REQUEST_TRANSPORT_HTTP = "http"
 _COMPACT_SAME_CONTRACT_RETRY_BUDGET = 1
 _ACCOUNT_RECOVERY_RETRY_CODES = frozenset(
     {
-        "rate_limit_exceeded", "usage_limit_reached", "insufficient_quota",
-        "usage_not_included", "quota_exceeded", *PERMANENT_FAILURE_CODES.keys(),
+        "rate_limit_exceeded",
+        "usage_limit_reached",
+        "insufficient_quota",
+        "usage_not_included",
+        "quota_exceeded",
+        *PERMANENT_FAILURE_CODES.keys(),
     }
 )
 
 _TRANSIENT_RETRY_CODES = frozenset(
     {
-        "overloaded_error", "server_error", "server_is_overloaded",
-        "stream_incomplete", "stream_idle_timeout", "upstream_request_timeout",
+        "overloaded_error",
+        "server_error",
+        "server_is_overloaded",
+        "stream_incomplete",
+        "stream_idle_timeout",
+        "upstream_request_timeout",
     }
 )
 _UPSTREAM_UNAVAILABLE_TRANSIENT_MESSAGE_MARKERS = (
-    "broken pipe", "cannot connect", "connection aborted", "connection closed",
-    "connection reset", "keepalive ping timeout", "no close frame",
-    "server disconnected", "timed out", "timeout", "upstream closed",
+    "broken pipe",
+    "cannot connect",
+    "connection aborted",
+    "connection closed",
+    "connection reset",
+    "keepalive ping timeout",
+    "no close frame",
+    "server disconnected",
+    "timed out",
+    "timeout",
+    "upstream closed",
 )
 _UPSTREAM_UNAVAILABLE_NON_TRANSIENT_MESSAGE_MARKERS = (
-    "certificate verify failed", "clientconnectorcertificateerror", "sslcertverificationerror",
+    "certificate verify failed",
+    "clientconnectorcertificateerror",
+    "sslcertverificationerror",
 )
 _UPSTREAM_CLOSE_CODES_SKIP_SAME_ACCOUNT_RETRY = frozenset({1011})
 _MAX_TRANSIENT_SAME_ACCOUNT_RETRIES = 3
@@ -858,13 +880,23 @@ _STREAM_MAX_ACCOUNT_ATTEMPTS = 3
 _WEBSOCKET_MAX_ACCOUNT_ATTEMPTS = 3
 _WEBSOCKET_TRANSPARENT_REPLAY_ERROR_CODES = frozenset(
     {
-        "rate_limit_exceeded", "usage_limit_reached", "insufficient_quota",
-        "usage_not_included", "quota_exceeded", "overloaded_error", "server_is_overloaded",
+        "rate_limit_exceeded",
+        "usage_limit_reached",
+        "insufficient_quota",
+        "usage_not_included",
+        "quota_exceeded",
+        "overloaded_error",
+        "server_is_overloaded",
     }
 )
 _WEBSOCKET_AUTH_FAILURE_CODES = frozenset({"invalid_api_key", "invalid_authentication", "token_invalidated"})
 _WEBSOCKET_REAUTH_REQUIRED_MESSAGE_MARKERS = (
-    "session has ended", "session expired", "log in again", "login again", "reauth", "re-auth",
+    "session has ended",
+    "session expired",
+    "log in again",
+    "login again",
+    "reauth",
+    "re-auth",
 )
 _WEBSOCKET_SESSION_EXPIRED_FAILURE_CODE = "account_session_expired"
 _WEBSOCKET_AUTH_INVALIDATED_FAILURE_CODE = "account_auth_invalidated"
@@ -1419,14 +1451,12 @@ class ProxyService(
         await self._load_balancer.release_account_lease(lease)
 
     async def _select_account_with_budget_compatible(self, deadline: float, **kwargs: object) -> AccountSelection:
-        affinity_policy = kwargs.pop("affinity_policy", None)
-        if isinstance(affinity_policy, _AffinityPolicy):
-            # Expand once at the compatibility edge so transport callers cannot drift.
-            kwargs.update(affinity_policy.selection_kwargs())
-        else:
-            affinity_policy = None
+        affinity = kwargs.pop("affinity_policy", None)
+        affinity_obj = affinity if isinstance(affinity, _AffinityPolicy) else None
+        if affinity_obj is not None:
+            kwargs.update(affinity_obj.selection_kwargs())
         return await select_account_with_subagent_preference(
-            self._select_account_with_budget, deadline, self._repo_factory, affinity_policy, kwargs
+            self._select_account_with_budget, deadline, self._repo_factory, affinity_obj, kwargs
         )
 
     @asynccontextmanager
@@ -1775,15 +1805,10 @@ class ProxyService(
                 settings = await get_settings_cache().get()
                 concurrency_caps = effective_account_concurrency_caps(settings)
                 routing_tunables = effective_routing_tunables(settings)  # C2-2 routing/overload
-                stream_reserve_slots = (
-                    (
-                        get_settings().proxy_account_stream_recovery_reserve
-                        if getattr(settings, "proxy_account_stream_recovery_reserve", None) is None
-                        else settings.proxy_account_stream_recovery_reserve
-                    )
-                    if lease_kind == "stream" and request_stage != "reattach"
-                    else 0
-                )
+                _sr = getattr(settings, "proxy_account_stream_recovery_reserve", None)
+                if _sr is None:
+                    _sr = get_settings().proxy_account_stream_recovery_reserve
+                stream_reserve_slots = _sr if lease_kind == "stream" and request_stage != "reattach" else 0
                 api_key_fair_share_threshold_pct = _selection_api_key_fair_share_threshold_pct(
                     settings, lease_kind=lease_kind, request_stage=request_stage
                 )
@@ -1793,25 +1818,16 @@ class ProxyService(
                 )
                 required_continuity = required_preferred_account and preferred_account_is_continuity_owner
                 single_account_routing_id: str | None = None
-                _mro = await apply_model_account_routing(
-                    model=model,
-                    headers=headers,
-                    preferred_account_id=preferred_account_id,
-                    fallback_on_preferred_account_unavailable=fallback_on_preferred_account_unavailable,
-                    required_preferred_account=required_preferred_account,
-                    single_account_routing_id=single_account_routing_id,
-                    routing_strategy=routing_strategy,
-                    repo_factory=self._repo_factory,
-                    excluded_account_ids_set=excluded_account_ids_set,
-                    scoped_account_ids=scoped_account_ids,
+                target_id, target_err = await resolve_model_account_override(
+                    model, headers, self._repo_factory, excluded_account_ids_set, scoped_account_ids
                 )
-                if _mro.error is not None:
-                    return _mro.error
-                preferred_account_id = _mro.preferred_account_id
-                fallback_on_preferred_account_unavailable = _mro.fallback
-                required_preferred_account = _mro.required
-                single_account_routing_id = _mro.single_id
-                routing_strategy = _mro.strategy
+                if target_err is not None:
+                    return target_err
+                if target_id is not None:
+                    preferred_account_id, fallback_on_preferred_account_unavailable = target_id, False
+                    required_preferred_account = True
+                    single_account_routing_id = target_id
+                    routing_strategy = "single_account"
                 if _routing_strategy(settings) == "single_account" and (
                     not required_preferred_account
                     or (required_continuity and not preferred_account_overrides_single_account_routing)
@@ -2217,24 +2233,11 @@ def _proxy_response_error_code(exc: ProxyResponseError) -> str | None:
 
 
 _LOCAL_PROXY_ERROR_CODES = frozenset(
-    {
-        "bridge_owner_forward_failed",
-        "bridge_instance_mismatch",
-        "bridge_owner_unreachable",
-        "preferred_account_unavailable",
-        "previous_response_owner_unavailable",
-        "insufficient_image_quota",
-        "ip_forbidden",
-        "no_accounts",
-        "no_plan_support_for_model",
-        "additional_quota_data_unavailable",
-        "additional_quota_routing_disabled",
-        "no_additional_quota_eligible_accounts",
-        "payload_too_large",
-        "proxy_overloaded",
-        "upstream_request_timeout",
-        "upstream_unavailable",
-    }
+    "bridge_owner_forward_failed bridge_instance_mismatch bridge_owner_unreachable "
+    "preferred_account_unavailable previous_response_owner_unavailable insufficient_image_quota "
+    "ip_forbidden no_accounts no_plan_support_for_model additional_quota_data_unavailable "
+    "additional_quota_routing_disabled no_additional_quota_eligible_accounts payload_too_large "
+    "proxy_overloaded upstream_request_timeout upstream_unavailable".split()
 )
 
 

@@ -454,9 +454,7 @@ def _sticky_key_for_compact_request(
     # turns' transcript and will usually mint a new anchor. That is the same
     # answer the ordinary path gives for a compacted turn, and it is correct:
     # the upstream prefix cache is cold after compaction.
-    effective_max_age_seconds = _effective_prompt_cache_max_age_seconds(
-        headers, openai_cache_affinity_max_age_seconds
-    )
+    effective_max_age_seconds = _effective_prompt_cache_max_age_seconds(headers, openai_cache_affinity_max_age_seconds)
     resolution = _resolve_prompt_cache_key(
         payload,
         openai_cache_affinity=openai_cache_affinity,

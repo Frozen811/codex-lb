@@ -3558,11 +3558,7 @@ class _HTTPBridgeStreamingMixin:
             )
             _apply_http_bridge_downstream_turn_state(
                 request_state,
-                downstream_turn_state=(
-                    None
-                    if model_transition_fork_cleared_session_id
-                    else downstream_turn_state
-                ),
+                downstream_turn_state=(None if model_transition_fork_cleared_session_id else downstream_turn_state),
                 incoming_turn_state_header=incoming_turn_state_header,
             )
             request_state.transport = _REQUEST_TRANSPORT_HTTP

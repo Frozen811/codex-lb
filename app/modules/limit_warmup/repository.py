@@ -154,7 +154,7 @@ class LimitWarmupRepository:
                     # is the verdict, and the unique (account, window, reset_at)
                     # tuple resolves the row that was just written.
                     insert_result = await self._session.execute(insert_stmt)
-                    if (insert_result.rowcount or 0) > 0:
+                    if (getattr(insert_result, "rowcount", 0) or 0) > 0:
                         inserted_id = await self._session.scalar(
                             select(AccountLimitWarmup.id).where(
                                 AccountLimitWarmup.account_id == account_id,
@@ -205,7 +205,7 @@ class LimitWarmupRepository:
             await self._session.commit()
         # rowcount carries the same verdict as the RETURNING row did, and works
         # on MySQL too.
-        if (result.rowcount or 0) == 0:
+        if (getattr(result, "rowcount", 0) or 0) == 0:
             return None
         row = await self._session.get(AccountLimitWarmup, attempt_id)
         if row is not None:

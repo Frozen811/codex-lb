@@ -4764,7 +4764,7 @@ def test_a_terminal_reporting_failure_does_not_settle_a_turn(failure_terminal: s
         ),
     )
 
-    assert _terminal_response_output_items(cast(_TranscriptTurn, transcript[0]).events) is None
+    assert _terminal_response_output_items(transcript[0].events) is None
     assert _rebuild(transcript, [_user_item("second")]) is None
 
 
@@ -5365,7 +5365,7 @@ def test_a_request_frame_yields_a_body_only_for_the_create_envelope(
 )
 def test_durable_rebuild_refuses_a_body_the_strict_predicate_declines(
     current_input: Sequence[JsonValue],
-    extra_fields: dict[str, JsonValue],
+    extra_fields: dict[str, Any],
 ) -> None:
     transcript = (_transcript_turn([_user_item("first")], [_assistant_item("answer", item_id="msg_1")]),)
 
@@ -5528,7 +5528,7 @@ def test_the_item_bound_is_measured_across_the_whole_transcript() -> None:
     transcript = _chain_of_item_heavy_turns(3, items_per_turn=12_000)
     for turn in transcript:
         stored = cast(_TranscriptTurn, turn)
-        turn_items = len(cast(Any, json.loads(stored.operation.request_text or "{}"))["input"]) + 1
+        turn_items = len(json.loads(stored.operation.request_text or "{}")["input"]) + 1
 
         assert turn_items < RELOCATION_TRANSCRIPT_MAX_ITEMS
 
@@ -5605,7 +5605,7 @@ def test_the_byte_bound_counts_the_bytes_the_spool_holds_not_the_characters(prom
     # that keeps a rebuild off the event loop becomes 24 MiB for the
     # conversations most likely to be long.
     transcript = (_utf8_turn(prompt, answer),)
-    stored = cast(_TranscriptTurn, transcript[0])
+    stored = transcript[0]
     material = [stored.operation.request_text or "", *stored.events]
     characters = sum(len(text) for text in material)
     stored_bytes = sum(len(text.encode("utf-8")) for text in material)
@@ -5771,7 +5771,7 @@ def test_the_join_canonicalizes_each_item_once_rather_than_once_per_comparison(
     canonical = replay_safety_module._relocation_comparison_key
     keys_built = 0
 
-    def _counted(item: JsonValue) -> str:
+    def _counted(item: JsonValue) -> object:
         nonlocal keys_built
         keys_built += 1
         return canonical(item)

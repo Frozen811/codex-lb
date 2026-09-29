@@ -276,4 +276,3 @@ async def test_preview_suppressed_and_no_identity_minted_under_env_kill_switch(
     assert payload["active"] is False
     assert payload["preview"] is None
     identity_mock.assert_not_called()
-

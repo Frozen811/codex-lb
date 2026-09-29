@@ -1855,8 +1855,10 @@ class LoadBalancer:
             )
             now = self._clock.time()
             normalized_usage = _normalize_usage_inputs(
-                account=account, primary_entry=primary_entry,
-                secondary_entry=effective_secondary_entry, now_epoch=int(now),
+                account=account,
+                primary_entry=primary_entry,
+                secondary_entry=effective_secondary_entry,
+                now_epoch=int(now),
             )
             health_primary_used = _health_tier_primary_used(
                 plan_type=account.plan_type, primary_used=normalized_usage.primary_used
@@ -1881,9 +1883,12 @@ class LoadBalancer:
                 return
 
             normalized_state = _state_from_account(
-                account=account, primary_entry=primary_entry,
-                secondary_entry=effective_secondary_entry, runtime=replace(runtime),
-                routing_tunables=tunables, now=now,
+                account=account,
+                primary_entry=primary_entry,
+                secondary_entry=effective_secondary_entry,
+                runtime=replace(runtime),
+                routing_tunables=tunables,
+                now=now,
                 soft_drain_enabled=resilience.soft_drain_enabled,
             )
             account_status = normalized_state.status
@@ -2027,12 +2032,12 @@ class LoadBalancer:
     ) -> None:
         reset_at_int = int(state.reset_at) if state.reset_at else None
         blocked_at_int = int(state.blocked_at) if state.blocked_at else None
-        status_changed = account.status != state.status
-        reason_changed = account.deactivation_reason != state.deactivation_reason
-        reset_changed = account.reset_at != reset_at_int
-        blocked_changed = account.blocked_at != blocked_at_int
-
-        if status_changed or reason_changed or reset_changed or blocked_changed:
+        if (
+            account.status != state.status
+            or account.deactivation_reason != state.deactivation_reason
+            or account.reset_at != reset_at_int
+            or account.blocked_at != blocked_at_int
+        ):
             await accounts_repo.update_status(
                 account.id,
                 state.status,
@@ -2042,10 +2047,10 @@ class LoadBalancer:
             )
             stored = await accounts_repo.get_by_id_fresh(account.id)
             if stored is not None:
-                account.status, account.deactivation_reason = stored.status, stored.deactivation_reason
-                account.reset_at, account.blocked_at = stored.reset_at, stored.blocked_at
-                state.status, state.deactivation_reason = stored.status, stored.deactivation_reason
-                state.reset_at, state.blocked_at = stored.reset_at, stored.blocked_at
+                account.status = state.status = stored.status
+                account.deactivation_reason = state.deactivation_reason = stored.deactivation_reason
+                account.reset_at = state.reset_at = stored.reset_at
+                account.blocked_at = state.blocked_at = stored.blocked_at
                 self._sync_runtime_state(account, state)
 
     async def _persist_state_if_current(
@@ -2058,16 +2063,11 @@ class LoadBalancer:
     ) -> bool:
         reset_at_int = int(state.reset_at) if state.reset_at else None
         blocked_at_int = int(state.blocked_at) if state.blocked_at else None
-        status_changed = account.status != state.status
-        reason_changed = account.deactivation_reason != state.deactivation_reason
-        reset_changed = account.reset_at != reset_at_int
-        blocked_changed = account.blocked_at != blocked_at_int
-
         if (
-            status_changed
-            or reason_changed
-            or reset_changed
-            or blocked_changed
+            account.status != state.status
+            or account.deactivation_reason != state.deactivation_reason
+            or account.reset_at != reset_at_int
+            or account.blocked_at != blocked_at_int
             or (
                 expected_refresh_token_encrypted is not None and reauth_reason_blocks_routing(state.deactivation_reason)
             )
@@ -2090,10 +2090,8 @@ class LoadBalancer:
                 ),
             )
             if updated:
-                account.status = state.status
-                account.deactivation_reason = state.deactivation_reason
-                account.reset_at = reset_at_int
-                account.blocked_at = blocked_at_int
+                account.status, account.deactivation_reason = state.status, state.deactivation_reason
+                account.reset_at, account.blocked_at = reset_at_int, blocked_at_int
             return updated
         return True
 

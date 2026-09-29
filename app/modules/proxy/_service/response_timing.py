@@ -115,9 +115,7 @@ def observe_output_timing(
     state.output_delta_count += 1
 
 
-def _verbatim_line_has_nonempty_output(
-    event_type: str | None, line: str, *, allow_snapshot: bool
-) -> bool:
+def _verbatim_line_has_nonempty_output(event_type: str | None, line: str, *, allow_snapshot: bool) -> bool:
     if event_type in OUTPUT_DELTA_EVENT_TYPES:
         for key in ('"delta":', '"arguments":', '"input":'):
             idx = line.find(key)
@@ -150,11 +148,8 @@ def observe_verbatim_output_timing(
     *,
     observed_at: float,
 ) -> None:
-    if not _verbatim_line_has_nonempty_output(
-        event_type, line, allow_snapshot=state.output_delta_count == 0
-    ):
+    if not _verbatim_line_has_nonempty_output(event_type, line, allow_snapshot=state.output_delta_count == 0):
         return
     if state.latency_first_output_ms is None:
         state.latency_first_output_ms = max(0, int((observed_at - state.started_at) * 1000))
     state.output_delta_count += 1
-

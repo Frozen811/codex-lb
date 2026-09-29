@@ -412,4 +412,3 @@ async def test_sender_synchronizes_snapshot_transmission_and_opt_out() -> None:
     active_state = False
     await sender._transmit_once(session, snapshot, identity)
     sender._post_signed.assert_not_awaited()
-

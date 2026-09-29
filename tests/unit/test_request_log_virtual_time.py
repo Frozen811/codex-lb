@@ -275,4 +275,3 @@ async def test_write_request_log_persists_latency_upstream_terminal_ms() -> None
     (row,) = request_logs.rows
     assert row["latency_ms"] == 1100
     assert row["status"] == "success"
-

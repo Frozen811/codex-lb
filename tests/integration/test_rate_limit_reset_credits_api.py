@@ -335,9 +335,7 @@ async def test_redeem_all_consumes_eligible_credits_across_accounts(
 
     # Set acc3 to PAUSED
     async with SessionLocal() as session:
-        await session.execute(
-            update(Account).where(Account.id == acc3).values(status=AccountStatus.PAUSED)
-        )
+        await session.execute(update(Account).where(Account.id == acc3).values(status=AccountStatus.PAUSED))
         await session.commit()
 
     store = get_rate_limit_reset_credits_store()
@@ -378,7 +376,7 @@ async def test_redeem_all_with_explicit_account_ids_and_partial_failure(
         **kwargs: Any,
     ) -> ConsumeResetCreditResponse:
         if "fail" in str(account_id):
-            raise reset_credits_api.ConsumeResetCreditError("Upstream rejected consume", code="upstream_fail")
+            raise reset_credits_api.ConsumeResetCreditError(500, "Upstream rejected consume", code="upstream_fail")
         return ConsumeResetCreditResponse.model_validate(
             {
                 "code": "reset",
@@ -424,4 +422,3 @@ async def test_redeem_all_with_explicit_account_ids_and_partial_failure(
     assert fail_result["success"] is False
     assert fail_result["creditsRedeemed"] == 0
     assert fail_result["error"] is not None
-

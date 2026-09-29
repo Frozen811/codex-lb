@@ -352,4 +352,3 @@ class AccountQuotaLimitUpdateRequest(DashboardModel):
 class AccountQuotaLimitUpdateResponse(DashboardModel):
     account_id: str
     limit_percent: float | None = None
-

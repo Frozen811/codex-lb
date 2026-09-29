@@ -1401,7 +1401,7 @@ def _effective_compact_connect_timeout(configured_timeout_seconds: float) -> flo
     return max(0.001, min(configured_timeout_seconds, override))
 
 
-def _effective_compact_total_timeout(configured_timeout_seconds: float | None) -> float | None:
+def _effective_compact_total_timeout(configured_timeout_seconds: float | None = None) -> float | None:
     # The per-request compact budget bounds the main path. An explicit upstream
     # cap remains an operator escape hatch and can only shorten that budget.
     override = _COMPACT_TOTAL_TIMEOUT_OVERRIDE.get()
@@ -4907,13 +4907,9 @@ class _CompactCommandTransport:
             compact_timeout_seconds = _effective_compact_total_timeout()
         default_idle_timeout = getattr(settings, "stream_idle_timeout_seconds", 7200.0)
         try:
-            compact_idle_timeout_seconds = (
-                _effective_compact_total_timeout(None) or default_idle_timeout
-            )
+            compact_idle_timeout_seconds = _effective_compact_total_timeout(None) or default_idle_timeout
         except TypeError:
-            compact_idle_timeout_seconds = (
-                _effective_compact_total_timeout() or default_idle_timeout
-            )
+            compact_idle_timeout_seconds = _effective_compact_total_timeout() or default_idle_timeout
         effective_connect_timeout = _effective_compact_connect_timeout(settings.upstream_connect_timeout_seconds)
         payload_dict = _responses_compact_payload_for_responses_endpoint(self.payload)
         payload_dict["store"] = False

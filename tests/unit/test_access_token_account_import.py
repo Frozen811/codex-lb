@@ -43,6 +43,7 @@ def test_build_auth_status_non_refreshable():
     account.refresh_error_code = None
 
     status = _build_auth_status(account, encryptor)
+    assert status.refresh is not None
     assert status.refresh.state == "non_refreshable"
 
 

@@ -1441,4 +1441,3 @@ for line in sys.stdin:
         assert response.status == 200
     finally:
         await client.aclose()
-

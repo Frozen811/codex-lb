@@ -2303,7 +2303,6 @@ def test_handle_permanent_failure_preserves_routing_blocked_reauth_reason() -> N
     assert state.deactivation_reason == PERMANENT_FAILURE_CODES["token_revoked"]
 
 
-
 def _make_test_account(
     account_id: str = "a",
     status: AccountStatus = AccountStatus.ACTIVE,

@@ -208,15 +208,10 @@ def claims_from_auth(auth: AuthFile) -> AccountClaims:
     auth_claims = claims.auth or OpenAIAuthClaims()
     plan_type = auth.plan_type or auth_claims.chatgpt_plan_type or claims.chatgpt_plan_type
     account_id = (
-        auth.account_id
-        or auth.tokens.account_id
-        or auth_claims.chatgpt_account_id
-        or claims.chatgpt_account_id
+        auth.account_id or auth.tokens.account_id or auth_claims.chatgpt_account_id or claims.chatgpt_account_id
     )
     email = auth.email or claims.email
-    workspace_id = clean_account_identity_part(
-        auth.workspace_id or auth_claims.workspace_id or claims.workspace_id
-    )
+    workspace_id = clean_account_identity_part(auth.workspace_id or auth_claims.workspace_id or claims.workspace_id)
     workspace_label = clean_account_identity_part(
         auth.workspace_label or auth_claims.workspace_label or claims.workspace_label
     )

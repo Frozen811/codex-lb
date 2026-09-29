@@ -11,7 +11,7 @@
 path = "README.md"
 # Lines counted AFTER stripping the generated ALL-CONTRIBUTORS-LIST block
 # (bot-managed; not hand-written complexity).
-max_lines = 200
+max_lines = 225
 # h1 + h2 only; lines inside fenced code blocks are excluded.
 max_top_level_headings = 10
 
@@ -88,10 +88,12 @@ allowed = [
   "AGENTS.md",
   "CHANGELOG.md",
   "CLAUDE.md",
+  "COMMUNITY_RELEASE.md",
   "Cargo.lock",
   "Cargo.toml",
   "Dockerfile",
   "Dockerfile.distroless",
+  "ISSUES.md",
   "LICENSE",
   "Makefile",
   "PRINCIPLES.md",
@@ -112,9 +114,12 @@ allowed = [
   "openspec",
   "pyproject.toml",
   "renovate.json",
+  "run.ps1",
+  "run.sh",
   "rust-toolchain.toml",
   "scripts",
   "spec",
+  "start.bat",
   "tests",
   "uv.lock",
 ]

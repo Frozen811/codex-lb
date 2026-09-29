@@ -143,15 +143,26 @@ def _wait_until_ready(server: subprocess.Popen[bytes], base_url: str) -> None:
 def _stop_server(server: subprocess.Popen[bytes]) -> None:
     if server.poll() is not None:
         return
-    try:
-        os.killpg(server.pid, signal.SIGTERM)
-    except ProcessLookupError:
-        return
-    try:
-        server.wait(timeout=SHUTDOWN_TIMEOUT_SECONDS)
-    except subprocess.TimeoutExpired:
-        os.killpg(server.pid, signal.SIGKILL)
-        server.wait(timeout=5.0)
+    killpg = getattr(os, "killpg", None)
+    sigterm = getattr(signal, "SIGTERM", 15)
+    sigkill = getattr(signal, "SIGKILL", 9)
+    if killpg is not None:
+        try:
+            killpg(server.pid, sigterm)
+        except ProcessLookupError:
+            return
+        try:
+            server.wait(timeout=SHUTDOWN_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            killpg(server.pid, sigkill)
+            server.wait(timeout=5.0)
+    else:
+        server.terminate()
+        try:
+            server.wait(timeout=SHUTDOWN_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            server.kill()
+            server.wait(timeout=5.0)
 
 
 def run() -> int:

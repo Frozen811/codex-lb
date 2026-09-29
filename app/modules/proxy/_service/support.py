@@ -91,8 +91,7 @@ _PENDING_TOOL_CALL_OUTPUT_ITEM_TYPE_BY_CALL_TYPE = {
 _PENDING_TOOL_CALL_ITEM_TYPES = frozenset(_PENDING_TOOL_CALL_OUTPUT_ITEM_TYPE_BY_CALL_TYPE)
 _PENDING_TOOL_CALL_OUTPUT_ITEM_TYPES = frozenset(_PENDING_TOOL_CALL_OUTPUT_ITEM_TYPE_BY_CALL_TYPE.values())
 _TOOL_CALL_ITEM_TYPES_BY_OUTPUT_TYPE = {
-    output_type: call_type
-    for call_type, output_type in _PENDING_TOOL_CALL_OUTPUT_ITEM_TYPE_BY_CALL_TYPE.items()
+    output_type: call_type for call_type, output_type in _PENDING_TOOL_CALL_OUTPUT_ITEM_TYPE_BY_CALL_TYPE.items()
 }
 _TTFT_OUTPUT_ITEM_TYPES = _PENDING_TOOL_CALL_ITEM_TYPES - {"function_call"}
 
@@ -117,6 +116,8 @@ def _responses_input_items_are_self_contained(input_items: Sequence[JsonValue]) 
         if call_id is None or call_id not in seen_call_ids_by_type[call_item_type]:
             return False
     return True
+
+
 # Upstream ``response.*`` events that prove the model already ran for a turn.
 # Both relay surfaces flip ``upstream_model_output_seen`` on them; in the
 # Responses protocol the first one is always ``response.output_item.added``.

@@ -434,11 +434,7 @@ async def _fold_next_slice(session: AsyncSession, target: datetime) -> tuple[_Fo
                 .limit(1)
             )
         ).first()
-        if (
-            key_probe is not None
-            and key_probe[1] not in _EXCLUDED_REQUEST_KINDS
-            and key_probe[2] is not None
-        ):
+        if key_probe is not None and key_probe[1] not in _EXCLUDED_REQUEST_KINDS and key_probe[2] is not None:
             key_earliest = key_probe[0]
         else:
             key_earliest = (

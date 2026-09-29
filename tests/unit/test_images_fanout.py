@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -56,7 +57,7 @@ async def test_execute_image_fanout_success():
     # Mock collect and response
     call_idx = 0
 
-    async def mock_collect(upstream, captured=None):
+    async def mock_collect(upstream: Any, *, captured: Any = None) -> Any:
         nonlocal call_idx
         call_idx += 1
         if captured is not None:
@@ -81,7 +82,7 @@ async def test_execute_image_fanout_success():
     import app.modules.proxy.images_service as svc
 
     orig_collect = svc.collect_responses_stream_for_images
-    svc.collect_responses_stream_for_images = mock_collect
+    setattr(svc, "collect_responses_stream_for_images", mock_collect)
     try:
         resp = await execute_image_fanout(
             context=mock_context,
@@ -102,10 +103,10 @@ async def test_execute_image_fanout_success():
             resolve_client_host=mock_client_host,
         )
     finally:
-        svc.collect_responses_stream_for_images = orig_collect
+        setattr(svc, "collect_responses_stream_for_images", orig_collect)
 
     assert resp.status_code == 200
-    body = json.loads(resp.body)
+    body = json.loads(bytes(resp.body))
     assert len(body["data"]) == 3
     assert body["data"][0]["b64_json"] == "base64_data_1"
     assert body["data"][1]["b64_json"] == "base64_data_2"

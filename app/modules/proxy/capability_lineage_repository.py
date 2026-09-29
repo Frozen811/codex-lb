@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Collection
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.mysql import insert as mysql_insert
@@ -79,7 +80,7 @@ class CapabilityLineageRepository:
             insert_fn = mysql_insert
         else:
             raise RuntimeError(f"Capability lineage persistence unsupported for dialect={dialect!r}")
-        statement = insert_fn(CapabilityLineageMarker).values(marker_hash=marker_hash)
+        statement: Any = insert_fn(CapabilityLineageMarker).values(marker_hash=marker_hash)
         if is_mysql(dialect):
             return statement.on_duplicate_key_update(last_seen_at=func.now())
         return statement.on_conflict_do_update(

@@ -75,7 +75,7 @@ async def try_acquire_redeem_claim(
                 .where(ResetCreditRedeemClaim.expires_at < now)
                 .values(holder_id=holder_id, expires_at=lease_expires_at)
             )
-            if (taken.rowcount or 0) > 0:
+            if (getattr(taken, "rowcount", 0) or 0) > 0:
                 await session.commit()
                 return True
             try:
@@ -153,7 +153,7 @@ async def renew_redeem_claim(
             .values(expires_at=now + timedelta(seconds=lease_seconds))
         )
         await session.commit()
-        return (result.rowcount or 0) > 0
+        return (getattr(result, "rowcount", 0) or 0) > 0
     finally:
         await close_session(session)
 

@@ -456,7 +456,7 @@ class DashboardUsersRepository:
             .values(consumed_at=now)
             .execution_options(synchronize_session=False)
         )
-        return (result.rowcount or 0) > 0
+        return (getattr(result, "rowcount", 0) or 0) > 0
 
     async def find_invite_expecting_identity(
         self, provider: str, provider_key: str, subject: str, now: datetime
@@ -602,7 +602,7 @@ class DashboardUsersRepository:
             .values(token_hash=token_hash, expires_at=expires_at, consumed_at=None, revoked_at=None)
             .execution_options(synchronize_session=False)
         )
-        return (result.rowcount or 0) > 0
+        return (getattr(result, "rowcount", 0) or 0) > 0
 
     # --- writes ---
 

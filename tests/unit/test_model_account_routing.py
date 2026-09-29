@@ -72,10 +72,7 @@ def test_resolve_model_account_target_precedence(tmp_path: Path):
 
     # Header overrides registered and file
     headers = {"x-codex-model-account-routing": "gpt-5.6-sol=acc-header"}
-    assert (
-        resolve_model_account_target("gpt-5.6-sol", headers=headers, config_path=config_file)
-        == "acc-header"
-    )
+    assert resolve_model_account_target("gpt-5.6-sol", headers=headers, config_path=config_file) == "acc-header"
 
     # Registered overrides file
     clear_model_account_routes()
