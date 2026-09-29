@@ -73,10 +73,12 @@ def _to_upstream_model(source: ModelSource, source_model: ModelSourceModel) -> U
     default_reasoning_level = (
         _default_reasoning_level_from_metadata(raw, reasoning_levels) if reasoning_opted_in else None
     )
+    base_instructions = raw.get("base_instructions")
     return UpstreamModel(
         slug=source_model.model,
         display_name=display_name,
         description=display_name,
+        base_instructions=base_instructions if isinstance(base_instructions, str) else "",
         context_window=context_window,
         input_modalities=input_modalities,
         supported_reasoning_levels=reasoning_levels,
@@ -234,9 +236,10 @@ def source_model_request_overrides(source: ModelSource, model: str) -> dict[str,
 def source_model_supported_tool_types(source: ModelSource, model: str) -> frozenset[str]:
     """Non-function Responses tool types the source model declares support for.
 
-    Function tools are always forwarded to OpenAI-compatible sources; hosted
-    tool types are dropped unless the model opts in via
-    ``"supports_search_tool": true`` (web search) or lists the tool type in
+    Function tools are always forwarded to OpenAI-compatible sources;
+    other tool types are dropped unless the model opts in via
+    ``"supports_search_tool": true`` (web search), a nonblank
+    ``"multi_agent_version"`` string (namespaces), or lists the tool type in
     ``"experimental_supported_tools"`` in ``raw_metadata_json``.
     """
     entry = next(
@@ -249,6 +252,9 @@ def source_model_supported_tool_types(source: ModelSource, model: str) -> frozen
     supported: set[str] = set()
     if raw.get("supports_search_tool") is True:
         supported |= _SEARCH_TOOL_TYPES
+    multi_agent_version = raw.get("multi_agent_version")
+    if isinstance(multi_agent_version, str) and multi_agent_version.strip():
+        supported.add("namespace")
     experimental = raw.get("experimental_supported_tools")
     if is_json_list(experimental):
         supported.update(item for item in experimental if isinstance(item, str))

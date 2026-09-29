@@ -1624,7 +1624,7 @@ This report concerns
 
 ---
 
-### [🟢 OPEN] [#2499: bug(model-sources): multi-agent capability does not preserve client collaboration tools](https://github.com/Soju06/codex-lb/issues/2499)
+### [✅ RESOLVED / MERGED IN FORK] [#2499: bug(model-sources): multi-agent capability does not preserve client collaboration tools](https://github.com/Soju06/codex-lb/issues/2499)
 
 - **Тип:** Issue / Предложение
 - **Автор:** @nhdong1993
@@ -2507,7 +2507,7 @@ Documents existing endpoint support. The setup explanation links to the existing
 
 ---
 
-### [🟢 OPEN] [#2517: fix(telemetry): map codex_cli_rs user agent to codex-cli family](https://github.com/Soju06/codex-lb/pull/2517)
+### [✅ RESOLVED / MERGED IN FORK] [#2517: fix(telemetry): map codex_cli_rs user agent to codex-cli family](https://github.com/Soju06/codex-lb/pull/2517)
 
 - **Тип:** Pull Request
 - **Автор:** @drakeo338
@@ -2936,7 +2936,7 @@ The regression calls `POST /api/accounts/{account_id}/probe` through the real ro
 
 ---
 
-### [🟢 OPEN] [#2525: fix(model-sources): preserve source base instructions in catalogs](https://github.com/Soju06/codex-lb/pull/2525)
+### [✅ RESOLVED / MERGED IN FORK] [#2525: fix(model-sources): preserve source base instructions in catalogs](https://github.com/Soju06/codex-lb/pull/2525)
 
 - **Тип:** Pull Request
 - **Автор:** @Abaddollyon
@@ -2995,7 +2995,7 @@ For source met
 
 ---
 
-### [🟢 OPEN] [#2526: fix(model-sources): preserve declared collaboration namespaces](https://github.com/Soju06/codex-lb/pull/2526)
+### [✅ RESOLVED / MERGED IN FORK] [#2526: fix(model-sources): preserve declared collaboration namespaces](https://github.com/Soju06/codex-lb/pull/2526)
 
 - **Тип:** Pull Request
 - **Автор:** @Abaddollyon
