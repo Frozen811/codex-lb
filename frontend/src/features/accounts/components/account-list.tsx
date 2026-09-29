@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Plus, Search } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, RotateCcw, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -33,6 +33,7 @@ export type AccountListProps = {
   onSelect: (accountId: string) => void;
   onOpenImport: () => void;
   onOpenOauth: () => void;
+  onOpenRedeemAll?: () => void;
   sortMode?: AccountSortMode;
   onSortModeChange?: (sortMode: AccountSortMode) => void;
   showResetCreditBadges?: boolean;
@@ -45,6 +46,7 @@ export function AccountList({
   onSelect,
   onOpenImport,
   onOpenOauth,
+  onOpenRedeemAll,
   sortMode,
   onSortModeChange,
   showResetCreditBadges = true,
@@ -76,6 +78,17 @@ export function AccountList({
       );
     });
   }, [accounts, quotaDisplay, search, statusFilter, activeSortMode]);
+
+  const totalEligibleCredits = useMemo(() => {
+    return accounts
+      .filter(
+        (a) =>
+          a.status !== "paused" &&
+          a.status !== "deactivated" &&
+          (a.availableResetCredits ?? 0) > 0,
+      )
+      .reduce((sum, a) => sum + (a.availableResetCredits ?? 0), 0);
+  }, [accounts]);
 
   return (
     <div className="flex max-h-[calc(100dvh-15rem)] min-h-0 min-w-0 flex-1 flex-col space-y-3">
@@ -139,16 +152,33 @@ export function AccountList({
             {helpOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           </Button>
         )}
-        <Button
-          type="button"
-          size="sm"
-          className="gap-1.5"
-          disabled={readOnly}
-          onClick={() => setChooserOpen(true)}
-        >
-          <Plus className="h-3.5 w-3.5" />
-          {t("accounts.list.addAccount")}
-        </Button>
+        <div className="flex items-center gap-2">
+          {!readOnly && totalEligibleCredits > 0 && onOpenRedeemAll ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs h-8"
+              onClick={onOpenRedeemAll}
+              title={t("accounts.list.redeemAllCreditsTooltip", "Redeem all eligible reset credits across accounts")}
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              {t("accounts.list.redeemAllCredits", "Redeem all ({{count}})", {
+                count: totalEligibleCredits,
+              })}
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            size="sm"
+            className="gap-1.5"
+            disabled={readOnly}
+            onClick={() => setChooserOpen(true)}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            {t("accounts.list.addAccount")}
+          </Button>
+        </div>
       </div>
 
       {helpOpen && !readOnly ? <WindowsOauthHelp /> : null}

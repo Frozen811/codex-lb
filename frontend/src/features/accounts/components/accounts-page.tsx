@@ -12,6 +12,7 @@ import { AccountList } from "@/features/accounts/components/account-list";
 import { AccountsSkeleton } from "@/features/accounts/components/accounts-skeleton";
 import { ImportDialog } from "@/features/accounts/components/import-dialog";
 import { ResetCreditConfirmDialog } from "@/features/accounts/components/reset-credit-confirm-dialog";
+import { RedeemAllResetCreditsDialog } from "@/features/accounts/components/redeem-all-reset-credits-dialog";
 import { AuthExportDialog } from "@/features/accounts/components/auth-export-dialog";
 import {
   useAccounts,
@@ -72,11 +73,29 @@ export function AccountsPage() {
   const usageResetDialog = useDialogState<string>();
   const exportDialog = useDialogState<AccountAuthExportResponse>();
   const [deleteHistory, setDeleteHistory] = useState(false);
+  const [bulkRedeemOpen, setBulkRedeemOpen] = useState(false);
 
   const accounts = useMemo(
     () => accountsQuery.data ?? [],
     [accountsQuery.data],
   );
+
+  const eligibleBulkAccounts = useMemo(() => {
+    return accounts
+      .filter(
+        (a) =>
+          a.status !== "paused" &&
+          a.status !== "deactivated" &&
+          (a.availableResetCredits ?? 0) > 0,
+      )
+      .map((a) => ({
+        accountId: a.accountId,
+        displayName: a.displayName,
+        email: a.email,
+        alias: a.alias,
+        availableResetCredits: a.availableResetCredits ?? 0,
+      }));
+  }, [accounts]);
   const showResetCreditBadges = settingsQuery.data?.showResetCreditBadges ?? true;
   const showResetCreditExpiryBadge = settingsQuery.data?.showResetCreditExpiryBadge ?? true;
   const quotaDisplay = useAccountQuotaDisplayStore((s) => s.quotaDisplay);
@@ -192,6 +211,7 @@ export function AccountsPage() {
                   setOauthAccountId(null);
                   oauthDialog.show();
                 }}
+                onOpenRedeemAll={() => setBulkRedeemOpen(true)}
                 readOnly={!canWrite}
               />
             </div>
@@ -300,6 +320,14 @@ export function AccountsPage() {
           accountId={resetCreditDialog.data.accountId}
           summaryAvailableCount={resetCreditDialog.data.availableResetCredits}
           onOpenChange={resetCreditDialog.onOpenChange}
+        />
+      ) : null}
+
+      {bulkRedeemOpen ? (
+        <RedeemAllResetCreditsDialog
+          open={bulkRedeemOpen}
+          onOpenChange={setBulkRedeemOpen}
+          eligibleAccounts={eligibleBulkAccounts}
         />
       ) : null}
 

@@ -19,6 +19,7 @@ import {
   AccountProbeRequestSchema,
   AccountProbeResponseSchema,
   ConsumeRateLimitResetCreditResponseSchema,
+  RedeemAllResetCreditsResponseSchema,
   ManualOauthCallbackRequestSchema,
   ManualOauthCallbackResponseSchema,
   OauthCompleteRequestSchema,
@@ -160,6 +161,14 @@ export function consumeRateLimitResetCredit(
     `${ACCOUNTS_BASE_PATH}/${encodeURIComponent(accountId)}/rate-limit-reset-credits/consume`,
     ConsumeRateLimitResetCreditResponseSchema,
     validated ? { body: validated } : undefined,
+  );
+}
+
+export function redeemAllRateLimitResetCredits(payload?: { accountIds?: string[] }) {
+  return post(
+    `${ACCOUNTS_BASE_PATH}/rate-limit-reset-credits/redeem-all`,
+    RedeemAllResetCreditsResponseSchema,
+    payload ? { body: payload } : undefined,
   );
 }
 

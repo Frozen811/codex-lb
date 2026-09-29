@@ -198,7 +198,7 @@ async def test_get_returns_cached_snapshot_shape(monkeypatch: pytest.MonkeyPatch
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "status",
-    [AccountStatus.PAUSED, AccountStatus.REAUTH_REQUIRED, AccountStatus.DEACTIVATED],
+    [AccountStatus.REAUTH_REQUIRED, AccountStatus.DEACTIVATED],
 )
 async def test_get_invalidates_cached_snapshot_for_ineligible_status(
     status: AccountStatus,
@@ -1594,3 +1594,59 @@ async def test_consume_refuses_read_only_guest(app_instance, async_client) -> No
 
 async def _raise_not_called(*args: Any, **kwargs: Any) -> Any:
     raise AssertionError("consume_fn must not be called when no credit is available")
+
+
+@pytest.mark.asyncio
+async def test_redeem_all_rate_limit_reset_credits_unit(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.modules.rate_limit_reset_credits.api import (
+        redeem_all_rate_limit_reset_credits,
+    )
+
+    acc1 = _account("acc_1")
+    acc2 = _account("acc_2")
+    acc_paused = _account("acc_paused")
+    acc_paused.status = AccountStatus.PAUSED
+    acc_deactivated = _account("acc_deactivated")
+    acc_deactivated.status = AccountStatus.DEACTIVATED
+
+    accounts = [acc1, acc2, acc_paused, acc_deactivated]
+
+    class _Repo:
+        async def list_accounts(self) -> list[Account]:
+            return accounts
+
+        async def list_accounts_by_ids(self, ids: list[str]) -> list[Account]:
+            return [a for a in accounts if a.id in ids]
+
+    store = RateLimitResetCreditsStore()
+    await store.set(acc1.id, _snapshot([_credit("c1")], available_count=1))
+    await store.set(acc2.id, _snapshot([_credit("c2")], available_count=1))
+    await store.set(acc_paused.id, _snapshot([_credit("cp")], available_count=1))
+    monkeypatch.setattr(reset_credits_api, "get_rate_limit_reset_credits_store", lambda: store)
+
+    fake_context = SimpleNamespace(
+        repository=_Repo(),
+        service=SimpleNamespace(_auth_manager=None, _usage_updater=None, _encryptor=StubEncryptor()),
+    )
+
+    async def _mock_redeem(*args: Any, **kwargs: Any) -> Any:
+        return SimpleNamespace(
+            response=SimpleNamespace(code="reset", windows_reset=1),
+            available_count_before=1,
+            available_count_after=0,
+        )
+
+    monkeypatch.setattr(reset_credits_api, "_redeem_soonest_reset_credit", _mock_redeem)
+
+    res = await redeem_all_rate_limit_reset_credits(
+        _fake_request(),
+        payload=None,
+        principal=_ADMIN_PRINCIPAL,
+        context=cast(Any, fake_context),
+    )
+
+    assert res.total_accounts_attempted == 2
+    assert res.total_accounts_succeeded == 2
+    assert res.total_credits_redeemed == 2
+    assert len(res.results) == 2
+    assert {r.account_id for r in res.results} == {"acc_1", "acc_2"}

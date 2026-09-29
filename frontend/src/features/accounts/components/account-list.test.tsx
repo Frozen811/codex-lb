@@ -637,4 +637,36 @@ describe("AccountList", () => {
       ),
     ).not.toBeInTheDocument();
   });
+
+  it("renders Redeem all button when eligible credits exist and calls onOpenRedeemAll", async () => {
+    const user = userEvent.setup();
+    const onOpenRedeemAll = vi.fn();
+
+    render(
+      <AccountList
+        accounts={[
+          {
+            accountId: "acc-1",
+            email: "acc1@example.com",
+            displayName: "Account 1",
+            planType: "pro",
+            status: "active",
+            availableResetCredits: 2,
+            limitWarmupEnabled: false,
+            additionalQuotas: [],
+          },
+        ]}
+        selectedAccountId={null}
+        onSelect={() => {}}
+        onOpenImport={() => {}}
+        onOpenOauth={() => {}}
+        onOpenRedeemAll={onOpenRedeemAll}
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: /Redeem all/i });
+    expect(button).toBeInTheDocument();
+    await user.click(button);
+    expect(onOpenRedeemAll).toHaveBeenCalledTimes(1);
+  });
 });

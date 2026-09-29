@@ -78,6 +78,7 @@ ConsumeFn = Callable[..., Awaitable[ConsumeResetCreditResponse]]
 RefreshUsageFn = Callable[[Account], Awaitable[None]]
 ResolveRouteFn = Callable[[Account], Awaitable[ResolvedUpstreamRoute | None]]
 
+_NON_OBSERVABLE_STATUSES = frozenset({AccountStatus.DEACTIVATED})
 _NON_REDEEMABLE_STATUSES = frozenset({AccountStatus.PAUSED, AccountStatus.DEACTIVATED})
 
 _redeem_locks: dict[str, asyncio.Lock] = {}
@@ -106,6 +107,27 @@ class ConsumeResetCreditResponseSchema(DashboardModel):
     code: str | None = None
     windows_reset: int | None = None
     redeemed_at: datetime | None = None
+
+
+class AccountRedeemResultItem(DashboardModel):
+    account_id: str
+    email: str | None = None
+    alias: str | None = None
+    success: bool
+    credits_redeemed: int = 0
+    windows_reset: int | None = None
+    error: str | None = None
+
+
+class RedeemAllResetCreditsResponse(DashboardModel):
+    total_accounts_attempted: int
+    total_accounts_succeeded: int
+    total_credits_redeemed: int
+    results: list[AccountRedeemResultItem] = Field(default_factory=list)
+
+
+class RedeemAllResetCreditsRequest(DashboardModel):
+    account_ids: list[str] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,7 +162,7 @@ async def get_rate_limit_reset_credits(
         await store.invalidate(account_id)
         return None
     if (
-        account.status in _NON_REDEEMABLE_STATUSES
+        account.status in _NON_OBSERVABLE_STATUSES
         or account_reauth_credentials_are_unavailable(account, context.service._encryptor)
         or not account.chatgpt_account_id
     ):
@@ -211,6 +233,179 @@ async def consume_rate_limit_reset_credit(
         },
     )
     return outcome.response
+
+
+@router.post(
+    "/rate-limit-reset-credits/redeem-all",
+    response_model=RedeemAllResetCreditsResponse,
+)
+async def redeem_all_rate_limit_reset_credits(
+    request: Request,
+    payload: RedeemAllResetCreditsRequest | None = None,
+    principal: DashboardPrincipal = Depends(require_dashboard_permission(Permission.ACCOUNTS_WRITE)),
+    context: AccountsContext = Depends(get_accounts_context),
+) -> RedeemAllResetCreditsResponse:
+    if payload is not None and payload.account_ids is not None:
+        accounts = await context.repository.list_accounts_by_ids(payload.account_ids)
+    else:
+        accounts = await context.repository.list_accounts()
+
+    store = get_rate_limit_reset_credits_store()
+    results: list[AccountRedeemResultItem] = []
+    total_credits_redeemed = 0
+    total_accounts_succeeded = 0
+    total_accounts_attempted = 0
+
+    for account in accounts:
+        if account.delete_requested_at is not None:
+            if payload is not None and payload.account_ids is not None:
+                results.append(
+                    AccountRedeemResultItem(
+                        account_id=account.id,
+                        email=account.email,
+                        alias=account.alias,
+                        success=False,
+                        credits_redeemed=0,
+                        error="Account is marked for deletion",
+                    )
+                )
+            continue
+        if account.status in _NON_REDEEMABLE_STATUSES:
+            if payload is not None and payload.account_ids is not None:
+                results.append(
+                    AccountRedeemResultItem(
+                        account_id=account.id,
+                        email=account.email,
+                        alias=account.alias,
+                        success=False,
+                        credits_redeemed=0,
+                        error=f"Account is {account.status.value} and cannot redeem a reset credit",
+                    )
+                )
+            continue
+        if not account.chatgpt_account_id:
+            if payload is not None and payload.account_ids is not None:
+                results.append(
+                    AccountRedeemResultItem(
+                        account_id=account.id,
+                        email=account.email,
+                        alias=account.alias,
+                        success=False,
+                        credits_redeemed=0,
+                        error="Account has no ChatGPT account ID",
+                    )
+                )
+            continue
+        if account_reauth_credentials_are_unavailable(account, context.service._encryptor):
+            if payload is not None and payload.account_ids is not None:
+                results.append(
+                    AccountRedeemResultItem(
+                        account_id=account.id,
+                        email=account.email,
+                        alias=account.alias,
+                        success=False,
+                        credits_redeemed=0,
+                        error="Account credentials are unavailable",
+                    )
+                )
+            continue
+
+        snapshot = store.get(account.id)
+        if snapshot is None or snapshot.available_count <= 0:
+            if payload is not None and payload.account_ids is not None:
+                results.append(
+                    AccountRedeemResultItem(
+                        account_id=account.id,
+                        email=account.email,
+                        alias=account.alias,
+                        success=False,
+                        credits_redeemed=0,
+                        error="No available reset credit",
+                    )
+                )
+            continue
+
+        total_accounts_attempted += 1
+        account_credits_redeemed = 0
+        last_windows_reset: int | None = None
+        account_error: str | None = None
+
+        current_credits = [c for c in snapshot.credits if c.status == "available"]
+        initial_available = snapshot.available_count
+        for _ in range(initial_available):
+            try:
+                outcome = await _redeem_soonest_reset_credit(
+                    account=account,
+                    store=store,
+                    encryptor=context.service._encryptor,
+                    lock_session=getattr(context, "session", None),
+                    auth_manager=context.service._auth_manager,
+                    refresh_usage=_build_refresh_usage_callback(context),
+                    resolve_route=_resolve_reset_credit_route,
+                )
+                account_credits_redeemed += 1
+                last_windows_reset = outcome.response.windows_reset
+                if outcome.available_count_after <= 0:
+                    break
+
+                if current_credits:
+                    current_credits = current_credits[1:]
+                await store.set(
+                    account.id,
+                    RateLimitResetCreditsSnapshot(
+                        available_count=outcome.available_count_after,
+                        credits=current_credits
+                        or [
+                            ResetCreditItem(id=f"remaining-{i}", status="available")
+                            for i in range(outcome.available_count_after)
+                        ],
+                    ),
+                )
+            except Exception as exc:
+                account_error = str(exc)
+                logger.warning(
+                    "Bulk reset credit redeem failed for account_id=%s: %s",
+                    account.id,
+                    exc,
+                    exc_info=True,
+                )
+                break
+
+        succeeded = account_credits_redeemed > 0 or account_error is None
+        if account_credits_redeemed > 0:
+            total_accounts_succeeded += 1
+            total_credits_redeemed += account_credits_redeemed
+
+        results.append(
+            AccountRedeemResultItem(
+                account_id=account.id,
+                email=account.email,
+                alias=account.alias,
+                success=succeeded,
+                credits_redeemed=account_credits_redeemed,
+                windows_reset=last_windows_reset,
+                error=account_error,
+            )
+        )
+
+    AuditService.log_async(
+        "accounts_rate_limit_reset_credits_redeemed_all",
+        actor_ip=request.client.host if request.client else None,
+        actor=AuditActor.from_principal(principal),
+        target=AuditTarget("accounts", "all"),
+        details={
+            "total_accounts_attempted": total_accounts_attempted,
+            "total_accounts_succeeded": total_accounts_succeeded,
+            "total_credits_redeemed": total_credits_redeemed,
+        },
+    )
+
+    return RedeemAllResetCreditsResponse(
+        total_accounts_attempted=total_accounts_attempted,
+        total_accounts_succeeded=total_accounts_succeeded,
+        total_credits_redeemed=total_credits_redeemed,
+        results=results,
+    )
 
 
 async def _redeem_soonest_reset_credit(

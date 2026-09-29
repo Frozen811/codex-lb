@@ -81,10 +81,16 @@ The system SHALL store the most recent successful reset-credits response per acc
 
 #### Scenario: Dashboard read invalidates stale snapshots for ineligible accounts
 - **GIVEN** an account has a cached reset-credits snapshot
-- **AND** the account is now persisted as `paused`, `reauth_required`, `deactivated`, or no longer has a usable `chatgpt-account-id`
+- **AND** the account is now persisted as `reauth_required`, `deactivated`, or no longer has a usable `chatgpt-account-id`
 - **WHEN** the dashboard invokes `GET /api/accounts/{id}/rate-limit-reset-credits`
 - **THEN** the endpoint returns `null` without calling upstream
 - **AND** the cached snapshot for that account is invalidated
+
+#### Scenario: Paused account retains last observed reset credits
+- **GIVEN** a paused account has a usable ChatGPT account identity and a cached snapshot
+- **WHEN** the dashboard reads the cached endpoint or account summary
+- **THEN** the system SHALL return its cached count and expiry without invalidating it merely because the account is paused
+- **AND** the read SHALL NOT initiate upstream polling or redemption
 
 ### Requirement: Operators can redeem the soonest-expiring available credit
 
@@ -348,4 +354,55 @@ When exposing rate-limit reset credits to Codex Desktop and Codex CLI through `/
 - **THEN** the redemption is executed against upstream using account B's credentials
 - **AND** account B's cached reset credits snapshot is invalidated
 - **AND** usage is refreshed for both account B and account A
+
+### Requirement: Paused dashboard credit observation is independent of redemption
+
+The dashboard `GET /api/accounts/{account_id}/usage-reset-credits` SHALL allow an authorized account read for a paused account with usable credentials and ChatGPT account identity. It SHALL reuse existing credential refresh, upstream-401 retry, account visibility, and account-bound proxy routing controls. A successful read MUST NOT reactivate the account or consume a credit. Failed reads SHALL retain the existing dashboard error envelope rather than return a successful zero count. Deactivated account reads MUST remain rejected. Paused accounts MUST remain excluded from background reset-credit polling and manual and automatic redemption.
+
+#### Scenario: Inspect paused account without resuming it
+- **GIVEN** a paused account has usable credentials and a permitted upstream route
+- **WHEN** an authorized dashboard user requests its usage reset-credit count
+- **THEN** the system SHALL return the upstream available count
+- **AND** the account SHALL remain paused and no credit SHALL be consumed
+
+#### Scenario: Read failure does not masquerade as no credits
+- **GIVEN** a paused account's upstream usage request fails
+- **WHEN** the dashboard requests its reset-credit count
+- **THEN** the endpoint SHALL return the existing error envelope
+- **AND** it SHALL NOT return a successful zero count
+
+#### Scenario: Observation cannot bypass the account proxy route
+- **GIVEN** a paused account is bound to an unavailable proxy pool
+- **WHEN** the dashboard requests its reset-credit count
+- **THEN** the request MUST fail without direct upstream egress
+
+### Requirement: Bulk redemption of eligible reset credits across accounts
+
+The dashboard endpoint `POST /api/accounts/rate-limit-reset-credits/redeem-all` SHALL allow authorized operators to redeem all eligible banked reset credits across accounts in a single request. It SHALL accept an optional JSON payload with `account_ids: list[str]`. When `account_ids` is provided, redemption SHALL target only those specified accounts; when omitted or null, all eligible accounts in the repository SHALL be evaluated.
+
+An account SHALL be eligible for bulk redemption only if:
+- It is not marked for deletion (`delete_requested_at is None`),
+- Its status is not in `_NON_REDEEMABLE_STATUSES` (`status != paused` and `status != deactivated`),
+- It has a non-empty `chatgpt_account_id`,
+- Its credentials are valid or usable (not failing `account_reauth_credentials_are_unavailable`),
+- It has at least one banked reset credit (`available_count > 0` in its cached snapshot).
+
+The endpoint SHALL redeem each account's own credits only, reusing the existing per-account redeem helper, durable ledger, and per-account serialization lock (`serialize_reset_credit_redeem`). It SHALL NOT pool credits across accounts. It SHALL report per-account success/failure in the response without failing the entire batch when an individual account encounters an error.
+
+#### Scenario: Bulk redeem consumes all eligible credits across accounts
+- **GIVEN** account A has 1 eligible reset credit
+- **AND** account B has 2 eligible reset credits
+- **AND** account C is paused with 1 credit
+- **WHEN** the operator invokes `POST /api/accounts/rate-limit-reset-credits/redeem-all`
+- **THEN** 1 credit is redeemed for account A
+- **AND** 2 credits are redeemed for account B
+- **AND** account C is skipped
+- **AND** the response reports 3 total credits redeemed across 2 successful accounts
+
+#### Scenario: Bulk redeem handles partial failures gracefully
+- **GIVEN** account A has 1 eligible reset credit
+- **AND** account B has 1 credit but its upstream consume call fails
+- **WHEN** the operator invokes `POST /api/accounts/rate-limit-reset-credits/redeem-all`
+- **THEN** account A succeeds and account B reports failure with an error message
+- **AND** the overall response status is 200 with `total_accounts_succeeded: 1`
 

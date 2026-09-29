@@ -1216,6 +1216,14 @@ def discover_native_egress_client() -> SubprocessNativeEgressClient | None:
 
     executable = shutil.which(_NATIVE_EGRESS_EXECUTABLE)
     if executable is None:
+        for directory in os.environ.get("PATH", "").split(os.pathsep):
+            if not directory:
+                continue
+            candidate = Path(directory) / _NATIVE_EGRESS_EXECUTABLE
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                executable = str(candidate)
+                break
+    if executable is None:
         return None
     client = SubprocessNativeEgressClient(executable)
     if not client.available:

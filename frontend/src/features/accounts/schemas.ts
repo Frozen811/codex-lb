@@ -128,6 +128,23 @@ export const ConsumeRateLimitResetCreditResponseSchema = z.object({
   redeemedAt: z.iso.datetime({ offset: true }).nullable(),
 });
 
+export const AccountRedeemResultItemSchema = z.object({
+  accountId: z.string(),
+  email: z.string().nullable().optional(),
+  alias: z.string().nullable().optional(),
+  success: z.boolean(),
+  creditsRedeemed: z.number().int().default(0),
+  windowsReset: z.number().int().nullable().optional(),
+  error: z.string().nullable().optional(),
+});
+
+export const RedeemAllResetCreditsResponseSchema = z.object({
+  totalAccountsAttempted: z.number().int(),
+  totalAccountsSucceeded: z.number().int(),
+  totalCreditsRedeemed: z.number().int(),
+  results: z.array(AccountRedeemResultItemSchema).default([]),
+});
+
 export const AccountTrendsResponseSchema = z.object({
   accountId: z.string(),
   primary: z.array(UsageTrendPointSchema),
@@ -342,6 +359,8 @@ export type RateLimitResetCreditsSnapshot = z.infer<
 export type ConsumeRateLimitResetCreditResponse = z.infer<
   typeof ConsumeRateLimitResetCreditResponseSchema
 >;
+export type AccountRedeemResultItem = z.infer<typeof AccountRedeemResultItemSchema>;
+export type RedeemAllResetCreditsResponse = z.infer<typeof RedeemAllResetCreditsResponseSchema>;
 export type AccountRoutingPolicy = z.infer<typeof AccountRoutingPolicySchema>;
 export type AccountAliasResponse = z.infer<typeof AccountAliasResponseSchema>;
 export type AccountLimitWarmupStatus = z.infer<

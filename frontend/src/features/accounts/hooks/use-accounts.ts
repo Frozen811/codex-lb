@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import {
   consumeRateLimitResetCredit,
+  redeemAllRateLimitResetCredits,
   consumeAccountUsageResetCredit,
   deleteAccount,
   exportAccountAuth,
@@ -242,6 +243,27 @@ export function useAccountMutations() {
     },
   });
 
+  const redeemAllResetCreditsMutation = useMutation({
+    mutationFn: (payload?: { accountIds?: string[] }) =>
+      redeemAllRateLimitResetCredits(payload),
+    onSuccess: (data) => {
+      toast.success(
+        t("accounts.toasts.bulkRedeemSuccess", {
+          credits: data.totalCreditsRedeemed,
+          accounts: data.totalAccountsSucceeded,
+        }),
+      );
+      void queryClient.invalidateQueries({ queryKey: ["accounts", "list"] });
+      void queryClient.invalidateQueries({ queryKey: ["accounts", "trends"] });
+      void queryClient.invalidateQueries({ queryKey: ["accounts", "reset-credits"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard", "projections"] });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || t("accounts.toasts.bulkRedeemFailed"));
+    },
+  });
+
   return {
     importMutation,
     pauseMutation,
@@ -255,6 +277,7 @@ export function useAccountMutations() {
     routingPolicyMutation,
     updateMutation,
     resetCreditConsumeMutation,
+    redeemAllResetCreditsMutation,
   };
 }
 

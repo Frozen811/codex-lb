@@ -1489,7 +1489,7 @@
 
 > В данный раздел включены все **41 новых обращений** (Issues, Feature Requests, Pull Requests), поступивших в оригинальный репозиторий `Soju06/codex-lb` с момента последнего релиза (номера #2497–#2537), со всеми подробностями, описанием багов, ссылками на код, прикрепленными скриншотами и решениями.
 
-### [🟢 OPEN] [#2497: feat(accounts): show reset credits for paused accounts](https://github.com/Soju06/codex-lb/pull/2497)
+### [✅ RESOLVED / MERGED IN FORK] [#2497: feat(accounts): show reset credits for paused accounts](https://github.com/Soju06/codex-lb/pull/2497)
 
 - **Тип:** Pull Request
 - **Автор:** @codemoo
@@ -1735,7 +1735,7 @@ A stable
 
 ---
 
-### [🟢 OPEN] [#2501: bug: native HTTP upstream regressed in 1.25.0-beta.7 with native upstream request failures](https://github.com/Soju06/codex-lb/issues/2501)
+### [✅ RESOLVED / MERGED IN FORK] [#2501: bug: native HTTP upstream regressed in 1.25.0-beta.7 with native upstream request failures](https://github.com/Soju06/codex-lb/issues/2501)
 
 - **Тип:** Issue / Предложение
 - **Автор:** @milad2golnia
@@ -2361,7 +2361,7 @@ Refs #2128 (the Content-Type half; the `/v1` alias question on that issue is a s
 
 ---
 
-### [🟢 OPEN] [#2514: feat(accounts): redeem all eligible reset credits in one action](https://github.com/Soju06/codex-lb/issues/2514)
+### [✅ RESOLVED / MERGED IN FORK] [#2514: feat(accounts): redeem all eligible reset credits in one action](https://github.com/Soju06/codex-lb/issues/2514)
 
 - **Тип:** Issue / Предложение
 - **Автор:** @Soju06

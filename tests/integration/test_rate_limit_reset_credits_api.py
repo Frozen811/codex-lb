@@ -74,6 +74,38 @@ def _snapshot(credits: list[ResetCreditItem], available_count: int | None = None
 
 
 @pytest.mark.asyncio
+async def test_paused_account_cached_credits_remain_visible_without_upstream(async_client, monkeypatch) -> None:
+    account_id = await _import_test_account(
+        async_client,
+        email="paused-observation@example.com",
+        account_id="acc_paused_observation",
+    )
+    store = get_rate_limit_reset_credits_store()
+    await store.set(account_id, _snapshot([_credit("last-observed")], available_count=2))
+    assert (await async_client.post(f"/api/accounts/{account_id}/pause")).status_code == 200
+
+    async def should_not_fetch(*args: Any, **kwargs: Any) -> ResetCreditsResponse:
+        raise AssertionError("cached observation must not fetch or redeem upstream")
+
+    monkeypatch.setattr(reset_credits_api, "fetch_reset_credits", should_not_fetch)
+    monkeypatch.setattr(reset_credits_api, "consume_reset_credit", should_not_fetch)
+    response = await async_client.get(f"/api/accounts/{account_id}/rate-limit-reset-credits")
+    assert response.status_code == 200
+    assert response.json()["availableCount"] == 2
+    assert store.get(account_id) is not None
+
+    response = await async_client.get("/api/accounts")
+    account = next(row for row in response.json()["accounts"] if row["accountId"] == account_id)
+    assert account["status"] == "paused"
+    assert account["availableResetCredits"] == 2
+    assert account["resetCreditNearestExpiresAt"] is not None
+
+    for endpoint in ("usage-reset-credits", "rate-limit-reset-credits"):
+        response = await async_client.post(f"/api/accounts/{account_id}/{endpoint}/consume")
+        assert response.status_code == 409
+
+
+@pytest.mark.asyncio
 async def test_consume_paused_account_returns_409(async_client, monkeypatch) -> None:
     async def _should_not_fetch(*args: Any, **kwargs: Any) -> ResetCreditsResponse:
         raise AssertionError("paused account should not invoke upstream fetch")
@@ -249,3 +281,147 @@ async def test_get_returns_null_on_cache_miss_without_upstream_fetch(async_clien
     response = await async_client.get(f"/api/accounts/{account_id}/rate-limit-reset-credits")
     assert response.status_code == 200, response.text
     assert response.json() is None
+
+
+@pytest.mark.asyncio
+async def test_redeem_all_consumes_eligible_credits_across_accounts(
+    async_client,
+    monkeypatch,
+) -> None:
+    redeemed_credits: list[tuple[str, str]] = []
+
+    async def _fake_fetch(access_token: str, account_id: str | None, **kwargs: Any) -> ResetCreditsResponse:
+        # Return remaining credits based on what's been redeemed
+        account_credits = [c for a, c in redeemed_credits if a == account_id]
+        if account_id == "acc_bulk_1":
+            all_c = [_credit("c1-1")]
+        elif account_id == "acc_bulk_2":
+            all_c = [_credit("c2-1"), _credit("c2-2")]
+        else:
+            all_c = [_credit("c3-1")]
+        available = [c for c in all_c if c.id not in account_credits]
+        return _upstream_response(available, len(available))
+
+    async def _fake_consume(
+        access_token: str,
+        account_id: str | None,
+        credit_id: str,
+        redeem_request_id: str | None = None,
+        **kwargs: Any,
+    ) -> ConsumeResetCreditResponse:
+        redeemed_credits.append((account_id or "", credit_id))
+        return ConsumeResetCreditResponse.model_validate(
+            {
+                "code": "reset",
+                "credit": {
+                    "id": credit_id,
+                    "status": "redeemed",
+                    "redeemed_at": "2026-06-13T13:12:31Z",
+                },
+                "windows_reset": 1,
+            }
+        )
+
+    async def _noop_refresh(account) -> None:  # noqa: ANN001
+        return None
+
+    monkeypatch.setattr(reset_credits_api, "fetch_reset_credits", _fake_fetch)
+    monkeypatch.setattr(reset_credits_api, "consume_reset_credit", _fake_consume)
+    monkeypatch.setattr(reset_credits_api, "_build_refresh_usage_callback", lambda _context: _noop_refresh)
+
+    acc1 = await _import_test_account(async_client, email="bulk1@example.com", account_id="acc_bulk_1")
+    acc2 = await _import_test_account(async_client, email="bulk2@example.com", account_id="acc_bulk_2")
+    acc3 = await _import_test_account(async_client, email="bulk3@example.com", account_id="acc_bulk_3")
+
+    # Set acc3 to PAUSED
+    async with SessionLocal() as session:
+        await session.execute(
+            update(Account).where(Account.id == acc3).values(status=AccountStatus.PAUSED)
+        )
+        await session.commit()
+
+    store = get_rate_limit_reset_credits_store()
+    await store.set(acc1, _snapshot([_credit("c1-1")], available_count=1))
+    await store.set(acc2, _snapshot([_credit("c2-1"), _credit("c2-2")], available_count=2))
+    await store.set(acc3, _snapshot([_credit("c3-1")], available_count=1))
+
+    response = await async_client.post("/api/accounts/rate-limit-reset-credits/redeem-all")
+    assert response.status_code == 200, response.text
+    data = response.json()
+
+    assert data["totalAccountsAttempted"] == 2
+    assert data["totalAccountsSucceeded"] == 2
+    assert data["totalCreditsRedeemed"] == 3
+    result_ids = {r["accountId"] for r in data["results"]}
+    assert acc1 in result_ids
+    assert acc2 in result_ids
+    assert acc3 not in result_ids
+
+    # Store for acc1 and acc2 should be invalidated
+    assert store.get(acc1) is None
+    assert store.get(acc2) is None
+
+
+@pytest.mark.asyncio
+async def test_redeem_all_with_explicit_account_ids_and_partial_failure(
+    async_client,
+    monkeypatch,
+) -> None:
+    async def _fake_fetch(access_token: str, account_id: str | None, **kwargs: Any) -> ResetCreditsResponse:
+        return _upstream_response([_credit(f"{account_id}-c1")], 1)
+
+    async def _fake_consume(
+        access_token: str,
+        account_id: str | None,
+        credit_id: str,
+        redeem_request_id: str | None = None,
+        **kwargs: Any,
+    ) -> ConsumeResetCreditResponse:
+        if "fail" in str(account_id):
+            raise reset_credits_api.ConsumeResetCreditError("Upstream rejected consume", code="upstream_fail")
+        return ConsumeResetCreditResponse.model_validate(
+            {
+                "code": "reset",
+                "credit": {
+                    "id": credit_id,
+                    "status": "redeemed",
+                    "redeemed_at": "2026-06-13T13:12:31Z",
+                },
+                "windows_reset": 1,
+            }
+        )
+
+    async def _noop_refresh(account) -> None:  # noqa: ANN001
+        return None
+
+    monkeypatch.setattr(reset_credits_api, "fetch_reset_credits", _fake_fetch)
+    monkeypatch.setattr(reset_credits_api, "consume_reset_credit", _fake_consume)
+    monkeypatch.setattr(reset_credits_api, "_build_refresh_usage_callback", lambda _context: _noop_refresh)
+
+    acc_ok = await _import_test_account(async_client, email="bulkok@example.com", account_id="acc_bulk_ok")
+    acc_fail = await _import_test_account(async_client, email="bulkfail@example.com", account_id="acc_bulk_fail")
+
+    store = get_rate_limit_reset_credits_store()
+    await store.set(acc_ok, _snapshot([_credit("ok-c1")], available_count=1))
+    await store.set(acc_fail, _snapshot([_credit("fail-c1")], available_count=1))
+
+    response = await async_client.post(
+        "/api/accounts/rate-limit-reset-credits/redeem-all",
+        json={"accountIds": [acc_ok, acc_fail]},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+
+    assert data["totalAccountsAttempted"] == 2
+    assert data["totalAccountsSucceeded"] == 1
+    assert data["totalCreditsRedeemed"] == 1
+
+    ok_result = next(r for r in data["results"] if r["accountId"] == acc_ok)
+    fail_result = next(r for r in data["results"] if r["accountId"] == acc_fail)
+
+    assert ok_result["success"] is True
+    assert ok_result["creditsRedeemed"] == 1
+    assert fail_result["success"] is False
+    assert fail_result["creditsRedeemed"] == 0
+    assert fail_result["error"] is not None
+
