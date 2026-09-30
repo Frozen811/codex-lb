@@ -3803,6 +3803,8 @@ async def _stream_responses_with_session(
         responses_lite=_payload_uses_responses_lite(http_payload_dict),
     )
     websocket_payload_dict = dict(payload_dict)
+    if payload.parallel_tool_calls is not None:
+        websocket_payload_dict["parallel_tool_calls"] = payload.parallel_tool_calls
     _set_responses_lite_websocket_client_metadata(websocket_payload_dict)
     _finalize_responses_lite_reasoning_context(
         websocket_payload_dict,

@@ -835,7 +835,7 @@ async def test_client_leaving_after_the_stall_window_is_a_stall_abandonment(
 ) -> None:
     """(c) headers delayed past the evidence window, then the client leaves -> ``source_stall_abandoned``."""
 
-    monkeypatch.setattr(dispatch_module, "STALL_EVIDENCE_SECONDS", 0.3)
+    monkeypatch.setattr(dispatch_module, "STALL_EVIDENCE_SECONDS", 0.1)
     await _enable_api_key_auth(async_client)
     state = _StubState()
     delay_headers = asyncio.Event()
