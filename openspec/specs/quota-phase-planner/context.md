@@ -135,3 +135,11 @@ The routes use dashboard session authentication and write settings changes to th
 Decision responses include `details` parsed from the planner audit JSON when available. Current scheduler details
 include `target_peak_at`, `expected_gain`, `scenario_gain`, `expected_cost`, `net_score`, `warmup_cycle`,
 `scheduled_at`, `skip_reason`, `noop_reason`, and `unmet_demand`. Older rows may have `details = null`.
+
+## Working-hour validation
+
+Working-hour writes accept real ASCII 24-hour times from `00:00` through
+`23:59`. For example, `24:00` returns HTTP 422 without saving accompanying
+fields. Null and omitted fields keep the saved time. Legacy malformed values
+remain readable and use the existing scheduler defaults until corrected.
+

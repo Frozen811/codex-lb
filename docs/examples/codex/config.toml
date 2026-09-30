@@ -6,9 +6,13 @@ model_provider = "codex-lb"
 # Optional: make /status report the pool's limits instead of one local account.
 # chatgpt_base_url = "http://127.0.0.1:2455"
 
+[features]
+api_key_model_discovery = true
+
 [model_providers.codex-lb]
 name = "openai"
 base_url = "http://127.0.0.1:2455/backend-api/codex"
+model_catalog_url = "http://127.0.0.1:2455/backend-api/codex/models"
 wire_api = "responses"
 supports_websockets = true
 supports_standalone_web_search = true # requires codex-lb >= 1.22.0
@@ -24,6 +28,7 @@ requires_openai_auth = true
 [model_providers.codex-lb-daybreak-blue]
 name = "openai"
 base_url = "http://127.0.0.1:2455/backend-api/codex"
+model_catalog_url = "http://127.0.0.1:2455/backend-api/codex/models"
 wire_api = "responses"
 env_key = "CODEX_LB_API_KEY"
 supports_websockets = true

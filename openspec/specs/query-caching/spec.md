@@ -597,6 +597,12 @@ Every process-local cache that serves security, authorization, or routing decisi
 - **WHEN** another mutation commits and requests a bump for the same namespace before that write completes
 - **THEN** the new marker survives and is flushed on a subsequent cycle, incrementing the version beyond the in-flight bump
 
+#### Scenario: Successful immediate publication consumes earlier queued work
+- **GIVEN** a namespace has a pending marker before an immediate publication starts
+- **AND** no further mutation requests that namespace during the write
+- **WHEN** the immediate publication succeeds
+- **THEN** a subsequent poll cycle does not write an extra bump for the already-covered marker
+
 #### Scenario: Failed invalidation callback keeps the version unacknowledged and is retried
 - **GIVEN** a replica observes an `account_routing` version bump
 - **AND** its routing snapshot refresh fails with a transient database error

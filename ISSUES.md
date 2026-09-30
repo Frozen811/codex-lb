@@ -4,10 +4,10 @@
 > Включает все **108 открытых Issues**, предложения из **49 Дискуссий**, а также ссылки на связанные **Pull Requests** от комьюнити.
 
 ## Сводка данных
-- **Всего открытых Issues:** 109
+- **Всего открытых Issues:** 110
 - **Всего открытых Дискуссий:** 49
-- **Всего открытых PR (включая фиксы от комьюнити):** 101
-- **Решено в текущей ветке (проверено кодом и тестами):** **156 Issues / PRs**
+- **Всего открытых PR (включая фиксы от комьюнити):** 108
+- **Решено в текущей ветке (проверено кодом и тестами):** **164 Issues / PRs**
 - **Осталось в очереди:** **0 задач** (Все задачи и предложения из реестра решены на 100%!)
 
 ### Распределение проблем по категориям
@@ -23,7 +23,7 @@
 | [8. Dashboard, UI и Prometheus метрики](#dashboard_metrics_ui) | **7** | **9** (✅ #1870, PR #2489, PR #2464, PR #2377, #2492, #2444, #2443, #2426, #2418) | Неработающий автофилл TOTP в macOS/Chrome, искажение TPS из-за reasoning-токенов, неактуальные prometheus-метрики аккаунтов, UI баги, сброс лимитов API-ключей, видимость model sources в логах. |
 | [9. Предложения пользователей и фичи (Feature Requests / RFC)](#feature_requests) | **11** | **11** (✅ PR #2473 (#2413), PR #2448, #2304, #2343, #850, #631, #1979, #1959, #1636, #1595, #1307, #1080, #956, #620, #578) | Новые возможности, предлагаемые пользователями в Issues: диверсификация субагентов, бэкап/восстановление, Luna Reserve fallback, поддержка PAT, OIDC, drain persistence exposure, re-login lifecycle, fuzzing, pace-aware routing, health-tier dominance. |
 | [10. Прочие ошибки и регрессии](#other_bugs) | **7** | **7** (✅ #2029, PR #2255, #2291, #1924, #1707, #2410, #2314) | Остальные замеченные пользователями проблемы. |
-| [14. Новые обращения, баги и PR из апстрима (#2497–#2537)](#upstream_recent_2497_2537) | **41** | **41** | Все 41 новое обращение (Issues, предложения, фичи, PR) из оригинального репозитория Soju06/codex-lb со скриншотами, анализом и компонентами. |
+| [14. Новые обращения, баги и PR из апстрима (#2497–#2545)](#upstream_recent_2497_2545) | **49** | **49** | Все 49 новых обращений (Issues, предложения, фичи, PR) из оригинального репозитория Soju06/codex-lb со скриншотами, анализом и компонентами. |
 
 ---
 
@@ -3541,3 +3541,168 @@ The Images adapter selected `gpt-5.6-luna` as its internal Responses host. In th
 
 
 ---
+
+### [✅ РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ] [#2538: bug(http-bridge): upstream error responses silently swallowed as timeouts - pretty JSON parsing + Responses-Lite parallel_tool_calls](https://github.com/Soju06/codex-lb/issues/2538)
+
+- **Тип:** Issue / Баг-репорт
+- **Автор:** @SantaDiegoKairos
+- **Дата создания:** 2026-09-29
+- **Метки:** `bug, triage`
+- **Статус:** ✅ **РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ**
+
+**Описание проблемы и предложенные изменения:**
+В версиях beta.8/beta.9 длительные сессии с большим контекстом (gpt-6-astra, ~577k входных токенов) завершались ошибкой `upstream_request_timeout` через 121 секунду (два таймаута по 60 секунд) из-за двух независимых багов:
+1. `parallel_tool_calls=true` отправлялся на Responses-Lite upstream (который требует `parallel_tool_calls=false` и немедленно отвечал HTTP 400).
+2. Ошибка HTTP 400 от upstream возвращалась в формате pretty-printed JSON (с символами перевода строк). SSE-парсер WebSocket-моста заворачивал все сообщение в одну строку `data:`, и весь контент после первого переноса строки отбрасывался, из-за чего `type=error` никогда не считывался, запрос зависал до таймаута, а сессия помещалась в карантин на 600 секунд.
+
+**Решение в текущей ветке:**
+Проблема полностью решена:
+- PR #2530: парсинг многострочных WebSocket JSON сообщений в HTTP-мосте (корректная обработка pretty-printed JSON ответов upstream).
+- PR #2531: нормализация `parallel_tool_calls=false` при запросах к Responses-Lite upstream.
+- **Компоненты:** `app/core/openai/requests.py`, `app/modules/proxy/_service/http_bridge/upstream_events.py`
+- **Тесты:** `tests/unit/test_openai_requests.py`, `tests/unit/test_proxy_http_bridge.py`
+
+
+---
+
+### [✅ РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ] [#2539: fix(proxy): treat websocket close 1009 as terminal payload_too_large](https://github.com/Soju06/codex-lb/pull/2539)
+
+- **Тип:** Pull Request
+- **Автор:** @SantaDiegoKairos
+- **Дата создания:** 2026-09-29
+- **Метки:** `documentation, python`
+- **Статус:** ✅ **РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ**
+
+**Описание проблемы и предложенные изменения:**
+Закрытие upstream WebSocket с кодом RFC 6455 1009 (message too big) свидетельствует о превышении размера сообщения, однако HTTP-мост и прямой WebSocket-релей ранее ошибочно классифицировали его как транзиентный сетевой сбой. В результате происходил повторный replay того же самого заведомо невалидного запроса, что приводило к необоснованному штрафу здоровья аккаунта, его исключению из пула и маскировке реальной причины ошибкой `no_accounts`.
+
+**Решение в текущей ветке:**
+- Код закрытия 1009 классифицируется как терминальная ошибка `payload_too_large` (`is_upstream_message_too_big_close_code`).
+- Для не скоммиченного HTTP-ответа возвращается статус HTTP 400 (`invalid_request_error`, `param=input`).
+- Для скоммиченного стрима SSE или прямого WebSocket возвращается терминальный конверт ошибки без повторов и без дублирования вывода.
+- Исключены штраф здоровья аккаунта и его ротация; последующие валидные запросы могут использовать тот же аккаунт.
+- **Компоненты:** `app/core/clients/proxy_websocket.py`, `app/modules/proxy/_service/http_bridge/upstream_events.py`, `app/modules/proxy/_service/streaming/helpers.py`, `app/modules/proxy/_service/websocket/mixin.py`, `openspec/changes/classify-websocket-close-1009/`, `openspec/specs/responses-api-compat/spec.md`
+- **Тесты:** `tests/integration/test_direct_websocket_close_1009.py`, `tests/integration/test_http_bridge_close_1009.py`, `tests/unit/test_websocket_close_1009.py` (22 passed).
+
+
+---
+
+### [✅ РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ] [#2540: fix(quota): reject invalid planner clock times](https://github.com/Soju06/codex-lb/pull/2540)
+
+- **Тип:** Pull Request
+- **Автор:** @NikitaMGrimm
+- **Дата создания:** 2026-09-29
+- **Метки:** `documentation, python`
+- **Статус:** ✅ **РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ**
+
+**Описание проблемы и предложенные изменения:**
+API настроек планировщика квот (`PUT /api/quota-planner/settings`) принимал недопустимые значения времени рабочих часов (например, `24:00`, `12:60`, `99:99`), из-за чего планировщик переходил на дефолтные аварийные часы, а сохраненные в базе настройки не соответствовали реальному поведению.
+
+**Решение в текущей ветке:**
+- Добавлен строгий ASCII-паттерн `_CLOCK_TIME_PATTERN = r"^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"` для полей `working_hours_start` и `working_hours_end` в `QuotaPlannerSettingsUpdateRequest`.
+- Невалидные значения отклоняются со статусом HTTP 422 Unprocessable Entity без сохранения сопутствующих полей. Сохранена обратная совместимость с чтением legacy-настроек.
+- **Компоненты:** `app/modules/quota_planner/schemas.py`, `openspec/specs/quota-phase-planner/spec.md`, `openspec/specs/quota-phase-planner/context.md`, `openspec/changes/archive/2026-09-30-validate-quota-planner-clock-times/`
+- **Тесты:** `tests/unit/test_quota_planner.py`, `tests/integration/test_quota_planner_api.py` (73 passed).
+
+
+---
+
+### [✅ РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ] [#2541: fix(scim): enforce body limits while reading the stream](https://github.com/Soju06/codex-lb/pull/2541)
+
+- **Тип:** Pull Request
+- **Автор:** @NikitaMGrimm
+- **Дата создания:** 2026-09-29
+- **Метки:** `documentation, python`
+- **Статус:** ✅ **РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ**
+
+**Описание проблемы и предложенные изменения:**
+В модуле SCIM 2.0 лимит размера тела запроса (64 KiB) проверялся только после вычитывания всего тела в память через `await request.body()`. При отсутствии или подмене заголовка `Content-Length` это позволяло буферизовать в памяти до 32 MiB данных до срабатывания проверки.
+
+**Решение в текущей ветке:**
+- Потоковое чтение `request.stream()` с проверкой размера каждого чанка на лету (`len(raw) + len(chunk) > MAX_BODY_BYTES`).
+- При превышении 64 KiB чтение немедленно прерывается с ошибкой SCIM 413, не дожидаясь оставшихся байт и не создавая сущностей в БД.
+- **Компоненты:** `app/modules/scim/api.py`, `openspec/specs/http-ingress-limits/spec.md`, `openspec/changes/archive/2026-09-30-bound-scim-streamed-bodies/`
+- **Тесты:** `tests/unit/test_scim_body_limit.py`, `tests/integration/test_scim_v2_users.py` (51 passed).
+
+
+---
+
+### [✅ РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ] [#2542: test(shutdown): override the current account import permission](https://github.com/Soju06/codex-lb/pull/2542)
+
+- **Тип:** Pull Request
+- **Автор:** @NikitaMGrimm
+- **Дата создания:** 2026-09-29
+- **Метки:** `python`
+- **Статус:** ✅ **РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ**
+
+**Описание проблемы и предложенные изменения:**
+В тесте завершения работы lifespan (`test_otel.py`) использовалось устаревшее переопределение `require_dashboard_write_access` вместо актуальной системы гранулярных прав доступа `require_dashboard_permission(Permission.ACCOUNTS_WRITE)`. Это приводило к выполнению реальной проверки аутентификации против неинициализированной тестовой БД.
+
+**Решение в текущей ветке:**
+- Обновлено переопределение `dependency_overrides` на `require_dashboard_permission(Permission.ACCOUNTS_WRITE)`.
+- **Компоненты:** `tests/unit/test_otel.py`
+- **Тесты:** `tests/unit/test_otel.py` (49 passed).
+
+
+---
+
+### [✅ РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ] [#2543: docs(codex): enable API-key model discovery in setup examples](https://github.com/Soju06/codex-lb/pull/2543)
+
+- **Тип:** Pull Request
+- **Автор:** @mastertyko
+- **Дата создания:** 2026-09-30
+- **Метки:** `documentation, python`
+- **Статус:** ✅ **РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ**
+
+**Описание проблемы и предложенные изменения:**
+В Codex 0.159.0 клиент, настроенный с `env_key`, использует ветку API-key обнаружения моделей даже при `requires_openai_auth = true`. Без явного указания флага `features.api_key_model_discovery = true` и URL каталога `model_catalog_url`, Codex использовал свой зашитый список моделей и не отображал новые модели (например, `gpt-6.1-sol`), доступные в каталоге codex-lb.
+
+**Решение в текущей ветке:**
+- В примеры `docs/examples/codex/config.toml` и документацию `docs/client-setup.md` добавлены `[features] api_key_model_discovery = true` и явный `model_catalog_url = "http://127.0.0.1:2455/backend-api/codex/models"`.
+- Обновлен E2E-тест Daybreak profile для валидации запросов каталога `/models`.
+- **Компоненты:** `docs/client-setup.md`, `docs/examples/codex/config.toml`, `tests/e2e/test_codex_daybreak_profile.py`, `openspec/specs/model-catalog-compat/context.md`, `openspec/specs/model-catalog-compat/spec.md`, `openspec/changes/archive/2026-09-30-document-codex-api-key-model-discovery/`
+- **Тесты:** `tests/e2e/test_codex_daybreak_profile.py`.
+
+
+---
+
+### [✅ РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ] [#2544: chore(metadata): refresh model pricing and Codex version](https://github.com/Soju06/codex-lb/pull/2544)
+
+- **Тип:** Pull Request
+- **Автор:** @Soju06
+- **Дата создания:** 2026-09-30
+- **Метки:** `documentation, python`
+- **Статус:** ✅ **РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ**
+
+**Описание проблемы и предложенные изменения:**
+Обновление снапшотов цен и метаданных версий Codex CLI из внешних источников (models.dev, LiteLLM, npm).
+
+**Решение в текущей ветке:**
+- Обновлен `CODEX_VERSION = "0.159.2"` в `app/core/clients/codex_version_snapshot.py` и документации `docs/reference/settings.md`.
+- Добавлены тарифы модели `gpt-6.1-sol` в `app/core/usage/pricing_snapshot.json`.
+- **Компоненты:** `app/core/clients/codex_version_snapshot.py`, `app/core/usage/pricing_snapshot.json`, `docs/reference/settings.md`
+- **Тесты:** `tests/unit/test_pricing.py`, `tests/unit/test_pricing_catalog.py` (110 passed).
+
+
+---
+
+### [✅ РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ] [#2545: fix(cache): retain failed immediate invalidations](https://github.com/Soju06/codex-lb/pull/2545)
+
+- **Тип:** Pull Request
+- **Автор:** @mustafa0x
+- **Дата создания:** 2026-09-30
+- **Метки:** `documentation, python`
+- **Статус:** ✅ **РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ**
+
+**Описание проблемы и предложенные изменения:**
+При сбое записи прямой инвалидации кэша (`await bump(namespace)`) из-за локов БД или отмены задачи, сигнал об инвалидации мог быть утерян, оставляя другие реплики на устаревшем состоянии кэша (например, с отозванным API-ключом или паузой аккаунта) до истечения TTL кэша.
+
+**Решение в текущей ветке:**
+- В `app/core/cache/invalidation.py` метод `bump()` очищает маркер перед началом записи, а в блоке `finally:` надежно возвращает маркер в `_pending_bumps`, если запись не завершилась успешно (включая отмену при ретраях и backoff).
+- Очистка `_flush_pending_bumps()` исключает двойной сброс маркеров и изолирует сбои между пространствами имен.
+- **Компоненты:** `app/core/cache/invalidation.py`, `openspec/changes/retain-immediate-invalidation-bumps/`, `openspec/specs/query-caching/spec.md`, `openspec/specs/query-caching/context.md`
+- **Тесты:** `tests/unit/test_cache_invalidation_poller.py`, `tests/integration/test_cache_invalidation_bus.py` (52 passed).
+
+
+---
+

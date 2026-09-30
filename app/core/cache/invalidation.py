@@ -167,34 +167,35 @@ class CacheInvalidationPoller:
         self._pending_bumps.add(namespace)
 
     async def bump(self, namespace: str) -> bool:
-        """Persist one invalidation now and retain a queued retry until it lands.
+        """Publish now, retaining unfinished work for a later poll cycle.
 
-        This attempt covers every mutation queued before it starts, so consume
-        that marker before awaiting the write. A mutation arriving while the
-        write is in flight re-adds the marker and therefore still gets its own
-        later bump. Failed or interrupted writes are re-queued because their
-        commit outcome is either negative or ambiguous; a redundant retry is
-        safe, while losing the invalidation is not.
+        Consume only markers queued before this attempt. A request arriving
+        during the write re-adds the marker and must survive completion. An
+        interrupted write may already have committed; a redundant retry is
+        safe, while losing its invalidation is not.
         """
         self._pending_bumps.discard(namespace)
+        succeeded = False
         try:
             for attempt in range(_BUMP_RETRY_ATTEMPTS):
                 try:
                     await self._bump_once(namespace)
+                    succeeded = True
                     return True
                 except OperationalError:
                     if attempt == _BUMP_RETRY_ATTEMPTS - 1:
                         self._record_bump_failure(namespace)
-                        break
+                        return False
                     await asyncio.sleep(_BUMP_RETRY_BASE_SECONDS * (2**attempt))
                 except Exception:
                     self._record_bump_failure(namespace)
-                    break
-        except BaseException:
-            self.request_bump(namespace)
-            raise
-        self.request_bump(namespace)
-        return False
+                    return False
+            return False
+        finally:
+            # Synchronous cleanup also covers cancellation during retry backoff
+            # and session cleanup without swallowing the cancellation.
+            if not succeeded:
+                self.request_bump(namespace)
 
     async def bump_local(self, namespace: str) -> bool:
         """Bump a namespace this replica has ALREADY invalidated locally.
@@ -304,15 +305,15 @@ class CacheInvalidationPoller:
 
     async def _flush_pending_bumps(self) -> None:
         for namespace in sorted(self._pending_bumps):
-            self._pending_bumps.discard(namespace)
             try:
                 await self.bump(namespace)
             except asyncio.CancelledError:
-                # Defensive if bump() is ever replaced or refactored.
+                # Defensive if bump() is replaced: cancellation still retains
+                # the current namespace and propagates to the flush owner.
                 self.request_bump(namespace)
                 raise
             except Exception:
-                # Keep flushing other namespaces; this one remains retryable.
+                # An abnormal raise must not starve later namespaces.
                 self.request_bump(namespace)
                 logger.warning(
                     "cache_invalidation flush bump raised for namespace %s; kept pending",
