@@ -80,36 +80,46 @@ async def test_completion_separates_local_failure_from_durable_adoption(
     monkeypatch.setattr(service._durable_bridge, "lookup_retry_circuit", load)
     monkeypatch.setattr(service._durable_bridge, "clear_retry_circuit", settle)
     monkeypatch.setattr(service, "_register_http_bridge_previous_response_id", registration)
-    await complete(async_client, session_id="quarantine-provenance")
-    assert seeded and settled and registered
-    assert lookups >= 2
-    assert original is not None
-    entry = quarantine._http_bridge_quarantine_registry(service).get(original.key)
-    if outcome != "success":
-        assert entry is not None
-        assert quarantine._http_bridge_session_key_poison_quarantined(service, original.key) is True
-        return
-    if evidence == "none":
-        assert entry is None
-        assert original.quarantined is False
-    elif evidence == "first-strike":
-        assert entry is not None
-        assert entry.consecutive_eventless_timeouts == 1
-        assert entry.quarantined_until == 0.0
-        assert quarantine._http_bridge_session_key_poison_quarantined(service, original.key) is False
-        assert original.quarantined is False
-        quarantine._record_http_bridge_quarantine_eventless_timeout(service, original)
-        assert entry.consecutive_eventless_timeouts == 2
-        assert quarantine._http_bridge_session_key_quarantined(service, original.key) is True
-    else:
-        assert entry is not None
-        assert entry.reason == (
-            "retry_circuit_poisoned_anchor" if evidence == "poison" else "reattach_missing_response_created"
-        )
-        assert local_deadline == 700.0
-        assert entry.quarantined_until == 700.0
-        assert entry.poison_quarantined_until == (local_deadline if evidence == "poison" else 0.0)
-        assert original.quarantined is True
+    session_id = f"quarantine-provenance-{evidence}-{retry_load}-{outcome}"
+    try:
+        await complete(async_client, session_id=session_id)
+        assert seeded and settled and registered
+        assert lookups >= 2
+        assert original is not None
+        entry = quarantine._http_bridge_quarantine_registry(service).get(original.key)
+        if outcome != "success":
+            assert entry is not None
+            assert quarantine._http_bridge_session_key_poison_quarantined(service, original.key) is True
+            return
+        if evidence == "none":
+            assert entry is None
+            assert original.quarantined is False
+        elif evidence == "first-strike":
+            assert entry is not None
+            assert entry.consecutive_eventless_timeouts == 1
+            assert entry.quarantined_until == 0.0
+            assert quarantine._http_bridge_session_key_poison_quarantined(service, original.key) is False
+            assert original.quarantined is False
+            quarantine._record_http_bridge_quarantine_eventless_timeout(service, original)
+            assert entry.consecutive_eventless_timeouts == 2
+            assert quarantine._http_bridge_session_key_quarantined(service, original.key) is True
+        else:
+            assert entry is not None
+            assert entry.reason == (
+                "retry_circuit_poisoned_anchor" if evidence == "poison" else "reattach_missing_response_created"
+            )
+            assert local_deadline == 700.0
+            assert entry.quarantined_until == 700.0
+            assert entry.poison_quarantined_until == (local_deadline if evidence == "poison" else 0.0)
+            assert original.quarantined is True
+    finally:
+        if original is not None:
+            quarantine._http_bridge_quarantine_registry(service).pop(original.key, None)
+            await service._durable_bridge.clear_retry_circuit(
+                session_key_kind=original.key.affinity_kind,
+                session_key_value=original.key.affinity_key,
+                api_key_id=original.key.api_key_id,
+            )
 
 
 @pytest.mark.asyncio
@@ -151,8 +161,9 @@ async def test_predecessor_completion_preserves_replacement_evidence(
 
     monkeypatch.setattr(service, "_process_http_bridge_upstream_text", track)
     monkeypatch.setattr(service, "_register_http_bridge_previous_response_id", replace_owner)
+    session_id = f"quarantine-replacement-{evidence}-{registered_owner}"
     try:
-        await complete(async_client)
+        await complete(async_client, session_id=session_id)
         assert replacement is not None and original is not None
         entry = quarantine._http_bridge_quarantine_registry(service).get(replacement.key)
         assert entry is not None
@@ -167,3 +178,6 @@ async def test_predecessor_completion_preserves_replacement_evidence(
     finally:
         if original is not None:
             service._http_bridge_sessions[original.key] = original
+            quarantine._http_bridge_quarantine_registry(service).pop(original.key, None)
+        if replacement is not None:
+            quarantine._http_bridge_quarantine_registry(service).pop(replacement.key, None)
