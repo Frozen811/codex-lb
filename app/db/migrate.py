@@ -780,13 +780,20 @@ def _is_ignored_schema_drift(connection: Connection, diff: object) -> bool:
         return False
 
     if connection.dialect.name == "sqlite" and diff[0] == "modify_type" and len(diff) >= 7:
+        existing_str = str(diff[5]).upper()
+        metadata_str = str(diff[6]).upper()
+        # SQLite uses dynamic typing with INTEGER affinity for all integer widths.
+        # SQLAlchemy reflection reports INTEGER() for BigInteger/BIGINT columns.
+        if (
+            existing_str.startswith("INTEGER")
+            and metadata_str.startswith(("BIGINT", "BIGINTEGER", "INTEGER"))
+        ):
+            return True
         table_name = str(diff[2])
         column_name = str(diff[3])
-        if (table_name, column_name) not in _SQLITE_FLOAT_TYPE_COMPAT_COLUMNS:
-            return False
-        existing_type = diff[5]
-        metadata_type = diff[6]
-        return str(existing_type).upper() == "REAL" and str(metadata_type).upper() in {"FLOAT", "REAL"}
+        if (table_name, column_name) in _SQLITE_FLOAT_TYPE_COMPAT_COLUMNS:
+            return existing_str == "REAL" and metadata_str in {"FLOAT", "REAL"}
+        return False
 
     return False
 

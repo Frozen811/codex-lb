@@ -1,1 +1,2 @@
 frontend/bun.nix linguist-generated=true
+*.sh text eol=lf
