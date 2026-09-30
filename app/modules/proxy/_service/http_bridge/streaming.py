@@ -2529,6 +2529,7 @@ class _HTTPBridgeStreamingMixin:
                     "The account that owns this conversation is no longer available; "
                     "resend the full conversation history or start a new conversation.",
                 ),
+                local_pre_dispatch_refusal=True,
             )
 
         def owner_unavailable_allows_account_neutral_replay(exc: ProxyResponseError) -> bool:

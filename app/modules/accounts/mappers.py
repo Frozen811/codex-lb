@@ -124,6 +124,17 @@ def _account_to_summary(
     )
 
     if (
+        monthly_usage is None
+        and primary_usage is not None
+        and primary_usage.window_minutes is not None
+        and primary_usage.window_minutes >= 40_000
+        and secondary_usage is None
+        and plan_type != "free"
+    ):
+        monthly_usage = primary_usage
+        effective_primary_usage = None
+
+    if (
         monthly_usage is not None
         and usage_core.capacity_for_plan(plan_type, "monthly") is None
         and any(

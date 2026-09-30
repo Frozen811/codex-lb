@@ -1958,22 +1958,6 @@ class _WebSocketMixin:
                                                 request_state=request_state,
                                             )
                                         )
-                                        if request_state.previous_response_owner_account_id is None:
-                                            _record_continuity_fail_closed(
-                                                surface="websocket_source_route",
-                                                reason="owner_account_unavailable",
-                                                previous_response_id=request_state.previous_response_id,
-                                                session_id=request_state.session_id,
-                                                upstream_error_code="owner_lookup_miss",
-                                            )
-                                            raise ProxyResponseError(
-                                                502,
-                                                openai_error(
-                                                    "previous_response_owner_unavailable",
-                                                    "Previous response owner account is unavailable; retry later.",
-                                                    error_type="server_error",
-                                                ),
-                                            )
                                         request_state.preferred_account_id = resolve_required_account_id(
                                             ("existing bridge or file", request_state.preferred_account_id),
                                             (
@@ -2244,25 +2228,6 @@ class _WebSocketMixin:
                                 request_state=request_state,
                             )
                             request_state.previous_response_owner_account_id = previous_response_owner_account_id
-                        if (
-                            request_state.previous_response_id is not None
-                            and previous_response_owner_account_id is None
-                        ):
-                            _record_continuity_fail_closed(
-                                surface="websocket",
-                                reason="owner_account_unavailable",
-                                previous_response_id=request_state.previous_response_id,
-                                session_id=request_state.session_id,
-                                upstream_error_code="owner_lookup_miss",
-                            )
-                            raise ProxyResponseError(
-                                502,
-                                openai_error(
-                                    "previous_response_owner_unavailable",
-                                    "Previous response owner account is unavailable; retry later.",
-                                    error_type="server_error",
-                                ),
-                            )
                         request_state.preferred_account_id = resolve_required_account_id(
                             ("existing bridge or file", request_state.preferred_account_id),
                             ("turn state", turn_state_owner_account_id),
@@ -6074,18 +6039,9 @@ class _WebSocketMixin:
             and retry_error_code in _facade()._WEBSOCKET_TRANSPARENT_REPLAY_ERROR_CODES
             and request_state.previous_response_id is not None
             and request_state.preferred_account_id is not None
-            and event_type != "response.failed"
             and not retry_safe_previous_response_not_found
             and not retry_safe_owner_replay
         ):
-            await proxy._handle_stream_error(
-                account,
-                _websocket_event_upstream_error(event_type, payload),
-                retry_error_code,
-            )
-            event, payload, event_type, downstream_text = _rewrite_websocket_previous_response_owner_unavailable_event(
-                request_state=request_state,
-            )
             retry_error_code = None
         if retry_safe_owner_replay and not retry_safe_previous_response_not_found:
             safe_request_text = _prepare_websocket_request_state_for_account_switch(request_state)

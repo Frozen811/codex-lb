@@ -322,7 +322,9 @@ def is_previous_response_not_found_public_shape(
 ) -> bool:
     """Match stale-anchor errors for masking without authorizing replay."""
 
-    if code in {PREVIOUS_RESPONSE_NOT_FOUND_CODE, "bridge_previous_response_not_found"}:
+    if code == PREVIOUS_RESPONSE_NOT_FOUND_CODE:
+        return True
+    if code == "bridge_previous_response_not_found" and message == PREVIOUS_RESPONSE_STREAM_INCOMPLETE_MESSAGE:
         return True
     param_state = coerce_error_param(param)
     if (
