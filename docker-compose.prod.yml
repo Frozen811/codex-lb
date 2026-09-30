@@ -17,7 +17,8 @@ services:
       dockerfile: Dockerfile
     image: ghcr.io/frozen811/codex-lb:1.25.1
     env_file:
-      - .env.local
+      - path: .env.local
+        required: false
     ports:
       - "2455:2455"
       - "1455:1455"
