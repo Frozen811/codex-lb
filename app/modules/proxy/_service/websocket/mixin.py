@@ -1968,9 +1968,8 @@ class _WebSocketMixin:
                                                 request_state.api_key or api_key,
                                                 raw_model=request_state.raw_source_model,
                                             )
-                                        if (
-                                            request_state.previous_response_owner_account_id is None
-                                            and not bool(request_state.is_source_owned)
+                                        if request_state.previous_response_owner_account_id is None and not bool(
+                                            request_state.is_source_owned
                                         ):
                                             _record_continuity_fail_closed(
                                                 surface="websocket_source_route",
@@ -6084,10 +6083,8 @@ class _WebSocketMixin:
                 _websocket_event_upstream_error(event_type, payload),
                 retry_error_code,
             )
-            event, payload, event_type, downstream_text = (
-                _rewrite_websocket_previous_response_owner_unavailable_event(
-                    request_state=request_state,
-                )
+            event, payload, event_type, downstream_text = _rewrite_websocket_previous_response_owner_unavailable_event(
+                request_state=request_state,
             )
             retry_error_code = None
         if retry_safe_owner_replay and not retry_safe_previous_response_not_found:
