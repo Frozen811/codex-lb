@@ -5259,6 +5259,11 @@ def test_backend_responses_websocket_forwards_previous_response_id(app_instance,
     monkeypatch.setattr(proxy_api_module, "validate_proxy_api_key_authorization", allow_proxy_api_key)
     monkeypatch.setattr(proxy_module, "get_settings_cache", lambda: _FakeSettingsCache())
     monkeypatch.setattr(proxy_module.ProxyService, "_connect_proxy_websocket", fake_connect_proxy_websocket)
+    monkeypatch.setattr(
+        proxy_module.ProxyService,
+        "_resolve_websocket_previous_response_owner",
+        AsyncMock(return_value="acct_ws_prev"),
+    )
     monkeypatch.setattr(proxy_module.ProxyService, "_write_request_log", fake_write_request_log)
 
     request_payload = {
@@ -5895,6 +5900,11 @@ def test_v1_responses_websocket_forwards_previous_response_id(app_instance, monk
     monkeypatch.setattr(proxy_api_module, "validate_proxy_api_key_authorization", allow_proxy_api_key)
     monkeypatch.setattr(proxy_module, "get_settings_cache", lambda: _FakeSettingsCache())
     monkeypatch.setattr(proxy_module.ProxyService, "_connect_proxy_websocket", fake_connect_proxy_websocket)
+    monkeypatch.setattr(
+        proxy_module.ProxyService,
+        "_resolve_websocket_previous_response_owner",
+        AsyncMock(return_value="acct_ws_v1_prev"),
+    )
     monkeypatch.setattr(proxy_module.ProxyService, "_write_request_log", fake_write_request_log)
 
     request_payload = {
@@ -10683,9 +10693,9 @@ def test_backend_responses_websocket_previous_response_usage_limit_returns_upstr
             websocket.send_text(json.dumps(request_payload))
             event = json.loads(websocket.receive_text())
 
-    assert event["type"] == "error"
-    assert event["error"]["code"] == "usage_limit_reached"
-    assert event["error"]["message"] == "The usage limit has been reached"
+    assert event["type"] == "response.failed"
+    assert event["response"]["error"]["code"] == "upstream_unavailable"
+    assert event["response"]["error"]["message"] == "Previous response owner account is unavailable; retry later."
     assert connect_models == ["gpt-5.1"]
     assert captured_preferred_accounts == ["acct_ws_proxy_owner"]
     assert handled_error_codes == ["usage_limit_reached"]

@@ -854,7 +854,6 @@ class ResponsesCompactRequest(BaseModel):
 _UNSUPPORTED_UPSTREAM_FIELDS = {
     "max_output_tokens",
     "metadata",
-    "parallel_tool_calls",
     "prompt_cache_retention",
     "safety_identifier",
     "temperature",

@@ -1958,6 +1958,35 @@ class _WebSocketMixin:
                                                 request_state=request_state,
                                             )
                                         )
+                                        if (
+                                            request_state.previous_response_owner_account_id is None
+                                            and request_state.is_source_owned is None
+                                            and not request_state.source_route_excluded
+                                        ):
+                                            request_state.is_source_owned = await responses_model_is_source_owned(
+                                                request_state.model,
+                                                request_state.api_key or api_key,
+                                                raw_model=request_state.raw_source_model,
+                                            )
+                                        if (
+                                            request_state.previous_response_owner_account_id is None
+                                            and not bool(request_state.is_source_owned)
+                                        ):
+                                            _record_continuity_fail_closed(
+                                                surface="websocket_source_route",
+                                                reason="owner_account_unavailable",
+                                                previous_response_id=request_state.previous_response_id,
+                                                session_id=request_state.session_id,
+                                                upstream_error_code="owner_lookup_miss",
+                                            )
+                                            raise ProxyResponseError(
+                                                502,
+                                                openai_error(
+                                                    "previous_response_owner_unavailable",
+                                                    "Previous response owner account is unavailable; retry later.",
+                                                    error_type="server_error",
+                                                ),
+                                            )
                                         request_state.preferred_account_id = resolve_required_account_id(
                                             ("existing bridge or file", request_state.preferred_account_id),
                                             (
@@ -1990,14 +2019,18 @@ class _WebSocketMixin:
                                     # resolved above, may bypass this guard.
                                     and request_state.previous_response_owner_account_id is None
                                     and request_state.preferred_account_id is None
-                                    and await responses_model_is_source_owned(
-                                        request_state.model,
-                                        request_state.api_key or api_key,
-                                        # The raw client model, before enforcement
-                                        # normalized aliases: an alias-only source
-                                        # (``gpt-5-high``) is invisible in the
-                                        # normalized ``request_state.model``.
-                                        raw_model=request_state.raw_source_model,
+                                    and (
+                                        request_state.is_source_owned
+                                        if request_state.is_source_owned is not None
+                                        else await responses_model_is_source_owned(
+                                            request_state.model,
+                                            request_state.api_key or api_key,
+                                            # The raw client model, before enforcement
+                                            # normalized aliases: an alias-only source
+                                            # (``gpt-5-high``) is invisible in the
+                                            # normalized ``request_state.model``.
+                                            raw_model=request_state.raw_source_model,
+                                        )
                                     )
                                 ):
                                     # Socket reuse bypasses connect-time selection, so a later
@@ -3741,13 +3774,17 @@ class _WebSocketMixin:
             not request_state.source_route_excluded
             and request_state.previous_response_owner_account_id is None
             and request_state.preferred_account_id is None
-            and await responses_model_is_source_owned(
-                model,
-                request_api_key,
-                # ``model`` is the session loop's post-enforcement
-                # ``request_state.model``; the raw client alias captured at
-                # preparation is what an alias-only source is registered under.
-                raw_model=request_state.raw_source_model,
+            and (
+                request_state.is_source_owned
+                if request_state.is_source_owned is not None
+                else await responses_model_is_source_owned(
+                    model,
+                    request_api_key,
+                    # ``model`` is the session loop's post-enforcement
+                    # ``request_state.model``; the raw client alias captured at
+                    # preparation is what an alias-only source is registered under.
+                    raw_model=request_state.raw_source_model,
+                )
             )
         ):
             source_model = request_state.raw_source_model or model
@@ -6042,6 +6079,16 @@ class _WebSocketMixin:
             and not retry_safe_previous_response_not_found
             and not retry_safe_owner_replay
         ):
+            await proxy._handle_stream_error(
+                account,
+                _websocket_event_upstream_error(event_type, payload),
+                retry_error_code,
+            )
+            event, payload, event_type, downstream_text = (
+                _rewrite_websocket_previous_response_owner_unavailable_event(
+                    request_state=request_state,
+                )
+            )
             retry_error_code = None
         if retry_safe_owner_replay and not retry_safe_previous_response_not_found:
             safe_request_text = _prepare_websocket_request_state_for_account_switch(request_state)
