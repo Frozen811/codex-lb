@@ -203,13 +203,13 @@ Upgrade to the latest wheel release:
 
 **pip:**
 ```bash
-pip install --upgrade https://github.com/Frozen811/codex-lb/releases/download/v1.25.0-hardened.1/codex_lb-1.25.1-py3-none-any.whl
+pip install --upgrade https://github.com/Frozen811/codex-lb/releases/download/v1.25.0-hardened.2/codex_lb-1.25.1-py3-none-any.whl
 codex-lb
 ```
 
 **uv:**
 ```bash
-uv pip install --upgrade https://github.com/Frozen811/codex-lb/releases/download/v1.25.0-hardened.1/codex_lb-1.25.1-py3-none-any.whl
+uv tool install --reinstall https://github.com/Frozen811/codex-lb/releases/download/v1.25.0-hardened.2/codex_lb-1.25.1-py3-none-any.whl
 codex-lb
 ```
 

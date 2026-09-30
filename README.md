@@ -11,9 +11,9 @@ python oauth sqlalchemy dashboard load-balancer openai rate-limit api-proxy code
 ![codex-lb](docs/screenshots/banner.jpg)
 
 <p align="left">
-  <a href="https://github.com/Frozen811/codex-lb/releases/tag/v1.25.0-hardened.1"><img src="https://img.shields.io/badge/Hardened%20Release-v1.25.0--hardened.1-blue" alt="Release" /></a>
-  <a href="https://github.com/Frozen811/codex-lb/tree/main/openspec"><img src="https://img.shields.io/badge/OpenSpec-67%2F67%20Passed-success" alt="OpenSpec" /></a>
-  <a href="https://github.com/Frozen811/codex-lb/blob/main/ISSUES.md"><img src="https://img.shields.io/badge/Tracked%20Issues-164%2F164%20Resolved-brightgreen" alt="Issues" /></a>
+  <a href="https://github.com/Frozen811/codex-lb/releases/tag/v1.25.0-hardened.2"><img src="https://img.shields.io/badge/Hardened%20Release-v1.25.0--hardened.2-blue" alt="Release" /></a>
+  <a href="https://github.com/Frozen811/codex-lb/tree/main/openspec"><img src="https://img.shields.io/badge/OpenSpec-68%2F68%20Passed-success" alt="OpenSpec" /></a>
+  <a href="https://github.com/Frozen811/codex-lb/blob/main/ISSUES.md"><img src="https://img.shields.io/badge/Tracked%20Issues-165%2F165%20Resolved-brightgreen" alt="Issues" /></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License" /></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-%3E%3D3.13-blue.svg" alt="Python" /></a>
 </p>
