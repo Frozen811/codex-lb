@@ -112,10 +112,28 @@ def _make_postgres_repo(monkeypatch: pytest.MonkeyPatch) -> tuple[AccountsReposi
     return repo, recorded
 
 
-def _make_result(value: str | None = "acc") -> MagicMock:
+def _make_result(value: Any = "acc", stmt: Any = None) -> MagicMock:
     result = MagicMock()
     result.scalar_one_or_none.return_value = value
-    result.one_or_none.return_value = (AccountStatus.ACTIVE, None) if value is not None else None
+    num_cols = None
+    if stmt is not None:
+        if hasattr(stmt, "selected_columns"):
+            num_cols = len(stmt.selected_columns)
+        elif hasattr(stmt, "_returning") and stmt._returning:
+            num_cols = len(stmt._returning)
+    if num_cols == 4:
+        result.one_or_none.return_value = (b"access", AccountStatus.ACTIVE, None, None)
+    elif num_cols is not None:
+        result.one_or_none.return_value = (AccountStatus.ACTIVE, None) if value is not None else None
+    elif isinstance(value, AccountStatus):
+        result.one_or_none.return_value = (AccountStatus.ACTIVE, None) if value is not None else None
+    else:
+        result.one_or_none.side_effect = [
+            (b"access", AccountStatus.ACTIVE, None, None),
+            (AccountStatus.ACTIVE, None),
+            (AccountStatus.ACTIVE, None),
+            (AccountStatus.ACTIVE, None),
+        ]
     return result
 
 
@@ -152,7 +170,6 @@ async def test_postgresql_upstream_identity_lock_failure_rolls_back_and_propagat
 async def test_account_update_status_uses_sqlite_writer_section(monkeypatch):
     session = MagicMock()
     session.execute = AsyncMock(return_value=_make_result(AccountStatus.RATE_LIMITED))
-    session.scalar = AsyncMock(return_value=AccountStatus.ACTIVE)
     session.commit = AsyncMock()
     repo = AccountsRepository(session)
     order: list[str] = []
@@ -164,26 +181,20 @@ async def test_account_update_status_uses_sqlite_writer_section(monkeypatch):
         order.append("lock-exit")
 
     async def execute_with_order(*args, **kwargs):
-        del args, kwargs
+        stmt = args[0] if args else None
         order.append("execute")
-        return _make_result(AccountStatus.RATE_LIMITED)
-
-    async def scalar_with_order(*args, **kwargs):
-        del args, kwargs
-        order.append("scalar")
-        return AccountStatus.ACTIVE
+        return _make_result(AccountStatus.RATE_LIMITED, stmt)
 
     async def commit_with_order():
         order.append("commit")
 
     monkeypatch.setattr(repository_module, "sqlite_writer_section", fake_writer_section)
     session.execute.side_effect = execute_with_order
-    session.scalar.side_effect = scalar_with_order
     session.commit.side_effect = commit_with_order
 
     assert await repo.update_status("acc", AccountStatus.RATE_LIMITED) is True
 
-    assert order == ["lock-enter", "scalar", "execute", "execute", "commit", "lock-exit"]
+    assert order == ["lock-enter", "execute", "execute", "execute", "commit", "lock-exit"]
 
 
 @pytest.mark.asyncio
@@ -201,19 +212,14 @@ async def test_account_rotate_tokens_uses_sqlite_writer_section(monkeypatch):
         order.append("lock-exit")
 
     async def execute_with_order(*args, **kwargs):
-        del args, kwargs
+        stmt = args[0] if args else None
         order.append("execute")
-        return _make_result("acc")
+        return _make_result("acc", stmt)
 
     async def commit_with_order():
         order.append("commit")
 
-    async def scalar_with_order(*args, **kwargs):
-        order.append("scalar")
-        return b"access"
-
     monkeypatch.setattr(repository_module, "sqlite_writer_section", fake_writer_section)
-    session.scalar = AsyncMock(side_effect=scalar_with_order)
     session.execute.side_effect = execute_with_order
     session.commit.side_effect = commit_with_order
 
@@ -226,7 +232,7 @@ async def test_account_rotate_tokens_uses_sqlite_writer_section(monkeypatch):
         expected_refresh_token_encrypted=b"refresh",
     )
 
-    assert order == ["lock-enter", "scalar", "execute", "commit", "lock-exit"]
+    assert order == ["lock-enter", "execute", "execute", "commit", "lock-exit"]
 
 
 @pytest.mark.asyncio
@@ -410,7 +416,7 @@ async def test_local_identity_writers_lock_old_and_incoming_membership(monkeypat
     repo.session.scalar = AsyncMock(return_value=b"access")
     existing = _stub_account("acc_writer", "writer@example.com", chatgpt_id="chatgpt_old")
     membership_locks: list[tuple[str, str | None]] = []
-    cast(Any, repo.session.execute).return_value = _make_result("acc_writer")
+    cast(Any, repo.session.execute).side_effect = lambda stmt=None, *args, **kwargs: _make_result("acc_writer", stmt)
 
     async def fake_membership_lock(account_id: str, incoming: str | None) -> Account:
         membership_locks.append((account_id, incoming))

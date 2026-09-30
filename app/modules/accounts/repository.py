@@ -1470,6 +1470,14 @@ class AccountsRepository:
                     # excludes the account after its credentials are repaired.
                     status=case((repaired_rejection, repaired_status), else_=Account.status),
                     deactivation_reason=case((repaired_rejection, None), else_=Account.deactivation_reason),
+                    reset_at=case(
+                        (and_(repaired_rejection, Account.reset_at <= time.time()), None),
+                        else_=Account.reset_at,
+                    ),
+                    blocked_at=case(
+                        (and_(repaired_rejection, Account.reset_at <= time.time()), None),
+                        else_=Account.blocked_at,
+                    ),
                 )
             )
             if is_mysql(self._session):

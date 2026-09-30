@@ -3968,7 +3968,7 @@ def _http_bridge_runtime_config(
             dashboard_settings.http_responses_session_bridge_prompt_cache_idle_ttl_seconds,
         ),
         gateway_safe_mode=dashboard_settings.http_responses_session_bridge_gateway_safe_mode,
-        inline_images_enabled=app_settings.http_responses_session_bridge_inline_images_enabled,
+        inline_images_enabled=bool(getattr(app_settings, "http_responses_session_bridge_inline_images_enabled", True)),
     )
 
 

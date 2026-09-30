@@ -8,7 +8,12 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.unit
+from app.core.metrics.prometheus import PROMETHEUS_AVAILABLE
+
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.skipif(not PROMETHEUS_AVAILABLE, reason="prometheus_client is not installed"),
+]
 
 _WORKER = """
 import os

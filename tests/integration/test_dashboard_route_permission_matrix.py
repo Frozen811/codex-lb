@@ -141,6 +141,7 @@ STEP_UP_GATED: frozenset[tuple[str, str]] = frozenset(
         # retired predecessors that ``unified-auth-export`` forbids serving; only the
         # single export route below exists.
         ("POST", "/api/accounts/{account_id}/export/auth"),
+        ("POST", "/api/accounts/backup/export"),
         ("POST", "/api/firewall/ips"),
         ("DELETE", "/api/firewall/ips/{ip_address}"),
         ("POST", "/api/settings/upstream-proxy/endpoints"),

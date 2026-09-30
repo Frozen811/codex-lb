@@ -6231,13 +6231,15 @@ async def test_list_due_manual_runs_limit_counts_only_eligible_rows(db_setup):
                 started_at=scheduled_for + timedelta(seconds=10),
                 account_id=account.id,
             )
-        assert in_flight is not None
-        assert placeholder is not None
+            assert in_flight is not None
+            assert placeholder is not None
 
-        due = await automations_repository.list_due_manual_runs(now_utc=scheduled_for + timedelta(seconds=200), limit=1)
-        assert [due_run.id for due_run in due] == [placeholder.id]
+            due = await automations_repository.list_due_manual_runs(
+                now_utc=scheduled_for + timedelta(seconds=200), limit=1
+            )
+            assert [due_run.id for due_run in due] == [placeholder.id]
 
-        past_window = await automations_repository.list_due_manual_runs(
-            now_utc=scheduled_for + timedelta(seconds=700), limit=1
-        )
-        assert [due_run.id for due_run in past_window] == [in_flight.id]
+            past_window = await automations_repository.list_due_manual_runs(
+                now_utc=scheduled_for + timedelta(seconds=700), limit=1
+            )
+            assert [due_run.id for due_run in past_window] == [in_flight.id]

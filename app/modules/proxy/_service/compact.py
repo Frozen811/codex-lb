@@ -924,30 +924,22 @@ class _CompactMixin:
                 surface="compact",
             )
             if previous_response_preferred_account_id is None:
-                selection_inputs = await proxy._load_balancer._load_selection_inputs(
-                    model=payload.model,
-                    additional_limit_name=None,
-                    account_ids=api_key.assigned_account_ids
-                    if api_key is not None and api_key.account_assignment_scope_enabled
-                    else None,
+                message = "Previous response owner account is unavailable; retry later."
+                _record_continuity_fail_closed(
+                    surface="compact",
+                    reason="owner_account_unavailable",
+                    previous_response_id=previous_response_id,
+                    session_id=previous_response_lookup_session_id,
+                    upstream_error_code="owner_lookup_miss",
                 )
-                if len(selection_inputs.accounts) != 1:
-                    message = "Previous response owner account is unavailable; retry later."
-                    _record_continuity_fail_closed(
-                        surface="compact",
-                        reason="owner_account_unavailable",
-                        previous_response_id=previous_response_id,
-                        session_id=previous_response_lookup_session_id,
-                        upstream_error_code="owner_lookup_miss",
-                    )
-                    raise ProxyResponseError(
-                        502,
-                        openai_error(
-                            "previous_response_owner_unavailable",
-                            message,
-                            error_type="server_error",
-                        ),
-                    )
+                raise ProxyResponseError(
+                    502,
+                    openai_error(
+                        "previous_response_owner_unavailable",
+                        message,
+                        error_type="server_error",
+                    ),
+                )
 
         # File pins are account ownership, not locality. Resolved turn-state or
         # previous-response owners above still take precedence (and conflicts

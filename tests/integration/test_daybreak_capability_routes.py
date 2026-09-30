@@ -84,6 +84,10 @@ _FAIL_CLOSED_HTTP_ROUTES: frozenset[_RouteKey] = frozenset(
         ("HTTP", "POST", "/v1/reset-credit"),
         ("HTTP", "POST", "/api/codex/rate-limit-reset-credits/consume/"),
         ("HTTP", "POST", "/api/codex/rate-limit-reset-credits/consume"),
+        ("HTTP", "POST", "/backend-api/wham/rate-limit-reset-credits/consume"),
+        ("HTTP", "POST", "/backend-api/wham/rate-limit-reset-credits/consume/"),
+        ("HTTP", "POST", "/backend-api/codex/rate-limit-reset-credits/consume"),
+        ("HTTP", "POST", "/backend-api/codex/rate-limit-reset-credits/consume/"),
     }
 )
 _LOCAL_AUTHENTICATED_ROUTES: frozenset[_RouteKey] = frozenset(
@@ -96,6 +100,10 @@ _LOCAL_AUTHENTICATED_ROUTES: frozenset[_RouteKey] = frozenset(
         ("HTTP", "GET", "/v1/reset-credit"),
         ("HTTP", "GET", "/api/codex/usage/"),
         ("HTTP", "GET", "/api/codex/usage"),
+        ("HTTP", "GET", "/backend-api/wham/usage"),
+        ("HTTP", "GET", "/backend-api/wham/usage/"),
+        ("HTTP", "GET", "/backend-api/codex/usage"),
+        ("HTTP", "GET", "/backend-api/codex/usage/"),
     }
 )
 _RESPONSES_WEBSOCKET_ROUTES: frozenset[_RouteKey] = frozenset(

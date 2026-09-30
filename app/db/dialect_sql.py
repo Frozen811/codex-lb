@@ -13,7 +13,9 @@ from typing import Any, Mapping, Sequence
 
 from sqlalchemy import Integer, String, case, func, select
 from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.sql import elements
 from sqlalchemy.sql.functions import FunctionElement
+from sqlalchemy.sql.selectable import Values
 
 MYSQL_DIALECT_NAMES = frozenset({"mysql", "mariadb"})
 
@@ -357,3 +359,57 @@ def _compile_greatest_sqlite(element, compiler, **kw):  # type: ignore[no-untype
 @compiles(least)
 def _compile_least_sqlite(element, compiler, **kw):  # type: ignore[no-untyped-def]
     return f"min({_render_arguments(element, compiler, kw)})"
+
+
+@compiles(Values, "mysql")
+@compiles(Values, "mariadb")
+def _compile_values_mysql(
+    element: Values,
+    compiler: Any,
+    asfrom: bool = False,
+    from_linter: Any = None,
+    visiting_cte: Any = None,
+    **kw: Any,
+) -> str:
+    """Render table value constructors with MySQL's mandatory ROW keyword."""
+    kw.setdefault("literal_binds", element.literal_binds)
+    tuples = ", ".join(
+        "ROW"
+        + compiler.process(
+            elements.Tuple(types=element._column_types, *elem).self_group(),
+            **kw,
+        )
+        for chunk in element._data
+        for elem in chunk
+    )
+    v = f"VALUES {tuples}"
+
+    if element._unnamed:
+        name = None
+    elif isinstance(element.name, elements._truncated_label):
+        name = compiler._truncated_identifier("values", element.name)
+    else:
+        name = element.name
+
+    lateral = "LATERAL " if element._is_lateral else ""
+
+    if asfrom:
+        if from_linter:
+            from_linter.froms[element._de_clone()] = name if name is not None else "(unnamed VALUES element)"
+
+        if visiting_cte is not None and visiting_cte.element is element:
+            if element._is_lateral:
+                from sqlalchemy import exc
+
+                raise exc.CompileError("Can't use a LATERAL VALUES expression inside of a CTE")
+        elif name:
+            kw["include_table"] = False
+            v = "%s(%s)%s (%s)" % (
+                lateral,
+                v,
+                compiler.get_render_as_alias_suffix(compiler.preparer.quote(name)),
+                (", ".join(c._compiler_dispatch(compiler, **kw) for c in element.columns)),
+            )
+        else:
+            v = "%s(%s)" % (lateral, v)
+    return v

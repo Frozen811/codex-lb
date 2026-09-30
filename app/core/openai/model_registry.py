@@ -651,6 +651,8 @@ class ModelRegistry:
         normalized_service_tier = canonical_service_tier_value(service_tier)
         if not normalized_slug or not normalized_service_tier:
             return None
+        if normalized_slug in self._quota_only_bootstrap_slugs:
+            return None
 
         tier_accounts = self._snapshot.model_service_tier_accounts.get(
             slug

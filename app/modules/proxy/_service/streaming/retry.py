@@ -3292,26 +3292,11 @@ class _StreamingRetryMixin:
                                     if refresh_exc.code == "token_revoked":
                                         last_permanent_refresh_error = refresh_exc
                                         last_permanent_refresh_error_account_id = account.id
-                                    can_recover_auth = not (
-                                        settlement.downstream_visible
-                                        or require_preferred_account
-                                        or preferred_account_id is not None
-                                        or file_preferred_account_id is not None
-                                        or turn_state_owner_account_id is not None
-                                        or affinity.codex_session_source == "turn_state"
-                                        or routing_strategy == "single_account"
-                                        or attempt >= max_attempts - 1
-                                    )
-                                    if can_recover_auth and await _recover_rejected_auth(
+                                    if await _recover_rejected_auth(
                                         account, exc, rejected_credentials=rejected_credentials
                                     ):
                                         continue
-                                    last_transient_exc = exc
-                                    await proxy._load_balancer.mark_permanent_failure(account, refresh_exc.code)
-                                    await _release_tracked_stream_lease(current_account_lease)
-                                    current_account_lease = None
-                                    excluded_account_ids.add(account.id)
-                                    continue
+                                    break
                                 if is_transient_refresh_contention(refresh_exc):
                                     # Transient CROSS-REPLICA refresh contention on
                                     # the post-401 forced refresh: benign claim

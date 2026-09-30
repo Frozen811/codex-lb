@@ -42,11 +42,10 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     event,
-    text,
 )
 from sqlalchemy.dialects.mysql import VARBINARY, VARCHAR
+from sqlalchemy.dialects.mysql.base import MySQLDDLCompiler
 from sqlalchemy.ext.compiler import compiles
-from sqlalchemy.schema import DefaultClause
 
 from app.db.dialect_sql import MYSQL_BINARY_COLLATION, MYSQL_DIALECT_NAMES, is_mysql
 
@@ -294,40 +293,35 @@ def _size_strings_for_mysql(target: Any, connection: Any, **_: Any) -> None:
             if column_type.length is None and column.name in keyed_names:
                 column.type = VARBINARY(MYSQL_KEYED_BINARY_LENGTH)
             continue
-        if isinstance(column_type, DateTime) and column.server_default is not None:
-            # The port renders DateTime as ``DATETIME(6)``, and MySQL rejects a
-            # second-precision default on a precision-6 column (error 1067:
-            # ``DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP`` is invalid).
-            # The models and historical migrations spell the default without
-            # the precision, so rewrite it here -- which also gives MySQL the
-            # microsecond ``now()`` default PostgreSQL has all along.
-            rendered = str(getattr(column.server_default, "arg", column.server_default)).strip().lower()
-            if "current_timestamp" in rendered or rendered.startswith("now("):
-                column.server_default = DefaultClause(text("CURRENT_TIMESTAMP(6)"))
-            continue
         if isinstance(column_type, Text):
             override = MYSQL_TEXT_AS_VARCHAR.get(column.name.lower())
             if override is not None:
                 column.type = VARCHAR(override)
             elif column.name in keyed_names:
                 column.type = VARCHAR(mysql_string_length_for(column.name))
-            # MySQL rejects ``DEFAULT 'x'`` on TEXT columns but accepts the
-            # expression form ``DEFAULT ('x')`` (8.0.13+); the models declare
-            # the literal form, so rewrite it for this dialect.
-            default = column.server_default
-            literal = getattr(default, "arg", None)
-            if literal is not None:
-                if isinstance(literal, str):
-                    escaped = literal.replace("\\", "\\\\").replace("'", "''")
-                    column.server_default = DefaultClause(text(f"('{escaped}')"))
-                else:
-                    rendered = str(literal)
-                    if not rendered.lstrip().startswith("("):
-                        column.server_default = DefaultClause(text(f"({rendered})"))
             continue
         if isinstance(column_type, String) and column_type.length is None:
             column.type = VARCHAR(mysql_string_length_for(column.name))
 
+
+_orig_mysql_get_column_default_string = MySQLDDLCompiler.get_column_default_string
+
+
+def _mysql_get_column_default_string(self: Any, column: Any) -> Any:
+    val = _orig_mysql_get_column_default_string(self, column)
+    if val is not None:
+        if isinstance(column.type, DateTime):
+            v_lower = val.strip().lower()
+            if "current_timestamp" in v_lower or v_lower.startswith("now(") or v_lower == "now()":
+                return "CURRENT_TIMESTAMP(6)"
+        elif isinstance(column.type, Text):
+            stripped = val.strip()
+            if not stripped.startswith("("):
+                return f"({stripped})"
+    return val
+
+
+MySQLDDLCompiler.get_column_default_string = _mysql_get_column_default_string
 
 event.listen(Table, "before_create", _size_strings_for_mysql)
 

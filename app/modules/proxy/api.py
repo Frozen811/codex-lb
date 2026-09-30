@@ -1164,10 +1164,14 @@ async def codex_alpha_history_v2(
     return await _codex_control_proxy(request, f"alpha/history/v2/{clean_op}", context, api_key)
 
 
-@router.api_route("/alpha/notes/v2/{operation}", methods=["GET", "POST"])
-@router.api_route("/alpha/notes/v2/{operation}/", methods=["GET", "POST"], include_in_schema=False)
-@v1_router.api_route("/alpha/notes/v2/{operation}", methods=["GET", "POST"])
-@v1_router.api_route("/alpha/notes/v2/{operation}/", methods=["GET", "POST"], include_in_schema=False)
+@router.get("/alpha/notes/v2/{operation}")
+@router.get("/alpha/notes/v2/{operation}/", include_in_schema=False)
+@router.post("/alpha/notes/v2/{operation}")
+@router.post("/alpha/notes/v2/{operation}/", include_in_schema=False)
+@v1_router.get("/alpha/notes/v2/{operation}")
+@v1_router.get("/alpha/notes/v2/{operation}/", include_in_schema=False)
+@v1_router.post("/alpha/notes/v2/{operation}")
+@v1_router.post("/alpha/notes/v2/{operation}/", include_in_schema=False)
 async def codex_alpha_notes_v2(
     operation: str,
     request: Request,
@@ -3565,6 +3569,7 @@ async def _proxy_images_generation_request(
             outcome="rate_limited",
             started_at=started_at,
         )
+        return usage_share_denial
     if payload.n > 1 and not payload.stream:
         from app.modules.proxy.images_fanout import execute_image_fanout
 
@@ -3921,6 +3926,7 @@ async def _proxy_images_edit_request(
             outcome="rate_limited",
             started_at=started_at,
         )
+        return usage_share_denial
     if payload.n > 1 and not payload.stream:
         from app.modules.proxy.images_fanout import execute_image_fanout
 

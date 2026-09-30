@@ -1818,6 +1818,7 @@ async def test_v1_responses_previous_response_not_found_without_http_bridge_retu
     files = {"auth_json": ("auth.json", json.dumps(auth_json), "application/json")}
     response = await async_client.post("/api/accounts/import", files=files)
     assert response.status_code == 200
+    internal_account_id = generate_unique_account_id(raw_account_id, email)
 
     async def fake_stream(payload, headers, access_token, account_id, base_url=None, raise_for_status=False, **kwargs):
         del payload, headers, access_token, account_id, base_url, raise_for_status, kwargs
@@ -1831,7 +1832,12 @@ async def test_v1_responses_previous_response_not_found_without_http_bridge_retu
         if False:
             yield ""
 
+    async def fake_resolve_owner(self, *, previous_response_id, api_key, session_id, surface):
+        del self, previous_response_id, api_key, session_id, surface
+        return internal_account_id
+
     monkeypatch.setattr(proxy_module, "core_stream_responses", fake_stream)
+    monkeypatch.setattr(proxy_module.ProxyService, "_resolve_websocket_previous_response_owner", fake_resolve_owner)
 
     response = await async_client.post(
         "/v1/responses",

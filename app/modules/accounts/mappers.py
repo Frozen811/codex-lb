@@ -118,20 +118,6 @@ def _account_to_summary(
     # quota, but not who it belongs to upstream.
     email = mask_email(account.email) if redact_identity else account.email
     auth_status = _build_auth_status(account, encryptor) if include_auth else None
-    has_active_secondary = (
-        secondary_usage is not None
-        and secondary_usage.used_percent is not None
-        and usage_core.is_weekly_window_minutes(secondary_usage.window_minutes)
-    )
-    if (
-        monthly_usage is None
-        and primary_usage is not None
-        and usage_core.is_monthly_window_minutes(primary_usage.window_minutes)
-        and not has_active_secondary
-    ):
-        monthly_usage = primary_usage
-        primary_usage = None
-
     effective_primary_usage, effective_secondary_usage = _effective_usage_windows(
         primary_usage,
         secondary_usage,
