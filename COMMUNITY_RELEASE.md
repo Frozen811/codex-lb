@@ -171,3 +171,63 @@ model_provider = "codex-lb"
 base_url = "http://127.0.0.1:2455/backend-api/codex"
 wire_specification = "responses"
 ```
+
+---
+
+<a id="how-to-update"></a>
+## 🔄 How to Update / Инструкция по обновлению
+
+### 1. If using Git clone (Windows / Linux / macOS)
+Pull the latest commits from the fork and start as usual (dependencies and DB migrations are applied automatically):
+
+**Windows (PowerShell / Command Prompt):**
+```powershell
+git pull origin main
+.\run.ps1
+# or double-click start.bat
+```
+
+**Linux / macOS / Server:**
+```bash
+git pull origin main
+uv sync --frozen
+./run.sh
+# or if running as a systemd service:
+sudo systemctl restart codex-lb
+```
+
+---
+
+### 2. If using pip or uv pre-built wheel
+Upgrade to the latest wheel release:
+
+**pip:**
+```bash
+pip install --upgrade https://github.com/Frozen811/codex-lb/releases/download/v1.25.0-hardened.1/codex_lb-1.25.1-py3-none-any.whl
+codex-lb
+```
+
+**uv:**
+```bash
+uv pip install --upgrade https://github.com/Frozen811/codex-lb/releases/download/v1.25.0-hardened.1/codex_lb-1.25.1-py3-none-any.whl
+codex-lb
+```
+
+---
+
+### 3. If running via uvx (zero install)
+Use `--refresh` to invalidate the cached build and fetch the newest HEAD commit:
+```bash
+uvx --refresh --from git+https://github.com/Frozen811/codex-lb.git codex-lb
+```
+
+---
+
+### 4. If using Docker / Docker Compose
+Pull the repository update and rebuild the container (your database and settings in volumes are preserved):
+```bash
+git pull origin main
+docker compose down
+docker compose up -d --build
+```
+

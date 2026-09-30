@@ -11,9 +11,9 @@ python oauth sqlalchemy dashboard load-balancer openai rate-limit api-proxy code
 ![codex-lb](docs/screenshots/banner.jpg)
 
 <p align="left">
-  <a href="https://github.com/Frozen811/codex-lb/releases/tag/v1.25.1"><img src="https://img.shields.io/badge/Hardened%20Release-v1.25.1-blue" alt="Release" /></a>
+  <a href="https://github.com/Frozen811/codex-lb/releases/tag/v1.25.0-hardened.1"><img src="https://img.shields.io/badge/Hardened%20Release-v1.25.0--hardened.1-blue" alt="Release" /></a>
   <a href="https://github.com/Frozen811/codex-lb/tree/main/openspec"><img src="https://img.shields.io/badge/OpenSpec-67%2F67%20Passed-success" alt="OpenSpec" /></a>
-  <a href="https://github.com/Frozen811/codex-lb/blob/main/ISSUES.md"><img src="https://img.shields.io/badge/Tracked%20Issues-156%2F156%20Resolved-brightgreen" alt="Issues" /></a>
+  <a href="https://github.com/Frozen811/codex-lb/blob/main/ISSUES.md"><img src="https://img.shields.io/badge/Tracked%20Issues-164%2F164%20Resolved-brightgreen" alt="Issues" /></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License" /></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-%3E%3D3.13-blue.svg" alt="Python" /></a>
 </p>
@@ -26,7 +26,7 @@ Load balancer for ChatGPT accounts. Pool multiple accounts, track usage, manage 
 
 > [!NOTE]
 > ### 🛡️ Hardened Community Edition (by [@Frozen811](https://github.com/Frozen811))
-> This production-ready fork includes **100% verified in-code fixes for all 156 tracked issues and 101 community PRs**:
+> This production-ready fork includes **100% verified in-code fixes for all 164 tracked issues and community PRs**:
 > - Fixes HTTP/2 Native Egress cascade stream drops and stream-cap exhaustion ([#2471](https://github.com/Soju06/codex-lb/issues/2471), [#2470](https://github.com/Soju06/codex-lb/issues/2470))
 > - Delivers terminal error frames on injected anchor rejection ([#2493](https://github.com/Soju06/codex-lb/issues/2493))
 > - Integrates Replay Relocation engine and account-neutral transcript rebuilding ([PR #2428](https://github.com/Soju06/codex-lb/pull/2428))
@@ -36,7 +36,7 @@ Load balancer for ChatGPT accounts. Pool multiple accounts, track usage, manage 
 > - Enables bounded inline image streaming and upstream transport label recording ([#2508](https://github.com/Soju06/codex-lb/issues/2508), [#2534](https://github.com/Soju06/codex-lb/issues/2534), [#2503](https://github.com/Soju06/codex-lb/issues/2503))
 > - Fully bumped and verified frontend and Python dependency stacks ([PR #2509](https://github.com/Soju06/codex-lb/pull/2509), [PR #2533](https://github.com/Soju06/codex-lb/pull/2533))
 > 
-> Detailed release notes: [COMMUNITY_RELEASE.md](COMMUNITY_RELEASE.md) | Official release: [v1.25.1](https://github.com/Frozen811/codex-lb/releases/tag/v1.25.1)
+> Release notes: [COMMUNITY_RELEASE.md](COMMUNITY_RELEASE.md) | Release: [v1.25.0-hardened.1](https://github.com/Frozen811/codex-lb/releases/tag/v1.25.0-hardened.1) | How to update: [Update Guide](COMMUNITY_RELEASE.md#how-to-update)
 > 
 > ### 🚀 Quick Install & Run:
 > 
@@ -56,7 +56,7 @@ Load balancer for ChatGPT accounts. Pool multiple accounts, track usage, manage 
 > uvx --from git+https://github.com/Frozen811/codex-lb.git codex-lb
 > 
 > # Or install pre-built wheel directly:
-> pip install https://github.com/Frozen811/codex-lb/releases/download/v1.25.1/codex_lb-1.25.1-py3-none-any.whl
+> pip install https://github.com/Frozen811/codex-lb/releases/download/v1.25.0-hardened.1/codex_lb-1.25.1-py3-none-any.whl
 > codex-lb
 > ```
 > 
