@@ -46,6 +46,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.mysql import VARBINARY, VARCHAR
 from sqlalchemy.dialects.mysql.base import MySQLDDLCompiler
 from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.util import immutabledict
 
 from app.db.dialect_sql import MYSQL_BINARY_COLLATION, MYSQL_DIALECT_NAMES, is_mysql
 
@@ -238,6 +239,21 @@ def _has_dialect_variant(column_type: Any) -> bool:
     return bool(mapping)
 
 
+def _with_mysql_variant(column_type: Any, variant: Any) -> Any:
+    """Return a copy of column_type with MySQL and MariaDB variants mapped.
+
+    Preserves the base type and any non-MySQL variants so SQLite and
+    PostgreSQL DDL compilation does not inherit MySQL-specific types or
+    collations (such as ``utf8mb4_bin``) in the process-global metadata.
+    """
+    new_type = column_type.copy()
+    existing = dict(getattr(column_type, "_variant_mapping", None) or {})
+    for dialect_name in MYSQL_DIALECT_NAMES:
+        existing[dialect_name] = variant
+    new_type._variant_mapping = immutabledict(existing)
+    return new_type
+
+
 def _mysql_dimension_length(column_type: Any, column_name: str) -> int:
     """Length for a rollup dimension column rewritten to a binary collation."""
     length = getattr(column_type, "length", None)
@@ -278,9 +294,12 @@ def _size_strings_for_mysql(target: Any, connection: Any, **_: Any) -> None:
             # Rollup dimension columns carry the DIMENSION_SENTINEL encoding;
             # a byte-exact collation keeps the sentinel and the empty string
             # distinct (utf8mb4_0900_ai_ci treats U+001F as ignorable).
-            column.type = VARCHAR(
-                _mysql_dimension_length(column_type, column.name),
-                collation=MYSQL_BINARY_COLLATION,
+            column.type = _with_mysql_variant(
+                column_type,
+                VARCHAR(
+                    _mysql_dimension_length(column_type, column.name),
+                    collation=MYSQL_BINARY_COLLATION,
+                ),
             )
             continue
         if _has_dialect_variant(column_type):
@@ -291,17 +310,17 @@ def _size_strings_for_mysql(target: Any, connection: Any, **_: Any) -> None:
             # that carry a key are hashes (sha256 = 32 bytes measured), so a
             # VARBINARY is both correct and indexable.
             if column_type.length is None and column.name in keyed_names:
-                column.type = VARBINARY(MYSQL_KEYED_BINARY_LENGTH)
+                column.type = _with_mysql_variant(column_type, VARBINARY(MYSQL_KEYED_BINARY_LENGTH))
             continue
         if isinstance(column_type, Text):
             override = MYSQL_TEXT_AS_VARCHAR.get(column.name.lower())
             if override is not None:
-                column.type = VARCHAR(override)
+                column.type = _with_mysql_variant(column_type, VARCHAR(override))
             elif column.name in keyed_names:
-                column.type = VARCHAR(mysql_string_length_for(column.name))
+                column.type = _with_mysql_variant(column_type, VARCHAR(mysql_string_length_for(column.name)))
             continue
         if isinstance(column_type, String) and column_type.length is None:
-            column.type = VARCHAR(mysql_string_length_for(column.name))
+            column.type = _with_mysql_variant(column_type, VARCHAR(mysql_string_length_for(column.name)))
 
 
 _orig_mysql_get_column_default_string = MySQLDDLCompiler.get_column_default_string

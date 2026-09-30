@@ -28,3 +28,32 @@ def test_account_codex_installation_id_has_uuid_default() -> None:
     generated = new_codex_installation_id()
     assert isinstance(generated, str)
     assert str(uuid.UUID(generated)) == generated
+
+
+def test_mysql_type_sizing_does_not_pollute_sqlite_ddl() -> None:
+    from unittest.mock import MagicMock
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.dialects import mysql, sqlite
+    from sqlalchemy.schema import CreateTable
+
+    from app.db.models import Base
+    from app.db.mysql_compat import _size_strings_for_mysql
+
+    mock_conn = MagicMock()
+    mock_conn.dialect.name = "mysql"
+
+    for table in Base.metadata.tables.values():
+        _size_strings_for_mysql(table, mock_conn)
+
+    # SQLite must successfully create all tables without 'no such collation sequence: utf8mb4_bin'
+    sqlite_engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(sqlite_engine)
+
+    # Sentinel columns must keep utf8mb4_bin on MySQL while omitting it on SQLite
+    rollups_table = Base.metadata.tables["request_usage_hourly_rollups"]
+    mysql_ddl = str(CreateTable(rollups_table).compile(dialect=mysql.dialect()))
+    sqlite_ddl = str(CreateTable(rollups_table).compile(dialect=sqlite.dialect()))
+
+    assert "utf8mb4_bin" in mysql_ddl
+    assert "utf8mb4_bin" not in sqlite_ddl
