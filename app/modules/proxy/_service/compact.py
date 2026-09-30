@@ -931,7 +931,11 @@ class _CompactMixin:
                     if api_key is not None and api_key.account_assignment_scope_enabled
                     else None,
                 )
-                if len(selection_inputs.accounts) != 1:
+                if (
+                    api_key is None
+                    or not api_key.account_assignment_scope_enabled
+                    or len(selection_inputs.accounts) != 1
+                ):
                     message = "Previous response owner account is unavailable; retry later."
                     _record_continuity_fail_closed(
                         surface="compact",
