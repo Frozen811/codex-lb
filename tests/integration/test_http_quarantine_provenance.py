@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 
 import pytest
 
@@ -80,7 +81,7 @@ async def test_completion_separates_local_failure_from_durable_adoption(
     monkeypatch.setattr(service._durable_bridge, "lookup_retry_circuit", load)
     monkeypatch.setattr(service._durable_bridge, "clear_retry_circuit", settle)
     monkeypatch.setattr(service, "_register_http_bridge_previous_response_id", registration)
-    session_id = f"quarantine-provenance-{evidence}-{retry_load}-{outcome}"
+    session_id = f"quarantine-provenance-{evidence}-{retry_load}-{outcome}-{uuid.uuid4().hex[:8]}"
     try:
         await complete(async_client, session_id=session_id)
         assert seeded and settled and registered
@@ -161,7 +162,7 @@ async def test_predecessor_completion_preserves_replacement_evidence(
 
     monkeypatch.setattr(service, "_process_http_bridge_upstream_text", track)
     monkeypatch.setattr(service, "_register_http_bridge_previous_response_id", replace_owner)
-    session_id = f"quarantine-replacement-{evidence}-{registered_owner}"
+    session_id = f"quarantine-replacement-{evidence}-{registered_owner}-{uuid.uuid4().hex[:8]}"
     try:
         await complete(async_client, session_id=session_id)
         assert replacement is not None and original is not None
