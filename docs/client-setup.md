@@ -36,6 +36,7 @@ supports_standalone_web_search = true # requires codex-lb >= 1.22.0
 requires_openai_auth = true # required for codex app
 ```
 
+<<<<<<< HEAD
 ### Model discovery in the Codex app
 
 Verified with Codex 0.159.0: a provider configured with `env_key` uses API-key
@@ -80,28 +81,46 @@ model_provider = "openai"
 base_url = "http://127.0.0.1:2455/backend-api/codex"
 ```
 
-### Pool-wide limits in `/status`
+### Showing pooled quota in Codex
 
-Codex reads the limits it shows in `/status` and the footer from
-`chatgpt_base_url`, which defaults to `https://chatgpt.com/backend-api` — so it
-reports the single account in your local `auth.json`, not the pool codex-lb is
-rotating through. Point it at codex-lb's origin (top level, before any
-`[section]` header):
+By default Codex reads its rate-limit display from `chatgpt.com` for the
+account it is logged in as, so it shows that one account's quota even while
+codex-lb routes its requests to a different account. To show the pool's
+combined quota instead, point Codex's ChatGPT backend at codex-lb. Add this at
+the top level of `~/.codex/config.toml`, not under `[model_providers.codex-lb]`:
 
 ```toml
-chatgpt_base_url = "http://127.0.0.1:2455"
+chatgpt_base_url = "http://127.0.0.1:2455/backend-api"
 ```
 
-Codex then calls `GET /api/codex/usage`, which answers with the
-capacity-weighted usage of every active account, so the 5h and weekly bars
-describe the pool. The plugin catalog Codex fetches from the same base
-(`/ps/plugins/*`, `/plugins/featured`) is forwarded upstream with pool
-credentials, so browsing and installing from the remote marketplace keeps
-working. The `Account:` line still shows the local `auth.json` identity, and
-the usage-limit-reset hint is not surfaced through this path.
+Or try it for one run without editing the file:
 
-Spec:
-[codex-plugin-catalog-passthrough](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/codex-plugin-catalog-passthrough).
+```bash
+codex -c 'chatgpt_base_url="http://127.0.0.1:2455/backend-api"'
+```
+
+Recent Codex versions run sessions through a background app-server daemon that
+reads `config.toml` only when it starts. After adding the line, restart it once
+(`codex app-server daemon restart`; this interrupts running sessions), or new
+sessions will keep showing the logged-in account's quota. A `-c` flag applies
+immediately.
+
+Keep the `/backend-api` suffix. Codex then reads usage from
+`/backend-api/wham/usage`, which codex-lb answers with usage pooled across all
+accounts. Codex's other ChatGPT-backend calls (account checks, user settings,
+plugins, cloud tasks) are forwarded to ChatGPT unchanged, under your own login.
+This works only if the account Codex is logged into is also in the codex-lb
+pool; otherwise those calls return `401`.
+
+Two limits:
+
+- ChatGPT connectors are unavailable with this setting. Codex does not send
+  your ChatGPT credentials to its connectors endpoint unless the host is
+  chatgpt.com, and codex-lb will not substitute a pool account's.
+- During a session, the display still updates from the rate-limit events of
+  whichever account served the last turn.
+
+See [codex-backend-passthrough](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/codex-backend-passthrough).
 
 ### Opting into the 872k context window
 
@@ -480,4 +499,4 @@ print(response.choices[0].message.content)
 
 ---
 
-*Specs: [responses-api-compat](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/responses-api-compat) · [images-api-compat](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/images-api-compat) · [chat-completions-compat](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/chat-completions-compat) · [realtime-api-compat](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/realtime-api-compat) · [proxy-admission-control](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/proxy-admission-control) · [proxy-warmup](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/proxy-warmup) · [files-upload-protocol](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/files-upload-protocol) · [audio-transcriptions-compat](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/audio-transcriptions-compat) · [model-catalog-compat](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/model-catalog-compat) · [runtime-portability](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/runtime-portability)*
+*Specs: [responses-api-compat](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/responses-api-compat) · [images-api-compat](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/images-api-compat) · [chat-completions-compat](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/chat-completions-compat) · [realtime-api-compat](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/realtime-api-compat) · [proxy-admission-control](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/proxy-admission-control) · [proxy-warmup](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/proxy-warmup) · [files-upload-protocol](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/files-upload-protocol) · [audio-transcriptions-compat](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/audio-transcriptions-compat) · [model-catalog-compat](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/model-catalog-compat) · [runtime-portability](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/runtime-portability) · [codex-backend-passthrough](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/codex-backend-passthrough)*

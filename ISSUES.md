@@ -3467,8 +3467,12 @@ Known limit: connectors (`/backend-api/ps/mcp`) don't work with this setting. Co
 
 ---
 
-### [🟣 MERGED/CLOSED] [#2536: feat(proxy): show pooled quota in Codex /status by serving and forwarding /backend-api calls](https://github.com/Soju06/codex-lb/pull/2536)
+### [✅ RESOLVED / MERGED IN FORK] [#2536: feat(proxy): show pooled quota in Codex /status by serving and forwarding /backend-api calls](https://github.com/Soju06/codex-lb/pull/2536)
 
+- **Статус:** ✅ **РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ**
+  - **Решение:** Интегрирован форвардинг и сквозной проксирование вызовов `/backend-api/{rest:path}` в `codex_backend_passthrough.py`, поддержка показа суммарной квоты пула через `/backend-api/wham/usage` с сохранением аутентификации вызывающего аккаунта.
+  - **Компоненты:** `app/modules/proxy/codex_backend_passthrough.py, app/core/clients/codex_backend.py, app/core/auth/dependencies.py, docs/client-setup.md, openspec/specs/codex-backend-passthrough/spec.md`
+  - **Тесты:** `tests/integration/test_codex_backend_passthrough.py, tests/unit/test_codex_backend_passthrough_outcome.py`
 - **Тип:** Pull Request
 - **Автор:** @ngallodev
 - **Дата создания:** 2026-09-29
