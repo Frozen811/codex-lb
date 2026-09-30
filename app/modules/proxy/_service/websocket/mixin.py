@@ -1968,8 +1968,17 @@ class _WebSocketMixin:
                                                 request_state.api_key or api_key,
                                                 raw_model=request_state.raw_source_model,
                                             )
-                                        if request_state.previous_response_owner_account_id is None and not bool(
-                                            request_state.is_source_owned
+                                        effective_key = request_state.api_key or api_key
+                                        if (
+                                            request_state.previous_response_owner_account_id is None
+                                            and not bool(request_state.is_source_owned)
+                                            and (
+                                                not codex_session_affinity
+                                                or (
+                                                    effective_key is not None
+                                                    and bool(effective_key.account_assignment_scope_enabled)
+                                                )
+                                            )
                                         ):
                                             _record_continuity_fail_closed(
                                                 surface="websocket_source_route",

@@ -1293,15 +1293,9 @@ async def test_bulk_history_since_per_account_row_cap_keeps_newest_rows(db_setup
         )
         uncapped = await repo.bulk_history_since(["acc-dense", "acc-sparse"], "secondary", since)
 
-    if _dialect_name(session) != "mysql":
-        # Newest three rows, still oldest-first across both PostgreSQL and SQLite.
-        assert [snapshot.used_percent for snapshot in capped["acc-dense"]] == [15.0, 16.0, 17.0]
-        assert capped["acc-dense"] == uncapped["acc-dense"][-3:]
-    else:
-        # MySQL/MariaDB's generic path has no per-account cap: full slice.
-        assert [snapshot.used_percent for snapshot in capped["acc-dense"]] == [
-            snapshot.used_percent for snapshot in uncapped["acc-dense"]
-        ]
+    # Newest three rows, still oldest-first across PostgreSQL, SQLite, and MySQL.
+    assert [snapshot.used_percent for snapshot in capped["acc-dense"]] == [15.0, 16.0, 17.0]
+    assert capped["acc-dense"] == uncapped["acc-dense"][-3:]
     # Under-cap accounts return their full in-cutoff slice on every backend.
     assert [snapshot.used_percent for snapshot in capped["acc-sparse"]] == [90.0, 95.0]
 

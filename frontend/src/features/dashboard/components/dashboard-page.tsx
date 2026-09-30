@@ -413,7 +413,7 @@ export function DashboardPage() {
     null;
 
   return (
-    <div className={fullscreenAccounts ? "flex min-h-0 flex-1 flex-col gap-4" : "animate-fade-in-up space-y-8"}>
+    <div className={fullscreenAccounts ? "flex min-h-0 flex-1 flex-col gap-4" : "animate-fade-in-up min-w-0 max-w-full space-y-8"}>
       {/* Page header */}
       <div className={cn("flex-wrap items-start justify-between gap-3", fullscreenAccounts && view ? "hidden" : "flex shrink-0")}>
         <div>
@@ -497,7 +497,7 @@ export function DashboardPage() {
               <StatsGrid stats={view.stats} />
 
               {view.weeklyCreditPace ? (
-                <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
+                <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
                   <UsageDonuts
                     primaryItems={view.primaryUsageItems}
                     secondaryItems={view.secondaryUsageItems}
@@ -525,7 +525,7 @@ export function DashboardPage() {
             </>
           ) : null}
 
-          <section aria-label={t("accounts.page.title")} className={fullscreenAccounts ? "flex min-h-0 flex-1 flex-col" : "space-y-4"}>
+          <section aria-label={t("accounts.page.title")} className={fullscreenAccounts ? "flex min-h-0 flex-1 flex-col" : "min-w-0 space-y-4"}>
             <div className={cn(
               "flex shrink-0 flex-wrap items-center gap-3",
               fullscreenAccounts && "py-6",
@@ -563,7 +563,7 @@ export function DashboardPage() {
           </section>
 
           {!fullscreenAccounts ? (
-            <section className="space-y-4">
+            <section className="min-w-0 space-y-4">
               <div className="flex flex-wrap items-center gap-3">
                 <DashboardViewSelector
                   value={dashboardView}

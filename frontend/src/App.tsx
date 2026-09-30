@@ -87,7 +87,7 @@ function AppLayout() {
         showAdminLogin={isGuest && passwordRequired}
         showLogout={(role === "admin" && passwordRequired) || (isGuest && guestPasswordRequired)}
       />
-      <main className={cn("mx-auto flex w-full max-w-375 flex-1 flex-col px-4 pb-8 sm:px-6", fullscreenAccounts ? "min-h-0" : "pt-8")}>
+      <main className={cn("mx-auto flex w-full max-w-375 min-w-0 max-w-full flex-1 flex-col px-4 pb-8 sm:px-6", fullscreenAccounts ? "min-h-0" : "pt-8")}>
         <RouteErrorBoundary
           key={pathname}
           resetKey={`${locationKey}:${pathname}${search}${hash}`}

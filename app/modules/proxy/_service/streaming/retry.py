@@ -1568,41 +1568,53 @@ class _StreamingRetryMixin:
                 # soft prompt-cache affinity key. A different account may have a
                 # warmer cache, but it cannot safely resolve the stored response.
                 if preferred_account_id is None:
-                    message = "Previous response owner account is unavailable; retry later."
-                    _record_continuity_fail_closed(
-                        surface="http_stream",
-                        reason="owner_account_unavailable",
-                        previous_response_id=payload.previous_response_id,
-                        session_id=previous_response_lookup_session_id,
-                        upstream_error_code="owner_lookup_miss",
-                    )
-                    event = response_failed_event(
-                        "previous_response_owner_unavailable",
-                        message,
-                        response_id=request_id,
-                    )
-                    yield format_sse_event(event)
-                    await proxy._write_request_log(
-                        affinity_observation=affinity_observation,
-                        account_id=None,
-                        api_key=api_key,
-                        request_id=request_id,
+                    selection_inputs = await proxy._load_balancer._load_selection_inputs(
                         model=payload.model,
-                        latency_ms=int((clock.monotonic() - start) * 1000),
-                        status="error",
-                        error_code="previous_response_owner_unavailable",
-                        error_message=message,
-                        reasoning_effort=payload.reasoning.effort if payload.reasoning else None,
-                        transport=request_transport,
-                        upstream_transport=resolved_upstream_transport,
-                        service_tier=payload.service_tier,
-                        requested_service_tier=payload.service_tier,
-                        useragent=useragent,
-                        useragent_group=useragent_group,
-                        conversation_id=conversation_id,
-                        client_ip=client_ip,
+                        additional_limit_name=None,
+                        account_ids=api_key.assigned_account_ids
+                        if api_key is not None and api_key.account_assignment_scope_enabled
+                        else None,
                     )
-                    return
+                    if (
+                        (enforce_openai_sdk_contract and previous_response_lookup_session_id is not None)
+                        or api_key is not None
+                        or len(selection_inputs.accounts) != 1
+                    ):
+                        message = "Previous response owner account is unavailable; retry later."
+                        _record_continuity_fail_closed(
+                            surface="http_stream",
+                            reason="owner_account_unavailable",
+                            previous_response_id=payload.previous_response_id,
+                            session_id=previous_response_lookup_session_id,
+                            upstream_error_code="owner_lookup_miss",
+                        )
+                        event = response_failed_event(
+                            "previous_response_owner_unavailable",
+                            message,
+                            response_id=request_id,
+                        )
+                        yield format_sse_event(event)
+                        await proxy._write_request_log(
+                            affinity_observation=affinity_observation,
+                            account_id=None,
+                            api_key=api_key,
+                            request_id=request_id,
+                            model=payload.model,
+                            latency_ms=int((clock.monotonic() - start) * 1000),
+                            status="error",
+                            error_code="previous_response_owner_unavailable",
+                            error_message=message,
+                            reasoning_effort=payload.reasoning.effort if payload.reasoning else None,
+                            transport=request_transport,
+                            upstream_transport=resolved_upstream_transport,
+                            service_tier=payload.service_tier,
+                            requested_service_tier=payload.service_tier,
+                            useragent=useragent,
+                            useragent_group=useragent_group,
+                            conversation_id=conversation_id,
+                            client_ip=client_ip,
+                        )
+                        return
             # File and previous-response ownership are peers, not fallback
             # preferences. Resolve both before selection so a conflict cannot
             # be hidden by whichever source happened to run first. A hard turn

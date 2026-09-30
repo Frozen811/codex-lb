@@ -378,7 +378,7 @@ export function RecentRequestsTable({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 space-y-3">
     <div className="rounded-xl border bg-card">
       <div className="relative overflow-x-auto">
         <Table

@@ -1,0 +1,3 @@
+# Known base-image CVEs with no fix in Debian trixie yet
+CVE-2026-75804
+CVE-2026-84782
