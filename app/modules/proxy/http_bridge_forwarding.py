@@ -704,7 +704,7 @@ def _structured_bridge_signing_payload(
 
 
 def _sign_bridge_payload(signing_payload: str) -> str:
-    secret = get_or_create_key(get_settings().encryption_key_file)
+    secret = get_or_create_key()
     return hmac.new(secret, signing_payload.encode("utf-8"), hashlib.sha256).hexdigest()
 
 

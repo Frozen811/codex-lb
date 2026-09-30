@@ -11,7 +11,7 @@ python oauth sqlalchemy dashboard load-balancer openai rate-limit api-proxy code
 ![codex-lb](docs/screenshots/banner.jpg)
 
 <p align="left">
-  <a href="https://github.com/Frozen811/codex-lb/releases/tag/v1.25.0-hardened.2"><img src="https://img.shields.io/badge/Hardened%20Release-v1.25.0--hardened.2-blue" alt="Release" /></a>
+  <a href="https://github.com/Frozen811/codex-lb/releases/tag/v1.25.0-hardened.3"><img src="https://img.shields.io/badge/Hardened%20Release-v1.25.0--hardened.3-blue" alt="Release" /></a>
   <a href="https://github.com/Frozen811/codex-lb/tree/main/openspec"><img src="https://img.shields.io/badge/OpenSpec-68%2F68%20Passed-success" alt="OpenSpec" /></a>
   <a href="https://github.com/Frozen811/codex-lb/blob/main/ISSUES.md"><img src="https://img.shields.io/badge/Tracked%20Issues-165%2F165%20Resolved-brightgreen" alt="Issues" /></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License" /></a>
@@ -36,7 +36,7 @@ Load balancer for ChatGPT accounts. Pool multiple accounts, track usage, manage 
 > - Enables bounded inline image streaming and upstream transport label recording ([#2508](https://github.com/Soju06/codex-lb/issues/2508), [#2534](https://github.com/Soju06/codex-lb/issues/2534), [#2503](https://github.com/Soju06/codex-lb/issues/2503))
 > - Fully bumped and verified frontend and Python dependency stacks ([PR #2509](https://github.com/Soju06/codex-lb/pull/2509), [PR #2533](https://github.com/Soju06/codex-lb/pull/2533))
 > 
-> Release notes: [COMMUNITY_RELEASE.md](COMMUNITY_RELEASE.md) | Release: [v1.25.0-hardened.1](https://github.com/Frozen811/codex-lb/releases/tag/v1.25.0-hardened.1) | How to update: [Update Guide](COMMUNITY_RELEASE.md#how-to-update)
+> Release notes: [COMMUNITY_RELEASE.md](COMMUNITY_RELEASE.md) | Release: [v1.25.0-hardened.3](https://github.com/Frozen811/codex-lb/releases/tag/v1.25.0-hardened.3) | How to update: [Update Guide](COMMUNITY_RELEASE.md#how-to-update)
 > 
 > ### 🚀 Quick Install & Run:
 > 
@@ -56,7 +56,7 @@ Load balancer for ChatGPT accounts. Pool multiple accounts, track usage, manage 
 > uvx --from git+https://github.com/Frozen811/codex-lb.git codex-lb
 > 
 > # Or install pre-built wheel directly:
-> pip install https://github.com/Frozen811/codex-lb/releases/download/v1.25.0-hardened.1/codex_lb-1.25.1-py3-none-any.whl
+> pip install https://github.com/Frozen811/codex-lb/releases/download/v1.25.0-hardened.3/codex_lb-1.25.1-py3-none-any.whl
 > codex-lb
 > ```
 > 

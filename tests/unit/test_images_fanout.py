@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -174,3 +175,139 @@ async def test_execute_image_fanout_error_handling():
     assert resp.status_code == 502
     mock_release.assert_awaited_once_with(mock_reservation)
     mock_finalize.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_execute_image_fanout_partial_failure_settles_usage():
+    mock_context = MagicMock()
+    mock_context.service.rewrite_request_log_model = AsyncMock()
+    mock_request = _make_mock_request()
+    payload = ResponsesRequest(
+        model="gpt-4o",
+        input=[{"type": "message", "role": "user", "content": "draw"}],
+        instructions="gen",
+    )
+    mock_reservation = MagicMock()
+
+    call_count = 0
+
+    async def mock_prime(req, upstream, headers, on_error=None):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return upstream, None
+        return None, JSONResponse(status_code=500, content={"error": {"message": "subcall 2 failed"}})
+
+    def mock_logged_error(req, status, envelope, headers=None):
+        return JSONResponse(status_code=status, content=envelope, headers=headers)
+
+    mock_release = AsyncMock()
+    mock_finalize = AsyncMock()
+
+    async def mock_collect(upstream: Any, *, captured: Any = None) -> Any:
+        if captured is not None:
+            captured["image_input_tokens"] = 120
+            captured["image_output_tokens"] = 60
+            captured["image_cached_input_tokens"] = 10
+            captured["response_id"] = "resp-subcall-1"
+        return (
+            {
+                "output": [
+                    {
+                        "type": "image_generation_call",
+                        "status": "completed",
+                        "result": "base64_data_partial",
+                    }
+                ]
+            },
+            None,
+        )
+
+    import app.modules.proxy.images_service as svc
+
+    orig_collect = svc.collect_responses_stream_for_images
+    setattr(svc, "collect_responses_stream_for_images", mock_collect)
+    try:
+        resp = await execute_image_fanout(
+            context=mock_context,
+            request=mock_request,
+            responses_payload=payload,
+            api_key=None,
+            reservation=mock_reservation,
+            rate_limit_headers={},
+            public_model="gpt-image-2",
+            route="generations",
+            n=2,
+            started_at=1000.0,
+            prime_upstream_stream=mock_prime,
+            logged_error_json_response=mock_logged_error,
+            status_for_image_error_envelope=lambda e: 500,
+            release_reservation=mock_release,
+            finalize_image_reservation=mock_finalize,
+            resolve_client_host=lambda r: "127.0.0.1",
+        )
+    finally:
+        setattr(svc, "collect_responses_stream_for_images", orig_collect)
+
+    # First error is surfaced
+    assert resp.status_code == 500
+    # Successful subcall usage is settled!
+    mock_finalize.assert_awaited_once_with(
+        mock_context.service,
+        None,
+        mock_reservation,
+        model="gpt-image-2",
+        input_tokens=120,
+        output_tokens=60,
+        cached_input_tokens=10,
+    )
+    # Release is NOT called because usage was finalized
+    mock_release.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_execute_image_fanout_cancellation_releases_reservation():
+    mock_context = MagicMock()
+    mock_request = _make_mock_request()
+    payload = ResponsesRequest(
+        model="gpt-4o",
+        input=[{"type": "message", "role": "user", "content": "draw"}],
+        instructions="gen",
+    )
+    mock_reservation = MagicMock()
+
+    async def mock_prime_blocking(req, upstream, headers, on_error=None):
+        await asyncio.sleep(10)
+        return upstream, None
+
+    mock_release = AsyncMock()
+    mock_finalize = AsyncMock()
+
+    task = asyncio.create_task(
+        execute_image_fanout(
+            context=mock_context,
+            request=mock_request,
+            responses_payload=payload,
+            api_key=None,
+            reservation=mock_reservation,
+            rate_limit_headers={},
+            public_model="gpt-image-2",
+            route="generations",
+            n=2,
+            started_at=1000.0,
+            prime_upstream_stream=mock_prime_blocking,
+            logged_error_json_response=lambda *a, **k: None,
+            status_for_image_error_envelope=lambda e: 500,
+            release_reservation=mock_release,
+            finalize_image_reservation=mock_finalize,
+            resolve_client_host=lambda r: "127.0.0.1",
+        )
+    )
+    await asyncio.sleep(0.01)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    mock_release.assert_awaited_once_with(mock_reservation)
+    mock_finalize.assert_not_called()
+

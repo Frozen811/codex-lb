@@ -7,7 +7,7 @@ import logging
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Iterable
+from typing import TYPE_CHECKING, Any, Iterable
 from uuid import uuid4
 
 from app.core import usage as usage_core
@@ -327,6 +327,23 @@ class LoadBalancer:
     def current_routing_tunables(self) -> RoutingTunables:
         """Routing/overload knobs as of the most recent request-path snapshot."""
         return self._routing_tunables or effective_routing_tunables()
+
+    async def list_continuity_owner_candidates(
+        self,
+        *,
+        api_key: Any = None,
+    ) -> list[Account]:
+        """List possible owners for continuity fallback on lookup miss.
+
+        The possible owners are the key's assigned accounts (all accounts if unscoped),
+        ignoring health, quota, plan and model support.
+        """
+        async with self._repo_factory() as repos:
+            accounts = await repos.accounts.list_accounts()
+        if api_key is not None and getattr(api_key, "account_assignment_scope_enabled", False):
+            assigned = set(getattr(api_key, "assigned_account_ids", []) or [])
+            return [account for account in accounts if account.id in assigned]
+        return accounts
 
     async def release_account_lease(self, lease: AccountLease | None) -> None:
         if lease is None:

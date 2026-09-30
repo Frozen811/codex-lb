@@ -87,17 +87,17 @@ async def _has_active_proxy_bindings(session: AsyncSession) -> bool:
         return False
 
 
-async def _oauth_route() -> ResolvedUpstreamRoute | None:
+async def _oauth_route(intended_account_id: str | None = None) -> ResolvedUpstreamRoute | None:
     async with get_background_session() as session:
-        strict = await _has_active_proxy_bindings(session)
+        strict = None if intended_account_id is not None else (await _has_active_proxy_bindings(session) or None)
         try:
             return await resolve_upstream_route(
                 session,
-                account_id=None,
+                account_id=intended_account_id,
                 operation="oauth",
-                scope="bootstrap",
+                scope="account" if intended_account_id is not None else "bootstrap",
                 # strict=True forces default-pool requirement; None defers to dashboard setting
-                strict=strict or None,
+                strict=strict,
             )
         except UpstreamProxyRouteError as exc:
             raise OAuthError(exc.reason, str(exc), status_code=502) from exc
@@ -702,7 +702,11 @@ class OauthService:
             return ManualCallbackResponse(status="error", error_message=message)
 
         try:
-            route = await _oauth_route()
+            route = (
+                await _oauth_route(flow.intended_account_id)
+                if (flow is not None and flow.intended_account_id is not None)
+                else await _oauth_route()
+            )
             tokens = await exchange_authorization_code(
                 code=code,
                 code_verifier=verifier,
@@ -741,7 +745,11 @@ class OauthService:
     async def _start_device_flow(self, *, intended_account_id: str | None = None) -> OauthStartResponse:
         flow_id = secrets.token_urlsafe(12)
         try:
-            route = await _oauth_route()
+            route = (
+                await _oauth_route(intended_account_id)
+                if intended_account_id is not None
+                else await _oauth_route()
+            )
             device = await request_device_code(route=route, allow_direct_egress=route is None)
         except OAuthError as exc:
             await self._set_error(exc.message)
@@ -844,7 +852,11 @@ class OauthService:
             return self._html_response(_error_html("Invalid OAuth callback."))
 
         try:
-            route = await _oauth_route()
+            route = (
+                await _oauth_route(flow.intended_account_id)
+                if (flow is not None and flow.intended_account_id is not None)
+                else await _oauth_route()
+            )
             tokens = await exchange_authorization_code(
                 code=code,
                 code_verifier=verifier,
@@ -890,7 +902,11 @@ class OauthService:
         consumed = False
         try:
             while time.time() < context.expires_at:
-                route = await _oauth_route()
+                route = (
+                    await _oauth_route(context.intended_account_id)
+                    if context.intended_account_id is not None
+                    else await _oauth_route()
+                )
                 tokens = await exchange_device_token(
                     device_auth_id=context.device_auth_id,
                     user_code=context.user_code,

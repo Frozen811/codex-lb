@@ -67,6 +67,13 @@ In this edition, **every single reported defect was verified and resolved direct
   - Implemented `install_redacting_loop_exception_handler` wrapping asyncio event loop exceptions in `_RedactedRepr`, preventing credential leakage in unhandled task traces.
   - Sanitized Bearer tokens, passwords, API keys, and URL query credentials across all log handlers.
 
+#### 7. Live Deployment Hardening (v1.25.0-hardened.3)
+- **OAuth Proxy Route Reauthentication**: Passed `intended_account_id` to route resolution so reauthenticating accounts route via their own assigned proxy binding instead of falling back to default pool or erroring with `default_pool_unconfigured`. Unbound accounts egress direct as intended, avoiding IP split.
+- **Continuity Single-Account Owner Pinning ([#2274](https://github.com/Soju06/codex-lb/issues/2274))**: On an owner-lookup miss for `previous_response_id`, single-account pools and scoped keys now unambiguously pin the single candidate rather than failing closed with 502 `previous_response_owner_unavailable`.
+- **Image Fan-out (`n > 1`) Settlement & Fault Isolation**: Replaced unprotected `asyncio.gather` with `gather(return_exceptions=True)`. Settles token usage for all successful subcalls on partial failure instead of discarding them, releases on zero success or cancellation, and cleanly surfaces the first error.
+- **Bridge Payload Signing via Configured Encryption Key**: Changed `_sign_bridge_payload` to call `get_or_create_key()` which honors `CODEX_LB_ENCRYPTION_KEY` env var across stateless cluster replicas.
+- **Reset-Credit Target Account Validation**: Validates `target_chatgpt_account_id` before redeeming reset credits cross-account, preventing sending requests upstream with `account_id=None`.
+
 ---
 
 ### Verification & Quality Assurance
@@ -129,6 +136,13 @@ In this edition, **every single reported defect was verified and resolved direct
 #### 6. Безопасность и логи
 - **Маскирование учетных данных ([#2028](https://github.com/Soju06/codex-lb/issues/2028), [PR #2490](https://github.com/Soju06/codex-lb/pull/2490))**:
   - Устранена утечка Bearer-токенов, API-ключей и паролей в логах исключений Event Loop через специальную обертку `_RedactedRepr`.
+
+#### 7. Дополнительная стабилизация в проде (v1.25.0-hardened.3)
+- **Привязка прокси при повторной OAuth-авторизации**: Передача `intended_account_id` в резолвер маршрутов обеспечивает роутинг через назначенный прокси конкретного аккаунта; несвязанные аккаунты идут напрямую без ошибки `default_pool_unconfigured` и без разрыва IP.
+- **Определение владельца преемственности для одиночных аккаунтов ([#2274](https://github.com/Soju06/codex-lb/issues/2274))**: При промахе поиска владельца по `previous_response_id` для пулов или ключей с единственным аккаунтом запрос больше не падает с 502 `previous_response_owner_unavailable`, а надёжно привязывается к единственному владельцу.
+- **Учёт токенов и устойчивость Image Fan-out (`n > 1`)**: При частичном сбое генерации пачки изображений использованные токены успешных подзапросов корректно фиксируются в лимитах ключа, а при отмене резервация освобождается.
+- **Подпись запросов моста настроенным ключом шифрования**: Функция подписи моста использует `get_or_create_key()`, соблюдая общую переменную окружения `CODEX_LB_ENCRYPTION_KEY` для всех реплик.
+- **Валидация целевого аккаунта при списании кредитов сброса лимита**: Защита от отправки запроса с `account_id=None` при меж-аккаунтном списании.
 
 ---
 
@@ -203,13 +217,13 @@ Upgrade to the latest wheel release:
 
 **pip:**
 ```bash
-pip install --upgrade https://github.com/Frozen811/codex-lb/releases/download/v1.25.0-hardened.2/codex_lb-1.25.1-py3-none-any.whl
+pip install --upgrade https://github.com/Frozen811/codex-lb/releases/download/v1.25.0-hardened.3/codex_lb-1.25.1-py3-none-any.whl
 codex-lb
 ```
 
 **uv:**
 ```bash
-uv tool install --reinstall https://github.com/Frozen811/codex-lb/releases/download/v1.25.0-hardened.2/codex_lb-1.25.1-py3-none-any.whl
+uv tool install --reinstall https://github.com/Frozen811/codex-lb/releases/download/v1.25.0-hardened.3/codex_lb-1.25.1-py3-none-any.whl
 codex-lb
 ```
 

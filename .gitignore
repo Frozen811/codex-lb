@@ -1,6 +1,7 @@
 # Project-specific
 refs/
 poc/
+FIXES-NOT-IN-*.md
 
 # Python
 .venv/

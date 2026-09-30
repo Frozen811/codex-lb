@@ -50,6 +50,7 @@ from app.modules.api_keys.service import (
     ApiKeyRequestUsageBudget,
     ApiKeyUsageReservationData,
 )
+from app.modules.proxy._service.continuity_owner import resolve_continuity_owner_candidate
 from app.modules.proxy._service.support import _request_log_client_fields, _RequestLogFailureMetadata
 from app.modules.proxy.affinity import (
     _affinity_with_payload_continuity,
@@ -924,18 +925,13 @@ class _CompactMixin:
                 surface="compact",
             )
             if previous_response_preferred_account_id is None:
-                selection_inputs = await proxy._load_balancer._load_selection_inputs(
-                    model=payload.model,
-                    additional_limit_name=None,
-                    account_ids=api_key.assigned_account_ids
-                    if api_key is not None and api_key.account_assignment_scope_enabled
-                    else None,
+                candidate_id = await resolve_continuity_owner_candidate(
+                    proxy._load_balancer,
+                    api_key=api_key,
                 )
-                if (
-                    api_key is None
-                    or not api_key.account_assignment_scope_enabled
-                    or len(selection_inputs.accounts) != 1
-                ):
+                if candidate_id is not None:
+                    previous_response_preferred_account_id = candidate_id
+                else:
                     message = "Previous response owner account is unavailable; retry later."
                     _record_continuity_fail_closed(
                         surface="compact",

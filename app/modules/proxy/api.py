@@ -7909,6 +7909,8 @@ async def codex_consume_rate_limit_reset_credit(
         target_credentials = await _ensure_v1_reset_credit_account_fresh(target_account_id)
         target_token = TokenEncryptor().decrypt(target_credentials.access_token_encrypted)
         target_chatgpt_account_id = target_credentials.chatgpt_account_id
+        if not target_chatgpt_account_id:
+            raise ProxyAuthError("Target account has no ChatGPT account ID")
         async with get_background_session() as session:
             try:
                 target_route = await resolve_upstream_route(

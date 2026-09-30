@@ -1802,3 +1802,18 @@ async def test_iter_sse_event_blocks_receive_timeout_is_scheduler_owned() -> Non
     await scheduler.cancel_owned_tasks()
     assert scheduler.owned_tasks == frozenset()
     assert scheduler.pending_timers == 0
+
+
+def test_sign_bridge_payload_uses_configured_encryption_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    import hashlib
+    import hmac
+
+    from app.core.config.settings import get_settings
+    from app.modules.proxy.http_bridge_forwarding import _sign_bridge_payload
+
+    test_env_key = "a" * 32
+    monkeypatch.setattr(get_settings(), "encryption_key", test_env_key)
+    sig = _sign_bridge_payload("test-payload")
+    expected = hmac.new(test_env_key.encode("utf-8"), b"test-payload", hashlib.sha256).hexdigest()
+    assert sig == expected
+

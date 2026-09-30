@@ -8,6 +8,7 @@ from starlette.responses import JSONResponse, Response
 
 from app.core.clients.proxy import ProxyResponseError
 from app.core.clock import clock_for
+from app.core.errors import openai_error
 from app.core.openai.images import V1ImageResponse, V1ImageUsage
 from app.core.types import JsonValue
 from app.modules.proxy import images_service as images_service_module
@@ -105,12 +106,72 @@ async def execute_image_fanout(
             return None, err_resp, captured
 
     tasks = [_run_single_call(i) for i in range(n)]
-    results = await asyncio.gather(*tasks)
+    reservation_settled = False
+    try:
+        results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    for img_result, err_resp, captured in results:
-        if err_resp is not None:
+        first_error_resp: Response | None = None
+        all_data = []
+        total_input = 0
+        total_output = 0
+        total_cached = 0
+        has_tokens = False
+        successful_calls = 0
+
+        for res in results:
+            if isinstance(res, BaseException):
+                if first_error_resp is None:
+                    first_error_resp = logged_error_json_response(
+                        request,
+                        500,
+                        openai_error("internal_error", str(res) or "Internal server error", error_type="server_error"),
+                        headers=rate_limit_headers,
+                    )
+                continue
+
+            img_result, err_resp, captured = res
+            if err_resp is not None:
+                if first_error_resp is None:
+                    first_error_resp = err_resp
+                continue
+
+            if img_result is not None:
+                successful_calls += 1
+                all_data.extend(img_result.data)
+
+                _input = captured.get("image_input_tokens")
+                _output = captured.get("image_output_tokens")
+                _cached = captured.get("image_cached_input_tokens")
+                if isinstance(_input, int):
+                    total_input += _input
+                    has_tokens = True
+                if isinstance(_output, int):
+                    total_output += _output
+                    has_tokens = True
+                if isinstance(_cached, int):
+                    total_cached += _cached
+
+                response_id = captured.get("response_id")
+                if response_id and isinstance(response_id, str):
+                    await context.service.rewrite_request_log_model(response_id, public_model)
+
+        if successful_calls > 0:
+            await finalize_image_reservation(
+                context.service,
+                api_key,
+                reservation,
+                model=public_model,
+                input_tokens=total_input if has_tokens else None,
+                output_tokens=total_output if has_tokens else None,
+                cached_input_tokens=total_cached if total_cached > 0 else None,
+            )
+            reservation_settled = True
+        else:
             await release_reservation(reservation)
-            status = getattr(err_resp, "status_code", 500)
+            reservation_settled = True
+
+        if first_error_resp is not None:
+            status = getattr(first_error_resp, "status_code", 500)
             record_images_route_observability(
                 route=route,
                 model=public_model,
@@ -120,69 +181,36 @@ async def execute_image_fanout(
                 started_at=started_at,
                 fanout=n,
             )
-            return err_resp
+            return first_error_resp
 
-    all_data = []
-    total_input = 0
-    total_output = 0
-    total_cached = 0
-    has_tokens = False
+        usage = None
+        if has_tokens:
+            input_details: dict[str, JsonValue] | None = {"cached_tokens": total_cached} if total_cached > 0 else None
+            usage = V1ImageUsage(
+                input_tokens=total_input,
+                output_tokens=total_output,
+                total_tokens=total_input + total_output,
+                input_tokens_details=input_details,
+            )
 
-    for img_result, _, captured in results:
-        assert img_result is not None
-        all_data.extend(img_result.data)
-
-        _input = captured.get("image_input_tokens")
-        _output = captured.get("image_output_tokens")
-        _cached = captured.get("image_cached_input_tokens")
-        if isinstance(_input, int):
-            total_input += _input
-            has_tokens = True
-        if isinstance(_output, int):
-            total_output += _output
-            has_tokens = True
-        if isinstance(_cached, int):
-            total_cached += _cached
-
-        response_id = captured.get("response_id")
-        if response_id and isinstance(response_id, str):
-            await context.service.rewrite_request_log_model(response_id, public_model)
-
-    await finalize_image_reservation(
-        context.service,
-        api_key,
-        reservation,
-        model=public_model,
-        input_tokens=total_input if has_tokens else None,
-        output_tokens=total_output if has_tokens else None,
-        cached_input_tokens=total_cached if total_cached > 0 else None,
-    )
-
-    usage = None
-    if has_tokens:
-        input_details: dict[str, JsonValue] | None = {"cached_tokens": total_cached} if total_cached > 0 else None
-        usage = V1ImageUsage(
-            input_tokens=total_input,
-            output_tokens=total_output,
-            total_tokens=total_input + total_output,
-            input_tokens_details=input_details,
+        record_images_route_observability(
+            route=route,
+            model=public_model,
+            stream=False,
+            status=200,
+            outcome="success",
+            started_at=started_at,
+            fanout=n,
         )
-
-    record_images_route_observability(
-        route=route,
-        model=public_model,
-        stream=False,
-        status=200,
-        outcome="success",
-        started_at=started_at,
-        fanout=n,
-    )
-    combined = V1ImageResponse(
-        created=int(clock_for(context.service).time()),
-        data=all_data,
-        usage=usage,
-    )
-    return JSONResponse(
-        content=combined.model_dump(mode="json", exclude_none=True),
-        headers=rate_limit_headers,
-    )
+        combined = V1ImageResponse(
+            created=int(clock_for(context.service).time()),
+            data=all_data,
+            usage=usage,
+        )
+        return JSONResponse(
+            content=combined.model_dump(mode="json", exclude_none=True),
+            headers=rate_limit_headers,
+        )
+    finally:
+        if not reservation_settled:
+            await release_reservation(reservation)

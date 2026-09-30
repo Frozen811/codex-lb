@@ -123,6 +123,7 @@ from app.modules.proxy._service.compact import (
 from app.modules.proxy._service.compact import (
     _sticky_key_from_compact_payload as _sticky_key_from_compact_payload,
 )
+from app.modules.proxy._service.continuity_owner import resolve_continuity_owner_candidate
 from app.modules.proxy._service.http_bridge.accepted_replay import (
     _stage_websocket_request_state_for_replay,
 )
@@ -1969,6 +1970,13 @@ class _WebSocketMixin:
                                                 raw_model=request_state.raw_source_model,
                                             )
                                         effective_key = request_state.api_key or api_key
+                                        if request_state.previous_response_owner_account_id is None:
+                                            candidate_id = await resolve_continuity_owner_candidate(
+                                                proxy._load_balancer,
+                                                api_key=effective_key,
+                                            )
+                                            if candidate_id is not None:
+                                                request_state.previous_response_owner_account_id = candidate_id
                                         if (
                                             request_state.previous_response_owner_account_id is None
                                             and not bool(request_state.is_source_owned)
