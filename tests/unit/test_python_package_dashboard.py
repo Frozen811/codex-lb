@@ -95,10 +95,10 @@ def test_clean_source_uses_pinned_bun_and_frozen_lock(tmp_path: Path, monkeypatc
     def run(args: list[str], **kwargs: object) -> None:
         calls.append(args)
         assert kwargs["cwd"] == tmp_path / "frontend"
-        if args == ["bun", "run", "build"]:
+        if args == ["bun", "--bun", "run", "build"]:
             _assets(tmp_path)
 
     monkeypatch.setattr("scripts.build_dashboard.subprocess.run", run)
     ensure_dashboard(tmp_path)
-    assert calls == [["bun", "install", "--frozen-lockfile"], ["bun", "run", "build"]]
+    assert calls == [["bun", "install", "--frozen-lockfile"], ["bun", "--bun", "run", "build"]]
     assert dashboard_complete(tmp_path)

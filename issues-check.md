@@ -4,7 +4,7 @@
 
 Этот файл фиксирует доказательства, замечания, исправляющие коммиты и повторные проверки. Нормативные контракты остаются в [openspec/specs](openspec/specs), работа по изменению поведения — в [openspec/changes](openspec/changes). Заявления автора, зелёная сборка образа и наличие теста сами по себе не означают, что проблема решена.
 
-**Последнее обновление: 2026-10-01.** Предыдущие локальные исправления и новый пакет INSTALL-06/07/08 закоммичены и отправлены в `fix/python-install-audit`; текущие результаты — §20. Stable main и публичные release artifacts не обновлялись. Реестр полного аудита установки — §15; прежние утверждения о неопубликованных правках ниже сохранены как история соответствующих прогонов.
+**Последнее обновление: 2026-10-01.** Предыдущие batches перенесены в main через PR #2–#5 после exact-head CI/review checks; main `8a2b706e`. INSTALL-09/10/11 исправлены и проверены на Windows/Linux в следующей ветке; §21. Public release artifacts остаются историческими. Реестр полного аудита установки — §15; предыдущие статусы сохранены как история соответствующих прогонов.
 
 ## 1. Правила ведения
 
@@ -104,6 +104,11 @@
 | F-022 | P1 | ИСПРАВЛЕНО ЛОКАЛЬНО | Чистый Git/source install выпускал wheel без dashboard assets. Custom Hatch hook собирает assets закреплённым Bun/frozen lock либо отказывает с prerequisite guidance; actual clean source wheel/sdist и 11 regressions PASS; §20 |
 | F-023 | P1 | ИСПРАВЛЕНО ЛОКАЛЬНО | Explicit-root sdist selector всё ещё допускал worktrees/credentials внутри выбранных frontend/app folders. Inert marker archive probe воспроизвёл 4 leaks; explicit nested exclusions устранили все markers; §20 |
 | F-024 | P1 | ИСПРАВЛЕНО / WINDOWS CLOUD PASS | Новый build hook требовал Bun при editable uv sync и сломал первый Windows run. Editable-only exemption и CI guard проверены локально и на опубликованном SHA 4dce7220; §20.5 |
+| F-025 | P1 | ИСПРАВЛЕНО / SOURCE SMOKE PASS | Checkout launchers не выбирали собственный проект и не готовили dashboard; clean baseline readiness 200, UI 503. Frozen project-bound startup теперь готовит assets; foreign cwd/paths with spaces Windows/Linux PASS; §21 |
+| F-026 | P2 | ИСПРАВЛЕНО / SOURCE SMOKE PASS | PowerShell терял CLI exit 2, batch также не сохранял errorlevel, run.sh был 100644. Exit status/args исправлены, Bash 100755; actual PS/pwsh/cmd/Linux failure/signal tests PASS; §21 |
+| F-027 | P1 | ИСПРАВЛЕНО / WINDOWS+LINUX PASS | Bun build выбирал host Node 18 через Vite shebang и падал на node:util styleText. Frontend tools теперь --bun runtime, pinned 1.3.14; actual builds PASS; §21 |
+| F-028 | P2 | ИСПРАВЛЕНО / PR CI PASS | Affinity/close-1009 fixtures обходили committed account routing notification. Fixtures приведены к реальному import lifecycle, runtime Pause guard не ослаблялся; 11 routes + 25 Pause local PASS и full PR CI; §21 |
+| F-029 | P1 | ИСПРАВЛЕНО / NIX CLOUD PASS | Explicit Nix sources не включали объявленный Hatch hook/helper; wheel build падал до assets reuse. Узкие source filters исправлены, actual Nix flake check на f61669d6 PASS; §21 |
 
 ### F-001 — ORM-объекты покидают сессию до чтения ID
 
@@ -1286,9 +1291,9 @@ OpenSpec: [2026-10-01-guard-paused-websocket-dispatch](openspec/changes/archive/
 | INSTALL-06 | Wheel из GitHub Release через pip | Правильная ссылка и версия форка; чистая venv на поддерживаемых ОС; зависимости, console scripts, frontend/config/migrations; импорт и старт вне checkout; сеть и подключение Codex | PUBLIC ПРОВЕРЕН Windows/Python 3.13: actual pip + uv pip, CLI/migrations/readiness/assets вне checkout, root code соответствует tag после newline normalization; historical runtime drift раскрыт. Real OAuth/Codex/native Linux/macOS отдельно; §20 |
 | INSTALL-07 | Sdist / source archive из Release | Метаданные, состав без чужих worktrees и credentials, сборка wheel из sdist, установка вне checkout, dashboard/config/migrations; скачивание и инструкции | PUBLIC ПРОВЕРЕН: clean rebuild/install/startup, но 5967 nested worktree entries и runtime drift остаются в старом asset. Исправленный local sdist также исключает nested markers, содержит build hooks/assets и перестраивается без Bun; F-014/023, §20 |
 | INSTALL-08 | `uv` / `uvx` / установка из индекса | Каждая заявленная команда и канал: действительно ли устанавливает форк, а не upstream `codex-lb`; version pinning, runtime deps, config/data directory и дальнейшие обновления | ПРОВЕРЕНО Windows: isolated uvx/uv tool public wheel, source replacement сохраняет data/key; corrected published Git SHA install PASS. Editable-only uv sync exemption проверен после cloud failure; §20 |
-| INSTALL-09 | Запуск из Git checkout | clone URL/ref форка, `uv sync --frozen`, frontend и Rust prerequisites, подготовка assets, CLI/start команды; чистое окружение без существующей `.venv` и кешей разработчика | НЕ ПРОВЕРЕНО |
-| INSTALL-10 | Windows скрипты / Desktop + WSL | `run.ps1`, `start.bat` и остальные найденные entrypoints; пути с пробелами, PowerShell/cmd синтаксис, prerequisites, Docker Desktop/WSL границы, firewall и startup failures | НЕ ПРОВЕРЕНО |
-| INSTALL-11 | Linux/macOS скрипты | `run.sh` и документированные команды; shell/permissions, Python/native helper архитектура, env/config paths, background/foreground/restart и корректный выход | НЕ ПРОВЕРЕНО |
+| INSTALL-09 | Запуск из Git checkout | clone URL/ref форка, `uv sync --frozen`, frontend и Rust prerequisites, подготовка assets, CLI/start команды; чистое окружение без существующей `.venv` и кешей разработчика | WINDOWS/LINUX SOURCE ПРОВЕРЕНО: fresh no-venv/assets source copies, locked setup, pinned frontend build, readiness/assets/data recreate; optional Windows Rust native build/discovery/handshake PASS; F-025/027, §21 |
+| INSTALL-10 | Windows скрипты / Desktop + WSL | `run.ps1`, `start.bat` и остальные найденные entrypoints; пути с пробелами, PowerShell/cmd синтаксис, prerequisites, Docker Desktop/WSL границы, firewall и startup failures | WINDOWS SOURCE ПРОВЕРЕНО: PS5/pwsh/cmd foreign cwd/path spaces, help, missing uv/wrong Bun, real startup/assets, preserved exit 1/2, data/key reuse; WSL Linux tested separately, no system firewall changes; §21 |
+| INSTALL-11 | Linux/macOS скрипты | `run.sh` и документированные команды; shell/permissions, Python/native helper архитектура, env/config paths, background/foreground/restart и корректный выход | LINUX/WSL ПРОВЕРЕНО: executable Bash, clean setup, cwd/args/spaces, readiness/assets, repeat data/key, SIGTERM forwarding/app shutdown/no listener, exit 143. Native macOS не исполнялся и остаётся отдельной границей; §21 |
 | INSTALL-12 | Helm / Kubernetes | Fork chart/package/image repository и version; values, secrets, PVC/DB, migrations, probes, service/ingress/OAuth/TLS/WS; clean install, upgrade, rollback; одиночный и документированный multi-replica режим | НЕ ПРОВЕРЕНО |
 | INSTALL-13 | Nix / flake | Все опубликованные `nix run`/build команды, fork URL/ref, locked inputs, Python/native/frontend contents, runtime/data paths; доступность реального Nix стенда | НЕ ПРОВЕРЕНО |
 | INSTALL-14 | Прочие найденные способы | System service, reverse proxy, удалённый сервер, установщик или сторонняя инструкция — отдельная карточка на каждый реально обещанный путь | НЕ ПРОВЕРЕНО: требуется завершить инвентаризацию |
@@ -1622,3 +1627,56 @@ Source push в [fork branch](https://github.com/Frozen811/codex-lb/tree/fix/pyth
 Повторный exact-source Windows run [36905440811](https://github.com/Frozen811/codex-lb/actions/runs/36905440811), SHA **`4dce7220eed12da1b3b1890af48c09d66eb07ee6`**: terminal API result **completed/success**. Dependency setup, editable guard, portability tests, Bun/frontend build и installed-wheel readiness/assets smoke прошли. Этот manual Windows run не заменяет полный main-push CI/review gates и не разрешает выпуск релиза сам по себе. Следующий commit лишь архивирует verification/report; cloud result относится именно к указанному source SHA.
 
 Follow-up OpenSpec: [repair-editable-package-setup](openspec/changes/archive/2026-10-01-repair-editable-package-setup/), owning spec/context/docs синхронизированы. Source остаётся в отдельной fork branch; F-010 и исторические package/image artifacts не обновлялись.
+
+## 21. Main integration и INSTALL-09 / INSTALL-10 / INSTALL-11 — 2026-10-01
+
+### 21.1. Предыдущие исправления перенесены в main
+
+Пользователь поручил перенос после обсуждения main/PR gates. Действующий GitHub аккаунт — owner Frozen811. Использованы четыре тематических PR, merge с сохранением commit ancestry, без force-push. Перед каждым merge проверены exact-head check-runs, успешный CI Required, REST mergeable_state=clean, отсутствие CHANGES_REQUESTED и unresolved non-outdated review threads через GitHub GraphQL; review pagination завершена, findings не пропускались.
+
+| PR | Проверенный source SHA | Merge SHA в main |
+|---|---|---|
+| [#2 proxy](https://github.com/Frozen811/codex-lb/pull/2) | `feadca30900411efaa2523351315218d5d721c5f` | `f847fc5718f3971ad7bb4c99137b23c007ebc634` |
+| [#3 release gates](https://github.com/Frozen811/codex-lb/pull/3) | `72487a38c4daaed70f5633bff76a03829c61da0d` | `245152d7931244f37044713ec0f630cecc42051f` |
+| [#4 Docker](https://github.com/Frozen811/codex-lb/pull/4) | `904efd6653a08cd14cc4a6b75547a0690828822e` | `bff1bd56a915cede3c366c124f8d4f11c5cd7e19` |
+| [#5 Python](https://github.com/Frozen811/codex-lb/pull/5) | `f61669d62acfe69a15e982d3afadf8a28c1b8b14` | **`8a2b706e4d5ec86f71ec84bd704be8cfde98b7d8`** |
+
+Full CI обнаружил проблемы, не покрытые прежними targeted tests: affinity fixtures raw-inserted accounts после startup snapshot без import availability callback; close-1009 test мокал connected account без committed row. Исправлены только fixtures после реального commit, не Pause/runtime routing guard. Local **11** affinity/close route tests и **25** Pause cases прошли. Дополнительно Nix source filter не включал новый Hatch hook; добавлены только два declared helper files для package/editable variants. Actual [Nix job](https://github.com/Frozen811/codex-lb/actions/runs/36917479916/job/110555586516) на f61669d6 — success.
+
+PR2 final run [36916078511](https://github.com/Frozen811/codex-lb/actions/runs/36916078511), attempt 2 — **success**. В attempt 1 shard2 закончил **1085 passed / 327 skipped**, но job помечен cancelled и aggregate отказал; это не assertion regression. Повторены только failed/cancelled jobs, gate не ослаблен. PR3/4/5 CI Required также success на указанных heads. Новые main-push runs после merge — отдельная evidence chain; не выдавать PR success за уже прошедший final-main CI. Release/tag/GHCR/PyPI publication не выполнялась.
+
+### 21.2. Реальные source-launcher дефекты и исправления
+
+- **F-025:** scripts использовали caller cwd и `uv run codex-lb`, поэтому editable install не готовил ignored dashboard. Isolated Windows cold-source baseline имел `/health/ready` 200, `/` **503**. Added shared `scripts/source_startup.py`: missing assets через pinned helper, затем app.cli в том же interpreter. Helpers honor frozen uv.lock and own checkout; help не требует frontend prerequisites. Внешний cwd не используется для выбора чужого проекта/config.
+- **F-026:** Windows PowerShell native CLI error возвращал launcher exit **0**. PS5/pwsh теперь сохраняют $LASTEXITCODE, batch делегирует через quoted own path/system PowerShell и сохраняет errorlevel; interactive pause только без аргументов. Bash shipped mode был **100644**, стал **100755**, script anchors dirname и execs uv.
+- **F-027:** реальный Linux source build выбрал Node **18.19.1** через Vite shebang и упал на absent `node:util.styleText`. `build_dashboard.py` теперь использует `bun --bun run build`; это confirmed runtime selection fix, не версия зависимости. Windows/Linux isolated Bun **1.3.14** archives сверены с official SHASUMS256.
+
+### 21.3. Доказательства INSTALL-09/10/11
+
+Windows audit root: `C:\Users\ext\AppData\Local\Temp\codex-lb-install-batch7-20261001\`; fresh source snapshots не содержали .venv/static/node_modules/env. Logs/result scripts retained. Ubuntu 24.04 WSL final source audit: `/home/ext/.cache/codex-lb-launcher-audits/batch7-v22xztgg/`; uv **0.11.16**, isolated Python/cache/data and Bun **1.3.14**, host Node **18.19.1**.
+
+| Продуктовый путь | Итог |
+|---|---|
+| Cold Windows PowerShell 5 source | **PASS** frontend install/build, readiness/HTML/JS/CSS from foreign cwd, checkout path with spaces |
+| Windows pwsh repeat | **PASS** same data/key after restart |
+| cmd/start.bat | **PASS** real startup, quoted checkout path/foreign cwd, preserved CLI exit 2 |
+| Windows log argument containing spaces | **PASS** actual CLI created the supplied log path; fresh rebuild with forced Bun runtime passed |
+| Missing uv | **PASS refusal**, PS and batch exit 1 with actionable diagnostic |
+| Wrong Bun 1.4.2 | **PASS refusal**, no dashboard-less server started |
+| Help without pinned Bun | **PASS**, CLI options available, no frontend output created |
+| Invalid CLI arguments | **PASS**, PS5/pwsh/cmd/Linux returned CLI exit 2 |
+| Windows retained state | **PASS**, synthetic dashboard setting false and encryption-key hash survived PS/pwsh/batch restarts |
+| Linux executable source run | **PASS**, direct run.sh from foreign cwd/path spaces, cold source build, readiness/HTML/JS/CSS and log-path args |
+| Linux repeat/state | **PASS**, setting/key retained on second start |
+| Linux foreground SIGTERM | **PASS**, uv forwarded termination; application shutdown completed, listener removed, supervisor returned expected signal exit **143** |
+| Optional Windows Rust/native helper | **PASS**, pinned Rust **1.96.0**, own CARGO_HOME/TARGET_DIR build --release --locked; native --help, PATH discovery, protocol handshake and child cleanup |
+
+Windows server tests use only owned process-tree cleanup; graceful Windows console Ctrl+C/close GUI semantics не заявлены выполненными. No real account/OAuth/Codex traffic, native macOS execution, LAN firewall changes или production data. Native transport handshake — не реальный upstream request. WSL tools/data отдельны от Windows, общая SQLite между двумя instances не использовалась.
+
+Intermediate harness failures recorded: baseline incorrectly expected dashboard 404, observed 503; initial cmd nested quote form was wrong, actual cmd call form passed; Python 3.14 module-style help differs from Python 3.13 prog name, assertion now checks product description/options; initial Linux SIGTERM assertion expected zero although uv legitimately returned 143 with complete shutdown; first Linux build failed on old Node and caused the actual --bun fix. None counted as green before correction. Automatic cleanup review rejected removing the disposable static directory without stated reason; no retry deletion, final Windows build used another fresh copy.
+
+### 21.4. Проверки, документация и следующий PR
+
+**35 focused unit cases PASS**, включая 7 new source-startup tests; full Ruff check/format, ty, architecture и strict OpenSpec **68 main specs PASS**. README **222/225**, headings **10/10**, budgets unchanged. PS/pwsh/Bash/cmd source commands, prerequisite pins, explicit frontend rebuild after update, optional Rust PATH setup и WSL/native OS boundaries отражены в owning Python guide/context; CHANGELOG не редактировался.
+
+OpenSpec: `repair-checkout-launchers`, verification then archive `2026-10-01-repair-checkout-launchers`. Новая ветка **fix/checkout-launchers** предназначена для следующего focused PR после main integration. Source scripts/data smoke не означает green cloud CI этого нового branch head. Main-публикация старых fixes не обновляет historical packages/images F-010. Release timing остаётся отдельно gated по exact-source main CI.

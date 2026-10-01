@@ -78,6 +78,108 @@ the corrected source distribution includes build helpers, frontend inputs and
 assets, and excludes local dependencies/worktrees. The ordinary GitHub source
 archive has no prebuilt assets and requires the pinned Bun prerequisite.
 
+## Run from a fork checkout
+
+Clone the fork and select the source revision you want to run. Source launchers
+need [uv](https://docs.astral.sh/uv/) and Bun **1.3.14** on PATH. uv supplies a
+compatible Python if one is unavailable. The launchers honor `uv.lock`, prepare
+missing dashboard assets, and run from their own checkout even when invoked
+from another directory. They do not install Bun automatically.
+
+To install the pinned Bun with its official installer, use one of these
+[version-specific commands](https://bun.sh/docs/installation#installing-older-versions),
+then reopen the terminal and check `bun --version`:
+
+```powershell
+iex "& {$(irm https://bun.com/install.ps1)} -Version 1.3.14"
+```
+
+```bash
+curl -fsSL https://bun.com/install | bash -s "bun-v1.3.14"
+```
+
+These optional setup commands install Bun in your user environment. The audit
+used checksum-verified isolated binaries instead of changing the user's install.
+
+```bash
+git clone https://github.com/Frozen811/codex-lb.git
+cd codex-lb
+git checkout <source-sha>
+```
+
+Windows PowerShell:
+
+```powershell
+.\run.ps1
+# Alternate port and a log path containing spaces:
+.\run.ps1 --port 2547 --log-file "logs with spaces/server.log"
+```
+
+If script execution policy prevents that command, invoke it explicitly with
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\run.ps1`. You can
+also double-click `start.bat`; the batch wrapper delegates to the same launcher
+and pauses after an interactive no-argument session ends. With explicit
+arguments, it returns the CLI's status without requiring a key press.
+
+Linux/WSL and macOS Bash:
+
+```bash
+./run.sh
+./run.sh --port 2547 --log-file "logs with spaces/server.log"
+```
+
+The Git checkout preserves its executable bit. `./run.sh --help` and
+`.\run.ps1 --help` work without frontend build prerequisites; normal startup
+with missing assets fails clearly if Bun is absent or incompatible. Frontend
+build tools are forced to use Bun, so an older host Node.js is not selected
+by a Vite shebang, as described in the [Bun runtime guide](https://bun.sh/docs/runtime#--bun).
+
+For manual development preparation: run `uv sync --dev --frozen`, then in
+`frontend` run `bun install --frozen-lockfile` and `bun --bun run build`.
+`uv run --frozen codex-lb` starts the CLI after that preparation. Editable
+dependency setup alone does not build the dashboard. After changing frontend
+sources or updating the checkout, rebuild the frontend explicitly; existing
+complete assets are reused on subsequent launcher starts.
+
+WSL uses Linux uv/Bun/Python inside its distribution. A Windows tool on PATH
+is not a substitute for Linux dependencies. Keep its checkout/cache/data on
+the Linux filesystem for reliable executable permissions and build behavior;
+do not share one SQLite data directory with a simultaneously running Windows
+instance. Default listeners are local; opening the service to a LAN requires
+the [remote-access configuration](remote.md), not a launcher-specific firewall rule.
+
+## Optional native transport helper
+
+Basic source startup and the Python fallback do not require Rust. To build
+the native transport helper, use the repository's pinned Rust **1.96.0** with
+the platform linker/toolchain (MSVC Build Tools on Windows):
+
+```bash
+cargo build --release --locked --package codex-lb-egress-worker --bin codex-lb-native-egress
+```
+
+The application discovers `codex-lb-native-egress` through PATH. Add the
+checkout's `target/release` directory for the current process before launching:
+
+```powershell
+$env:PATH = "$((Get-Location).Path)\target\release;$env:PATH"
+.\run.ps1
+```
+
+```bash
+PATH="$PWD/target/release:$PATH" ./run.sh
+```
+
+Use `codex-lb-native-egress --help` to verify the executable can run. This
+does not prove real upstream transport or account routing. Prefer the tested
+Docker source path when you want the helper and CA trust built into the image.
+
+Windows PowerShell/cmd and Ubuntu 24.04 WSL launchers were exercised on paths
+with spaces, foreign cwd, failures, readiness/assets and retained data. WSL
+SIGTERM forwarding completed application shutdown and removed its listener;
+uv returned signal status 143. macOS native startup remains an unexecuted
+platform boundary rather than a claimed successful install.
+
 ## Startup and retained data
 
 Open `http://localhost:2455` and check `/health/ready`. Both `codex-lb` and

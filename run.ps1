@@ -1,4 +1,7 @@
 # PowerShell launcher for codex-lb (Hardened Community Edition)
+$ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $false
+Set-Location -LiteralPath $PSScriptRoot
 Write-Host "========================================================" -ForegroundColor Cyan
 Write-Host "  codex-lb (Hardened Community Edition)" -ForegroundColor Cyan
 Write-Host "  Web Dashboard: http://localhost:2455" -ForegroundColor Green
@@ -11,4 +14,5 @@ if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-uv run codex-lb @args
+uv run --frozen python -m scripts.source_startup @args
+exit $LASTEXITCODE

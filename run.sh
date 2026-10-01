@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
+
 echo "========================================================"
 echo "  codex-lb (Hardened Community Edition)"
 echo "  Web Dashboard: http://localhost:2455"
@@ -13,4 +15,4 @@ if ! command -v uv >/dev/null 2>&1; then
     exit 1
 fi
 
-exec uv run codex-lb "$@"
+exec uv run --frozen python -m scripts.source_startup "$@"

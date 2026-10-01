@@ -194,6 +194,11 @@ wire_specification = "responses"
 ### 1. If using Git clone (Windows / Linux / macOS)
 Pull the latest commits from the fork and start as usual (dependencies and DB migrations are applied automatically):
 
+Source launchers require uv and Bun 1.3.14 for missing dashboard assets; see
+the [checkout guide](docs/deployment/python.md#run-from-a-fork-checkout).
+After updating frontend sources, rebuild them with the pinned Bun/frozen lock
+before restarting, since complete existing assets are reused.
+
 **Windows (PowerShell / Command Prompt):**
 ```powershell
 git pull origin main

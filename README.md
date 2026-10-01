@@ -65,6 +65,7 @@ Load balancer for ChatGPT accounts. Pool multiple accounts, track usage, manage 
 > git clone https://github.com/Frozen811/codex-lb.git
 > cd codex-lb
 > 
+> # Source prerequisites: uv + Bun 1.3.14; see docs/deployment/python.md
 > # Windows: double-click start.bat or run:
 > .\run.ps1
 > 
