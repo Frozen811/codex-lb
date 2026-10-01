@@ -74,4 +74,11 @@ def arm(
             session,
             reason="retry_circuit_poisoned_anchor" if evidence == "poison" else "reattach_missing_response_created",
         )
-    return quarantine._http_bridge_quarantine_registry(service)[session.key].quarantined_until
+    entry = quarantine._http_bridge_quarantine_registry(service)[session.key]
+    # A durable poison arm can already own the longer aggregate deadline.
+    # Report the local evidence's own expiry, not that adopted deadline.
+    if evidence == "poison":
+        return entry.local_poison_until
+    if evidence == "weaker" and entry.suppressed_weaker_reason is not None:
+        return entry.suppressed_weaker_until
+    return entry.quarantined_until

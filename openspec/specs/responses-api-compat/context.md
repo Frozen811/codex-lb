@@ -6,6 +6,29 @@ This capability implements OpenAI-compatible behavior for `POST /v1/responses`, 
 
 See `openspec/specs/responses-api-compat/spec.md` for normative requirements.
 
+## Bounded fallback after subscription owner lookup misses
+
+The [hard continuity ownership requirement](spec.md#requirement-hard-continuity-owner-lookup-fails-closed)
+distinguishes possible historical ownership from current routing eligibility.
+The fork's community continuity patch and upstream issue
+[#2274](https://github.com/Soju06/codex-lb/issues/2274) motivated this clarification.
+Candidate rows are copied while the repository session is open so later reads
+do not depend on expired ORM state. Shared resolution belongs to the service
+support domain; required-owner admission still belongs to account selection.
+
+For example, a key assigned only to A can pin A after a successful lookup miss
+even when unrelated B exists. For a scope containing active A and paused B,
+the same miss is ambiguous: pausing B does not establish A's ownership. A sole
+paused candidate can be identified but still fails normal admission. Codex
+affinity does not establish ownership for an arbitrary previous-response ID,
+including on a reused socket. Model-source transport handling remains governed
+by its separate source-routing contract.
+
+The regression tests use real session teardown and public HTTP, compact and
+direct WebSocket paths. These tests do not establish the cause of observed
+quota depletion after Pause or verify a published Docker tag; those require
+independent client, request-log and artifact evidence.
+
 ## Rationale and Decisions
 
 - **Responses as canonical wire format:** Internally we treat Responses as the source of truth to avoid divergent streaming semantics.

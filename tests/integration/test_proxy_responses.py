@@ -9,6 +9,7 @@ from collections.abc import AsyncIterator, Iterator, Mapping
 from datetime import timedelta
 from types import SimpleNamespace
 from typing import cast
+from unittest.mock import AsyncMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -1905,17 +1906,27 @@ async def test_v1_responses_missing_previous_response_owner_fails_closed_before_
 
 
 @pytest.mark.asyncio
-async def test_v1_responses_single_account_missing_previous_response_owner_fails_closed_without_dispatch(
+@pytest.mark.parametrize("stream", [False, True])
+async def test_v1_responses_single_account_missing_previous_response_owner_forwards(
     async_client,
     monkeypatch,
+    stream,
 ):
+    # Soju06/codex-lb#2274: exactly one possible owner may proceed.
     auth_json = _make_auth_json("acc_prev_single_cand", "prev-single-cand@example.com")
     files = {"auth_json": ("auth.json", json.dumps(auth_json), "application/json")}
     response = await async_client.post("/api/accounts/import", files=files)
     assert response.status_code == 200
 
-    async def fake_stream(*args, **kwargs):
-        raise AssertionError("missing previous_response_id owner must fail closed even with 1 account")
+    dispatched: list[tuple[str | None, str | None]] = []
+
+    async def fake_stream(payload, headers, access_token, account_id, **kwargs):
+        del headers, access_token, kwargs
+        dispatched.append((account_id, payload.previous_response_id))
+        yield (
+            'data: {"type":"response.completed","response":{"id":"resp_prev_single_followup",'
+            '"object":"response","status":"completed","output":[]}}\n\n'
+        )
 
     async def fake_resolve_owner(self, *, previous_response_id, api_key, session_id, surface):
         del self, previous_response_id, api_key, session_id, surface
@@ -1930,20 +1941,25 @@ async def test_v1_responses_single_account_missing_previous_response_owner_fails
             "model": "gpt-5.1",
             "input": "continue",
             "previous_response_id": "resp_prev_single_missing_owner",
+            "stream": stream,
         },
         headers={"session_id": "sid_prev_single_missing_owner"},
     )
 
-    assert response.status_code == 502
-    assert response.json()["error"]["code"] == "previous_response_owner_unavailable"
-    assert response.json()["error"]["message"] == "Previous response owner account is unavailable; retry later."
+    assert response.status_code == 200
+    if stream:
+        assert '"id":"resp_prev_single_followup"' in response.text
+    else:
+        assert response.json()["id"] == "resp_prev_single_followup"
+    assert dispatched == [("acc_prev_single_cand", "resp_prev_single_missing_owner")]
 
 
 @pytest.mark.asyncio
-async def test_v1_responses_compact_single_account_missing_previous_response_owner_fails_closed(
+async def test_v1_responses_compact_single_account_missing_previous_response_owner_forwards(
     async_client,
     monkeypatch,
 ):
+    # Soju06/codex-lb#2274: exactly one possible owner may proceed.
     auth_json = _make_auth_json("acc_prev_compact_single", "prev-compact-single@example.com")
     files = {"auth_json": ("auth.json", json.dumps(auth_json), "application/json")}
     response = await async_client.post("/api/accounts/import", files=files)
@@ -1953,7 +1969,21 @@ async def test_v1_responses_compact_single_account_missing_previous_response_own
         del self, previous_response_id, api_key, session_id, surface
         return None
 
+    dispatched: list[tuple[str | None, str | None]] = []
+
+    async def fake_compact(payload, headers, access_token, account_id, **kwargs):
+        del headers, access_token, kwargs
+        dispatched.append((account_id, payload.previous_response_id))
+        return CompactResponsePayload.model_validate(
+            {
+                "object": "response.compaction",
+                "compaction_summary": {"id": "cmp_prev_single_followup", "encrypted_content": "summary"},
+                "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
+            }
+        )
+
     monkeypatch.setattr(proxy_module.ProxyService, "_resolve_websocket_previous_response_owner", fake_resolve_owner)
+    monkeypatch.setattr(proxy_module, "core_compact_responses", fake_compact)
 
     response = await async_client.post(
         "/v1/responses/compact",
@@ -1965,9 +1995,194 @@ async def test_v1_responses_compact_single_account_missing_previous_response_own
         headers={"session_id": "sid_prev_compact_missing_owner"},
     )
 
+    assert response.status_code == 200
+    assert response.json()["compaction_summary"]["id"] == "cmp_prev_single_followup"
+    assert dispatched == [("acc_prev_compact_single", "resp_prev_compact_missing_owner")]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("endpoint", ["/v1/responses", "/v1/responses/compact"])
+async def test_v1_responses_owner_miss_counts_unroutable_accounts_as_possible_owners(
+    async_client,
+    monkeypatch,
+    endpoint,
+):
+    # Soju06/codex-lb#2274: routing eligibility may reject a known owner but
+    # must not choose one. A paused account can still own the response, so a
+    # pool with one routable and one paused account has two possible owners.
+    account_ids: list[str] = []
+    for raw_account_id, email in (
+        ("acc_prev_unroutable_active", "prev-unroutable-active@example.com"),
+        ("acc_prev_unroutable_paused", "prev-unroutable-paused@example.com"),
+    ):
+        auth_json = _make_auth_json(raw_account_id, email)
+        files = {"auth_json": ("auth.json", json.dumps(auth_json), "application/json")}
+        response = await async_client.post("/api/accounts/import", files=files)
+        assert response.status_code == 200
+        account_ids.append(generate_unique_account_id(raw_account_id, email))
+    paused = await async_client.post(f"/api/accounts/{account_ids[1]}/pause")
+    assert paused.status_code == 200
+
+    async def fake_stream(*args, **kwargs):
+        raise AssertionError("an owner miss with two possible owners must not dispatch to the routable one")
+        if False:
+            yield ""
+
+    async def fake_resolve_owner(self, *, previous_response_id, api_key, session_id, surface):
+        del self, previous_response_id, api_key, session_id, surface
+        return None
+
+    monkeypatch.setattr(proxy_module, "core_stream_responses", fake_stream)
+    monkeypatch.setattr(
+        proxy_module, "core_compact_responses", AsyncMock(side_effect=AssertionError("ambiguous owner"))
+    )
+    monkeypatch.setattr(proxy_module.ProxyService, "_resolve_websocket_previous_response_owner", fake_resolve_owner)
+
+    response = await async_client.post(
+        endpoint,
+        json={
+            "model": "gpt-5.1",
+            "input": "continue",
+            "previous_response_id": "resp_prev_unroutable_missing_owner",
+        },
+        headers={"session_id": "sid_prev_unroutable_missing_owner"},
+    )
+
     assert response.status_code == 502
     assert response.json()["error"]["code"] == "previous_response_owner_unavailable"
-    assert response.json()["error"]["message"] == "Previous response owner account is unavailable; retry later."
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("endpoint", ["/v1/responses", "/v1/responses/compact"])
+async def test_v1_responses_owner_miss_forwards_to_sole_assigned_account(
+    async_client,
+    monkeypatch,
+    endpoint,
+):
+    # Soju06/codex-lb#2274: fallback considers only the API key's assigned
+    # accounts, so accounts outside its scope do not make the owner ambiguous.
+    account_ids: list[str] = []
+    for raw_account_id, email in (
+        ("acc_prev_scoped_other", "prev-scoped-other@example.com"),
+        ("acc_prev_scoped_assigned", "prev-scoped-assigned@example.com"),
+    ):
+        auth_json = _make_auth_json(raw_account_id, email)
+        files = {"auth_json": ("auth.json", json.dumps(auth_json), "application/json")}
+        response = await async_client.post("/api/accounts/import", files=files)
+        assert response.status_code == 200
+        account_ids.append(generate_unique_account_id(raw_account_id, email))
+
+    response = await async_client.put("/api/settings", json={"apiKeyAuthEnabled": True})
+    assert response.status_code == 200
+    response = await async_client.post(
+        "/api/api-keys/",
+        json={"name": "prev-scoped-key", "assignedAccountIds": [account_ids[1]]},
+    )
+    assert response.status_code == 200
+    api_key = response.json()["key"]
+
+    dispatched: list[tuple[str | None, str | None]] = []
+
+    async def fake_stream(payload, headers, access_token, account_id, **kwargs):
+        del headers, access_token, kwargs
+        dispatched.append((account_id, payload.previous_response_id))
+        yield (
+            'data: {"type":"response.completed","response":{"id":"resp_prev_scoped_followup",'
+            '"object":"response","status":"completed","output":[]}}\n\n'
+        )
+
+    async def fake_resolve_owner(self, *, previous_response_id, api_key, session_id, surface):
+        del self, previous_response_id, api_key, session_id, surface
+        return None
+
+    async def fake_compact(payload, headers, access_token, account_id, **kwargs):
+        del headers, access_token, kwargs
+        dispatched.append((account_id, payload.previous_response_id))
+        return CompactResponsePayload.model_validate({"object": "response.compaction", "output": []})
+
+    monkeypatch.setattr(proxy_module, "core_stream_responses", fake_stream)
+    monkeypatch.setattr(proxy_module, "core_compact_responses", fake_compact)
+    monkeypatch.setattr(proxy_module.ProxyService, "_resolve_websocket_previous_response_owner", fake_resolve_owner)
+
+    response = await async_client.post(
+        endpoint,
+        json={
+            "model": "gpt-5.1",
+            "input": "continue",
+            "previous_response_id": "resp_prev_scoped_missing_owner",
+        },
+        headers={"session_id": "sid_prev_scoped_missing_owner", "Authorization": f"Bearer {api_key}"},
+    )
+
+    assert response.status_code == 200
+    if endpoint.endswith("compact"):
+        assert response.json()["object"] == "response.compaction"
+    else:
+        assert response.json()["id"] == "resp_prev_scoped_followup"
+    assert dispatched == [("acc_prev_scoped_assigned", "resp_prev_scoped_missing_owner")]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("endpoint", ["/v1/responses", "/v1/responses/compact"])
+@pytest.mark.parametrize("reason", ["paused", "listing_failure", "empty_scope"])
+async def test_owner_miss_refuses_dispatch_when_candidate_admission_is_unsafe(
+    async_client, monkeypatch, endpoint, reason
+):
+    from app.modules.proxy.load_balancer import LoadBalancer
+
+    raw_id, email = "acc_prev_refused", "prev-refused@example.com"
+    auth_json = _make_auth_json(raw_id, email)
+    imported = await async_client.post(
+        "/api/accounts/import", files={"auth_json": ("auth.json", json.dumps(auth_json), "application/json")}
+    )
+    assert imported.status_code == 200
+    headers = {"session_id": "sid_owner_refused"}
+    if reason == "paused":
+        paused = await async_client.post(f"/api/accounts/{generate_unique_account_id(raw_id, email)}/pause")
+        assert paused.status_code == 200
+    elif reason == "listing_failure":
+        monkeypatch.setattr(
+            LoadBalancer, "list_continuity_owner_candidates", AsyncMock(side_effect=RuntimeError("db read"))
+        )
+    else:
+        settings = await async_client.put("/api/settings", json={"apiKeyAuthEnabled": True})
+        assert settings.status_code == 200
+        key = await async_client.post(
+            "/api/api-keys/",
+            json={"name": "empty-owner-scope", "assignedAccountIds": [generate_unique_account_id(raw_id, email)]},
+        )
+        assert key.status_code == 200
+        assert key.json()["accountAssignmentScopeEnabled"] is True
+        removed = await async_client.delete(f"/api/accounts/{generate_unique_account_id(raw_id, email)}")
+        assert removed.status_code == 200
+        unrelated = _make_auth_json("acc_unrelated", "unrelated@example.com")
+        imported = await async_client.post(
+            "/api/accounts/import", files={"auth_json": ("auth.json", json.dumps(unrelated), "application/json")}
+        )
+        assert imported.status_code == 200
+        headers["Authorization"] = f"Bearer {key.json()['key']}"
+
+    async def no_dispatch(*args, **kwargs):
+        raise AssertionError("unsafe owner fallback must not dispatch")
+        yield ""
+
+    monkeypatch.setattr(proxy_module, "core_stream_responses", no_dispatch)
+    monkeypatch.setattr(proxy_module, "core_compact_responses", AsyncMock(side_effect=AssertionError("unsafe owner")))
+    monkeypatch.setattr(
+        proxy_module.ProxyService, "_resolve_websocket_previous_response_owner", AsyncMock(return_value=None)
+    )
+    response = await async_client.post(
+        endpoint,
+        json={"model": "gpt-5.1", "input": "continue", "previous_response_id": "resp_refused_owner"},
+        headers=headers,
+    )
+
+    if reason == "paused" and endpoint.endswith("compact"):
+        assert response.status_code == 503
+        assert response.json()["error"]["code"] == "no_accounts"
+    else:
+        assert response.status_code == 502
+        assert response.json()["error"]["code"] == "previous_response_owner_unavailable"
 
 
 @pytest.mark.asyncio

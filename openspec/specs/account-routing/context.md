@@ -6,6 +6,28 @@ The normative routing contract is in [spec.md](spec.md). This context explains
 why transient health is replica-local and how drained accounts return to normal
 routing without becoming permanently invisible behind healthier accounts.
 
+## Direct WebSocket Pause boundary
+
+Direct socket reuse can skip account selection, so the existing routing availability
+marker is checked again immediately before a new response.create is sent, after any
+asynchronous admission waits. The lookup remains in memory and uses the same
+cross-replica snapshot/local overlay as bridge reuse. The bound applies once the
+mark is visible on the serving replica; it is not a distributed send lock.
+
+For example, A completes a response, the dashboard Pause API commits PAUSED, and
+a client submits another fresh or anchored turn on the same socket. That unsent
+turn receives upstream_unavailable or previous_response_owner_unavailable and
+releases its reservation and create admission. The socket remains alive for
+responses that were already dispatched before Pause. Pause does not promise to
+cancel existing generation or freeze upstream quota immediately.
+
+The independent 2026-10-01 reproduction used the public Pause API and real DB
+selection on both direct WebSocket ingress routes. Delayed admission, peer-only
+snapshot changes and removal from the snapshot are also covered. Transport-only
+fixtures start with an unseeded empty snapshot when their fictional account IDs
+do not exist in the test DB; actual routing regressions explicitly seed/refresh
+the native snapshot and preserve its missing-account refusal.
+
 ## Reauthentication warning state
 
 `reauth_required` alone means refresh-token exchange needs operator repair; it does not

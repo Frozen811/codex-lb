@@ -55,11 +55,26 @@ from app.modules.proxy.load_balancer import (
     AccountLease,
     AccountSelection,
     CatalogOmissionQuotaAdmission,
+    LoadBalancer,
 )
 from app.modules.proxy.tool_call_dedupe import ToolCallDedupeKey
 from app.modules.proxy.work_admission import AdmissionLease
 
 logger = logging.getLogger(__name__)
+
+
+async def resolve_continuity_owner_candidate(
+    load_balancer: LoadBalancer,
+    *,
+    api_key: ApiKeyData | None = None,
+) -> str | None:
+    """Pin the sole possible owner after a successful previous-response lookup miss."""
+    try:
+        candidates = await load_balancer.list_continuity_owner_candidates(api_key=api_key)
+        return candidates[0].id if len(candidates) == 1 else None
+    except Exception:
+        logger.warning("Failed to list continuity owner candidates on lookup miss", exc_info=True)
+        return None
 
 
 _REQUEST_TRANSPORT_HTTP = "http"

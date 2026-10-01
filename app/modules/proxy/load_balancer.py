@@ -7,7 +7,7 @@ import logging
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Iterable
+from typing import TYPE_CHECKING, Iterable
 from uuid import uuid4
 
 from app.core import usage as usage_core
@@ -105,9 +105,16 @@ from app.modules.proxy._load_balancer.sticky_selection import (
     SelectionInputsProtocol,
     StickySelectionRequest,
     _clone_account,
+    _required_continuity_owner_failure,
     _StickySelectionOutcome,
     prepare_selection_states,
     run_sticky_selection_path,
+)
+from app.modules.proxy._load_balancer.sticky_selection import (
+    CONTINUITY_OWNER_POLICY_CONFLICT as CONTINUITY_OWNER_POLICY_CONFLICT,
+)
+from app.modules.proxy._load_balancer.sticky_selection import (
+    CONTINUITY_OWNER_UNAVAILABLE as CONTINUITY_OWNER_UNAVAILABLE,
 )
 from app.modules.proxy._load_balancer.sticky_selection import (
     _account_cap_error_message as _account_cap_error_message,
@@ -178,6 +185,7 @@ from app.modules.usage.mappers import usage_history_to_window_row
 
 if TYPE_CHECKING:
     from app.modules.accounts.repository import AccountsRepository
+    from app.modules.api_keys.service import ApiKeyData
     from app.modules.proxy.sticky_repository import StickyOwnerLookup, StickySessionsRepository
 
 logger = logging.getLogger(__name__)
@@ -196,8 +204,6 @@ NO_ADDITIONAL_QUOTA_ELIGIBLE_ACCOUNTS = "no_additional_quota_eligible_accounts"
 _ROUTING_POLICY_NORMAL = "normal"
 _ACCOUNT_ROUTING_POLICIES = frozenset({_ROUTING_POLICY_NORMAL, ROUTING_POLICY_BURN_FIRST, ROUTING_POLICY_PRESERVE})
 _ADDITIONAL_QUOTA_ROUTING_POLICIES = _ACCOUNT_ROUTING_POLICIES | frozenset({"inherit"})
-CONTINUITY_OWNER_UNAVAILABLE = "continuity_owner_unavailable"
-CONTINUITY_OWNER_POLICY_CONFLICT = "continuity_owner_policy_conflict"
 _AMBIGUOUS_CONVERSATION_OWNER_CODE = "conversation_owner_unavailable"
 _AMBIGUOUS_CONVERSATION_OWNER_MESSAGE = "Conversation owner cannot be determined from the eligible account pool"
 
@@ -275,26 +281,6 @@ class _SelectionInputs(SelectionInputsProtocol):
         return self.sticky_mutation_authority_account_ids
 
 
-def _required_continuity_owner_failure(
-    selection_inputs: _SelectionInputs,
-    *,
-    required_account_id: str,
-) -> tuple[str, str] | None:
-    if selection_inputs.error_code is not None:
-        return None
-    eligible_ids = {account.id for account in selection_inputs.effective_continuity_owner_candidates} | {
-        account.id for account in selection_inputs.accounts
-    }
-    if required_account_id in eligible_ids:
-        return None
-    runtime_accounts = (
-        selection_inputs.accounts if selection_inputs.runtime_accounts is None else selection_inputs.runtime_accounts
-    )
-    if required_account_id not in {account.id for account in runtime_accounts}:
-        return CONTINUITY_OWNER_UNAVAILABLE, "Required continuity owner account no longer exists"
-    return CONTINUITY_OWNER_POLICY_CONFLICT, "Required continuity owner is outside the eligible account policy"
-
-
 SelectionInputs = _SelectionInputs
 
 
@@ -328,20 +314,18 @@ class LoadBalancer:
         """Routing/overload knobs as of the most recent request-path snapshot."""
         return self._routing_tunables or effective_routing_tunables()
 
-    async def list_continuity_owner_candidates(
-        self,
-        *,
-        api_key: Any = None,
-    ) -> list[Account]:
+    async def list_continuity_owner_candidates(self, *, api_key: ApiKeyData | None = None) -> list[Account]:
         """List possible owners for continuity fallback on lookup miss.
 
         The possible owners are the key's assigned accounts (all accounts if unscoped),
         ignoring health, quota, plan and model support.
         """
         async with self._repo_factory() as repos:
-            accounts = await repos.accounts.list_accounts()
-        if api_key is not None and getattr(api_key, "account_assignment_scope_enabled", False):
-            assigned = set(getattr(api_key, "assigned_account_ids", []) or [])
+            # Clone inside the session: the rows outlive it, and a detached ORM
+            # instance raises DetachedInstanceError on the first attribute read.
+            accounts = [clone_row(account) for account in await repos.accounts.list_accounts()]
+        if api_key is not None and api_key.account_assignment_scope_enabled:
+            assigned = set(api_key.assigned_account_ids)
             return [account for account in accounts if account.id in assigned]
         return accounts
 

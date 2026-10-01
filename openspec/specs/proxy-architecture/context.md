@@ -5,6 +5,10 @@ free-form context for the proxy-architecture capability: architecture decision
 records (ADRs) are appended here and superseded by later entries rather than
 edited in place. Relocated from the former repository-root `DECISIONS.md`.
 
+## Portable diagnostic formatting
+
+The architecture checker renders paths with `Path.as_posix()` after making them relative to the repository when possible. For example, a Windows parse failure at `C:\repo\app\modules\proxy\service.py` reports `app/modules/proxy/service.py`, matching Linux diagnostics. An outside-root file retains its drive and absolute identity. This addresses F-011 without changing thresholds, check ordering or error handling; invalid spec and source cases remain non-zero failures.
+
 ## ADR-0001: ProxyService target-architecture cutover refactor
 
 - **Date:** 2026-06-05

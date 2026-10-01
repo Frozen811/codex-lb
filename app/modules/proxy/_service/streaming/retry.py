@@ -61,7 +61,6 @@ from app.modules.proxy._load_balancer.overload_backoff import (
     record_upstream_burst_rejection,
 )
 from app.modules.proxy._load_balancer.quarantine import quarantine_permanent_failure
-from app.modules.proxy._service.continuity_owner import resolve_continuity_owner_candidate
 from app.modules.proxy._service.observability import (
     _maybe_log_proxy_request_shape,
     _record_continuity_fail_closed,
@@ -85,6 +84,7 @@ from app.modules.proxy._service.support import (
     _TransientStreamError,
     _WebSocketUpstreamControl,
     configured_upstream_stream_transport,
+    resolve_continuity_owner_candidate,
     upstream_websocket_transport_recently_failed,
 )
 from app.modules.proxy._service.websocket.helpers import (
