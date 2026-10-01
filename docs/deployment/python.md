@@ -67,6 +67,10 @@ contains assets and does not require Bun at install time. Source installation
 needs network access for Python and frontend dependencies; build failure is
 reported instead of producing a package whose dashboard is missing.
 
+Editable development setup (`uv sync`) installs Python dependencies without
+compiling the dashboard or requiring Bun. Build the frontend explicitly before
+using its dashboard; this exception does not apply to distributable wheels/sdists.
+
 For a checkout of the selected source, build distributable packages with
 `uv build`, then install the wheel with `uv pip install --python <venv-python>
 <wheel-path>` or pip. A source distribution can be installed the same way;

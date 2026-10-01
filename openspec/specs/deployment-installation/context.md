@@ -46,6 +46,10 @@ Example: install a verified wheel with uv tool install --python 3.13 <fork-wheel
 
 Source installs need the pinned Bun prerequisite and dependency network access, whereas complete wheel/sdist installs require only Python dependencies. Application data defaults to ~/.codex-lb regardless of tool/venv path, with CODEX_LB_DATA_DIR taking precedence; keep that data/key and the corresponding SQL backup across updates. Package smoke does not prove real account login, routing or older-schema compatibility. See [Python installation](../../../docs/deployment/python.md); macOS/Linux native package installs remain separate from the verified Windows run.
 
+## Editable setup and frontend compilation
+
+Windows diagnostic run 36904727598 on b89bd0a1 failed during uv sync, before Bun setup: the distribution hook also ran for Hatch's editable wheel version. Editable dependency setup now skips dashboard compilation only for that wheel version; standard wheel/sdist builds retain the exact Bun and complete-assets requirement. Existing development/CI workflows compile the frontend separately after installing Python dependencies. A fresh no-asset uv sync with incompatible host Bun verifies this boundary; a normal wheel build in the same environment must still fail. This also preserves backend-only CI setup without adding frontend dependencies to every job.
+
 ## Nix flake workflow
 
 The root flake is an additive installation and development path for Nix users.
