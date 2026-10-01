@@ -8,9 +8,13 @@ from unittest.mock import AsyncMock
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.utils.time import utcnow
+from app.db.models import Account, AccountStatus
+from app.db.session import SessionLocal
 from app.dependencies import get_proxy_service_for_app
 from app.modules.proxy import api as proxy_api
 from app.modules.proxy import service as proxy_service
+from app.modules.proxy.account_cache import clear_account_routing_unavailable
 from tests.integration.test_proxy_websocket_responses import (
     _FakeUpstreamMessage,
     _SequencedUpstreamWebSocket,
@@ -18,6 +22,25 @@ from tests.integration.test_proxy_websocket_responses import (
 )
 
 pytestmark = pytest.mark.integration
+
+
+async def _seed_connected_account() -> None:
+    async with SessionLocal() as session:
+        session.add(
+            Account(
+                id="only-account",
+                chatgpt_account_id="only-account",
+                email="close-size@example.invalid",
+                plan_type="plus",
+                access_token_encrypted=b"access",
+                refresh_token_encrypted=b"refresh",
+                id_token_encrypted=b"id",
+                last_refresh=utcnow(),
+                status=AccountStatus.ACTIVE,
+            )
+        )
+        await session.commit()
+    clear_account_routing_unavailable("only-account")
 
 
 @pytest.mark.parametrize("path", ["/v1/responses", "/backend-api/codex/responses"])
@@ -74,6 +97,9 @@ def test_direct_close_1009_is_terminal_without_replay_or_account_penalty(
     }
 
     with TestClient(app_instance) as client:
+        assert client.portal is not None
+        # The mocked connection must represent a committed, routable account.
+        client.portal.call(_seed_connected_account)
         with client.websocket_connect(path) as websocket:
             websocket.send_text(json.dumps(body))
             received = [json.loads(websocket.receive_text()) for _ in range(3 if after_output else 1)]
