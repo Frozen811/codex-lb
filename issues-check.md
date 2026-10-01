@@ -878,8 +878,8 @@ index f65b64c2..93f145da 100644
 --- a/tests/integration/test_proxy_responses.py
 +++ b/tests/integration/test_proxy_responses.py
 @@ -1905,17 +1905,25 @@ async def test_v1_responses_missing_previous_response_owner_fails_closed_before_
- 
- 
+
+
  @pytest.mark.asyncio
 -async def test_v1_responses_single_account_missing_previous_response_owner_fails_closed_without_dispatch(
 +async def test_v1_responses_single_account_missing_previous_response_owner_forwards(
@@ -891,7 +891,7 @@ index f65b64c2..93f145da 100644
      files = {"auth_json": ("auth.json", json.dumps(auth_json), "application/json")}
      response = await async_client.post("/api/accounts/import", files=files)
      assert response.status_code == 200
- 
+
 -    async def fake_stream(*args, **kwargs):
 -        raise AssertionError("missing previous_response_id owner must fail closed even with 1 account")
 +    dispatched: list[tuple[str | None, str | None]] = []
@@ -903,21 +903,21 @@ index f65b64c2..93f145da 100644
 +            'data: {"type":"response.completed","response":{"id":"resp_prev_single_followup",'
 +            '"object":"response","status":"completed","output":[]}}\n\n'
 +        )
- 
+
      async def fake_resolve_owner(self, *, previous_response_id, api_key, session_id, surface):
          del self, previous_response_id, api_key, session_id, surface
 @@ -1934,16 +1942,17 @@ async def test_v1_responses_single_account_missing_previous_response_owner_fails
          headers={"session_id": "sid_prev_single_missing_owner"},
      )
- 
+
 -    assert response.status_code == 502
 -    assert response.json()["error"]["code"] == "previous_response_owner_unavailable"
 -    assert response.json()["error"]["message"] == "Previous response owner account is unavailable; retry later."
 +    assert response.status_code == 200
 +    assert response.json()["id"] == "resp_prev_single_followup"
 +    assert dispatched == [("acc_prev_single_cand", "resp_prev_single_missing_owner")]
- 
- 
+
+
  @pytest.mark.asyncio
 -async def test_v1_responses_compact_single_account_missing_previous_response_owner_fails_closed(
 +async def test_v1_responses_compact_single_account_missing_previous_response_owner_forwards(
@@ -931,7 +931,7 @@ index f65b64c2..93f145da 100644
 @@ -1953,7 +1962,21 @@ async def test_v1_responses_compact_single_account_missing_previous_response_own
          del self, previous_response_id, api_key, session_id, surface
          return None
- 
+
 +    dispatched: list[tuple[str | None, str | None]] = []
 +
 +    async def fake_compact(payload, headers, access_token, account_id, **kwargs):
@@ -947,13 +947,13 @@ index f65b64c2..93f145da 100644
 +
      monkeypatch.setattr(proxy_module.ProxyService, "_resolve_websocket_previous_response_owner", fake_resolve_owner)
 +    monkeypatch.setattr(proxy_module, "core_compact_responses", fake_compact)
- 
+
      response = await async_client.post(
          "/v1/responses/compact",
 @@ -1965,9 +1988,115 @@ async def test_v1_responses_compact_single_account_missing_previous_response_own
          headers={"session_id": "sid_prev_compact_missing_owner"},
      )
- 
+
 +    assert response.status_code == 200
 +    assert response.json()["compaction_summary"]["id"] == "cmp_prev_single_followup"
 +    assert dispatched == [("acc_prev_compact_single", "resp_prev_compact_missing_owner")]
@@ -1064,15 +1064,15 @@ index f65b64c2..93f145da 100644
 +    assert response.status_code == 200
 +    assert response.json()["id"] == "resp_prev_scoped_followup"
 +    assert dispatched == [("acc_prev_scoped_assigned", "resp_prev_scoped_missing_owner")]
- 
- 
+
+
  @pytest.mark.asyncio
 diff --git a/tests/unit/test_continuity_owner.py b/tests/unit/test_continuity_owner.py
 index af58a9fc..5c488121 100644
 --- a/tests/unit/test_continuity_owner.py
 +++ b/tests/unit/test_continuity_owner.py
 @@ -97,3 +97,27 @@ async def test_resolve_continuity_owner_candidate_exception_fails_closed():
- 
+
      result = await resolve_continuity_owner_candidate(lb)
      assert result is None
 +
@@ -1108,13 +1108,13 @@ index 6df73d39..db350221 100644
      service = proxy_service.ProxyService(_repo_factory(request_logs))
      account = _make_account("acc_compact_scoped_owner_miss")
 -    seen_account_ids: list[list[str] | None] = []
- 
+
      api_key = ApiKeyData(
          id="key_compact_scope",
 @@ -16115,16 +16114,12 @@ async def test_compact_owner_miss_uses_api_key_scope_before_fail_closed(monkeypa
      monkeypatch.setattr(proxy_service, "get_settings", lambda: settings)
      monkeypatch.setattr(service, "_resolve_websocket_previous_response_owner", AsyncMock(return_value=None))
- 
+
 -    async def fake_load_selection_inputs(**kwargs):
 -        seen_account_ids.append(kwargs.get("account_ids"))
 -        return SimpleNamespace(accounts=[account])
@@ -1133,9 +1133,9 @@ index 6df73d39..db350221 100644
 +    monkeypatch.setattr(service._load_balancer, "select_account", select_account)
      monkeypatch.setattr(service, "_ensure_fresh", AsyncMock(return_value=account))
      monkeypatch.setattr(service, "_settle_compact_api_key_usage", AsyncMock())
- 
+
 @@ -16147,7 +16142,10 @@ async def test_compact_owner_miss_uses_api_key_scope_before_fail_closed(monkeypa
- 
+
      assert result.object == "response.compaction"
      assert result.model_extra == {"output": []}
 -    assert seen_account_ids == [[account.id]]
@@ -1143,10 +1143,10 @@ index 6df73d39..db350221 100644
 +    assert list_continuity_owner_candidates.await_args is not None
 +    assert list_continuity_owner_candidates.await_args.kwargs["api_key"] is api_key
 +    select_account.assert_awaited_once()
- 
- 
+
+
  @pytest.mark.asyncio
--- 
+--
 2.54.0.windows.1
 ````
 
