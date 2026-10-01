@@ -44,11 +44,13 @@ services:
     build:
       context: ./frontend
       dockerfile_inline: |
-        FROM oven/bun:1.4.2-alpine
+        FROM oven/bun:1.3.14-alpine
         WORKDIR /app
-        COPY package.json bun.lock ./
+        RUN chown bun:bun /app
+        USER bun
+        COPY --chown=bun:bun package.json bun.lock ./
         RUN bun install --frozen-lockfile
-        COPY . .
+        COPY --chown=bun:bun . .
         CMD ["bun", "run", "dev", "--host", "0.0.0.0"]
     ports:
       - "5173:5173"
@@ -61,6 +63,9 @@ services:
           target: /app
           ignore:
             - node_modules/
+            - .env
+            - .env.*
+            - .git/
         - action: rebuild
           path: ./frontend/package.json
         - action: rebuild
@@ -107,7 +112,8 @@ services:
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U codex_lb -d codex_lb"]
+      # Use the container network address, not initdb's loopback trust rules.
+      test: ["CMD-SHELL", "PGPASSWORD=\"$${POSTGRES_PASSWORD}\" psql -h \"$${HOSTNAME}\" -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -v ON_ERROR_STOP=1 -c 'SELECT 1' >/dev/null"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -138,7 +144,7 @@ services:
     ports:
       - "3306:3306"
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -ucodex_lb -pcodex_lb --silent"]
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$${MYSQL_PASSWORD}\" mysql --protocol=TCP -h 127.0.0.1 -u\"$${MYSQL_USER}\" \"$${MYSQL_DATABASE}\" -e 'SELECT 1' >/dev/null"]
       interval: 10s
       timeout: 5s
       retries: 10

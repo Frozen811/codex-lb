@@ -21,6 +21,18 @@ def test_stock_compose_uses_user_defined_default_bridge(compose_name: str) -> No
         assert "dns" not in service
 
 
+def test_server_only_compose_builds_source_without_a_public_release_name() -> None:
+    compose = yaml.safe_load((_REPO_ROOT / "docker-compose.prod.yml").read_text(encoding="utf-8"))
+    server = compose["services"]["server"]
+    # A cached registry image previously won normal `up` despite build being
+    # present. Both selection and local image identity are operator contracts.
+    assert server["build"]["context"] == "."
+    assert server["pull_policy"] == "build"
+    assert "/" not in server["image"]
+    assert set(compose["services"]) == {"server"}
+    assert server["env_file"][0]["required"] is False
+
+
 def test_standalone_docker_examples_use_named_bridge() -> None:
     readme = (_REPO_ROOT / "README.md").read_text(encoding="utf-8")
     standalone_launches = readme.count("docker run -d --name codex-lb")

@@ -12,7 +12,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo build --release --locked --package codex-lb-egress-worker --bin codex-lb-native-egress \
     && cp target/release/codex-lb-native-egress /tmp/codex-lb-native-egress
 
-FROM oven/bun:1.4.2-alpine AS frontend-build
+FROM oven/bun:1.3.14-alpine AS frontend-build
 
 WORKDIR /app/frontend
 
@@ -85,5 +85,8 @@ RUN chmod +x /app/scripts/docker-entrypoint.sh \
 USER app
 RUN test -z "$(find /app/app /app/config /app/scripts -type f ! -readable -print -quit)"
 EXPOSE 2455 1455
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:2455/health/ready', timeout=4)"]
 
 CMD ["/app/scripts/docker-entrypoint.sh"]

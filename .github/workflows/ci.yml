@@ -810,6 +810,30 @@ jobs:
           cache-from: type=gha,scope=${{ env.DOCKER_CACHE_SCOPE }}
           cache-to: type=gha,mode=max,scope=${{ env.DOCKER_CACHE_SCOPE }}
 
+      - name: Build distroless Docker image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: .
+          file: Dockerfile.distroless
+          push: false
+          load: true
+          tags: codex-lb-distroless:ci
+          cache-from: type=gha,scope=${{ env.DOCKER_CACHE_SCOPE }}-distroless
+          cache-to: type=gha,mode=max,scope=${{ env.DOCKER_CACHE_SCOPE }}-distroless
+
+      - name: Smoke standard and distroless readiness and assets
+        run: |
+          container="codex-lb-docker-smoke-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+          for image in codex-lb:ci codex-lb-distroless:ci; do
+            ownership=$(docker run --rm --entrypoint python "$image" -c 'import os; assert os.getuid() != 0; print(f"uid={os.getuid()},gid={os.getgid()}")')
+            docker run -d --name "$container" --tmpfs "/var/lib/codex-lb:$ownership" -p 127.0.0.1::2455 "$image"
+            port=$(docker port "$container" 2455/tcp | cut -d: -f2)
+            python3 -m scripts.smoke_release --base-url "http://127.0.0.1:$port"
+            docker exec "$container" python -c 'import ssl, subprocess; assert ssl.create_default_context().get_ca_certs(); subprocess.run(["/usr/local/bin/codex-lb-native-egress", "--help"], input=b"", check=True, timeout=5)'
+            docker rm -f "$container"
+          done
+
       - name: Scan Docker image with Trivy (SARIF)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
