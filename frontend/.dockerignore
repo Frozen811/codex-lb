@@ -1,0 +1,16 @@
+node_modules
+dist
+coverage
+.git
+**/.git
+**/node_modules
+**/.env
+**/.env.*
+**/.npmrc
+**/*.key
+**/*.pem
+**/.kilo
+**/.codex
+**/.agents
+**/.worktrees
+**/worktrees

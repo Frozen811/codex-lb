@@ -42,3 +42,15 @@ def test_postgres18_compose_upgrade_helper_is_digest_pinned() -> None:
     assert upgrade["environment"]["PGAUTO_ONESHOT"] == "yes"
     assert upgrade["volumes"] == ["codex-lb-postgres-data:/var/lib/postgresql"]
     assert upgrade["restart"] == "no"
+
+
+def test_postgres_healthcheck_requires_authenticated_database_query() -> None:
+    # pg_isready does not establish valid user/database access. Use runtime env
+    # expansion after Compose interpolation so changed credentials are checked.
+    postgres = _compose()["services"]["postgres"]
+    assert postgres["healthcheck"]["test"] == [
+        "CMD-SHELL",
+        'PGPASSWORD="$${POSTGRES_PASSWORD}" psql -h "$${HOSTNAME}" '
+        '-U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" '
+        "-v ON_ERROR_STOP=1 -c 'SELECT 1' >/dev/null",
+    ]

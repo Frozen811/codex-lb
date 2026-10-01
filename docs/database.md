@@ -16,8 +16,31 @@ Backup this directory to preserve your data (database, encryption key, archives)
 The Docker Compose `postgres` profile uses the Postgres 18 image and mounts the named data volume at
 `/var/lib/postgresql`, the parent of the image's versioned `PGDATA` directory. The `postgres` and
 `postgres-upgrade` profiles live in the root
-[`docker-compose.yml`](https://github.com/Soju06/codex-lb/blob/main/docker-compose.yml)
-(`docker-compose.prod.yml` only defines the `server` service, for external PostgreSQL).
+[`docker-compose.yml`](https://github.com/Frozen811/codex-lb/blob/main/docker-compose.yml)
+(`docker-compose.prod.yml` defines only the source-built `server`, with SQLite
+by default or optional external PostgreSQL).
+
+Profiles start the database only: enabling `postgres` does not automatically
+switch the application away from SQLite. For a containerized backend, create
+`.env.local` in the checkout with this development-only URL:
+
+```dotenv
+CODEX_LB_DATABASE_URL=postgresql+asyncpg://codex_lb:codex_lb@postgres:5432/codex_lb
+```
+
+```bash
+docker compose --profile postgres up -d --wait postgres
+docker compose --profile postgres up -d --build --force-recreate server frontend
+```
+
+The profile's health probe runs authenticated SQL against the application
+database. Start the database and wait before the application. Use service DNS
+`postgres` from the backend container; use `127.0.0.1:5432` for a host-side
+client. Changing `.env.local` needs application recreation, not just `restart`.
+Do not enable both database profiles for a single application. The supplied
+credentials are for local development; use an existing external database with
+your own credentials for production. Keep the application volume for its
+encryption key and back up the SQL database separately.
 
 ## Upgrading Postgres 16 → 18
 
@@ -87,6 +110,24 @@ intent for a schema mutex and worth knowing when running several test databases 
 
 `docker compose --profile mysql up -d mysql` starts a local MySQL 8.4 with the `codex_lb` database.
 
+To use it from the containerized backend, set this development-only URL in
+`.env.local`, then wait for the database and recreate the application:
+
+```dotenv
+CODEX_LB_DATABASE_URL=mysql+asyncmy://codex_lb:codex_lb@mysql:3306/codex_lb
+```
+
+```bash
+docker compose --profile mysql up -d --wait mysql
+docker compose --profile mysql up -d --build --force-recreate server frontend
+```
+
+Host-side clients use `127.0.0.1:3306`. MySQL health requires a successful
+authenticated `SELECT 1` on the selected database: `mysqladmin ping` alone
+also succeeds on access-denied, as documented in the
+[MySQL manual](https://dev.mysql.com/doc/refman/8.4/en/mysqladmin.html).
+Neither profile migrates data from an existing SQLite installation.
+
 ### Sizing the server
 
 Size InnoDB deliberately. A profile for a database of up to ~5 GiB:
@@ -124,4 +165,4 @@ line.
 
 ---
 
-*Specs: [database-backends](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/database-backends) · [database-migrations](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/database-migrations)*
+*Specs: [database-backends](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/database-backends) · [database-migrations](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/database-migrations) · [deployment-installation](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/deployment-installation)*

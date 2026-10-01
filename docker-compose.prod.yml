@@ -1,9 +1,10 @@
-# Production Docker Compose — PostgreSQL backend
+# Server-only Docker Compose — source build, SQLite or external PostgreSQL
 # Usage:
-#   cp .env.example .env.local   # fill in secrets
+#   # Optional: create .env.local with overrides (see docs/deployment/docker.md)
 #   docker compose -f docker-compose.prod.yml up -d
 #
-# Requires external PostgreSQL. Set CODEX_LB_DATABASE_URL in .env.local:
+# SQLite persists in the named volume by default. To use external PostgreSQL,
+# set CODEX_LB_DATABASE_URL in .env.local (localhost refers to this container):
 #   CODEX_LB_DATABASE_URL=postgresql+asyncpg://user:password@host:5432/codexlb
 #
 # NOTE: This Compose file defines a SINGLE-REPLICA topology.
@@ -15,7 +16,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ghcr.io/frozen811/codex-lb:1.25.1
+    # Always build this checkout; never label local source as an official release.
+    image: codex-lb:local
+    pull_policy: build
     env_file:
       - path: .env.local
         required: false

@@ -32,9 +32,10 @@ def test_mysql_compose_service_matches_make_test_mysql_defaults() -> None:
 def test_mysql_compose_healthcheck_uses_the_codex_lb_account() -> None:
     mysql = _compose()["services"]["mysql"]
 
-    # ``mysqladmin ping`` exits non-zero while the server is still initialising;
-    # the healthcheck must gate dependents on a direct TCP ping with the app account.
+    # mysqladmin ping also succeeds on access-denied. Require a real query using
+    # the runtime application credentials and database before reporting health.
     assert mysql["healthcheck"]["test"] == [
         "CMD-SHELL",
-        "mysqladmin ping -h 127.0.0.1 -ucodex_lb -pcodex_lb --silent",
+        'MYSQL_PWD="$${MYSQL_PASSWORD}" mysql --protocol=TCP -h 127.0.0.1 '
+        '-u"$${MYSQL_USER}" "$${MYSQL_DATABASE}" -e \'SELECT 1\' >/dev/null',
     ]
