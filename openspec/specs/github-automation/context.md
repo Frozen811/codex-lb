@@ -133,6 +133,14 @@ therefore had to subscribe to `pull_request: edited`.
 - If the guards ever need the matrix result, do not fold them back into
   `ci.yml`; gate on the separate contexts instead.
 
+## Windows startup regression
+
+The Windows workflow runs for main pushes, pull-request source updates, merge-group candidates and manual dispatches, with one stable job and read-only contents permission. No workflow path filter can leave this candidate untested. Changes to PR text do not restart it. Pinned checkout/setup actions, Python 3.13 and Bun 1.3.14 match the tested release tooling.
+
+It checks memory monitoring, architecture diagnostics and launcher contracts, builds dashboard assets and a wheel, installs into a fresh environment under RUNNER_TEMP, and invokes the shared release smoke outside the checkout. PowerShell checks each native-command exit before proceeding. The smoke uses temporary storage and a random loopback port, checks runtime/distribution/source identity, readiness and HTML/JS/CSS, and terminates its process tree.
+
+Example: an import-only check would miss an unusable lifespan or missing dashboard assets; the installed-wheel smoke fails those candidates. A manual run on published main is baseline evidence only, and the fork release gate requires a successful automatic main-push run at the exact candidate SHA. This is startup/package coverage; real Codex routing, OAuth and Windows network transport still need their own tests.
+
 ## Changed OpenSpec validation
 
 Issue #2032 exposed that canonical-only validation accepts malformed active deltas. The required OpenSpec job also runs `.github/scripts/validate_changed_openspec.py` against GitHub event revisions. PR selection uses the merge base and event head, while validation runs in the normal merge checkout. A target-only invalid change added after a PR branches does not enter that PR's validation set.
