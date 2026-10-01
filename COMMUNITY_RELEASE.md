@@ -213,7 +213,10 @@ sudo systemctl restart codex-lb
 ---
 
 ### 2. If using pip or uv pre-built wheel
-Upgrade to the latest wheel release:
+The URLs below install the historical hardened.3 artifact. Its package version
+is 1.25.1 but runtime is 1.25.0-beta.9; it does not include later checkout fixes.
+Select a verified newer artifact URL explicitly when available. See the
+[Python installation guide](docs/deployment/python.md) for source and package channels.
 
 **pip:**
 ```bash
@@ -230,18 +233,33 @@ codex-lb
 ---
 
 ### 3. If running via uvx (zero install)
-Use `--refresh` to invalidate the cached build and fetch the newest HEAD commit:
+For the historical fork wheel, refresh its cached tool environment explicitly:
 ```bash
-uvx --refresh --from git+https://github.com/Frozen811/codex-lb.git codex-lb
+uvx --refresh --from https://github.com/Frozen811/codex-lb/releases/download/v1.25.0-hardened.3/codex_lb-1.25.1-py3-none-any.whl codex-lb
 ```
+
+Refreshing this URL does not select new source fixes. Git installs require the
+selected source SHA and Bun 1.3.14 when dashboard assets need building; see the
+Python guide. Keep the data directory/encryption key and back up the database
+before switching code or package sources. Do not assume a downgrade can read
+an upgraded database schema.
 
 ---
 
 ### 4. If using Docker / Docker Compose
-Pull the repository update and rebuild the container (your database and settings in volumes are preserved):
+For a source build, back up the application volume and database, select the
+desired fork revision, and rebuild only the application. Server-only Compose:
 ```bash
 git pull origin main
-docker compose down
-docker compose up -d --build
+docker compose -f docker-compose.prod.yml up -d --force-recreate server
 ```
+
+Root `docker-compose.yml` is development (backend + Vite frontend); use
+`docker compose up -d --build --force-recreate server frontend` for that setup.
+Keep the same volumes and database URL. A source pull/rebuild does not update
+an installation made from a public image. Public `latest`/`1.25.1` still refer
+to historical source `f622c563`; choose a tested release digest deliberately.
+See the [fork Docker guide](docs/deployment/docker.md) for image provenance,
+database profiles, external PostgreSQL and recreation. Restoring older code
+may also require restoring the matching database backup.
 
