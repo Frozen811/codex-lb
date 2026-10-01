@@ -745,11 +745,7 @@ class OauthService:
     async def _start_device_flow(self, *, intended_account_id: str | None = None) -> OauthStartResponse:
         flow_id = secrets.token_urlsafe(12)
         try:
-            route = (
-                await _oauth_route(intended_account_id)
-                if intended_account_id is not None
-                else await _oauth_route()
-            )
+            route = await _oauth_route(intended_account_id) if intended_account_id is not None else await _oauth_route()
             device = await request_device_code(route=route, allow_direct_egress=route is None)
         except OAuthError as exc:
             await self._set_error(exc.message)

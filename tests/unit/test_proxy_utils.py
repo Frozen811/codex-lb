@@ -16093,7 +16093,6 @@ async def test_compact_owner_miss_uses_api_key_scope_before_fail_closed(monkeypa
     request_logs = _RequestLogsRecorder()
     service = proxy_service.ProxyService(_repo_factory(request_logs))
     account = _make_account("acc_compact_scoped_owner_miss")
-    seen_account_ids: list[list[str] | None] = []
 
     api_key = ApiKeyData(
         id="key_compact_scope",
@@ -16115,16 +16114,12 @@ async def test_compact_owner_miss_uses_api_key_scope_before_fail_closed(monkeypa
     monkeypatch.setattr(proxy_service, "get_settings", lambda: settings)
     monkeypatch.setattr(service, "_resolve_websocket_previous_response_owner", AsyncMock(return_value=None))
 
-    async def fake_load_selection_inputs(**kwargs):
-        seen_account_ids.append(kwargs.get("account_ids"))
-        return SimpleNamespace(accounts=[account])
-
-    monkeypatch.setattr(service._load_balancer, "_load_selection_inputs", fake_load_selection_inputs)
-    monkeypatch.setattr(
-        service._load_balancer,
-        "select_account",
-        AsyncMock(return_value=AccountSelection(account=account, error_message=None)),
-    )
+    # Soju06/codex-lb#2274 (as in upstream PR #1905): possible owners come from
+    # the key's assignment scope, not from routing-eligible selection inputs.
+    list_continuity_owner_candidates = AsyncMock(return_value=(account,))
+    monkeypatch.setattr(service._load_balancer, "list_continuity_owner_candidates", list_continuity_owner_candidates)
+    select_account = AsyncMock(return_value=AccountSelection(account=account, error_message=None))
+    monkeypatch.setattr(service._load_balancer, "select_account", select_account)
     monkeypatch.setattr(service, "_ensure_fresh", AsyncMock(return_value=account))
     monkeypatch.setattr(service, "_settle_compact_api_key_usage", AsyncMock())
 
@@ -16147,7 +16142,10 @@ async def test_compact_owner_miss_uses_api_key_scope_before_fail_closed(monkeypa
 
     assert result.object == "response.compaction"
     assert result.model_extra == {"output": []}
-    assert seen_account_ids == [[account.id]]
+    list_continuity_owner_candidates.assert_awaited_once()
+    assert list_continuity_owner_candidates.await_args is not None
+    assert list_continuity_owner_candidates.await_args.kwargs["api_key"] is api_key
+    select_account.assert_awaited_once()
 
 
 @pytest.mark.asyncio

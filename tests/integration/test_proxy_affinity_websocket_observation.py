@@ -14,6 +14,7 @@ from app.db.models import Account, AccountStatus
 from app.db.session import SessionLocal
 from app.modules.api_keys.repository import ApiKeysRepository
 from app.modules.api_keys.service import ApiKeyCreateData, ApiKeysService
+from app.modules.proxy.account_cache import clear_account_routing_unavailable
 
 pytestmark = pytest.mark.integration
 
@@ -75,6 +76,9 @@ async def seed_account() -> str:
             )
         )
         await session.commit()
+        # The raw fixture insert bypasses AccountsService's import notification.
+        # Publish availability as the real import path does, after commit.
+        clear_account_routing_unavailable("affinity-ws")
         key = await ApiKeysService(ApiKeysRepository(session)).create_key(
             ApiKeyCreateData(name="synthetic-ws", allowed_models=None, transport_policy_override="always_websocket")
         )

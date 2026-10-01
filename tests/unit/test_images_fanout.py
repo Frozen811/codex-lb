@@ -310,4 +310,3 @@ async def test_execute_image_fanout_cancellation_releases_reservation():
 
     mock_release.assert_awaited_once_with(mock_reservation)
     mock_finalize.assert_not_called()
-

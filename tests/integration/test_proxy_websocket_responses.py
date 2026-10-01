@@ -18,8 +18,8 @@ from unittest.mock import AsyncMock
 import pytest
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
-from httpx import Headers
-from sqlalchemy import select
+from httpx import ASGITransport, AsyncClient, Headers
+from sqlalchemy import delete, select
 from starlette.testclient import WebSocketDenialResponse
 from starlette.websockets import WebSocketDisconnect
 from websockets.asyncio.client import connect as websocket_connect
@@ -45,17 +45,42 @@ from app.modules.api_keys.service import (
     LimitRuleInput,
 )
 from app.modules.proxy._service.websocket import mixin as websocket_mixin_module
+from app.modules.proxy.account_cache import get_routing_availability_cache
 from app.modules.proxy.affinity import _codex_session_selection_key
 from app.modules.proxy.capability_routing import (
     REQUIRED_CAPABILITY_HEADER,
     _capability_lineage_unavailable_error,
 )
+from app.modules.proxy.load_balancer import LoadBalancer
 
 pytestmark = pytest.mark.integration
 
 _REAL_WRITE_REQUEST_LOG = proxy_module.ProxyService._write_request_log
 _CODEX_CLIENT_CONFIG = Path(__file__).resolve().parents[2] / "docs/examples/codex/config.toml"
 _CODEX_DAYBREAK_PROFILE = Path(__file__).resolve().parents[2] / "docs/examples/codex/daybreak-blue.config.toml"
+
+
+@pytest.fixture(autouse=True)
+def _unseed_empty_startup_snapshot_for_mocked_websocket_transports(monkeypatch):
+    """Transport-only tests use fictional accounts outside the empty test DB.
+
+    Keep that initial empty snapshot unseeded, retaining real local Pause marks.
+    Later explicit refreshes are unmodified: real routing tests seed the DB and
+    refresh before dispatch, including deletion/peer-invalidation scenarios.
+    """
+    cache = get_routing_availability_cache()
+    refresh = cache.refresh_from_db
+    startup_refresh = True
+
+    async def refresh_snapshot():
+        nonlocal startup_refresh
+        await refresh()
+        if startup_refresh:
+            startup_refresh = False
+            if cache._snapshot == {}:
+                cache.reset()
+
+    monkeypatch.setattr(cache, "refresh_from_db", refresh_snapshot)
 
 
 @pytest.mark.asyncio
@@ -698,6 +723,15 @@ def _websocket_response_create(text: str) -> dict[str, object]:
     }
 
 
+def _mock_sole_continuity_candidate(monkeypatch, account_id: str) -> None:
+    """Give mocked transports an explicit possible-owner pool for unknown anchors."""
+    monkeypatch.setattr(
+        LoadBalancer,
+        "list_continuity_owner_candidates",
+        AsyncMock(return_value=[Account(id=account_id)]),
+    )
+
+
 def test_backend_responses_websocket_preserves_recorded_previous_response_account_owner(
     app_instance,
     monkeypatch,
@@ -768,6 +802,263 @@ def test_backend_responses_websocket_preserves_recorded_previous_response_accoun
     assert owner_lookups
     assert json.loads(upstream.sent_text[0])["previous_response_id"] == previous_response_id
     assert not any("model_source_requires_http_transport" in event for event in upstream.sent_text)
+
+
+@pytest.mark.parametrize(
+    "scope", ["sole", "scoped", "ambiguous", "ambiguous_reuse", "paused", "listing_failure", "empty_scope"]
+)
+def test_websocket_owner_miss_uses_real_candidate_snapshot_and_required_admission(app_instance, monkeypatch, scope):
+    account_id = "acc_ws_candidate"
+    previous_response_id = "resp_ws_missing_candidate"
+    upstream = _FakeUpstreamWebSocket(_websocket_response_batch("resp_ws_candidate_completed"))
+    dispatched: list[str] = []
+
+    async def seed_accounts_and_key():
+        async with SessionLocal() as session:
+            statuses = [(account_id, AccountStatus.PAUSED if scope == "paused" else AccountStatus.ACTIVE)]
+            if scope in {"scoped", "ambiguous", "ambiguous_reuse", "empty_scope"}:
+                statuses.append(
+                    ("acc_ws_other", AccountStatus.PAUSED if scope.startswith("ambiguous") else AccountStatus.ACTIVE)
+                )
+            session.add_all(
+                Account(
+                    id=owner_id,
+                    email=f"{owner_id}@example.com",
+                    plan_type="plus",
+                    access_token_encrypted=b"access",
+                    refresh_token_encrypted=b"refresh",
+                    id_token_encrypted=b"id",
+                    last_refresh=datetime.now(timezone.utc),
+                    status=status,
+                )
+                for owner_id, status in statuses
+            )
+            await session.commit()
+            if scope in {"scoped", "empty_scope"}:
+                service = ApiKeysService(ApiKeysRepository(session))
+                created = await service.create_key(
+                    ApiKeyCreateData(name="ws-scoped-owner", allowed_models=None, assigned_account_ids=[account_id])
+                )
+                if scope == "empty_scope":
+                    await session.execute(delete(Account).where(Account.id == account_id))
+                    await session.commit()
+                key_data = await service.get_key_by_id(created.id)
+                assert key_data is not None
+                return key_data
+        return None
+
+    async def no_owner(self, **kwargs):
+        del self, kwargs
+        return None
+
+    async def fresh_account(self, account, **kwargs):
+        del self, kwargs
+        return account
+
+    async def open_owner(self, account, headers, **kwargs):
+        del self, headers, kwargs
+        dispatched.append(account.id)
+        return account, upstream
+
+    monkeypatch.setattr(proxy_module.ProxyService, "_resolve_websocket_previous_response_owner", no_owner)
+    monkeypatch.setattr(proxy_module.ProxyService, "_ensure_fresh", fresh_account)
+    monkeypatch.setattr(proxy_module.ProxyService, "_try_open_websocket_connect_attempt", open_owner)
+    monkeypatch.setattr(websocket_mixin_module, "responses_model_is_source_owned", AsyncMock(return_value=False))
+    if scope == "listing_failure":
+        monkeypatch.setattr(
+            LoadBalancer, "list_continuity_owner_candidates", AsyncMock(side_effect=RuntimeError("db read"))
+        )
+
+    with TestClient(app_instance, client=("127.0.0.1", 50000)) as client:
+        assert client.portal is not None
+        api_key = client.portal.call(seed_accounts_and_key)
+
+        async def authorize(_authorization, *, request=None):
+            del _authorization, request
+            return api_key
+
+        monkeypatch.setattr(proxy_api_module, "validate_proxy_api_key_authorization", authorize)
+        response_create = _websocket_response_create("continue on the sole possible owner")
+        response_create["previous_response_id"] = previous_response_id
+        with client.websocket_connect("ws://localhost/backend-api/codex/responses") as websocket:
+            if scope == "ambiguous_reuse":
+                websocket.send_text(json.dumps(_websocket_response_create("fresh first turn")))
+                assert json.loads(websocket.receive_text())["type"] == "response.created"
+                assert json.loads(websocket.receive_text())["type"] == "response.completed"
+            websocket.send_text(json.dumps(response_create))
+            event = json.loads(websocket.receive_text())
+            if scope in {"sole", "scoped"}:
+                assert event["type"] == "response.created"
+                terminal = json.loads(websocket.receive_text())
+                assert terminal["type"] == "response.completed"
+            else:
+                if scope == "paused":
+                    assert event["type"] == "error"
+                    error = event["error"]
+                else:
+                    assert event["type"] == "response.failed"
+                    error = event["response"]["error"]
+                assert error["code"] == "previous_response_owner_unavailable"
+
+    if scope in {"sole", "scoped"}:
+        assert dispatched == [account_id]
+        assert json.loads(upstream.sent_text[0])["previous_response_id"] == previous_response_id
+    elif scope == "ambiguous_reuse":
+        assert dispatched == [account_id]
+        assert len(upstream.sent_text) == 1
+        assert "previous_response_id" not in json.loads(upstream.sent_text[0])
+    else:
+        assert dispatched == []
+        assert upstream.sent_text == []
+
+
+@pytest.mark.parametrize("path", ["/v1/responses", "/backend-api/codex/responses"])
+@pytest.mark.parametrize("anchored", [False, True])
+@pytest.mark.parametrize(
+    "pause_at", ["between_turns", "create_admission", "first_connect", "inflight", "peer_pause", "deleted_snapshot"]
+)
+def test_websocket_pause_blocks_new_dispatch_on_open_socket(app_instance, monkeypatch, path, anchored, pause_at):
+    account_id = "acc_ws_pause_boundary"
+    first_id = "resp_ws_before_pause"
+    upstream = _SequencedUpstreamWebSocket(
+        [],
+        deferred_message_batches=[
+            _websocket_response_batch(first_id, completed=pause_at != "inflight"),
+            _websocket_response_batch("resp_ws_forbidden_after_pause"),
+        ],
+    )
+    opened_accounts: list[Account] = []
+    acquired_leases: list[object] = []
+    released_leases: list[object] = []
+    acquire = proxy_module.ProxyService._acquire_account_response_create_lease_or_overload
+    release = LoadBalancer.release_account_lease
+
+    async def seed_account_and_key():
+        async with SessionLocal() as session:
+            session.add(
+                Account(
+                    id=account_id,
+                    email="ws-pause@example.com",
+                    plan_type="plus",
+                    access_token_encrypted=b"access",
+                    refresh_token_encrypted=b"refresh",
+                    id_token_encrypted=b"id",
+                    last_refresh=datetime.now(timezone.utc),
+                    status=AccountStatus.ACTIVE,
+                )
+            )
+            await session.commit()
+            service = ApiKeysService(ApiKeysRepository(session))
+            created = await service.create_key(
+                ApiKeyCreateData(
+                    name="ws-pause-boundary",
+                    allowed_models=None,
+                    limits=[LimitRuleInput(limit_type="total_tokens", limit_window="weekly", max_value=1_000_000)],
+                )
+            )
+            api_key = await service.get_key_by_id(created.id)
+        await get_routing_availability_cache().refresh_from_db()
+        return api_key
+
+    async def pause_account():
+        async with AsyncClient(transport=ASGITransport(app=app_instance), base_url="http://localhost") as client:
+            response = await client.post(f"/api/accounts/{account_id}/pause")
+            assert response.status_code == 200
+
+    async def apply_peer_state():
+        await app_instance.state.proxy_service.drain_persistence_tasks(timeout_seconds=5)
+        async with SessionLocal() as session:
+            if pause_at == "deleted_snapshot":
+                await session.execute(delete(Account).where(Account.id == account_id))
+            else:
+                account = await session.get(Account, account_id)
+                assert account is not None
+                account.status = AccountStatus.PAUSED
+            await session.commit()
+        cache = get_routing_availability_cache()
+        await cache.refresh_from_db()
+        assert not cache.is_locally_unavailable(account_id)
+        assert cache.is_unavailable(account_id)
+
+    async def fresh_account(self, account, **kwargs):
+        del self, kwargs
+        return account
+
+    async def open_account(self, account, headers, **kwargs):
+        del self, headers, kwargs
+        opened_accounts.append(account)
+        if pause_at == "first_connect":
+            await pause_account()
+        return account, upstream
+
+    async def acquire_create_lease(self, **kwargs):
+        lease = await acquire(self, **kwargs)
+        acquired_leases.append(lease)
+        if pause_at == "create_admission" and len(acquired_leases) == 2:
+            await pause_account()
+        return lease
+
+    async def release_lease(self, lease):
+        if lease is not None:
+            released_leases.append(lease)
+        await release(self, lease)
+
+    async def read_reservation_statuses():
+        async with SessionLocal() as session:
+            return list(await session.scalars(select(ApiKeyUsageReservation.status)))
+
+    monkeypatch.setattr(proxy_module.ProxyService, "_ensure_fresh", fresh_account)
+    monkeypatch.setattr(proxy_module.ProxyService, "_try_open_websocket_connect_attempt", open_account)
+    monkeypatch.setattr(
+        proxy_module.ProxyService, "_acquire_account_response_create_lease_or_overload", acquire_create_lease
+    )
+    monkeypatch.setattr(LoadBalancer, "release_account_lease", release_lease)
+    monkeypatch.setattr(websocket_mixin_module, "responses_model_is_source_owned", AsyncMock(return_value=False))
+
+    with TestClient(app_instance, base_url="http://localhost", client=("127.0.0.1", 50000)) as client:
+        assert client.portal is not None
+        api_key = client.portal.call(seed_account_and_key)
+        assert api_key is not None
+
+        async def authorize(_authorization, *, request=None):
+            del _authorization, request
+            return api_key
+
+        monkeypatch.setattr(proxy_api_module, "validate_proxy_api_key_authorization", authorize)
+        with client.websocket_connect(path) as websocket:
+            if pause_at != "first_connect":
+                websocket.send_text(json.dumps(_websocket_response_create("before pause")))
+                assert json.loads(websocket.receive_text())["type"] == "response.created"
+                if pause_at != "inflight":
+                    assert json.loads(websocket.receive_text())["type"] == "response.completed"
+            if pause_at in {"between_turns", "inflight"}:
+                assert client.post(f"/api/accounts/{account_id}/pause").status_code == 200
+            elif pause_at in {"peer_pause", "deleted_snapshot"}:
+                client.portal.call(apply_peer_state)
+            request = _websocket_response_create("must not dispatch after pause")
+            if anchored:
+                request["previous_response_id"] = first_id
+            websocket.send_text(json.dumps(request))
+            event = json.loads(websocket.receive_text())
+            assert event["type"] == "response.failed"
+            assert event["response"]["error"]["code"] == (
+                "previous_response_owner_unavailable" if anchored else "upstream_unavailable"
+            )
+            assert len(upstream.sent_text) == (0 if pause_at == "first_connect" else 1)
+            assert len(opened_accounts) == 1
+            assert opened_accounts[0].status == AccountStatus.ACTIVE  # Deliberately stale snapshot.
+            assert upstream.closed is False
+            assert acquired_leases
+            assert acquired_leases[-1] in released_leases
+            if pause_at == "inflight":
+                client.portal.call(upstream._messages.put_nowait, _websocket_response_batch(first_id)[-1])
+                completed = json.loads(websocket.receive_text())
+                assert completed["type"] == "response.completed"
+                assert completed["response"]["id"] == first_id
+        statuses = client.portal.call(read_reservation_statuses)
+        assert len(statuses) == (1 if pause_at == "first_connect" else 2)
+        assert "reserved" not in statuses
+        assert "released" in statuses
 
 
 def test_backend_responses_websocket_owner_bound_model_not_found_surfaces_original_404(app_instance, monkeypatch):
@@ -2992,6 +3283,9 @@ def test_backend_responses_websocket_strips_replayed_tool_call_namespaces(app_in
 
 
 def test_backend_responses_websocket_lite_marker_requires_previous_response_linkage(app_instance, monkeypatch):
+    # The foreign anchor is routable only because this fixture has one possible owner.
+    _mock_sole_continuity_candidate(monkeypatch, "acct_ws_lite_linkage")
+
     def _response_batch(response_id: str) -> list[_FakeUpstreamMessage]:
         return [
             _FakeUpstreamMessage(
@@ -4606,30 +4900,31 @@ def test_backend_responses_websocket_echoes_existing_turn_state_header(app_insta
 
 def test_v1_responses_websocket_reuses_upstream_for_sequential_requests(app_instance, monkeypatch):
     first_upstream = _SequencedUpstreamWebSocket(
-        [
-            _FakeUpstreamMessage(
-                "text",
-                text=json.dumps(
-                    {"type": "response.created", "response": {"id": "resp_ws_first", "status": "in_progress"}},
-                    separators=(",", ":"),
-                ),
-            ),
-            _FakeUpstreamMessage(
-                "text",
-                text=json.dumps(
-                    {
-                        "type": "response.completed",
-                        "response": {
-                            "id": "resp_ws_first",
-                            "status": "completed",
-                            "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
-                        },
-                    },
-                    separators=(",", ":"),
-                ),
-            ),
-        ],
+        [],
         deferred_message_batches=[
+            [
+                _FakeUpstreamMessage(
+                    "text",
+                    text=json.dumps(
+                        {"type": "response.created", "response": {"id": "resp_ws_first", "status": "in_progress"}},
+                        separators=(",", ":"),
+                    ),
+                ),
+                _FakeUpstreamMessage(
+                    "text",
+                    text=json.dumps(
+                        {
+                            "type": "response.completed",
+                            "response": {
+                                "id": "resp_ws_first",
+                                "status": "completed",
+                                "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
+                            },
+                        },
+                        separators=(",", ":"),
+                    ),
+                ),
+            ],
             [
                 _FakeUpstreamMessage(
                     "text",
@@ -4652,12 +4947,29 @@ def test_v1_responses_websocket_reuses_upstream_for_sequential_requests(app_inst
                         separators=(",", ":"),
                     ),
                 ),
-            ]
+            ],
         ],
     )
     connect_calls: list[dict[str, object]] = []
     dispatch_owner_snapshots: list[tuple[str | None, str | None]] = []
     original_bind_dispatch_owner = websocket_mixin_module._bind_websocket_request_dispatch_owner
+
+    async def seed_routing_account():
+        async with SessionLocal() as session:
+            session.add(
+                Account(
+                    id="acct_ws_proxy_owner",
+                    email="sequential-ws@example.com",
+                    plan_type="plus",
+                    access_token_encrypted=b"access",
+                    refresh_token_encrypted=b"refresh",
+                    id_token_encrypted=b"id",
+                    last_refresh=datetime.now(timezone.utc),
+                    status=AccountStatus.ACTIVE,
+                )
+            )
+            await session.commit()
+        await get_routing_availability_cache().refresh_from_db()
 
     class _FakeSettingsCache:
         async def get(self):
@@ -4743,6 +5055,8 @@ def test_v1_responses_websocket_reuses_upstream_for_sequential_requests(app_inst
     }
 
     with TestClient(app_instance) as client:
+        assert client.portal is not None
+        client.portal.call(seed_routing_account)
         with client.websocket_connect("/v1/responses") as websocket:
             websocket.send_text(json.dumps(first_request))
             first_events = [json.loads(websocket.receive_text()) for _ in range(2)]
@@ -5735,6 +6049,7 @@ def test_backend_responses_websocket_trims_replayed_tool_call_items_with_previou
     app_instance,
     monkeypatch,
 ):
+    _mock_sole_continuity_candidate(monkeypatch, "acct_ws_tool_output")
     fake_upstream = _FakeUpstreamWebSocket(
         [
             _FakeUpstreamMessage(
@@ -5944,6 +6259,7 @@ def test_v1_responses_websocket_masks_short_previous_response_not_found_without_
     app_instance,
     monkeypatch,
 ):
+    _mock_sole_continuity_candidate(monkeypatch, "acct_ws_prev_mask")
     first_upstream = _SequencedUpstreamWebSocket(
         [],
         deferred_message_batches=[
@@ -6257,6 +6573,7 @@ def test_responses_websocket_replays_client_full_resend_previous_response_miss_w
     app_instance,
     monkeypatch,
 ):
+    _mock_sole_continuity_candidate(monkeypatch, "acct_ws_prev_mask")
     first_upstream = _SequencedUpstreamWebSocket(
         [],
         deferred_message_batches=[
@@ -6439,6 +6756,7 @@ def test_v1_responses_websocket_masks_invalid_request_previous_response_not_foun
     app_instance,
     monkeypatch,
 ):
+    _mock_sole_continuity_candidate(monkeypatch, "acct_ws_prev_mask")
     first_upstream = _SequencedUpstreamWebSocket(
         [],
         deferred_message_batches=[
@@ -6601,6 +6919,8 @@ def test_backend_responses_websocket_connect_failure_masks_previous_response_not
     app_instance,
     monkeypatch,
 ):
+    _mock_sole_continuity_candidate(monkeypatch, "acct_ws_prev_connect_failure")
+
     class _FakeSettingsCache:
         async def get(self):
             return _websocket_settings()
@@ -6925,6 +7245,7 @@ def test_backend_responses_websocket_masks_anonymous_previous_response_not_found
     app_instance,
     monkeypatch,
 ):
+    _mock_sole_continuity_candidate(monkeypatch, "acct_ws_prev_followup")
     fake_upstream = _SequencedUpstreamWebSocket(
         [],
         deferred_message_batches=[
@@ -7107,6 +7428,7 @@ def test_backend_responses_websocket_masks_top_level_previous_response_not_found
     app_instance,
     monkeypatch,
 ):
+    _mock_sole_continuity_candidate(monkeypatch, "acct_ws_chatgpt_prev_top_level")
     fake_upstream = _SequencedUpstreamWebSocket(
         [],
         deferred_message_batches=[
@@ -7220,6 +7542,7 @@ def test_backend_responses_websocket_masks_pretty_previous_response_not_found_fr
     app_instance,
     monkeypatch,
 ):
+    _mock_sole_continuity_candidate(monkeypatch, "acct_ws_pretty_prev_mask")
     upstream_socket = _SequencedUpstreamWebSocket(
         [
             _FakeUpstreamMessage(
@@ -11778,6 +12101,7 @@ def test_backend_responses_websocket_connect_failure_logs_client_supplied_stale_
     monkeypatch,
     caplog,
 ):
+    _mock_sole_continuity_candidate(monkeypatch, "acct_ws_prev_connect_failure")
     log_calls: list[dict[str, object]] = []
     owner_requested_at = proxy_module.utcnow() - timedelta(seconds=180)
     full_resend_input = [

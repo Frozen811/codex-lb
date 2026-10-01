@@ -21,8 +21,9 @@ pytestmark = pytest.mark.integration
 @pytest.mark.parametrize("evidence", ["none", "weaker", "poison", "first-strike"])
 @pytest.mark.parametrize("retry_load", [False, True], ids=["preload", "failed-load-retry"])
 @pytest.mark.parametrize("outcome", ["success", "settle-failure", "alias-failure"])
+@pytest.mark.parametrize("durable_first", [False, True], ids=["local-first", "durable-first"])
 async def test_completion_separates_local_failure_from_durable_adoption(
-    async_client, app_instance, promotion_transport, monkeypatch, evidence, retry_load, outcome
+    async_client, app_instance, promotion_transport, monkeypatch, evidence, retry_load, outcome, durable_first
 ):
     service = get_proxy_service_for_app(app_instance)
     lookup = service._durable_bridge.lookup_retry_circuit
@@ -55,6 +56,10 @@ async def test_completion_separates_local_failure_from_durable_adoption(
                 seeded = True
                 assert completing.key.strength == "hard"
                 await seed_durable_poison(service, **kwargs)
+                if durable_first:
+                    # Another reader can adopt the row while persistence yields
+                    # and before the concurrent local failure is recorded.
+                    await service._load_http_bridge_retry_circuit(completing)
                 if evidence != "none":
                     local_deadline = arm(service, completing, evidence)
                 if retry_load:

@@ -123,7 +123,6 @@ from app.modules.proxy._service.compact import (
 from app.modules.proxy._service.compact import (
     _sticky_key_from_compact_payload as _sticky_key_from_compact_payload,
 )
-from app.modules.proxy._service.continuity_owner import resolve_continuity_owner_candidate
 from app.modules.proxy._service.http_bridge.accepted_replay import (
     _stage_websocket_request_state_for_replay,
 )
@@ -362,6 +361,7 @@ from app.modules.proxy._service.support import (
     _WebSocketUpstreamControl,
     clear_upstream_websocket_transport_failure,
     mark_upstream_websocket_transport_failure,
+    resolve_continuity_owner_candidate,
     websocket_connect_transport_failure_code,
 )
 from app.modules.proxy._service.support import (
@@ -468,6 +468,7 @@ from app.modules.proxy._service.websocket.helpers import (
     _wrapped_websocket_error_event,
 )
 from app.modules.proxy._service.websocket.protocol import _WebSocketServiceProtocol
+from app.modules.proxy.account_cache import is_account_routing_unavailable
 from app.modules.proxy.affinity import (
     _AffinityPolicy,
     _is_synthesized_turn_state,
@@ -1977,16 +1978,8 @@ class _WebSocketMixin:
                                             )
                                             if candidate_id is not None:
                                                 request_state.previous_response_owner_account_id = candidate_id
-                                        if (
-                                            request_state.previous_response_owner_account_id is None
-                                            and not bool(request_state.is_source_owned)
-                                            and (
-                                                not codex_session_affinity
-                                                or (
-                                                    effective_key is not None
-                                                    and bool(effective_key.account_assignment_scope_enabled)
-                                                )
-                                            )
+                                        if request_state.previous_response_owner_account_id is None and not bool(
+                                            request_state.is_source_owned
                                         ):
                                             _record_continuity_fail_closed(
                                                 surface="websocket_source_route",
@@ -2917,6 +2910,21 @@ class _WebSocketMixin:
                     if text_data is not None:
                         archive_request_id = None if request_state is None else request_state.archive_request_id
                         if request_state is not None and payload is not None and _is_websocket_response_create(payload):
+                            # Pause may commit while create admission awaits. A warm
+                            # socket's ACTIVE snapshot is not permission to send.
+                            if account is not None and is_account_routing_unavailable(account.id):
+                                anchored = bool(
+                                    request_state.previous_response_id or request_state.preferred_account_id
+                                )
+                                raise ProxyResponseError(
+                                    502 if anchored else 503,
+                                    openai_error(
+                                        "previous_response_owner_unavailable" if anchored else "upstream_unavailable",
+                                        "Selected account is unavailable for routing; retry later.",
+                                        error_type="server_error",
+                                    ),
+                                    local_pre_dispatch_refusal=True,
+                                )
                             if account is None or not _bind_websocket_request_dispatch_owner(
                                 request_state,
                                 account_id=account.id,

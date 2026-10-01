@@ -126,11 +126,11 @@ class ArchitectureThresholds:
     load_balancer_select_account_lines: int
 
 
-def _relative_path(path: Path) -> Path:
+def _relative_path(path: Path) -> str:
     try:
-        return path.relative_to(ROOT)
+        return path.relative_to(ROOT).as_posix()
     except ValueError:
-        return path
+        return path.as_posix()
 
 
 def _parse(path: Path) -> ast.Module:

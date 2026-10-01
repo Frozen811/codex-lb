@@ -784,10 +784,7 @@ def _is_ignored_schema_drift(connection: Connection, diff: object) -> bool:
         metadata_str = str(diff[6]).upper()
         # SQLite uses dynamic typing with INTEGER affinity for all integer widths.
         # SQLAlchemy reflection reports INTEGER() for BigInteger/BIGINT columns.
-        if (
-            existing_str.startswith("INTEGER")
-            and metadata_str.startswith(("BIGINT", "BIGINTEGER", "INTEGER"))
-        ):
+        if existing_str.startswith("INTEGER") and metadata_str.startswith(("BIGINT", "BIGINTEGER", "INTEGER")):
             return True
         table_name = str(diff[2])
         column_name = str(diff[3])

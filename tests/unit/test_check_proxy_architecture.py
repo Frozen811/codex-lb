@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from types import ModuleType
 from typing import Callable
 
@@ -54,6 +54,15 @@ def _load_checker_module() -> ModuleType:
         if sys.modules.get(spec.name) is module:
             del sys.modules[spec.name]
     return module
+
+
+@pytest.mark.parametrize("path_type,root", [(PureWindowsPath, "C:/repo"), (PurePosixPath, "/repo")])
+def test_diagnostic_paths_preserve_identity_with_portable_separators(monkeypatch, path_type, root) -> None:
+    checker = _load_checker_module()
+    monkeypatch.setattr(checker, "ROOT", path_type(root))
+    assert checker._relative_path(path_type(root) / "app" / "service.py") == "app/service.py"
+    outside = path_type(root).parent / "outside" / "spec.md"
+    assert checker._relative_path(outside) == outside.as_posix()
 
 
 def _write_proxy_fixture(root: Path) -> Path:
