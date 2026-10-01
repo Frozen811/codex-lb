@@ -75,6 +75,8 @@
           ./LICENSE
           ./README.md
           ./pyproject.toml
+          ./scripts/hatch_build.py
+          ./scripts/build_dashboard.py
         ];
       };
 
@@ -86,6 +88,8 @@
           ./LICENSE
           ./README.md
           ./pyproject.toml
+          ./scripts/hatch_build.py
+          ./scripts/build_dashboard.py
         ];
       };
 

@@ -22,7 +22,7 @@ python oauth sqlalchemy dashboard load-balancer openai rate-limit api-proxy code
 
 Load balancer for ChatGPT accounts. Pool multiple accounts, track usage, manage API keys, view everything in a dashboard.
 
-**Documentation: <https://soju06.github.io/codex-lb/>** — getting started, client setup, configuration, deployment, troubleshooting, and more screenshots.
+**Fork Docker guide: [Docker](docs/deployment/docker.md)** · [Upstream documentation](https://soju06.github.io/codex-lb/) — client setup, configuration, troubleshooting, and screenshots.
 
 > [!NOTE]
 > ### 🛡️ Hardened Community Edition (by [@Frozen811](https://github.com/Frozen811))
@@ -40,20 +40,20 @@ Load balancer for ChatGPT accounts. Pool multiple accounts, track usage, manage 
 > 
 > ### 🚀 Quick Install & Run:
 > 
-> **Option 1: Pre-built Docker Image (instant run, zero build)**
+> **Option 1: Historical public Docker image (linux/amd64, source `f622c563`; newer fixes require [a source build](docs/deployment/docker.md))**
 > ```bash
 > docker network inspect codex-lb-net >/dev/null 2>&1 || docker network create codex-lb-net
 > docker run -d --name codex-lb \
 >   --network codex-lb-net \
 >   -p 2455:2455 -p 1455:1455 \
 >   -v codex-lb-data:/var/lib/codex-lb \
->   ghcr.io/frozen811/codex-lb:latest
+>   ghcr.io/frozen811/codex-lb@sha256:ad9aa84b12bce9f6afc63adb3aa86e73f6aafca1814e6f20b486b00f21c60447
 > ```
 > 
-> **Option 2: Direct installation with uvx or pip**
+> **Option 2: Historical release wheel with uvx or pip ([identity and source-build guide](docs/deployment/python.md))**
 > ```bash
 > # Run via uvx:
-> uvx --from git+https://github.com/Frozen811/codex-lb.git codex-lb
+> uvx --from https://github.com/Frozen811/codex-lb/releases/download/v1.25.0-hardened.3/codex_lb-1.25.1-py3-none-any.whl codex-lb
 > 
 > # Or install pre-built wheel directly:
 > pip install https://github.com/Frozen811/codex-lb/releases/download/v1.25.0-hardened.3/codex_lb-1.25.1-py3-none-any.whl
@@ -84,7 +84,7 @@ Load balancer for ChatGPT accounts. Pool multiple accounts, track usage, manage 
 | **Dead Client Continuation Anchor ([#2493](https://github.com/Soju06/codex-lb/issues/2493))** | ❌ Client hangs without terminal frame | ✅ Clean terminal `response.failed` event |
 | **Replay Relocation Engine ([PR #2428](https://github.com/Soju06/codex-lb/pull/2428))** | ❌ Unmerged open PR | ✅ Fully integrated & regression-tested |
 | **Log Credential Redaction ([#2028](https://github.com/Soju06/codex-lb/issues/2028))** | ❌ Unhandled loop errors leak credentials | ✅ Sanitized with `_RedactedRepr` |
-| **Pre-built Docker Image** | ⚠️ Outdated | ✅ `ghcr.io/frozen811/codex-lb:latest` |
+| **Pre-built Docker Image** | Separate upstream artifact | Historical fork image; see [Docker provenance](docs/deployment/docker.md#public-fork-image) |
 | **OpenSpec Validation** | ⚠️ Partial / Untracked PRs | ✅ 67/67 Specifications strictly validated |
 
 ## Features
@@ -108,17 +108,17 @@ Load balancer for ChatGPT accounts. Pool multiple accounts, track usage, manage 
 ## Quick Start
 
 ```bash
-# Docker (recommended)
-docker volume create codex-lb-data
+# Docker (run from a fork checkout; see the Docker guide)
+docker build -t codex-lb:local .
 docker network inspect codex-lb-net >/dev/null 2>&1 || docker network create codex-lb-net
 docker run -d --name codex-lb \
   --network codex-lb-net \
   -p 2455:2455 -p 1455:1455 \
   -v codex-lb-data:/var/lib/codex-lb \
-  ghcr.io/soju06/codex-lb:latest
+  codex-lb:local
 
-# or uvx
-uvx codex-lb
+# or the historical fork wheel (see the Python guide for current source)
+uvx --from https://github.com/Frozen811/codex-lb/releases/download/v1.25.0-hardened.3/codex_lb-1.25.1-py3-none-any.whl codex-lb
 
 # or nix
 nix run github:Soju06/codex-lb

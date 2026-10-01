@@ -145,5 +145,22 @@ build-backend = "hatchling.build"
 [tool.hatch.build]
 artifacts = ["app/static/**"]
 
+[tool.hatch.build.hooks.custom]
+path = "scripts/hatch_build.py"
+
 [tool.hatch.build.targets.wheel]
 packages = ["app","config"]
+
+# Build from a source distribution without bundling local agent worktrees.
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "**/.kilo/**", "**/.codex/**", "**/.agents/**", "**/.git/**",
+    "**/.worktrees/**", "**/.venv/**", "**/node_modules/**",
+    "**/.env", "**/.env.*", "**/auth.json", "**/encryption.key",
+    "**/*.db", "**/*.db-*", "**/*.sqlite", "**/*.sqlite-*",
+]
+only-include = [
+    "app", "config", "frontend", "scripts", "deploy", "crates",
+    "pyproject.toml", "uv.lock", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml",
+    "Dockerfile", "README.md", "LICENSE",
+]

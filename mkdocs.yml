@@ -69,6 +69,7 @@ nav:
   - Routing: routing.md
   - Database: database.md
   - Deployment:
+      - Python: deployment/python.md
       - Docker: deployment/docker.md
       - Kubernetes: deployment/kubernetes.md
       - Remote Access: deployment/remote.md

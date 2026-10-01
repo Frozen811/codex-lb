@@ -10,6 +10,50 @@ fixed, and how removed settings are retired.
 See `openspec/specs/deployment-installation/spec.md` for normative
 requirements.
 
+## Local Docker, development Compose and distroless
+
+The fork source-build path uses the selected Frozen811/codex-lb checkout. Standard and distroless builds compile frontend and native helper with frozen Bun/uv/Cargo locks; all frontend container targets use the package's pinned Bun 1.3.14. Root and frontend Docker contexts exclude workstation dependency trees, nested env/credential files, databases and agent worktrees. A synthetic BuildKit COPY/export test reproduced the old context leaks and verified the exclusions without copying real secrets.
+
+Named volumes initialize the correct ownership for standard UID/GID 1000 and distroless UID/GID 65532. Both images use shell-independent Python readiness healthchecks. Their CLI startup, dashboard HTML/JS/CSS, CA trust and native helper were checked in Linux/amd64 containers on Docker Desktop for Windows. Recreating each image with the same isolated named volume preserved a changed dashboard setting and encryption-key hash; graceful stop exited zero. These are source-built artifacts, not proof about public tags, ARM64 or real Codex routing. Bind mounts require matching operator-managed permissions; downgrading an image across a database migration needs an explicit compatibility plan.
+
+The root Compose file is development tooling: backend at 2455, OAuth callback at 1455 and Vite at 5173. No env file is required. Its optional env-file syntax needs [Compose 2.24.0 or later](https://docs.docker.com/reference/compose-file/services/#required). The frontend uses UID 1000 (`bun`) with owned writable source/dependency cache paths; the previous inline target inherited root. Vite resolves `server:2455` on the service network. Source watch restarts backend and syncs frontend while excluding frontend env/dependencies. Example: opening `/health/ready` through port 5173 verifies the frontend-to-backend proxy; merely receiving Vite HTML does not establish that connection.
+
+The stock named volumes have explicit names; changing `-p` alone cannot isolate data. Audit stands override every volume name and bind random ports only on loopback. Watch sync becomes visible before backend restart finishes, and Docker can reassign an ephemeral published port on restart, so probes must observe the new start and re-resolve the port. On Windows, terminating the docker launcher alone can leave the Compose watch child alive; terminate the owned process tree in automated audit cleanup. Ordinary interactive users can stop watch with Ctrl+C.
+
+Docker CI now builds standard and distroless images and uses isolated tmpfs-backed containers for readiness/assets/native/CA checks, with failure cleanup. Local validation of this workflow does not assert that it ran on GitHub; the existing standard-image Trivy checks remain separate from installation smoke. Distroless has no shell: diagnose with container logs and Python. See [rendered Docker guidance](../../../docs/deployment/docker.md).
+
+## Fork public images and server-only Compose
+
+The 2026-10-01 anonymous registry check resolves `latest` and `1.25.1` to index digest `sha256:ad9aa84b12bce9f6afc63adb3aa86e73f6aafca1814e6f20b486b00f21c60447`, source `f622c5632013d24ce9236d176113087b387c7990`. OCI version is `1.25.1` while runtime is `1.25.0-beta.9`. The historical image copies source without installing the project distribution, so installed `codex-lb` package metadata is absent; package-version APIs must not be assumed available. Runtime platform is linux/amd64; unknown/unknown is attestation metadata. That digest passed anonymous pull, named-bridge readiness/assets and non-root named-volume recreation, but contains no built-in Docker HEALTHCHECK and does not contain later checkout fixes. No public tags were changed. Use a source build for the selected checkout, or deliberately select a verified public artifact; installation smoke is not real-account routing evidence.
+
+Previously server-only Compose declared both `build` and `ghcr.io/frozen811/codex-lb:1.25.1`. Ordinary `up` chose the cached historical image. It now uses a local `codex-lb:local` name and `pull_policy: build`, keeping source installation separate from release identity. A test seeded the audit's local tag with the historical image and proved normal startup replaces it with matching checkout source. No env file means SQLite. External PostgreSQL remains optional; the application data volume still contains the encryption key and must be retained with the database backup. Named volumes retain the stock fixed names for compatibility, so separate instances must override them as well as ports.
+
+Example: `.env.local` with `CODEX_LB_DATABASE_URL=postgresql+asyncpg://codex_lb:codex_lb@postgres:5432/codex_lb` selects the development PostgreSQL service. A host client instead uses `127.0.0.1:5432`; localhost inside the application is the application container, not the database. Profiles start databases only and do not infer a backend. Start the selected DB with `up -d --wait`, then recreate the backend to load env changes. Enabling both profiles does not combine their databases. Fixed profile passwords are development fixtures, not production credentials.
+
+Availability-only probes did not establish DB access: MySQL `mysqladmin ping` accepted a wrong password, PostgreSQL `pg_isready` accepted a nonexistent user/database, and initdb's loopback trust rules accepted a wrong password even in a real SQL query. Profiles now execute SQL as the configured app user against its database; PostgreSQL connects through `$HOSTNAME` to use network authentication. Tests reject wrong passwords and missing databases and verify actual schema migrations, remote settings, key retention and readiness after app recreation. Existing volumes whose operator explicitly chose trust authentication still follow that authentication policy; a health probe cannot impose a server password policy.
+
+External PostgreSQL with verified TLS was rehearsed with `PGSSLMODE=verify-full` and `PGSSLROOTCERT` pointing at a read-only mounted CA certificate. These existing driver variables apply to both psycopg migrations and asyncpg runtime without competing URL query semantics or new application settings. Startup and schema check, SQL `pg_stat_ssl`, app recreation, PostgreSQL dump/restore into another database with the original application key, and database container recreation/reconnection passed. Invalid passwords, DNS, certificate hostnames and untrusted CA configuration are tested as fail-before-readiness paths. An operator's actual remote network and certificate chain remain deployment-specific.
+
+The pinned postgres-upgrade helper also passed an offline synthetic PostgreSQL 16 в†’ 18 rehearsal: a volume-root legacy layout was refused by the ordinary 18 service, an offline tar backup was readable, the one-shot helper upgraded the data, and PostgreSQL 18.6 retained the synthetic row. This is not a production-size rehearsal, a restore test of that tar archive, or proof for all alternative volume layouts. See [Docker](../../../docs/deployment/docker.md) and [Database](../../../docs/database.md) for installation commands. Public alias repair remains release-gated, and local edits have not run in cloud CI.
+
+## Python package and Git installation channels
+
+The fork's distribution name remains codex-lb, so bare index commands select upstream. Python installation guidance uses an explicit fork wheel URL or selected Git commit. The historical hardened.3 wheel and sdist both carry metadata 1.25.1 and runtime 1.25.0-beta.9. All 762 root application Python files match tag deed76bab5fafa36051c2cf474a1b29055988aae after CRLF/LF normalization; raw byte differences are not code drift. The public sdist contains 5967 nested .kilo/worktrees entries and is historical; no existing release asset was replaced. Both public artifacts passed clean Windows/Python 3.13 CLI, migrations/schema-check, readiness and dashboard startup outside the checkout.
+
+Previously Git source installs silently built a wheel without the ignored app/static directory. The custom Hatch build hook now checks HTML-referenced JavaScript/CSS and invokes the frontend's exact Bun 1.3.14 with a frozen lock if assets are missing. Missing or incompatible Bun fails with prerequisite guidance; failed frontend processes or incomplete output fail package creation. Complete prebuilt assets skip Bun entirely, including when rebuilding a sdist. The helper lives under scripts, ships in the explicit-root sdist, and is not a runtime setting or runtime Bun dependency. A checksum-verified isolated Bun binary rebuilt clean source with no pre-existing static or node_modules directories; the corrected sdist contains neither workstation dependencies nor nested worktrees.
+
+Example: install a verified wheel with uv tool install --python 3.13 <fork-wheel-url>. Replace its source explicitly using uv tool install --reinstall <new-artifact-url>; merely refreshing the historical URL still selects historical code. An isolated public-to-local-wheel source replacement with unchanged package metadata retained a synthetic dashboard setting and encryption key while runtime changed to 1.25.1. uvx and actual pip installs were separately checked; all used disposable data and tool/cache directories. Identity probes must run outside the checkout or with python -I, otherwise current-directory imports can shadow the installed app and falsely report its source version.
+
+Source installs need the pinned Bun prerequisite and dependency network access, whereas complete wheel/sdist installs require only Python dependencies. Application data defaults to ~/.codex-lb regardless of tool/venv path, with CODEX_LB_DATA_DIR taking precedence; keep that data/key and the corresponding SQL backup across updates. Package smoke does not prove real account login, routing or older-schema compatibility. See [Python installation](../../../docs/deployment/python.md); macOS/Linux native package installs remain separate from the verified Windows run.
+
+## Editable setup and frontend compilation
+
+Windows diagnostic run 36904727598 on b89bd0a1 failed during uv sync, before Bun setup: the distribution hook also ran for Hatch's editable wheel version. Editable dependency setup now skips dashboard compilation only for that wheel version; standard wheel/sdist builds retain the exact Bun and complete-assets requirement. Existing development/CI workflows compile the frontend separately after installing Python dependencies. A fresh no-asset uv sync with incompatible host Bun verifies this boundary; a normal wheel build in the same environment must still fail. This also preserves backend-only CI setup without adding frontend dependencies to every job.
+
+## Nix build-hook source membership
+
+PR CI failed with missing scripts/hatch_build.py because explicit Nix source filesets selected metadata without its referenced plugin. Both packageSource and editableSource now include only scripts/hatch_build.py and scripts/build_dashboard.py. Complete standard Nix builds reuse the existing frontendAssets output; editable metadata loads the hook but leaves compilation explicit. This corrects a packaging compatibility seam without copying broad workstation state or changing Nix inputs/dependencies.
+
 ## Nix flake workflow
 
 The root flake is an additive installation and development path for Nix users.
@@ -189,7 +233,7 @@ settings, merged as PRs #1351, #1360, #1362, #1363, #1364 in v1.21.x):
 PRINCIPLES.md P2: "a setting the operator never needs to touch is a
 default in disguise." The `Settings` class carried 165 env-settable fields
 before phase 1; phases 1-4 removed 52 of them (plus adding `CODEX_LB_TRACE`).
-Selection rule for every phase: removal is provably zero-risk — each
+Selection rule for every phase: removal is provably zero-risk вЂ” each
 removed field keeps its exact previous default as the new fixed value, so
 behavior is byte-identical for any install that never overrode it, and the
 only behavioral seam (the removed-settings warning) is additive.
@@ -210,7 +254,7 @@ Phase 1 (24 removed, 1 added; zero-risk internals):
   (`codex_chatgpt_desktop`), `CODEX_LB_OAUTH_SCOPE`
   (`openid profile email`), `CODEX_LB_OAUTH_REDIRECT_URI`
   (`http://localhost:1455/auth/callback`), `CODEX_LB_OAUTH_CALLBACK_PORT`
-  (1455) — module constants in `app/core/config/settings.py`; changing any
+  (1455) вЂ” module constants in `app/core/config/settings.py`; changing any
   of them breaks login.
 - Auth guardian tuning (7 fields removed): interval 21600, max refresh
   age 43200, batch size 100, concurrency 3, jitter 300.0, failure backoff
@@ -230,7 +274,7 @@ Phase 1 (24 removed, 1 added; zero-risk internals):
 - Bulkhead per-class overrides (3): http/websocket/compact limits always
   derive from `CODEX_LB_BULKHEAD_PROXY_LIMIT` (http = websocket = proxy
   limit; compact = min(http, 16), 0 when http is 0).
-- Token-refresh claim polling (2): wait 8.0 s, poll 0.25 s — constants in
+- Token-refresh claim polling (2): wait 8.0 s, poll 0.25 s вЂ” constants in
   `app/modules/accounts/auth_manager.py`.
   `CODEX_LB_TOKEN_REFRESH_CLAIM_TTL_SECONDS` stayed in this phase because
   its floor validation referenced settings that were still configurable;
@@ -243,21 +287,21 @@ Phase 2 (15 removed):
 
 - Scheduler cadences (4): quota planner tick 300 s (the old
   `max(60, ...)` clamp became moot and was dropped), automations poll
-  30 s, model-registry refresh 300 s, sticky-session cleanup 300 s —
+  30 s, model-registry refresh 300 s, sticky-session cleanup 300 s вЂ”
   constants next to their scheduler builders; every `*_ENABLED` switch
   remains.
 - Codex client fingerprint (3): OS `Mac OS 26.5.0`, arch `arm64`,
-  terminal `iTerm.app/3.6.10` — `_FINGERPRINT_*` constants in
+  terminal `iTerm.app/3.6.10` вЂ” `_FINGERPRINT_*` constants in
   `app/core/clients/proxy.py`, maintained in lockstep with
   `CODEX_LB_MODEL_REGISTRY_CLIENT_VERSION` bumps (which stays a setting:
   it doubles as the degraded-startup catalog floor).
-- Live-usage write coalescing (2): min interval 5.0 s, queue size 512 —
+- Live-usage write coalescing (2): min interval 5.0 s, queue size 512 вЂ”
   constants in `app/modules/usage/live_ingest.py`.
 - Request-log count-cache TTL (1): fixed 30.0 s in
   `app/modules/request_logs/repository.py` (the test suite patches the
   constant to 0 where exact totals matter).
 - Circuit-breaker tuning (2): failure threshold 5, recovery timeout 60 s
-  — constants in `app/core/resilience/circuit_breaker.py`. The Helm chart
+  вЂ” constants in `app/core/resilience/circuit_breaker.py`. The Helm chart
   values `config.circuitBreakerFailureThreshold`,
   `config.circuitBreakerRecoveryTimeoutSeconds`, and
   `config.stickySessionCleanupIntervalSeconds` were removed in the same
@@ -265,7 +309,7 @@ Phase 2 (15 removed):
 - Memory warning threshold (1): derived as 80% of
   `CODEX_LB_MEMORY_REJECT_THRESHOLD_MB` in
   `app/core/resilience/memory_monitor.py`. The warning has no meaning on
-  its own — it exists to announce that the reject threshold is being
+  its own вЂ” it exists to announce that the reject threshold is being
   approached. The only lost configuration is a warning-only setup with no
   reject threshold, an observability half-measure the log stream covers
   anyway. `CODEX_LB_MEMORY_REJECT_THRESHOLD_MB` stays: it is the one
@@ -303,8 +347,8 @@ Phase 3 (10 removed):
   The Helm chart pins both pool inputs.
 - Soft-drain/probe thresholds (6): drain at 85%/90%, error window 60 s /
   count 2, probe quiet 60 s, success streak 3. They encode the
-  deterministic-failover design and interlock — raising one without the
-  others degrades failover in non-obvious ways — and
+  deterministic-failover design and interlock вЂ” raising one without the
+  others degrades failover in non-obvious ways вЂ” and
   `app/core/balancer/logic.py` already declared identical constants as
   `evaluate_health_tier` parameter defaults, so the settings were a second
   source of truth for numbers that must not drift. The function keeps its
@@ -321,7 +365,7 @@ Phase 4 (3 removed; prewarm canary scaffolding):
   instrumentation for a finished experiment, not an operator contract.
   Production was verified live on 2026-07-15 before removal: every
   replica ran `prewarm_enabled=False`, percent unset (`None`), empty
-  allow/deny lists — and the `canary_percent=None` code path (treat all
+  allow/deny lists вЂ” and the `canary_percent=None` code path (treat all
   eligible requests, `legacy_all`) is exactly the new unconditional
   behavior, so nothing changed for defaults or production.
   `..._PREWARM_ENABLED` stays (default off, mid-rollout): enabling it is
@@ -330,7 +374,7 @@ Phase 4 (3 removed; prewarm canary scaffolding):
   observability contract; see
   `openspec/specs/proxy-runtime-observability/context.md`.
   If a future feature needs percentage or cohort-scoped rollout, that is
-  a new OpenSpec change with its own design — re-introducing these
+  a new OpenSpec change with its own design вЂ” re-introducing these
   settings verbatim is explicitly not the path.
 
 ## Deprecation policy for removed settings
@@ -348,17 +392,17 @@ names are pruned (they stay inert), so the list never accumulates.
 Six env fields whose documented behavior was already dead or deprecated:
 
 - `CODEX_LB_REQUEST_LOG_RETENTION_DAYS`, `CODEX_LB_USAGE_HISTORY_RETENTION_DAYS`
-  — deprecated aliases for the dashboard retention settings since
+  вЂ” deprecated aliases for the dashboard retention settings since
   v1.21.x; NULL dashboard values are now disabled (`data-retention`).
 - `CODEX_LB_HTTP_DOWNSTREAM_TRANSPORT_POLICY`,
   `CODEX_LB_OPENAI_CACHE_AFFINITY_MAX_AGE_SECONDS`, `CODEX_LB_WARMUP_MODEL`
-  — only ever copied into the `dashboard_settings` row when it was first
+  вЂ” only ever copied into the `dashboard_settings` row when it was first
   created, so on every initialized deployment the env value was ignored
   while docs and the Helm chart (`config.cacheAffinityMaxAgeSeconds`,
   removed) presented it as live configuration. The first-created row now
   takes the column defaults (`smart`, `1800`, `gpt-5.4-mini`), which equal
   the former env defaults.
-- `CODEX_LB_HTTP_RESPONSES_SESSION_BRIDGE_GATEWAY_SAFE_MODE` — zero
+- `CODEX_LB_HTTP_RESPONSES_SESSION_BRIDGE_GATEWAY_SAFE_MODE` вЂ” zero
   readers; only the dashboard column was ever consulted.
 
 `CODEX_LB_WORKERS_PER_INSTANCE` was also dropped as a `Settings` field but
@@ -376,7 +420,7 @@ Behaviour is unchanged; each env name gets the one-release WARN.
 
 - Upstream transport: `CODEX_LB_MAX_SSE_EVENT_BYTES` (16 MiB),
   `CODEX_LB_UPSTREAM_RESPONSE_CREATE_MAX_BYTES` (15 MiB, derived from the
-  frame budget), `CODEX_LB_UPSTREAM_COMPACT_TIMEOUT_SECONDS` (no constant —
+  frame budget), `CODEX_LB_UPSTREAM_COMPACT_TIMEOUT_SECONDS` (no constant вЂ”
   the dashboard `compact_request_budget_seconds` was already the only total
   cap that ever applied).
 - Auth / token refresh: `CODEX_LB_OAUTH_TIMEOUT_SECONDS` (30 s),
@@ -398,7 +442,7 @@ Behaviour is unchanged; each env name gets the one-release WARN.
   `rate_limit_reset_credits_refresh_enabled`
   (`dashboard-managed-background-jobs`), where it joins
   `auth_guardian_enabled` and `automations_scheduler_enabled` under
-  Settings → Advanced → Background jobs.
+  Settings в†’ Advanced в†’ Background jobs.
 - Scheduler toggles: `CODEX_LB_STICKY_SESSION_CLEANUP_ENABLED`,
   `CODEX_LB_MODEL_REGISTRY_ENABLED` (always on),
   `CODEX_LB_QUOTA_PLANNER_SCHEDULER_ENABLED` (folded into the dashboard
@@ -433,15 +477,15 @@ any upstream 401 whatever the window says, so shortening it only adds
 exchanges and lengthening it only defers one.
 
 `constantize-core-tunables` kept the field because the traffic-parity canary
-was the one live consumer — it pinned the variable to `365` so a controlled
+was the one live consumer вЂ” it pinned the variable to `365` so a controlled
 run could not exchange its isolated, single-use refresh token against the real
 authorization host (`AUTH_BASE_URL` is a protocol constant, so redirecting
 `CODEX_LB_UPSTREAM_BASE_URL` at the local fixture does not cover OAuth). That
 pin is replaced by a repository-owned preflight in
 `scripts/traffic_analysis/fast_canary_suite.py`: the suite stamps the isolated
-`auth.json`'s recorded refresh time — every key the account importer accepts
+`auth.json`'s recorded refresh time вЂ” every key the account importer accepts
 for it (`lastRefreshAt`, `last_refresh`), so no stale alias outranks the stamp
-— to the current instant before either runner starts, so the imported account
+вЂ” to the current instant before either runner starts, so the imported account
 is inside the fixed window for the whole run.
 The stamp is strictly stronger than the pin, which only ever reached the
 failure-matrix subprocess while the raw HTTP/2 runner relied on a host-local
@@ -460,7 +504,7 @@ An operator running `CODEX_LB_LOG_UPSTREAM_REQUEST_PAYLOAD=true` upgrades:
 startup logs
 
 ```
-removed setting(s) ignored: CODEX_LB_LOG_UPSTREAM_REQUEST_PAYLOAD — values are now fixed; see PRINCIPLES.md P2 / issue #1340
+removed setting(s) ignored: CODEX_LB_LOG_UPSTREAM_REQUEST_PAYLOAD вЂ” values are now fixed; see PRINCIPLES.md P2 / issue #1340
 ```
 
 and the equivalent incident-debugging behavior is re-enabled interactively

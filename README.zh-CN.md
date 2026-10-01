@@ -39,17 +39,17 @@ ChatGPT 账户负载均衡器。聚合多个账户、追踪用量、管理 API K
 ## 快速开始
 
 ```bash
-# Docker（推荐）
-docker volume create codex-lb-data
+# Docker（在 Frozen811/codex-lb 仓库目录中运行；参见 docs/deployment/docker.md）
+docker build -t codex-lb:local .
 docker network inspect codex-lb-net >/dev/null 2>&1 || docker network create codex-lb-net
 docker run -d --name codex-lb \
   --network codex-lb-net \
   -p 2455:2455 -p 1455:1455 \
   -v codex-lb-data:/var/lib/codex-lb \
-  ghcr.io/soju06/codex-lb:latest
+  codex-lb:local
 
-# 或者使用 uvx
-uvx codex-lb
+# 或者安装历史 fork wheel（版本差异及源码安装见 docs/deployment/python.md）
+uvx --from https://github.com/Frozen811/codex-lb/releases/download/v1.25.0-hardened.3/codex_lb-1.25.1-py3-none-any.whl codex-lb
 
 # 或者使用 nix
 nix run github:Soju06/codex-lb
