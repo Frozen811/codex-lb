@@ -1816,4 +1816,3 @@ def test_sign_bridge_payload_uses_configured_encryption_key(monkeypatch: pytest.
     sig = _sign_bridge_payload("test-payload")
     expected = hmac.new(test_env_key.encode("utf-8"), b"test-payload", hashlib.sha256).hexdigest()
     assert sig == expected
-
