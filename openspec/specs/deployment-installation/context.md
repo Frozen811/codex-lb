@@ -50,6 +50,10 @@ Source installs need the pinned Bun prerequisite and dependency network access, 
 
 Windows diagnostic run 36904727598 on b89bd0a1 failed during uv sync, before Bun setup: the distribution hook also ran for Hatch's editable wheel version. Editable dependency setup now skips dashboard compilation only for that wheel version; standard wheel/sdist builds retain the exact Bun and complete-assets requirement. Existing development/CI workflows compile the frontend separately after installing Python dependencies. A fresh no-asset uv sync with incompatible host Bun verifies this boundary; a normal wheel build in the same environment must still fail. This also preserves backend-only CI setup without adding frontend dependencies to every job.
 
+## Nix build-hook source membership
+
+PR CI failed with missing scripts/hatch_build.py because explicit Nix source filesets selected metadata without its referenced plugin. Both packageSource and editableSource now include only scripts/hatch_build.py and scripts/build_dashboard.py. Complete standard Nix builds reuse the existing frontendAssets output; editable metadata loads the hook but leaves compilation explicit. This corrects a packaging compatibility seam without copying broad workstation state or changing Nix inputs/dependencies.
+
 ## Source checkout launchers
 
 The source wrappers select their own checkout, use frozen uv dependencies, and prepare missing frontend assets before delegating to app.cli in the same interpreter. Help bypasses frontend preparation. PowerShell/batch preserve CLI failure status; batch pauses only for no-argument interactive use. Bash ships executable and execs uv, preserving foreground termination semantics. Paths with spaces and a foreign caller cwd were exercised on Windows PowerShell 5/pwsh/cmd and Ubuntu 24.04 WSL. A clean baseline was backend-ready but returned dashboard 503; the old PowerShell launcher returned zero on a CLI failure.
