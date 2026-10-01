@@ -111,6 +111,7 @@ allowed = [
   "flake.lock",
   "flake.nix",
   "frontend",
+  "issues-check.md",
   "mkdocs.yml",
   "openspec",
   "pyproject.toml",
