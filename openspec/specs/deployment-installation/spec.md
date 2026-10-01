@@ -5,6 +5,16 @@
 Define installation modes, smoke-test expectations, and the operator environment-variable contract at settings-load time, so the Helm chart remains portable across supported deployments and the configuration surface stays minimal (PRINCIPLES.md P2).
 ## Requirements
 
+### Requirement: Nix filtered sources include declared package build hooks
+
+Both Nix package and editable source filters MUST include the custom build hook declared by project metadata and the helper it loads. They MUST preserve explicit exclusion of unrelated workstation state. Standard Nix builds SHALL reuse their prebuilt dashboard assets, while editable builds SHALL retain explicit frontend preparation.
+
+#### Scenario: Project metadata declares a custom Hatch hook
+
+- **WHEN** Nix builds a package or editable environment from filtered project source
+- **THEN** the declared hook and its required helper are present
+- **AND** package creation does not fail because a referenced build script is missing
+
 ### Requirement: Editable dependency setup does not compile the dashboard
 
 Editable development installation MUST NOT require Bun or compile frontend assets during Python dependency setup. Frontend compilation SHALL remain an explicit development/workflow step. This exemption MUST NOT apply to standard distributable wheels or source distributions, which retain complete dashboard requirements and fail-closed prerequisite/output validation.
