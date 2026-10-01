@@ -46,6 +46,8 @@ def ensure_dashboard(root: Path) -> None:
     if actual != expected:
         raise RuntimeError(f"Dashboard source build needs {manager}; found Bun {actual}. {guidance}")
     subprocess.run([bun, "install", "--frozen-lockfile"], cwd=frontend, check=True, timeout=600)
-    subprocess.run([bun, "run", "build"], cwd=frontend, check=True, timeout=600)
+    # Keep node-shebang tools on the pinned runtime even when the host has an
+    # older Node.js installed (Vite otherwise selects that executable).
+    subprocess.run([bun, "--bun", "run", "build"], cwd=frontend, check=True, timeout=600)
     if not dashboard_complete(root):
         raise RuntimeError("Frontend build did not produce complete dashboard HTML/JavaScript/CSS assets")
