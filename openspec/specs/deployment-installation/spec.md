@@ -17,7 +17,7 @@ Editable development installation MUST NOT require Bun or compile frontend asset
 
 ### Requirement: Python source builds include dashboard assets
 
-Python source builds MUST produce wheels with dashboard HTML and non-empty referenced JavaScript/CSS assets. When complete prebuilt assets are present, the build SHALL reuse them without requiring Bun. When assets are absent, the build MUST use the frontend package's exact pinned Bun version and frozen dependency lock. Missing/wrong prerequisites, a failed frontend build or incomplete output MUST fail package creation with actionable diagnostics. The source distribution MUST include the build hook and required frontend inputs while excluding workstation dependencies, environment files and nested agent worktrees.
+Standard distributable Python source builds MUST produce wheels with dashboard HTML and non-empty referenced JavaScript/CSS assets. When complete prebuilt assets are present, the build SHALL reuse them without requiring Bun. When assets are absent, the build MUST use the frontend package's exact pinned Bun version and frozen dependency lock. Missing/wrong prerequisites, a failed frontend build or incomplete output MUST fail package creation with actionable diagnostics. The source distribution MUST include the build hook and required frontend inputs while excluding workstation dependencies, environment files and nested agent worktrees.
 
 #### Scenario: Install from clean Git source
 
