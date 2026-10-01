@@ -1,0 +1,2 @@
+- [x] 1.1 Include declared hook/helper in both filtered source variants and run local source/strict spec checks.
+- [x] 1.2 Verify actual corrected Nix CI, sync context/requirements and archive the compatibility fix.
