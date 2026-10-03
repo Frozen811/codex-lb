@@ -89,3 +89,45 @@ def test_blank_env_file_override_falls_back_to_module_root(tmp_path: Path) -> No
     (tmp_path / ".env").write_text("CODEX_LB_LOG_FORMAT=json\n", encoding="utf-8")
 
     assert _probe_settings(tmp_path, {"CODEX_LB_ENV_FILE": "   "}) == _DEFAULTS
+
+
+def test_later_env_file_then_process_environment_wins(tmp_path: Path) -> None:
+    (tmp_path / ".env").write_text(
+        "CODEX_LB_LOG_FORMAT=json\nCODEX_LB_LEADER_ELECTION_ENABLED=false\n", encoding="utf-8"
+    )
+    (tmp_path / ".env.local").write_text("CODEX_LB_LOG_FORMAT=text\n", encoding="utf-8")
+    selected: dict[str, str] = {"CODEX_LB_ENV_FILE": os.pathsep.join([".env", ".env.local"])}
+    assert _probe_settings(tmp_path, selected) == ["text", False]
+    assert _probe_settings(tmp_path, selected | {"CODEX_LB_LOG_FORMAT": "json"}) == ["json", False]
+
+
+def test_env_files_do_not_supply_cli_listener_defaults(tmp_path: Path) -> None:
+    env_file = tmp_path / "settings.env"
+    env_file.write_text("HOST=0.0.0.0\nPORT=9999\nUNKNOWN_SETUP_NAME=ignored\n", encoding="utf-8")
+    environ = {name: value for name, value in os.environ.items() if not name.startswith("CODEX_LB_")}
+    for name in ("HOST", "PORT"):
+        environ.pop(name, None)
+    environ.update(PYTHONPATH=str(_REPO_ROOT), CODEX_LB_ENV_FILE=str(env_file))
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from app.cli import _parse_args; from app.core.config.settings import Settings; "
+            "Settings(); a = _parse_args([]); print(a.host, a.port)",
+        ],
+        cwd=tmp_path,
+        env=environ,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.stdout.strip() == "127.0.0.1 2455"
+
+
+def test_invalid_env_value_names_field(tmp_path: Path) -> None:
+    env_file = tmp_path / "invalid.env"
+    env_file.write_text("CODEX_LB_LEADER_ELECTION_ENABLED=not-a-boolean\n", encoding="utf-8")
+    with pytest.raises(subprocess.CalledProcessError) as caught:
+        _probe_settings(tmp_path, {"CODEX_LB_ENV_FILE": str(env_file)})
+    assert "leader_election_enabled" in caught.value.stderr
+    assert "bool_parsing" in caught.value.stderr

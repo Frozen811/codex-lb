@@ -72,6 +72,24 @@ The September 2026 endpoint regression measures SQLite VM work across the real H
 
 ## Example
 
+### Failed immediate publication after an operator mutation
+
+The pending marker belongs to the invalidation poller. For example, Pause can
+commit the account's PAUSED status and invalidate local routing while a shared
+namespace publication fails due to a locked database or driver error. The
+operator mutation remains committed; the marker stays pending and a later
+successful poll writes the namespace version. A peer then refreshes its
+database-backed routing snapshot and refuses reuse of an old ACTIVE bridge
+snapshot. Cancellation also retains the pending marker and propagates to the
+request owner; it does not roll back an already committed Pause.
+
+This queue is in memory. Source-process loss still relies on the documented
+TTL/reconcile backstop; a retry in a live process is not durable outbox
+delivery. The audit tests cover the operator route plus independent peer
+cache, alongside existing commit-ambiguity and namespace-isolation tests.
+
+### Primary-window lookup
+
 These rows must both participate in a primary-window lookup:
 
 ```text

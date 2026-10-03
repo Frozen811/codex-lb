@@ -30,8 +30,8 @@ _SENSITIVE_LOG_VALUE_PATTERNS = (
         r"(?:\s*,\s*(?!(?:status|request_id|code|latency|method|path)\s*=)[a-zA-Z0-9_-]+\s*=\s*(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^,\s&]+))*"
     ),
     re.compile(
-        r"(?i)((?<![\w-])(?:[\"']?authorization[\"']?\s*=\s*|authorization\s*:\s*|\bauthorization\s+))(?!\s*bearer\b)"
-        r"([^,&]+(?:\s*,\s*(?!(?:status|request_id|code|latency|method|path)\s*=)[a-zA-Z0-9_-]+\s*=\s*(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^,\s&]+))*)"
+        r"(?i)((?<![\w-])(?:[\"']?authorization[\"']?\s*[:=]\s*|\bauthorization\s+))"
+        r"(b?\"(?:\\.|[^\"\\])*\"|b?'(?:\\.|[^'\\])*'|[^\r\n]*)"
     ),
 )
 _LINE_BREAKS = re.compile(r"(\r\n|\n|\r)")
@@ -168,11 +168,14 @@ def _redact_oidc_callback_on_line(text: str) -> str:
 
 def _redact_secret_patterns_on_line(text: str) -> str:
     redacted = _redact_oidc_callback_on_line(_redact_invite_path_tokens_on_line(text))
+    # Mask explicit fields before generic token passes can leave partial
+    # placeholders. Unquoted authorization has no trustworthy separator:
+    # commas, ampersands and diagnostic-looking keys can all be credentials.
+    redacted = _SENSITIVE_LOG_VALUE_PATTERNS[2].sub(_redact_authorization_value, redacted)
     redacted = _JSON_SENSITIVE_LOG_VALUE_PATTERN.sub(_redact_json_secret, redacted)
     redacted = _SENSITIVE_LOG_VALUE_PATTERNS[0].sub(_redact_keyed_secret, redacted)
     redacted = _SENSITIVE_LOG_VALUE_PATTERNS[1].sub(_redact_bearer_token, redacted)
     redacted = _BASIC_TOKEN_PATTERN.sub(_redact_bearer_token, redacted)
-    redacted = _SENSITIVE_LOG_VALUE_PATTERNS[2].sub(_redact_authorization_value, redacted)
     # Last, so ``'Proxy-Authorization': 'Basic [REDACTED]'`` keeps the scheme
     # the token passes above already exposed.
     return _PYTHON_REPR_SENSITIVE_LOG_VALUE_PATTERN.sub(_redact_python_repr_secret, redacted)
@@ -262,7 +265,11 @@ def _redact_bearer_token(match: re.Match[str]) -> str:
 
 
 def _redact_authorization_value(match: re.Match[str]) -> str:
-    return f"{match.group(1)}{_LOG_REDACTION}"
+    value = match.group(2)
+    if value.startswith(("b'", 'b"')):
+        return f"{match.group(1)}b{value[1]}{_LOG_REDACTION}{value[1]}"
+    quote = value[0] if value.startswith(("'", '"')) and value.endswith(value[0]) else ""
+    return f"{match.group(1)}{quote}{_LOG_REDACTION}{quote}"
 
 
 def _utc_converter(seconds: float | None) -> time.struct_time:

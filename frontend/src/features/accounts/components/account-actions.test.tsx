@@ -118,12 +118,12 @@ describe("AccountActions", () => {
     expect(screen.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
   });
 
-  it("resumes a deactivated account alongside re-authentication", async () => {
+  it.each(["deactivated", "quota_exceeded"] as const)("resumes a %s account", async (status) => {
     const user = userEvent.setup();
     const onResume = vi.fn();
     const account = createAccountSummary({
-      accountId: "acc_deactivated",
-      status: "deactivated",
+      accountId: "acc_resume",
+      status,
     });
 
     render(
@@ -143,14 +143,43 @@ describe("AccountActions", () => {
       />,
     );
 
-    // Both recoveries stay available: resume clears a stale deactivation,
-    // re-authentication replaces credentials that are actually gone.
-    expect(
-      screen.getByRole("button", { name: "Re-authenticate" }),
-    ).toBeInTheDocument();
+    if (status === "deactivated") {
+      // Both recoveries stay available for a stale deactivation.
+      expect(
+        screen.getByRole("button", { name: "Re-authenticate" }),
+      ).toBeInTheDocument();
+    }
 
     await user.click(screen.getByRole("button", { name: "Resume" }));
-    expect(onResume).toHaveBeenCalledWith("acc_deactivated");
+    expect(onResume).toHaveBeenCalledWith("acc_resume");
+    expect(onResume).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { busy: true, readOnly: false },
+    { busy: false, readOnly: true },
+  ])("disables quota Resume for $busy/$readOnly", async ({ busy, readOnly }) => {
+    const onResume = vi.fn();
+    render(
+      <AccountActions
+        account={createAccountSummary({ status: "quota_exceeded" })}
+        busy={busy}
+        readOnly={readOnly}
+        onPause={vi.fn()}
+        onResume={onResume}
+        onProbe={vi.fn()}
+        onDelete={vi.fn()}
+        onReauth={vi.fn()}
+        onExportAuth={vi.fn()}
+        onResetCredit={vi.fn()}
+        onSecurityWorkAuthorizedChange={vi.fn()}
+        onLimitWarmupChange={vi.fn()}
+        onRoutingPolicyChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Resume" })).toBeDisabled();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Resume" }));
+    expect(onResume).not.toHaveBeenCalled();
   });
 
   it("fires the per-account probe callback for active accounts", async () => {

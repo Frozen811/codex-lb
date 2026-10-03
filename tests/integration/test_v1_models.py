@@ -101,7 +101,9 @@ async def _populate_test_registry() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("path", ["/v1/models", "/backend-api/codex/models"])
+@pytest.mark.parametrize(
+    "path", ["/v1/models", "/backend-api/codex/models", "/v1/models/gpt-5.2", "/v1/models/gpt-5.2/"]
+)
 async def test_models_routes_release_reservation_when_catalog_read_fails(async_client, monkeypatch, path):
     """Both public model routes settle their reservation on a catalog failure."""
     released: list[str] = []
@@ -1691,6 +1693,57 @@ async def test_v1_models_prefers_raw_max_output_tokens_over_slug_fallback(async_
     assert entry["capabilities"]["max_output_tokens"] == 96_000
     assert entry["maxOutputTokens"] == 96_000
     assert entry["max_output_tokens"] == 96_000
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("slug", ["gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "external-budget-model"])
+@pytest.mark.parametrize(
+    ("raw_limit", "known_expected", "unknown_expected"),
+    [
+        (None, 128_000, None),
+        (True, 128_000, None),
+        (False, 128_000, None),
+        (0, 128_000, None),
+        (-1, 128_000, None),
+        ("96000", 128_000, None),
+        (96000.0, 128_000, None),
+        ([], 128_000, None),
+        ({}, 128_000, None),
+        (96_000, 96_000, 96_000),
+        (1, 1, 1),
+    ],
+)
+async def test_model_output_budget_contract_on_public_surfaces(
+    async_client, slug: str, raw_limit: JsonValue, known_expected: int, unknown_expected: int | None
+):
+    raw = _raw_with_max_context_window(872_000)
+    raw["max_output_tokens"] = raw_limit
+    model = _make_upstream_model(slug, raw=raw)
+    await get_model_registry().update({"pro": [model]})
+    expected = unknown_expected if slug == "external-budget-model" else known_expected
+
+    for path in ("/v1/models", f"/v1/models/{slug}", f"/v1/models/{slug}/", "/backend-api/codex/models"):
+        response = await async_client.get(path, follow_redirects=False)
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        entry = next(item for item in payload["data"] if item["id"] == slug) if "data" in payload else payload
+        for actual in (
+            entry["metadata"]["max_output_tokens"],
+            entry["capabilities"]["max_output_tokens"],
+            entry["max_output_tokens"],
+            entry["maxOutputTokens"],
+        ):
+            assert actual == expected, (path, raw_limit, actual)
+            assert actual is None or type(actual) is int
+        assert entry["metadata"]["input_context_window"] == 272_000
+        assert entry["context_length"] == 272_000
+        if "models" in payload:
+            native = next(item for item in payload["models"] if item["slug"] == slug)
+            assert native["max_output_tokens"] == raw_limit
+            assert type(native["max_output_tokens"]) is type(raw_limit)
+            assert native["context_window"] == 272_000
+            assert native["max_context_window"] == 872_000
+    assert model.raw == raw
 
 
 @pytest.mark.asyncio

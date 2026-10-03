@@ -94,13 +94,30 @@ FILTERS = {
     "nix": [
         "flake.nix",
         "flake.lock",
-        "frontend/bun.nix",
-        "frontend/bun.lock",
+        "frontend/**",
+        "app/**",
+        "config/**",
+        "scripts/hatch_build.py",
+        "scripts/build_dashboard.py",
+        "LICENSE",
+        "README.md",
         "pyproject.toml",
         "uv.lock",
         ".github/workflows/ci.yml",
     ],
 }
+
+FULL_SUITE_PATTERNS = [
+    ".github/workflows/**",
+    ".github/scripts/detect_changed_areas.py",
+    ".github/scripts/github_api.py",
+    ".gitattributes",
+]
+
+
+def _full_suite_files(reason: str) -> list[str]:
+    print(f"warning: {reason}; falling back to the full CI suite", flush=True)
+    return [".github/workflows/ci.yml"]
 
 
 def _event() -> dict[str, Any]:
@@ -117,36 +134,44 @@ def _pull_request_files(event: dict[str, Any]) -> list[str]:
     files_url = pull_request.get("url")
     if not isinstance(files_url, str) or not files_url:
         raise SystemExit("pull_request.url missing from event payload")
+    expected_count = pull_request.get("changed_files")
+    if type(expected_count) is not int or not 0 <= expected_count <= 3000:
+        return _full_suite_files("PR changed-file count is missing, invalid or exceeds the API limit")
     url: str | None = f"{files_url}/files?per_page=100"
     files: list[str] = []
+    seen_urls: set[str] = set()
+    filenames: set[str] = set()
     while url:
+        if url in seen_urls or len(seen_urls) >= 30:
+            return _full_suite_files("PR file pagination repeats or exceeds the API limit")
+        seen_urls.add(url)
         try:
             payload, link = request_json(url)
         except GitHubApiError as exc:
-            print(
-                f"warning: GitHub PR files request failed after retries; falling back to the full CI suite: {exc}",
-                flush=True,
-            )
-            return [
-                "frontend/__github_api_unavailable__",
-                "app/__github_api_unavailable__",
-                "deploy/helm/__github_api_unavailable__",
-                "Dockerfile",
-                "app/db/alembic/__github_api_unavailable__",
-                "flake.nix",
-                "Cargo.toml",
-            ]
+            return _full_suite_files(f"GitHub PR files request failed after retries: {exc}")
         if not isinstance(payload, list):
-            raise SystemExit(f"GitHub PR files request returned {type(payload).__name__}, expected list")
+            return _full_suite_files("GitHub PR files response is not a list")
         for item in payload:
-            if isinstance(item, dict) and isinstance(item.get("filename"), str):
-                files.append(item["filename"])
+            if not isinstance(item, dict):
+                return _full_suite_files("GitHub PR file entry is not an object")
+            filename = item.get("filename")
+            if not isinstance(filename, str) or not filename or filename in filenames:
+                return _full_suite_files("GitHub PR file entry has a missing or repeated filename")
+            filenames.add(filename)
+            files.append(filename)
+            previous = item.get("previous_filename")
+            if "previous_filename" in item or item.get("status") == "renamed":
+                if not isinstance(previous, str) or not previous:
+                    return _full_suite_files("GitHub renamed file has no valid previous filename")
+                files.append(previous)
         url = next_link(link)
+    if len(filenames) != expected_count:
+        return _full_suite_files("GitHub PR file list does not match the changed-file count")
     return files
 
 
 def _matches(path: str, patterns: list[str]) -> bool:
-    return any(fnmatch(path, pattern) for pattern in patterns)
+    return any(fnmatch(path, pattern) for pattern in (*FULL_SUITE_PATTERNS, *patterns))
 
 
 def main() -> int:

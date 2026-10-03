@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from app.core.types import JsonValue
+from app.core.utils.sse import parse_sse_data_json
 
 TERMINAL_EVENT_TYPES = frozenset({"response.completed", "response.failed", "response.incomplete", "error"})
 OUTPUT_DELTA_EVENT_TYPES = frozenset(
@@ -115,32 +116,6 @@ def observe_output_timing(
     state.output_delta_count += 1
 
 
-def _verbatim_line_has_nonempty_output(event_type: str | None, line: str, *, allow_snapshot: bool) -> bool:
-    if event_type in OUTPUT_DELTA_EVENT_TYPES:
-        for key in ('"delta":', '"arguments":', '"input":'):
-            idx = line.find(key)
-            if idx != -1:
-                rest = line[idx + len(key) :].lstrip()
-                if rest.startswith('""'):
-                    return False
-                if rest.startswith('"'):
-                    return True
-        return False
-    if not allow_snapshot:
-        return False
-    snapshot_field = _OUTPUT_DONE_FIELDS.get(event_type or "")
-    if snapshot_field is not None:
-        key = f'"{snapshot_field}":'
-        idx = line.find(key)
-        if idx != -1:
-            rest = line[idx + len(key) :].lstrip()
-            if rest.startswith('""'):
-                return False
-            if rest.startswith('"'):
-                return True
-    return False
-
-
 def observe_verbatim_output_timing(
     state: OutputTimingState,
     event_type: str | None,
@@ -148,8 +123,13 @@ def observe_verbatim_output_timing(
     *,
     observed_at: float,
 ) -> None:
-    if not _verbatim_line_has_nonempty_output(event_type, line, allow_snapshot=state.output_delta_count == 0):
+    # Upstream ParsedSseBlock carriers reuse their payload without decoding.
+    # Sampling must use actual fields, independent of key spacing/escaping or
+    # unrelated nested metadata, while the relay keeps the original bytes.
+    try:
+        payload = parse_sse_data_json(line)
+    except (ValueError, RecursionError):
+        # Optional observations from plain-string producers must not break
+        # relay when unrelated JSON metadata exceeds the decoder's limits.
         return
-    if state.latency_first_output_ms is None:
-        state.latency_first_output_ms = max(0, int((observed_at - state.started_at) * 1000))
-    state.output_delta_count += 1
+    observe_output_timing(state, event_type, payload, observed_at=observed_at)

@@ -51,7 +51,7 @@
 
       codexLbMeta = {
         inherit (projectMetadata) description;
-        homepage = "https://github.com/Soju06/codex-lb";
+        homepage = "https://github.com/Frozen811/codex-lb";
         license = lib.licenses.mit;
         mainProgram = "codex-lb";
         maintainers = [ lib.maintainers.aaravrav ];
@@ -126,6 +126,13 @@
           };
 
           dontRunLifecycleScripts = true;
+          # Store files are root-owned and immutable. Linux protected_hardlinks
+          # can reject Bun's default linking backend for unprivileged builders.
+          bunInstallFlags = [
+            "--linker=isolated"
+            "--backend=copyfile"
+            "--frozen-lockfile"
+          ];
 
           buildPhase = ''
             runHook preBuild

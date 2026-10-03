@@ -52,4 +52,4 @@ For wiring keys into each client, see [Client Setup](client-setup.md).
 
 ---
 
-*Spec: [api-keys](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/api-keys)*
+*Spec: [api-keys](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/api-keys)*

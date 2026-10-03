@@ -359,7 +359,7 @@ def render_settings_reference() -> str:
         "The file uses the same redaction as stderr. URL userinfo is redacted at",
         "every level, but bearer tokens and `key=value` secrets only at `warning` and",
         "above, so keep log files on operator-only storage. See",
-        "[proxy-runtime-observability](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/proxy-runtime-observability).",
+        "[proxy-runtime-observability](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/proxy-runtime-observability).",
         "",
         "## Process-level environment variables (not settings)",
         "",
@@ -392,8 +392,8 @@ def render_settings_reference() -> str:
             "using registry plan visibility and suppression. If neither qualifies, they",
             "use `gpt-5.6-luna`. Catalog visibility does not guarantee account access.",
             "There is no host-model setting. See the",
-            "[Images spec](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/images-api-compat)",
-            "and [probe spec](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/usage-refresh-policy).",
+            "[Images spec](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/images-api-compat)",
+            "and [probe spec](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/usage-refresh-policy).",
             "",
             "Removed settings (ignored with a one-release startup warning; each is now a",
             "fixed default or a dashboard runtime setting — see PRINCIPLES.md P2 /",
@@ -408,15 +408,15 @@ def render_settings_reference() -> str:
             "---",
             "",
             "*Specs: [user-documentation]"
-            "(https://github.com/Soju06/codex-lb/tree/main/openspec/specs/user-documentation) · "
+            "(https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/user-documentation) · "
             "[responses-api-compat]"
-            "(https://github.com/Soju06/codex-lb/tree/main/openspec/specs/responses-api-compat) · "
+            "(https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/responses-api-compat) · "
             "[rate-limit-reset-credits]"
-            "(https://github.com/Soju06/codex-lb/tree/main/openspec/specs/rate-limit-reset-credits) · "
+            "(https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/rate-limit-reset-credits) · "
             "[deployment-installation]"
-            "(https://github.com/Soju06/codex-lb/tree/main/openspec/specs/deployment-installation) · "
+            "(https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/deployment-installation) · "
             "[proxy-runtime-observability]"
-            "(https://github.com/Soju06/codex-lb/tree/main/openspec/specs/proxy-runtime-observability)*",
+            "(https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/proxy-runtime-observability)*",
             "",
         ]
     )

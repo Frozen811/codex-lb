@@ -109,6 +109,42 @@ async def test_quota_planner_clock_time_boundaries_and_partial_updates(monkeypat
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("legacy", ["9:00", "bad", "", "09:00\n", "99:99"])
+async def test_legacy_clock_times_remain_readable_and_individually_correctable(monkeypatch, async_client, legacy):
+    monkeypatch.setattr("app.modules.quota_planner.api.AuditService.log_async", lambda *args, **kwargs: None)
+    async with SessionLocal() as session:
+        await QuotaPlannerRepository(session).upsert_settings(
+            PlannerSettings(working_hours_start=legacy, working_hours_end=legacy)
+        )
+
+    response = await async_client.get("/api/quota-planner/settings")
+    assert response.status_code == 200
+    assert response.json()["workingHoursStart"] == legacy
+    assert response.json()["workingHoursEnd"] == legacy
+    forecast = await async_client.get("/api/quota-planner/forecast")
+    assert forecast.status_code == 200
+    assert forecast.json()["slots"]
+
+    for payload in ({}, {"workingHoursStart": None, "workingHoursEnd": None}):
+        retained = await async_client.put("/api/quota-planner/settings", json=payload)
+        assert retained.status_code == 200
+        assert retained.json()["workingHoursStart"] == legacy
+        assert retained.json()["workingHoursEnd"] == legacy
+
+    corrected = await async_client.put("/api/quota-planner/settings", json={"workingHoursStart": "00:00"})
+    assert corrected.status_code == 200
+    assert corrected.json()["workingHoursStart"] == "00:00"
+    assert corrected.json()["workingHoursEnd"] == legacy
+    corrected = await async_client.put("/api/quota-planner/settings", json={"workingHoursEnd": "23:59"})
+    assert corrected.status_code == 200
+    assert corrected.json()["workingHoursEnd"] == "23:59"
+    async with SessionLocal() as session:
+        saved = await QuotaPlannerRepository(session).get_settings()
+    assert saved.working_hours_start == "00:00"
+    assert saved.working_hours_end == "23:59"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("timezone_name", ["/Europe/Stockholm", "Europe/../Stockholm", "Unknown/Timezone"])
 async def test_quota_planner_rejects_invalid_timezone_without_saving(monkeypatch, async_client, timezone_name):
     monkeypatch.setattr("app.modules.quota_planner.api.AuditService.log_async", lambda *args, **kwargs: None)

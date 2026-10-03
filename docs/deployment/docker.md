@@ -32,6 +32,52 @@ command with the same named volume. Back up the volume before updating;
 keeping a volume does not guarantee that an older image can read a newer
 database schema.
 
+## Update identity and rollback
+
+Stop application writers and retain a [paired DB/key backup](../database.md#backup-restore-and-rollback),
+configuration and the old executable/image identity before updating. Select a
+reviewed **fork** source or artifact explicitly; a local remote named `origin`
+can be upstream. Complete frontend assets are reused by source launchers, so
+rebuild changed frontend sources before restarting a checkout installation.
+
+For Docker, compare the candidate image and the running container separately:
+
+```bash
+docker image inspect codex-lb:local --format '{{.Id}}'
+docker inspect codex-lb --format '{{.Image}}'
+docker exec codex-lb python -c "import app; print(app.__version__)"
+```
+
+The first two values are local image IDs, not registry manifest/index digests.
+A running container keeps its image ID when a tag is retargeted or pulled;
+`docker restart` runs that same container/image. Recreate it with the explicitly
+selected candidate to change code. A mutable `latest` tag can be cached or
+retargeted, while a full `repository@sha256:...` selects a registry artifact.
+Fetching new source does not update a public-image installation. The server-only
+source Compose file uses `pull_policy: build`; follow its source build commands
+instead of expecting `docker compose pull` to select newer source.
+
+After recreation, check runtime version and selected image/source identity,
+`/health/ready`, dashboard HTML plus referenced assets, saved settings and
+account inventory. Verify credential decryptability without printing tokens;
+real upstream operation needs its own authenticated test. Readiness and a
+version string alone do not prove the intended update.
+
+Rollback uses the old pinned executable/image **and its compatible pre-upgrade
+DB/key snapshot**. Restore into an empty isolated store first, check schema and
+application data, then choose the cutover deliberately. Retaining a volume does
+not make it safe to run old code on a migrated schema. `helm rollback` and image
+retagging do not restore database contents. Migration-specific downgrade notes
+describe only that revision, not every release you might cross.
+
+An isolated Linux/amd64 rehearsal on 2026-10-02 replaced the historical pinned
+runtime `1.25.0-beta.9` with a local source overlay reporting `1.25.1`, retained
+settings/account ciphertext/key, recreated the candidate, then restored the old
+snapshot with the old image. Both schema and product data checks passed. The
+candidate reused an audited dependency image and copied current local source;
+this does not certify a new public release or every downgrade pair. Detailed
+artifact/source evidence remains in the repository's issues-check registry.
+
 ## Public fork image
 
 The public `latest` and `1.25.1` aliases were checked on 2026-10-01: both
@@ -60,6 +106,12 @@ existing volume. Do not assume an older image can open a migrated schema.
 
 ## Basic run
 
+After building `codex-lb:local` above, run **one** of these alternatives.
+Docker must use Linux containers. An existing container named `codex-lb`
+must be updated deliberately as described above before reusing its name.
+
+Linux/WSL/macOS Bash:
+
 ```bash
 docker volume create codex-lb-data
 docker network inspect codex-lb-net >/dev/null 2>&1 || docker network create codex-lb-net
@@ -70,12 +122,29 @@ docker run -d --name codex-lb \
   codex-lb:local
 ```
 
+Windows PowerShell (backticks must be the final character on each continued line):
+
+```powershell
+docker volume create codex-lb-data
+docker network inspect codex-lb-net *> $null
+if ($LASTEXITCODE -ne 0) { docker network create codex-lb-net }
+docker run -d --name codex-lb `
+  --network codex-lb-net `
+  -p 2455:2455 -p 1455:1455 `
+  -v codex-lb-data:/var/lib/codex-lb `
+  codex-lb:local
+```
+
 Ports:
 
 - `2455` — dashboard + proxy API
 - `1455` — OAuth login callback (needed while adding accounts)
 
-The volume holds everything under `/var/lib/codex-lb/` (database, encryption key, archives) — back it up to preserve your data.
+The volume retains the default SQLite database, encryption key and archives under
+`/var/lib/codex-lb/` across container recreation. External PostgreSQL/MySQL and
+independently configured key/archive/spool paths need separate backups. Follow
+the [paired backup and restore guide](../database.md#backup-restore-and-rollback)
+before updating; avoid removing the volume when recreating the container.
 
 ## Switching Wi-Fi or other networks
 
@@ -85,12 +154,12 @@ codex-lb retries only when the transport can prove that the request failed befor
 
 For laptops that switch networks frequently:
 
-The `uvx codex-lb` examples below install the upstream PyPI package. For the
+Bare `uvx codex-lb` installs the upstream PyPI package. For the
 fork, use the source-build instructions above or a verified fork release
 artifact; a PyPI command without a fork source does not select this checkout.
 
-- **Simplest on Linux, macOS, and Windows:** run `uvx codex-lb` directly on the host. This avoids Docker's additional DNS layer.
-- **Docker Engine on Linux (verified with `systemd-resolved`):** use host networking so the container shares the host resolver path. This survives network switches only when the host exposes a stable resolver address, such as the `127.0.0.53` `systemd-resolved` stub. If the host's `/etc/resolv.conf` points directly to a DNS server supplied by Wi-Fi or other DHCP, that address can still become stale. In that case, configure a stable host resolver, follow the [bridge-listener runbook](https://github.com/Soju06/codex-lb/blob/main/openspec/specs/deployment-networking/context.md#diagnostics-and-recovery), or prefer `uvx`. Use the following command instead of the portable Docker command above.
+- **Host Python on Linux, macOS, and Windows:** select the explicit fork source or historical wheel in the [Python guide](python.md). Running on the host avoids Docker's additional DNS layer.
+- **Docker Engine on Linux (verified with `systemd-resolved`):** use host networking so the container shares the host resolver path. This survives network switches only when the host exposes a stable resolver address, such as the `127.0.0.53` `systemd-resolved` stub. If the host's `/etc/resolv.conf` points directly to a DNS server supplied by Wi-Fi or other DHCP, that address can still become stale. In that case, configure a stable host resolver, follow the [bridge-listener runbook](https://github.com/Frozen811/codex-lb/blob/main/openspec/specs/deployment-networking/context.md#diagnostics-and-recovery), or prefer `uvx`. Use the following command instead of the portable Docker command above.
 - **Docker Desktop on macOS or Windows:** Docker Desktop 4.34 and later offers opt-in host networking, but containers still run through Docker Desktop's virtual machine and its DNS behavior can vary by version and configuration. This setup has not been verified as a reliable fix for switching networks. Keep Docker Desktop current; if failures persist, prefer the native `uvx` installation.
 
 ```bash

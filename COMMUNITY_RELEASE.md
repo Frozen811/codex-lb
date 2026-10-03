@@ -1,5 +1,5 @@
 # codex-lb (Hardened Community Edition)
-*Production-ready, thoroughly verified, high-reliability distribution of [Soju06/codex-lb](https://github.com/Soju06/codex-lb)*
+*Community fork of [Soju06/codex-lb](https://github.com/Soju06/codex-lb); independent verification is tracked in [issues-check.md](issues-check.md).*
 
 ---
 
@@ -7,7 +7,7 @@
 
 ### Executive Summary
 
-**codex-lb Hardened Community Edition (v1.25.1)** is a comprehensive, production-grade release of `codex-lb` incorporating **100% verified solutions for all 156 tracked issues and 101 community Pull Requests**.
+**codex-lb Hardened Community Edition** is the historical name of this fork. The published [v1.25.0-hardened.3](https://github.com/Frozen811/codex-lb/releases/tag/v1.25.0-hardened.3) has package metadata `1.25.1`; its runtime/version drift and later source fixes are recorded in [the independent audit](issues-check.md). This document describes source integration work, not certification of all fixes in that artifact.
 
 While the upstream repository established powerful load-balancing and account-pooling concepts, production environments at scale suffered from critical failure modes:
 1. **HTTP/2 Transport Cascades**: A single dropped stream in Native Egress severed the underlying HTTP/2 connection, abruptly terminating all concurrent streams across all accounts.
@@ -16,7 +16,7 @@ While the upstream repository established powerful load-balancing and account-po
 4. **SQLite Concurrency Deadlocks**: Intense multi-stream burst traffic produced unrecoverable database locks ("database is locked" errors).
 5. **Session wedging**: Injected anchors rejected by upstream (`previous_response_not_found`) caused client hangs without yielding terminal error events.
 
-In this edition, **every single reported defect was verified and resolved directly at the root cause in the source code**, accompanied by dedicated unit and integration regression tests and validated against OpenSpec specifications.
+The source registry contains 120 unique issue links, 128 PR links and 49 discussion links as counted on 2026-10-02; these are linked records, not verified fixes or current GitHub open counts. See [ISSUES.md](ISSUES.md) for the counting rule and historical source-author claims, and [issues-check.md](issues-check.md) for scoped tests, source SHAs, artifact evidence and remaining work. No aggregate completion or production-readiness claim is made.
 
 ---
 
@@ -78,10 +78,8 @@ In this edition, **every single reported defect was verified and resolved direct
 
 ### Verification & Quality Assurance
 
-- **OpenSpec Strict Compliance**: Validated **67 of 67 OpenSpec specifications** via `bunx @fission-ai/openspec validate --specs`.
-- **Zero Configuration Bloat (P1–P6 Simplicity Gates)**: Maintained exact setting budget (**97 of 97 parameters**). No unnecessary configuration levers added.
-- **Line Count Limits**: Strictly respected file size caps on sensitive core components (`service.py <= 2600`, `load_balancer.py <= 3021`, `mixin.py <= 2436`).
-- **Comprehensive Test Execution**: Over 1,000 unit and integration tests passing (`pytest tests/unit tests/integration`).
+- Evidence is recorded per source SHA and product path in [issues-check.md](issues-check.md), including failed checks and remaining artifact/platform limits. Historical totals and author-reported test runs do not certify the current tree or release.
+- OpenSpec validation uses the CI-pinned CLI; architecture and simplicity limits remain governed by repository checks. Targeted local tests and successful exact-source cloud CI are separate evidence.
 
 ---
 
@@ -89,7 +87,7 @@ In this edition, **every single reported defect was verified and resolved direct
 
 ### Общий обзор и назначение
 
-**codex-lb Hardened Community Edition (v1.25.1)** — это производственная, максимально стабилизированная сборка балансировщика и прокси `codex-lb`, включающая **100% проверенные по коду исправления всех 156 зарегистрированных проблем и 101 открытого Pull Request сообщества**.
+**codex-lb Hardened Community Edition** — историческое название форка. Публичный [v1.25.0-hardened.3](https://github.com/Frozen811/codex-lb/releases/tag/v1.25.0-hardened.3) имеет версию пакета `1.25.1`; расхождение runtime и последующие source-исправления описаны в [независимом аудите](issues-check.md). Этот документ описывает интеграции в исходниках, а не подтверждение всех исправлений в опубликованном артефакте.
 
 При эксплуатации оригинального репозитория под реальной нагрузкой возникали критические отказы:
 1. **Разрывы HTTP/2 соединений**: Сетевой сбой на одном активном стриме Native Egress приводил к закрытию всего HTTP/2 мультиплексированного соединения и обрыву стримов всех остальных аккаунтов.
@@ -98,7 +96,7 @@ In this edition, **every single reported defect was verified and resolved direct
 4. **Блокировки базы данных SQLite**: Параллельные потоки вызывали дедлоки («database is locked»).
 5. **Подвисание клиентов при реджекте якорей**: При ошибке `previous_response_not_found` на proxy-injected якоре HTTP-мост закрывался без отправки терминального события ошибки.
 
-В данной сборке **каждая из 132 проблем была исследована по коду, устранена на уровне архитектуры и покрыта регрессионными тестами**.
+В исходном реестре на 2026-10-02 найдены ссылки на 120 уникальных Issues, 128 PR и 49 Discussions. Это ссылочные записи, а не количество проверенных исправлений или текущих открытых обращений GitHub. Правило подсчёта и исторические заявления автора находятся в [ISSUES.md](ISSUES.md); доказательства отдельных проверок и открытая очередь — в [issues-check.md](issues-check.md). Общая завершённость и готовность к production не заявляются.
 
 ---
 
@@ -148,27 +146,31 @@ In this edition, **every single reported defect was verified and resolved direct
 
 ### Стандарты верификации и простоты
 
-- **OpenSpec SSOT**: Все **67 спецификаций** успешно проходят проверку (`bunx @fission-ai/openspec validate --specs`).
-- **Simplicity Gates**: Бюджет настроек строго сохранен на уровне **97 полей** (никаких лишних параметров).
-- **Ограничения по размеру файлов**: Все ключевые модули укладываются в установленные лимиты строк (`service.py`: 914 / 2600).
-- **Тесты**: Полный набор модульных и интеграционных тестов проходит без ошибок.
+- **OpenSpec SSOT**: Нормативные контракты находятся в `openspec/specs/`; результат валидации привязан к версии CLI и проверяемому source SHA в [независимом аудите](issues-check.md).
+- **Simplicity Gates**: Бюджеты определены в `.github/simplicity-budgets.toml`; проверяем их на конкретном дереве исходников.
+- **Ограничения по размеру файлов**: Архитектурные лимиты проверяются repository checkers, а не историческим счётчиком в release notes.
+- **Тесты**: Целевые локальные тесты, полный cloud CI и проверка опубликованных артефактов учитываются отдельно; результаты и ограничения — в [issues-check.md](issues-check.md).
 
 ---
 
 ## 🚀 Quick Start / Быстрый запуск
 
 ### 1. Локальный запуск через `uv` (Local run)
+Source checkout: нужны uv и Bun **1.3.14**. Launcher строит отсутствующие
+dashboard assets; один `uv run codex-lb` их не создаёт. Bash:
 ```bash
-git clone https://github.com/Frozen811/codex-lb.git
-cd codex-lb
-uv run codex-lb
+git clone https://github.com/Frozen811/codex-lb.git || exit 1
+cd codex-lb || exit 1
+./run.sh
 ```
+Windows PowerShell и выбор full SHA: [Python guide](docs/deployment/python.md#run-from-a-fork-checkout).
 Панель управления и прокси доступны по адресу: **`http://localhost:2455`**.
 
 ### 2. Запуск в Docker (Docker run)
+Docker Engine / Linux containers, Bash:
 ```bash
-git clone https://github.com/Frozen811/codex-lb.git
-cd codex-lb
+git clone https://github.com/Frozen811/codex-lb.git || exit 1
+cd codex-lb || exit 1
 docker build -t codex-lb:hardened .
 docker volume create codex-lb-data
 docker run -d --name codex-lb \
@@ -178,12 +180,14 @@ docker run -d --name codex-lb \
 ```
 
 ### 3. Настройка клиента Codex CLI (`~/.codex/config.toml`)
+Ниже только provider fragment; полный пример с API-key auth и model:
+[Client Setup](docs/client-setup.md#codex-cli-ide-extension).
 ```toml
 model_provider = "codex-lb"
 
 [model_providers.codex-lb]
 base_url = "http://127.0.0.1:2455/backend-api/codex"
-wire_specification = "responses"
+wire_api = "responses"
 ```
 
 ---
@@ -192,28 +196,51 @@ wire_specification = "responses"
 ## 🔄 How to Update / Инструкция по обновлению
 
 ### 1. If using Git clone (Windows / Linux / macOS)
-Pull the latest commits from the fork and start as usual (dependencies and DB migrations are applied automatically):
+Stop the old process/writers, save a paired DB/key backup, and select a reviewed
+fork revision. Remote names are local conventions: `origin` may point at
+Soju06 rather than Frozen811. The explicit fetch below does not depend on that
+name. Use a clean checkout or a separate checkout for saved local changes.
 
 Source launchers require uv and Bun 1.3.14 for missing dashboard assets; see
 the [checkout guide](docs/deployment/python.md#run-from-a-fork-checkout).
 After updating frontend sources, rebuild them with the pinned Bun/frozen lock
 before restarting, since complete existing assets are reused.
 
-**Windows (PowerShell / Command Prompt):**
+**Windows (PowerShell):**
 ```powershell
-git pull origin main
+$sourceRevision = "<reviewed-full-sha>"
+if (git status --porcelain) { throw "Save local changes or use a separate checkout first." }
+git fetch --depth 1 https://github.com/Frozen811/codex-lb.git $sourceRevision
+if ($LASTEXITCODE -ne 0) { throw "Fork fetch failed." }
+git switch --detach FETCH_HEAD
+if ($LASTEXITCODE -ne 0) { throw "Source selection failed." }
+git rev-parse HEAD
+# Rebuild changed frontend sources with Bun 1.3.14 before normal startup.
 .\run.ps1
 # or double-click start.bat
 ```
 
 **Linux / macOS / Server:**
 ```bash
-git pull origin main
+source_revision="<reviewed-full-sha>"
+test -z "$(git status --porcelain)" || { echo "Save local changes or use a separate checkout first."; exit 1; }
+git fetch --depth 1 https://github.com/Frozen811/codex-lb.git "$source_revision" && git switch --detach FETCH_HEAD || { echo "Fork source selection failed."; exit 1; }
+git rev-parse HEAD
 uv sync --frozen
 ./run.sh
-# or if running as a systemd service:
-sudo systemctl restart codex-lb
 ```
+
+The repository does not install a `codex-lb.service` systemd unit. If you
+created a service separately, update its selected source/package and restart
+the unit you configured. Keep its data directory and encryption key; see the
+[Python](docs/deployment/python.md), [Nix](docs/deployment/nix.md) and
+[remote access](docs/deployment/remote.md) guides for the applicable launch mode.
+
+Run each step only after the previous one succeeds. A remote SHA does not
+include uncommitted local audit fixes. Runtime version alone does not identify
+the selected code; compare the source/image identity and verify retained
+settings/account access. See [update and rollback checks](docs/deployment/docker.md#update-identity-and-rollback)
+and [platform evidence](docs/deployment/python.md#platform-and-topology-evidence).
 
 ---
 
@@ -255,7 +282,7 @@ an upgraded database schema.
 For a source build, back up the application volume and database, select the
 desired fork revision, and rebuild only the application. Server-only Compose:
 ```bash
-git pull origin main
+# Select the reviewed fork SHA explicitly as above, then:
 docker compose -f docker-compose.prod.yml up -d --force-recreate server
 ```
 

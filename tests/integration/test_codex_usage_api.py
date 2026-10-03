@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 from datetime import timedelta, timezone
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -1074,9 +1075,9 @@ async def test_codex_consume_reset_credit_cross_account(async_client, db_setup, 
         await accounts_repo.upsert(
             _make_account("acc_caller_x", "caller-x@example.com", chatgpt_account_id="workspace_caller_x")
         )
-        await accounts_repo.upsert(
-            _make_account("acc_owner_y", "owner-y@example.com", chatgpt_account_id="workspace_owner_y")
-        )
+        target_account = _make_account("acc_owner_y", "owner-y@example.com", chatgpt_account_id="workspace_owner_y")
+        target_account.access_token_encrypted = TokenEncryptor().encrypt("target-access")
+        await accounts_repo.upsert(target_account)
 
     async def stub_fetch_usage(*, access_token: str, account_id: str | None, **_: object) -> UsagePayload:
         return UsagePayload.model_validate({"plan_type": "plus"})
@@ -1118,7 +1119,51 @@ async def test_codex_consume_reset_credit_cross_account(async_client, db_setup, 
     # Verification: consumed against acc_owner_y
     assert len(consume_calls) == 1
     assert consume_calls[0]["account_id"] == "workspace_owner_y"
+    assert consume_calls[0]["access_token"] == "target-access"
     assert consume_calls[0]["redeem_request_id"] == "credit-target-999"
     # Verification: refreshed both accounts
     assert "acc_owner_y" in refreshed_accounts
     assert "acc_caller_x" in refreshed_accounts
+
+
+@pytest.mark.parametrize("prefix", ["/api/codex", "/backend-api/wham", "/backend-api/codex"])
+@pytest.mark.parametrize("slash", ["", "/"])
+@pytest.mark.parametrize("redeem_id", ["credit-no-identity", "default", "auto"])
+@pytest.mark.parametrize("target_identity", [None, ""])
+async def test_codex_reset_credit_missing_target_identity_refuses_without_mutation(
+    async_client,
+    db_setup,
+    monkeypatch,
+    prefix,
+    slash,
+    redeem_id,
+    target_identity,
+):
+    async with SessionLocal() as session:
+        repo = AccountsRepository(session)
+        await repo.upsert(_make_account("reset-caller", "caller@example.com", chatgpt_account_id="workspace-caller"))
+        await repo.upsert(_make_account("reset-target", "target@example.com", chatgpt_account_id=target_identity))
+    store = get_rate_limit_reset_credits_store()
+    await store.invalidate()
+    target_snapshot = _reset_credit_snapshot("credit-no-identity")
+    await store.set("reset-target", target_snapshot)
+    consume = AsyncMock()
+    refresh = AsyncMock()
+    monkeypatch.setattr("app.modules.proxy.api.consume_rate_limit_reset_credit", consume)
+    monkeypatch.setattr("app.modules.proxy.api._force_refresh_account", refresh)
+    monkeypatch.setattr("app.modules.proxy.api._force_refresh_codex_usage_identity_account", refresh)
+    try:
+        response = await async_client.post(
+            f"{prefix}/rate-limit-reset-credits/consume{slash}",
+            headers={"Authorization": "Bearer chatgpt-token", "chatgpt-account-id": "workspace-caller"},
+            json={"redeem_request_id": redeem_id},
+        )
+        assert response.status_code == 401, response.text
+        assert response.json()["error"]["code"] == "invalid_api_key"
+        assert response.json()["error"]["type"] == "authentication_error"
+        assert response.json()["error"]["message"] == "Target account has no ChatGPT account ID"
+        consume.assert_not_awaited()
+        refresh.assert_not_awaited()
+        assert store.list_all() == {"reset-target": target_snapshot}
+    finally:
+        await store.invalidate()

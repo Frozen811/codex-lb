@@ -718,7 +718,11 @@ async def test_a_cross_site_push_with_a_bearer_is_served_on_its_merits(async_cli
 
 
 @pytest.mark.asyncio
-async def test_an_oversized_stream_stops_at_the_scim_body_limit(async_client: AsyncClient, app_instance) -> None:
+@pytest.mark.parametrize("method", ["POST", "PUT", "PATCH"])
+@pytest.mark.parametrize("declared_length", [None, "1"])
+async def test_an_oversized_stream_stops_at_the_scim_body_limit(
+    async_client: AsyncClient, app_instance, method: str, declared_length: str | None
+) -> None:
     await _setup_admin(async_client)
     _, secret = await _issue_token(async_client)
     consumed: list[int] = []
@@ -729,18 +733,116 @@ async def test_an_oversized_stream_stops_at_the_scim_body_limit(async_client: As
             yield chunk
 
     async with _client(app_instance) as scim:
-        response = await scim.post(
-            USERS, content=body(), headers={**_auth(secret), "Content-Type": "application/scim+json"}
-        )
+        original = await _create(scim, secret)
+        assert original.status_code == 201
+        resource = original.json()
+        path = USERS if method == "POST" else f"{USERS}/{resource['id']}"
+        headers = {**_auth(secret), "Content-Type": "application/scim+json"}
+        if declared_length is not None:
+            headers["Content-Length"] = declared_length
+        response = await scim.request(method, path, content=body(), headers=headers)
+        unchanged = await scim.get(f"{USERS}/{resource['id']}", headers=_auth(secret))
+        assert unchanged.json() == resource
 
     assert response.status_code == 413
     assert response.headers["content-type"].startswith("application/scim+json")
     assert response.json()["status"] == "413"
     assert consumed == [0, 1]
     async with SessionLocal() as session:
+        identities = (
+            (await session.execute(select(DashboardIdentity).where(DashboardIdentity.provider == "scim")))
+            .scalars()
+            .all()
+        )
+        assert len(identities) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "declared",
+    ["9" * 5000, "0" * 5000 + str(MAX_BODY_BYTES + 1), "-1", "nope", "", "²"],
+    ids=["huge", "zero-padded-huge", "negative", "nondecimal", "empty", "nonascii-digit"],
+)
+async def test_scim_declared_length_is_refused_without_reading_or_writing(
+    async_client: AsyncClient, app_instance, declared: str
+) -> None:
+    await _setup_admin(async_client)
+    _, secret = await _issue_token(async_client)
+    consumed: list[bool] = []
+
+    async def body() -> AsyncIterator[bytes]:
+        consumed.append(True)
+        yield b"{}"
+
+    async with _client(app_instance) as scim:
+        response = await scim.post(
+            USERS,
+            content=body(),
+            headers=[
+                (b"authorization", _auth(secret)["Authorization"].encode()),
+                (b"content-type", b"application/scim+json"),
+                (b"content-length", declared.encode("latin-1")),
+            ],
+        )
+    expected_status = 413 if declared.isascii() and declared.isdecimal() else 400
+    assert response.status_code == expected_status
+    assert response.headers["content-type"].startswith("application/scim+json")
+    assert response.json()["status"] == str(expected_status)
+    assert consumed == []
+    async with SessionLocal() as session:
         assert (
             await session.execute(select(DashboardIdentity).where(DashboardIdentity.provider == "scim"))
         ).scalars().first() is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", ["POST", "PUT", "PATCH"])
+@pytest.mark.parametrize("leading_zeroes", [0, 5000])
+async def test_scim_valid_resource_at_exact_stream_limit(
+    async_client: AsyncClient, app_instance, method: str, leading_zeroes: int
+) -> None:
+    await _setup_admin(async_client)
+    _, secret = await _issue_token(async_client)
+    consumed: list[int] = []
+    async with _client(app_instance) as scim:
+        if method == "POST":
+            path = USERS
+            raw = b'{"userName":"bob@example.com","externalId":"bob"}'
+        else:
+            original = await _create(scim, secret)
+            assert original.status_code == 201
+            path = f"{USERS}/{original.json()['id']}"
+            if method == "PUT":
+                raw = b'{"userName":"alice@example.com","externalId":"ext-alice","displayName":"Updated"}'
+            else:
+                raw = (
+                    b'{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],'
+                    b'"Operations":[{"op":"replace","path":"displayName","value":"Updated"}]}'
+                )
+        raw += b" " * (MAX_BODY_BYTES - len(raw))
+
+        async def body() -> AsyncIterator[bytes]:
+            for index, chunk in enumerate((raw[:16], raw[16:])):
+                consumed.append(index)
+                yield chunk
+
+        response = await scim.request(
+            method,
+            path,
+            content=body(),
+            headers={
+                **_auth(secret),
+                "Content-Type": "application/scim+json",
+                "Content-Length": "0" * leading_zeroes + str(len(raw)),
+            },
+        )
+        assert response.status_code == (201 if method == "POST" else 200), response.text
+        assert consumed == [0, 1]
+        resource = response.json()
+        if method != "POST":
+            assert resource["displayName"] == "Updated"
+        read = await scim.get(f"{USERS}/{resource['id']}", headers=_auth(secret))
+        assert read.json() == resource
 
 
 @pytest.mark.asyncio

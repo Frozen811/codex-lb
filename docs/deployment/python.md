@@ -51,13 +51,24 @@ unchanged. See the [uv tool guide](https://docs.astral.sh/uv/guides/tools/).
 
 ## Install selected fork source
 
-Choose an audited commit SHA from the fork and replace `<source-sha>` below.
+Choose an audited full commit SHA from the fork and replace `REPLACE_WITH_REVIEWED_FULL_SHA` below.
 Install [Bun](https://bun.sh/docs/installation) **1.3.14**, matching
 `frontend/package.json`, before building a source tree without dashboard assets:
 
 ```bash
 bun --version  # must print 1.3.14
-uvx --python 3.13 --from git+https://github.com/Frozen811/codex-lb.git@<source-sha> codex-lb
+source_revision="REPLACE_WITH_REVIEWED_FULL_SHA"
+[[ "$source_revision" =~ ^[0-9a-fA-F]{40}$ ]] || { echo "Select a reviewed full SHA first."; exit 1; }
+uvx --python 3.13 --from "git+https://github.com/Frozen811/codex-lb.git@$source_revision" codex-lb
+```
+
+Windows PowerShell uses a different variable syntax:
+
+```powershell
+bun --version  # must print 1.3.14
+$sourceRevision = "REPLACE_WITH_REVIEWED_FULL_SHA"
+if ($sourceRevision -notmatch '^[0-9a-fA-F]{40}$') { throw "Select a reviewed full SHA first." }
+uvx --python 3.13 --from "git+https://github.com/Frozen811/codex-lb.git@$sourceRevision" codex-lb
 ```
 
 The package build hook runs `bun install --frozen-lockfile` and `bun run build`
@@ -102,14 +113,23 @@ These optional setup commands install Bun in your user environment. The audit
 used checksum-verified isolated binaries instead of changing the user's install.
 
 ```bash
-git clone https://github.com/Frozen811/codex-lb.git
-cd codex-lb
-git checkout <source-sha>
+git clone https://github.com/Frozen811/codex-lb.git || exit 1
+cd codex-lb || exit 1
+source_revision="REPLACE_WITH_REVIEWED_FULL_SHA"
+[[ "$source_revision" =~ ^[0-9a-fA-F]{40}$ ]] || { echo "Select a reviewed full SHA first."; exit 1; }
+git checkout --detach "$source_revision" || exit 1
 ```
 
 Windows PowerShell:
 
 ```powershell
+git clone https://github.com/Frozen811/codex-lb.git
+if ($LASTEXITCODE -ne 0) { throw "Fork clone failed." }
+Set-Location codex-lb
+$sourceRevision = "REPLACE_WITH_REVIEWED_FULL_SHA"
+if ($sourceRevision -notmatch '^[0-9a-fA-F]{40}$') { throw "Select a reviewed full SHA first." }
+git checkout --detach $sourceRevision
+if ($LASTEXITCODE -ne 0) { throw "Source selection failed." }
 .\run.ps1
 # Alternate port and a log path containing spaces:
 .\run.ps1 --port 2547 --log-file "logs with spaces/server.log"
@@ -121,7 +141,7 @@ also double-click `start.bat`; the batch wrapper delegates to the same launcher
 and pauses after an interactive no-argument session ends. With explicit
 arguments, it returns the CLI's status without requiring a key press.
 
-Linux/WSL and macOS Bash:
+Linux/WSL and macOS Bash, after selecting the checkout above:
 
 ```bash
 ./run.sh
@@ -197,6 +217,51 @@ Audit startup was verified on Windows/Python 3.13 in clean venvs outside the
 checkout. Real account OAuth/Codex routing, macOS/Linux native installs and
 custom enterprise network policies require separate checks. Package startup
 does not prove that the fork's newer code is in a historical release.
+
+## Update and rollback checks
+
+Choose the fork URL/full source SHA or verified wheel explicitly. Stop the old
+process and back up its DB/key/configuration before replacing the environment.
+For `uv tool`, `uv tool install --reinstall <verified-fork-artifact-url>` replaces
+the selected source even when package metadata has not changed; an old pinned
+URL remains old when refreshed. Replacing a Python environment does not copy
+data to another DB URL or preserve an independently configured key by itself.
+
+For a checkout, check remote URLs before choosing the source, or fetch directly
+from `https://github.com/Frozen811/codex-lb.git` at the reviewed full SHA. Save
+local changes and use a clean/separate checkout. Rebuild changed frontend assets
+with the pinned Bun/frozen lock. Run from the selected venv/tool and explicit
+configuration, then check `import app; print(app.__version__)`, package/source
+identity, migration state, readiness, assets, settings and account access.
+
+For rollback, restore the old environment/executable with its matching
+pre-upgrade DB/key snapshot in an isolated store first. Version metadata alone
+does not establish schema compatibility. See the [Docker identity checks](docker.md#update-identity-and-rollback)
+and [database backup guide](../database.md#backup-restore-and-rollback).
+
+## Platform and topology evidence
+
+The following is a **dated verification matrix**, not a guarantee for every
+machine. The owning installation/runtime contracts remain in OpenSpec. Earlier
+source/artifact snapshots and their limits are identified in the linked guide
+sections and repository issues-check registry.
+
+| Environment / target | Executed evidence | Boundary |
+|---|---|---|
+| Windows x64, Python 3.13 | Source PS5/pwsh/cmd launchers, wheel/tool startup, data/key retention; isolated Codex 0.159.3 HTTP/WS fixture on 2026-10-01/02 | Native console-close/Ctrl+C semantics, physical LAN/enterprise policies and real OpenAI login need separate runs |
+| Linux/amd64 containers on Docker Desktop for Windows | Historical pinned public image, source/dependency overlay update + paired rollback, probes and Linux SIGTERM/SIGINT tests on 2026-10-02 | This is a Linux container runtime, not native macOS/Windows container support or every Linux host network setup |
+| Ubuntu 24.04 WSL x86_64 | Prior 2026-10-01 source-launcher audit at published b5aa440b snapshot: Bun/uv, assets, paths, retained data, SIGTERM forwarding | WSL network-mode transitions and physical remote-client reachability remain unexecuted |
+| Local kind/Kubernetes 1.35 amd64 | Prior 2026-10-02 chart install/upgrade, PostgreSQL/Secret retention and two-pod ring rehearsal | Declared minimum Kubernetes version, cloud/ESO/Ingress/Gateway/provider integrations are not all certified |
+| Nix x86_64-linux | Prior 2026-10-02 package/dev-shell startup, assets/env/state and SIGTERM rehearsal | Flake declarations for aarch64-linux/aarch64-darwin are unexecuted runtime targets |
+| Native macOS Intel/ARM64; Linux ARM64 | Command/build-target declarations only in this audit | No native runtime certification from these x64 runs |
+
+The public fork OCI index observed on 2026-10-02 contains `linux/amd64` plus
+`unknown/unknown` marked `attestation-manifest`. The attestation is metadata,
+not an ARM64 runtime. A `py3-none-any` wheel describes Python packaging rather
+than proving native dependencies/helper execution on every platform. A Nix
+system declaration likewise needs its own build/runtime evidence. Choose a
+path with evidence for your environment and verify new source/artifacts rather
+than transferring an older green result to a different platform.
 
 ---
 

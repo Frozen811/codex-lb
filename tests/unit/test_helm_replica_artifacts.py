@@ -143,7 +143,7 @@ def test_grafana_dashboard_titles_can_be_overridden() -> None:
         if document["kind"] == "ConfigMap" and document["metadata"]["name"] == "codex-lb-dashboard"
     )
     raw_dashboard_values = {
-        dashboard_path.name: "\n" + dashboard_path.read_text().removesuffix("\n")
+        dashboard_path.name: "\n" + dashboard_path.read_text(encoding="utf-8").removesuffix("\n")
         for dashboard_path in (_CHART_DIR / "dashboards").glob("*.json")
     }
     assert default_config["data"] == raw_dashboard_values
@@ -223,8 +223,8 @@ def _connection_budget(values: dict) -> int:
 
 
 def test_helm_pool_budgets_count_both_postgres_engines() -> None:
-    defaults = yaml.safe_load((_CHART_DIR / "values.yaml").read_text())
-    production = yaml.safe_load((_CHART_DIR / "values-prod.yaml").read_text())
+    defaults = yaml.safe_load((_CHART_DIR / "values.yaml").read_text(encoding="utf-8"))
+    production = yaml.safe_load((_CHART_DIR / "values-prod.yaml").read_text(encoding="utf-8"))
     merged_production = {
         **defaults,
         **production,
@@ -242,9 +242,9 @@ def test_helm_pool_budgets_count_both_postgres_engines() -> None:
 
 
 def test_helm_codex_prewarm_defaults_off_like_settings() -> None:
-    defaults = yaml.safe_load((_CHART_DIR / "values.yaml").read_text())
-    bundled = yaml.safe_load((_CHART_DIR / "values-bundled.yaml").read_text())
-    configmap = (_CHART_DIR / "templates" / "configmap.yaml").read_text()
+    defaults = yaml.safe_load((_CHART_DIR / "values.yaml").read_text(encoding="utf-8"))
+    bundled = yaml.safe_load((_CHART_DIR / "values-bundled.yaml").read_text(encoding="utf-8"))
+    configmap = (_CHART_DIR / "templates" / "configmap.yaml").read_text(encoding="utf-8")
 
     assert defaults["config"]["sessionBridgeCodexPrewarmEnabled"] is False
     assert bundled["config"]["sessionBridgeCodexPrewarmEnabled"] is False
@@ -258,8 +258,8 @@ def test_helm_chart_does_not_render_constantized_bridge_tunables() -> None:
     # constantize-session-bridge-tunables: the idle TTLs are fixed application
     # constants, so a rendered key would only trip the removed-settings WARN on
     # every Helm deployment.
-    configmap = (_CHART_DIR / "templates" / "configmap.yaml").read_text()
-    values = (_CHART_DIR / "values.yaml").read_text()
+    configmap = (_CHART_DIR / "templates" / "configmap.yaml").read_text(encoding="utf-8")
+    values = (_CHART_DIR / "values.yaml").read_text(encoding="utf-8")
     for removed in ("SESSION_BRIDGE_IDLE_TTL_SECONDS", "SESSION_BRIDGE_CODEX_IDLE_TTL_SECONDS"):
         assert removed not in configmap
     for removed in ("sessionBridgeIdleTtlSeconds", "sessionBridgeCodexIdleTtlSeconds"):
@@ -294,9 +294,9 @@ def test_helm_default_disables_global_backpressure_and_honors_override() -> None
 
 
 def test_helm_pool_budget_values_flow_to_runtime_and_hpa_templates() -> None:
-    configmap = (_CHART_DIR / "templates" / "configmap.yaml").read_text()
-    deployment = (_CHART_DIR / "templates" / "deployment.yaml").read_text()
-    hpa = (_CHART_DIR / "templates" / "hpa.yaml").read_text()
+    configmap = (_CHART_DIR / "templates" / "configmap.yaml").read_text(encoding="utf-8")
+    deployment = (_CHART_DIR / "templates" / "deployment.yaml").read_text(encoding="utf-8")
+    hpa = (_CHART_DIR / "templates" / "hpa.yaml").read_text(encoding="utf-8")
 
     assert "CODEX_LB_DATABASE_POOL_SIZE: {{ .Values.config.databasePoolSize" in configmap
     assert "CODEX_LB_DATABASE_MAX_OVERFLOW: {{ .Values.config.databaseMaxOverflow" in configmap
@@ -305,9 +305,13 @@ def test_helm_pool_budget_values_flow_to_runtime_and_hpa_templates() -> None:
 
 
 def test_pool_budget_documentation_names_both_engines_one_worker_and_reserve() -> None:
-    readme = _CHART_README.read_text()
-    deployment_context = (_REPO_ROOT / "openspec" / "specs" / "deployment-installation" / "context.md").read_text()
-    database_context = (_REPO_ROOT / "openspec" / "specs" / "database-backends" / "context.md").read_text()
+    readme = _CHART_README.read_text(encoding="utf-8")
+    deployment_context = (_REPO_ROOT / "openspec" / "specs" / "deployment-installation" / "context.md").read_text(
+        encoding="utf-8"
+    )
+    database_context = (_REPO_ROOT / "openspec" / "specs" / "database-backends" / "context.md").read_text(
+        encoding="utf-8"
+    )
 
     assert "× 2 pools × 1 worker × replicas" in readme
     assert "WEB_CONCURRENCY" in readme
@@ -568,7 +572,7 @@ def test_static_ring_covering_every_replica_renders() -> None:
 
 
 def _readme_config_examples() -> list[dict]:
-    readme = _CHART_README.read_text()
+    readme = _CHART_README.read_text(encoding="utf-8")
     examples = []
     for fence in re.findall(r"```yaml\n(.*?)```", readme, re.DOTALL):
         parsed = yaml.safe_load(fence)
@@ -634,7 +638,7 @@ def test_readme_manual_ring_example_passes_settings_validation(monkeypatch: pyte
 
 
 def test_kind_smoke_external_db_mode_exercises_two_replica_bridge_ring() -> None:
-    script = _SMOKE_SCRIPT.read_text()
+    script = _SMOKE_SCRIPT.read_text(encoding="utf-8")
 
     assert "--set replicaCount=2" in script
     assert "--set replicaCount=1" not in script
@@ -652,7 +656,7 @@ def test_kind_smoke_external_db_mode_exercises_two_replica_bridge_ring() -> None
 
 def _env_example_active_assignments() -> dict[str, str]:
     assignments: dict[str, str] = {}
-    for raw_line in _ENV_EXAMPLE.read_text().splitlines():
+    for raw_line in _ENV_EXAMPLE.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
@@ -678,7 +682,7 @@ def test_env_example_does_not_force_leader_election_off() -> None:
     assert Settings().leader_election_enabled is True
 
     # The opt-out is still documented as a commented single-instance escape hatch.
-    text = _ENV_EXAMPLE.read_text()
+    text = _ENV_EXAMPLE.read_text(encoding="utf-8")
     assert "# CODEX_LB_LEADER_ELECTION_ENABLED=false" in text
 
 
@@ -696,7 +700,7 @@ def test_helm_configmap_enables_leader_election_by_default() -> None:
 
 def test_compose_files_declare_single_replica_topology() -> None:
     for compose_path in (_REPO_ROOT / "docker-compose.yml", _REPO_ROOT / "docker-compose.prod.yml"):
-        content = compose_path.read_text()
+        content = compose_path.read_text(encoding="utf-8")
         assert "SINGLE-REPLICA topology" in content, compose_path.name
         assert "--scale server=N" in content, compose_path.name
         assert "deploy/helm/codex-lb" in content, compose_path.name

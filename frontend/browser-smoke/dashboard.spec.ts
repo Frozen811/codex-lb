@@ -502,6 +502,29 @@ test("the model source dialogs stay inside supported viewports", async ({ page }
   }
 });
 
+test("quota-exceeded account Resume uses the existing reactivation route", async ({ page }) => {
+  const account = createAccountSummary({
+    accountId: "weekly-reserve", displayName: "Weekly reserve", status: "quota_exceeded",
+  });
+  await installMobileContainmentFixtures(page, [account]);
+  let resumed = 0;
+  await page.route("**/api/accounts/weekly-reserve/reactivate", async (route) => {
+    expect(route.request().method()).toBe("POST");
+    resumed += 1;
+    account.status = "active";
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ status: "reactivated" }) });
+  });
+  await page.goto("/accounts", { waitUntil: "networkidle" });
+  await page.getByText("Weekly reserve", { exact: true }).first().click();
+  const resume = page.getByRole("button", { name: "Resume", exact: true });
+  await expect(resume).toBeVisible();
+  await expect(resume).toBeEnabled();
+  await resume.click();
+  await expect.poll(() => resumed).toBe(1);
+  await expect(resume).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
+});
+
 test("the model source edit dialog keeps Save visible in compact viewports", async ({ page, request }) => {
   const created = await request.post("/api/model-sources/", {
     data: {

@@ -516,3 +516,95 @@ removed setting(s) ignored: CODEX_LB_LOG_UPSTREAM_REQUEST_PAYLOAD вЂ” values
 and the equivalent incident-debugging behavior is re-enabled interactively
 with `CODEX_LB_TRACE=upstream_payload`. Startup never fails because of a
 removed setting, and the fixed built-in value is used.
+
+## Fork Helm and Nix installation verification (2026-10-02)
+
+The fork chart uses `frozen811/codex-lb`; public aliases remain historical. Source
+installs build and explicitly select the audited image. Bundled PostgreSQL is
+pinned to the verified public 18.6 digest in values.yaml. The chart dependency
+lock pins chart 18.6.7, independently of the database image digest.
+
+Fresh external installs with chart-created app credentials run a regular
+migration Job alongside Secrets and schema-gated pods. A post-install hook
+would deadlock with Helm `--wait`. Existing DB credentials alone do not imply
+the encryption-key Secret exists; only an existing app Secret permits the
+pre-install hook. Upgrades retain pre-upgrade hooks and drain requirements.
+
+Runtime metadata and diagnostic/conversation scratch state use the mounted
+`/tmp/codex-lb`; DB rows and the shared key stay durable in PostgreSQL/Secret.
+Scratch files are ephemeral. Archive retention needs an operator-supplied mount
+and the existing conversation archive setting. Helm rollback never restores
+a compatible DB by itself; back up DB and key together.
+
+Nix uses Bun's copyfile backend because an unprivileged Linux build user may
+not hardlink immutable store files. Nix files use LF so embedded build-phase
+shell fragments also run from Windows/WSL checkouts. For example, `nix build .`
+followed by the result executable in a different launch directory keeps
+`.env` / `.env.local` discovery local to that directory; explicit env-file and
+process env overrides retain precedence. x86_64 Linux package/dev-shell builds
+and startup are verified; ARM64/Darwin, real OAuth and Codex generation remain
+separate runtime checks. See docs/deployment/nix.md and issues-check.md section 22.
+
+## Configuration and paired restore rehearsal (2026-10-02)
+
+Purpose: remove working-directory and storage ambiguity from SETUP-02/03. Python
+dotenv discovery remains module-root anchored to avoid reading an unrelated
+project's settings. For example, an installed package launched from a project
+directory uses explicit `CODEX_LB_ENV_FILE=/absolute/project/.env.local` when that
+file is intended. Ordered file paths use the platform separator; process values
+win. Compose injects its server env_file as process values, while Nix supplies
+launch-directory paths through its wrapper. Listener CLI defaults are separate.
+Missing files/unknown names remain ignored for compatibility; recognized invalid
+values fail validation. Negative CLI keep-alive now fails before startup.
+
+SQLite snapshots use the backup API, include committed WAL data and are restored
+into an empty directory with the matching key. PostgreSQL/MySQL require separate
+logical dumps. An external key/archive/spool path is not included just because
+the application volume is copied. Zero-config remains the base single-instance
+path; this does not add a setting, dependency or schema revision. Directory
+ownership and readable key material are prerequisites for non-root containers.
+
+Fresh CLI SQLite processes and disposable PostgreSQL/MySQL Docker databases
+verified dashboard overrides across restarts and matching-key decryptability
+after restore. A dashboard override of 9 stayed effective while the environment
+changed from 4 to 6/7; clearing it restored 7. Source-mounted Python runtime used
+the existing image only for its dependency environment. New Unix keys were 0600
+under UID 1000; unwritable storage refused startup. Windows force-termination is
+crash-style cleanup; Linux Docker SIGTERM completed graceful shutdown. A wrong
+key refused SQLite startup. Physical upstream credentials were never used.
+
+Rollback means restoring the old binary's paired pre-upgrade snapshot. An older
+binary pointed at a newer schema is not a verified downgrade. Platform/runtime
+limits and exact checks live in issues-check.md section 24 and the archived
+repair-setup-configuration-data-network verification report; operator commands
+are rendered in docs/configuration.md and docs/database.md.
+
+## Explicit-source update and paired rollback (SETUP-08, 2026-10-02)
+
+Purpose: separate source selection, running image identity and storage recovery.
+Local remote names are not repository authority: this checkout's origin is
+Soju06 while fork is Frozen811. The update guide uses explicit fork URL/fullSHA,
+clean-tree and failure checks. A disposable checkout with upstream origin
+successfully fetched and detached at fork f52adb7274c96c0702e19aa02eabd4f1c7556231;
+the shared checkout and its uncommitted fixes were not switched.
+
+The historical public Linux/amd64 runtime manifest
+31557c9d04de1fb263b022b0ab1309c4d020675309a69ecac2d19365d35b3087
+reports1.25.0-beta.9. A local copy-source overlay over the audited dependency
+image reports1.25.1. In isolated SQLite storage, old startup/seed, current
+migration/recreate and old-image restore of its paired pre-upgrade snapshot
+preserved settings, paused-account ciphertext/decryptability and key. Both
+current and restored schema checks passed. The old binary never opened the
+newly migrated original store; rollback used an empty separate restore volume.
+
+For example, retarget a mutable test tag while its old container is running:
+the tag's image ID changes, the container's ID/version do not. Recreating it
+selects the new image. Local image IDs, registry manifest/index digests,
+package metadata, runtime version and source SHA are distinct evidence. This
+does not certify every upgrade/downgrade pair or publish new artifacts.
+
+Failure guidance now covers package versus source asset recovery, selected
+venv/interpreter, optional native transport and DB/upstream stages. The runtime
+missing-assets503 hint uses pinned/frozen Bun with forced Bun execution rather
+than a host Node shebang, and advises complete-artifact reinstall for packages.
+See docs/deployment/docker.md, docs/deployment/python.md and issues-check§26.

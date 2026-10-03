@@ -14,8 +14,8 @@ class QuotaPlannerSettingsResponse(DashboardModel):
     mode: str = Field(pattern=r"^(off|shadow|suggest|auto)$")
     timezone: str
     working_days: list[int]
-    working_hours_start: str = Field(pattern=r"^\d{2}:\d{2}$")
-    working_hours_end: str = Field(pattern=r"^\d{2}:\d{2}$")
+    working_hours_start: str
+    working_hours_end: str
     prewarm_enabled: bool
     prewarm_lead_minutes: int = Field(ge=0, le=1440)
     max_warmups_per_day: int = Field(ge=0)

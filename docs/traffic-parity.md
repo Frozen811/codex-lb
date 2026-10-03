@@ -6,12 +6,12 @@ SSE, and WebSocket as distinct transports while projecting them into a common
 Responses turn model.
 
 The normative tooling contract is
-[`openspec/specs/compatibility-tooling`](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/compatibility-tooling).
+[`openspec/specs/compatibility-tooling`](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/compatibility-tooling).
 The native cutover is governed by
-[`outbound-http-clients`](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/outbound-http-clients),
-[`responses-api-compat`](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/responses-api-compat),
+[`outbound-http-clients`](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/outbound-http-clients),
+[`responses-api-compat`](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/responses-api-compat),
 and
-[`deployment-installation`](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/deployment-installation).
+[`deployment-installation`](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/deployment-installation).
 
 ## What the three paths mean
 
@@ -291,21 +291,25 @@ loopback: a run in a proxied shell captures nothing, and a run that also passed
 text, skills inventory, prompt — to whatever host the variable names.
 
 Then rebuild the body into a fixture, read it, and only then put it in the
-corpus:
+corpus. Replace the quoted example values below with your capture directory,
+capture timestamp and fixture name first; keep paths quoted if they contain spaces:
 
 ```bash
 # 1. rebuild to a scratch path
+capture_dir="REPLACE_WITH_CAPTURE_DIRECTORY"
+stamp="REPLACE_WITH_CAPTURE_TIMESTAMP"
+fixture_name="REPLACE_WITH_FIXTURE_NAME"
 uv run python -m scripts.traffic_analysis.codex_body_sanitize \
-  --in  <capture-dir>/body-gpt-5.5-http-<stamp>.json \
-  --out <capture-dir>/fixture.json \
-  --headers-in  <capture-dir>/headers-gpt-5.5-http-<stamp>.json \
-  --headers-out <capture-dir>/sanitised-headers.json \
-  --emit-redactions <capture-dir>/redactions.json
+  --in "$capture_dir/body-gpt-5.5-http-$stamp.json" \
+  --out "$capture_dir/fixture.json" \
+  --headers-in "$capture_dir/headers-gpt-5.5-http-$stamp.json" \
+  --headers-out "$capture_dir/sanitised-headers.json" \
+  --emit-redactions "$capture_dir/redactions.json"
 
 # 2. read <capture-dir>/fixture.json, then copy it in
 uv run python -m scripts.traffic_analysis.codex_body_sanitize \
-  --in  <capture-dir>/fixture.json \
-  --out tests/fixtures/codex_bodies/<name>.json \
+  --in "$capture_dir/fixture.json" \
+  --out "tests/fixtures/codex_bodies/$fixture_name.json" \
   --i-have-read-the-sanitised-body
 
 uv run python -m scripts.traffic_analysis.fixture_privacy_scan \

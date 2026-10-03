@@ -218,6 +218,25 @@ class _FakeCodexErrorWebSocket(_FakeCodexWebSocket):
         )
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("code", [1009, 1002, 1006, 1011])
+async def test_routed_adapter_preserves_only_typed_message_size_error(code: int, monkeypatch) -> None:
+    rotate = AsyncMock()
+    monkeypatch.setattr(proxy_websocket_module, "_rotate_after_websocket_network_failure", rotate)
+    websocket = CodexUpstreamWebSocket(_FakeCodexErrorWebSocket(aiohttp.WebSocketError(code, "protocol failure")))
+
+    message = await websocket.receive()
+
+    if code == 1009:
+        assert message.kind == "close"
+        assert message.close_code == 1009
+        assert message.error_code is None
+        rotate.assert_not_awaited()
+    else:
+        assert message.kind == "error"
+        assert message.close_code is None
+
+
 class _FakeCodexClient:
     def __init__(self, websocket: _FakeCodexWebSocket | None = None) -> None:
         self.calls: list[dict[str, object]] = []
@@ -1516,8 +1535,8 @@ async def test_connect_responses_websocket_uses_all_proxy_fallback(monkeypatch):
     monkeypatch.delenv("HTTPS_PROXY", raising=False)
     monkeypatch.delenv("socks_proxy", raising=False)
     monkeypatch.delenv("SOCKS_PROXY", raising=False)
-    monkeypatch.setenv("all_proxy", "socks5://127.0.0.1:7890")
     monkeypatch.delenv("ALL_PROXY", raising=False)
+    monkeypatch.setenv("all_proxy", "socks5://127.0.0.1:7890")
 
     await connect_responses_websocket(
         {"openai-beta": "responses_websockets=2026-02-06"},
@@ -1558,10 +1577,10 @@ async def test_connect_responses_websocket_uses_socks_proxy_before_all_proxy(mon
     monkeypatch.delenv("WSS_PROXY", raising=False)
     monkeypatch.delenv("https_proxy", raising=False)
     monkeypatch.delenv("HTTPS_PROXY", raising=False)
-    monkeypatch.setenv("socks_proxy", "socks5://127.0.0.1:7890")
     monkeypatch.delenv("SOCKS_PROXY", raising=False)
-    monkeypatch.setenv("all_proxy", "socks5://127.0.0.1:7891")
+    monkeypatch.setenv("socks_proxy", "socks5://127.0.0.1:7890")
     monkeypatch.delenv("ALL_PROXY", raising=False)
+    monkeypatch.setenv("all_proxy", "socks5://127.0.0.1:7891")
 
     await connect_responses_websocket(
         {"openai-beta": "responses_websockets=2026-02-06"},
@@ -1600,12 +1619,12 @@ async def test_connect_responses_websocket_uses_socks_proxy_before_https_proxy(m
     monkeypatch.delenv("NO_PROXY", raising=False)
     monkeypatch.delenv("wss_proxy", raising=False)
     monkeypatch.delenv("WSS_PROXY", raising=False)
-    monkeypatch.setenv("https_proxy", "http://127.0.0.1:7890")
     monkeypatch.delenv("HTTPS_PROXY", raising=False)
-    monkeypatch.setenv("socks_proxy", "socks5://127.0.0.1:7891")
+    monkeypatch.setenv("https_proxy", "http://127.0.0.1:7890")
     monkeypatch.delenv("SOCKS_PROXY", raising=False)
-    monkeypatch.setenv("all_proxy", "socks5://127.0.0.1:7892")
+    monkeypatch.setenv("socks_proxy", "socks5://127.0.0.1:7891")
     monkeypatch.delenv("ALL_PROXY", raising=False)
+    monkeypatch.setenv("all_proxy", "socks5://127.0.0.1:7892")
 
     await connect_responses_websocket(
         {"openai-beta": "responses_websockets=2026-02-06"},
@@ -1642,8 +1661,8 @@ async def test_connect_responses_websocket_normalizes_http_socks_env_proxy(monke
     )
     monkeypatch.delenv("no_proxy", raising=False)
     monkeypatch.delenv("NO_PROXY", raising=False)
-    monkeypatch.setenv("socks_proxy", "http://127.0.0.1:7891")
     monkeypatch.delenv("SOCKS_PROXY", raising=False)
+    monkeypatch.setenv("socks_proxy", "http://127.0.0.1:7891")
 
     await connect_responses_websocket(
         {"openai-beta": "responses_websockets=2026-02-06"},

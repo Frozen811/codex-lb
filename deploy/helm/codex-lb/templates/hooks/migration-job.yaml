@@ -1,4 +1,5 @@
-{{- if .Values.migration.enabled }}
+{{- if and .Values.migration.enabled (or .Release.IsUpgrade (not .Values.postgresql.enabled)) }}
+{{- $hookPhases := include "codex-lb.migrationHookPhases" . }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -6,13 +7,17 @@ metadata:
   namespace: {{ .Release.Namespace | quote }}
   labels:
     {{- include "codex-lb.labels" . | nindent 4 }}
+  {{- if or .Release.IsUpgrade (contains "pre-install" $hookPhases) .Values.commonAnnotations }}
   annotations:
-    "helm.sh/hook": {{ include "codex-lb.migrationHookPhases" . | quote }}
+    {{- if or .Release.IsUpgrade (contains "pre-install" $hookPhases) }}
+    "helm.sh/hook": {{ $hookPhases | quote }}
     "helm.sh/hook-weight": "-5"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-failed
+    {{- end }}
     {{- with .Values.commonAnnotations }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
+  {{- end }}
 spec:
   backoffLimit: {{ .Values.migration.backoffLimit }}
   activeDeadlineSeconds: {{ .Values.migration.activeDeadlineSeconds }}
@@ -85,6 +90,8 @@ spec:
             - app.db.migrate
             - upgrade
           env:
+            - name: CODEX_LB_ENCRYPTION_KEY_FILE
+              value: /var/lib/codex-lb/encryption.key
             {{- if or .Values.externalSecrets.enabled .Values.auth.existingSecret .Values.externalDatabase.existingSecret }}
             - name: CODEX_LB_DATABASE_URL
               valueFrom:

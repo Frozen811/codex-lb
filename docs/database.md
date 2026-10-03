@@ -9,7 +9,59 @@ SQLite is the default database backend and needs no configuration. PostgreSQL an
 | Local / uvx | `~/.codex-lb/` |
 | Docker | `/var/lib/codex-lb/` |
 
-Backup this directory to preserve your data (database, encryption key, archives).
+`CODEX_LB_DATA_DIR` moves the default SQLite DB, key and archive paths together. Explicit `CODEX_LB_DATABASE_URL`, `CODEX_LB_ENCRYPTION_KEY_FILE` or `CODEX_LB_CONVERSATION_ARCHIVE_DIR` paths remain independent. Relative filesystem paths resolve from the process working directory. Use absolute paths in services and containers.
+
+The application user needs a writable data directory and SQLite parent directory (SQLite also writes WAL/SHM sidecars), a readable key and a writable archive directory when archiving is enabled. New key files use mode `0600` on Unix. Named Docker volumes inherit the image directory's ownership; arbitrary bind mounts and Kubernetes volumes must grant the runtime UID access. Do not solve a mount permission error by running the application as root or making the key world-readable. A read-only key Secret is valid when it already contains the matching key; its parent needs write access only when generating a missing key.
+
+## Backup, restore and rollback
+
+Retain the **database and matching encryption key together**, plus enabled archive/spool storage and the launch configuration. A Docker volume survives container recreation; removing the volume removes its data. Avoid `docker compose down -v` for an installation you want to retain. Copying the application data directory does **not** back up PostgreSQL or MySQL. Those databases need a separate dump/snapshot. A pre-migration SQLite backup contains the database only, not the key.
+
+Stop application writers before the following rehearsal. Keep the original store intact. For SQLite, use its backup API instead of copying only a live `store.db`, which can omit committed WAL data. Set `SQLITE_SOURCE` to the effective database file, and choose a new empty backup destination:
+
+```bash
+export SQLITE_SOURCE=/absolute/data/store.db
+export SQLITE_BACKUP=/absolute/backup/store.db
+python - <<'PY'
+import os, sqlite3
+from contextlib import closing
+from pathlib import Path
+source = Path(os.environ["SQLITE_SOURCE"])
+backup = Path(os.environ["SQLITE_BACKUP"])
+if not source.is_file() or backup.exists():
+    raise SystemExit("Source must exist and backup destination must be new")
+backup.parent.mkdir(parents=True, exist_ok=True)
+with closing(sqlite3.connect(source.as_uri() + "?mode=ro", uri=True)) as src:
+    with closing(sqlite3.connect(backup)) as dst:
+        src.backup(dst)
+        dst.execute("PRAGMA journal_mode=DELETE")
+backup.chmod(0o600)
+PY
+```
+
+Copy the effective encryption key into that protected backup separately, including an external key file or Secret. If an explicit key value is used, retain it in your secret store. Back up enabled archives and the configured HTTP bridge spool directory too; they can contain private conversation data.
+
+PostgreSQL example, using `PGHOST`, `PGPORT`, `PGUSER` and a protected `PGPASSFILE` (or the equivalent connection service). Use client tools compatible with the database major version. The restore database must be empty and dedicated to the rehearsal:
+
+```bash
+pg_dump --format=custom --no-owner --no-acl --file=codex-lb.dump codex_lb
+createdb codex_lb_restore
+pg_restore --exit-on-error --no-owner --no-acl --dbname=codex_lb_restore codex-lb.dump
+```
+
+MySQL example, with connection credentials in a protected option file. Grant the rehearsal identity access to a new empty database; the example assumes the local profile's database charset/collation. Stop all writers; use InnoDB and compatible server/tool versions:
+
+```bash
+mysqldump --defaults-extra-file=/protected/mysql.cnf --single-transaction \
+  --no-tablespaces --set-gtid-purged=OFF codex_lb > codex-lb.sql
+mysql --defaults-extra-file=/protected/mysql.cnf \
+  -e 'CREATE DATABASE codex_lb_restore CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci'
+mysql --defaults-extra-file=/protected/mysql.cnf codex_lb_restore < codex-lb.sql
+```
+
+Restore into a separate directory/database with its matching key. For SQLite, copy the standalone snapshot as the new `store.db` in an empty directory; do not combine it with old WAL/SHM files. Point `CODEX_LB_DATA_DIR`, the DB URL and any independent key/archive paths at the rehearsal. Start with the backup's original executable version, run `codex-lb-db check`, then verify readiness, dashboard settings, account inventory and credential decryptability without printing credentials. A regenerated or unrelated key fails the default fingerprint check; restore the original key instead of bypassing the guard. Successful readiness alone does not establish that a real upstream account works.
+
+Before upgrading, retain the old executable/image identity and a fresh database/key snapshot. Binary or Helm rollback does not reverse schema/data changes: restore the matching pre-upgrade snapshot with the old executable and a compatible database server major version. Do not point an older executable at a newer database and assume it will downgrade safely. Switching a DB URL to PostgreSQL/MySQL selects a different store; it does not copy SQLite accounts/settings.
 
 ## PostgreSQL via Docker Compose
 

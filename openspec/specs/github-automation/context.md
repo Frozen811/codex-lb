@@ -1,5 +1,13 @@
 # Context: github-automation
 
+## Conservative PR area detection
+
+The area detector validates the API's file inventory against the event's changed-file count before using it to skip expensive checks. Rename origins are additional filter inputs, not extra changed-file records. Missing counts, malformed/duplicate entries, pagination cycles, API failures or the documented 3000-file API ceiling select the full suite using the existing CI workflow path. Workflow, selector, shared API helper and line-ending policy edits also select every area.
+
+Nix consumes application/configuration sources, frontend inputs, README/LICENSE and the two dashboard build helpers. Its filter includes those inputs rather than only flake/lock files. For example, moving `app/example.py` into `docs/example.py` still runs backend, Docker and Nix checks; editing an ordinary docs page stays selective. More CI on shared inputs is preferred to a successful placeholder check that never validates the affected package.
+
+Reference: [GitHub PR files API](https://docs.github.com/en/rest/pulls/pulls#list-pull-requests-files). Requirement: [CI area detection includes complete change evidence](spec.md#requirement-ci-area-detection-includes-complete-change-evidence).
+
 Normative requirements live in [`spec.md`](./spec.md). This document currently
 covers the Simplicity budgets check and the Release guards workflow; the
 codex-review label-sync machinery is summarized in the spec's Purpose.

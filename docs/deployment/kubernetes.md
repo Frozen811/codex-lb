@@ -1,16 +1,63 @@
 # Kubernetes
 
-Install with Helm:
+Commands on this page use **Bash** and require the selected cluster context.
+Use the chart from a **Frozen811/codex-lb checkout**, Helm 3.7+ and Kubernetes
+1.32+. The upstream OCI chart installs upstream. This fork's public images
+remain historical; use a source-built image whose revision you control.
+
+For an isolated kind cluster, build and load the fork image, then install the
+bundled overlay (requires a default StorageClass and the Bitnami PostgreSQL
+dependency's image to be available):
 
 ```bash
-helm install codex-lb oci://ghcr.io/soju06/charts/codex-lb \
+docker build -t codex-lb:local .
+kind load docker-image codex-lb:local --name YOUR_KIND_CLUSTER
+helm dependency build deploy/helm/codex-lb
+helm install codex-lb deploy/helm/codex-lb \
+  -f deploy/helm/codex-lb/values-bundled.yaml \
+  --set image.registry=docker.io --set image.repository=library/codex-lb \
+  --set image.tag=local --set image.pullPolicy=Never \
   --set postgresql.auth.password=changeme \
-  --set config.databaseMigrateOnStartup=true \
-  --set migration.schemaGate.enabled=false
+  --wait --timeout 10m
+helm test codex-lb
 kubectl port-forward svc/codex-lb 2455:2455
 ```
 
 Open [localhost:2455](http://localhost:2455) → Add account → Done.
+
+For other clusters, push your built image to your registry and set its
+repository plus immutable digest explicitly; `Never` is only for a preloaded
+local cluster. Replace the demo password and use existing Secrets for
+production credentials. Do not reuse demo storage for a production install.
+
+For an already reachable PostgreSQL database, choose
+`values-external-db.yaml` and supply `externalDatabase.url` or a DB Secret.
+The app keeps its schema gate. A generated app Secret uses a regular install
+migration Job, allowing `--wait` to progress on an empty DB; an existing app
+Secret uses a pre-install hook. Upgrades use a pre-upgrade hook. External
+Secrets Operator installations also use a regular install Job and require
+the operator/SecretStore to materialize the DB URL and shared encryption key.
+See the [chart install modes](https://github.com/Frozen811/codex-lb/tree/main/deploy/helm/codex-lb).
+
+OAuth callback port 1455 is separate from the dashboard Service. For a browser
+on another machine, forward `pod/codex-lb-workload-0 1455:1455` with kubectl
+and set `CODEX_LB_OAUTH_CALLBACK_HOST=0.0.0.0` through `extraEnv` if needed.
+Keep that pod's dashboard/account login session together with its callback;
+ordinary dashboard port forwarding alone does not forward the callback. Remote clients
+also need [API-key authentication](../api-keys.md).
+
+Preserve the PostgreSQL PVC or external DB **and the application's encryption
+key Secret** across installs. Uninstall/reinstall can delete a chart-managed
+Secret; save it privately or use `auth.existingSecret`. `helm rollback` rolls
+back manifests/images, not schema or DB contents. Back up DB/key together and
+restore a compatible snapshot before running an older image.
+
+Runtime metadata and diagnostic/conversation scratch files use `/tmp/codex-lb`
+on the pod's writable `emptyDir`; they are ephemeral across pod replacement.
+Durable application rows remain in PostgreSQL and the shared encryption key
+stays in its Secret. If you require persistent conversation archives, mount
+dedicated storage with `extraVolumes`/`extraVolumeMounts` and point
+`CODEX_LB_CONVERSATION_ARCHIVE_DIR` at it through `extraEnv`.
 
 ## Upgrading to the release that drops the legacy dashboard credential columns
 
@@ -23,11 +70,15 @@ it runs *before* the new pods roll and therefore before the old ones drain: an o
 
 ```bash
 # Scale to zero, upgrade, scale back up.
-kubectl scale deploy/codex-lb --replicas=0
-helm upgrade codex-lb oci://ghcr.io/soju06/charts/codex-lb
+kubectl scale statefulset/codex-lb-workload --replicas=0
+kubectl wait --for=delete pod -l app.kubernetes.io/instance=codex-lb,codex-lb.soju.dev/traffic=workload --timeout=120s
+helm upgrade codex-lb deploy/helm/codex-lb -f YOUR_REVIEWED_VALUES.yaml --wait --timeout 10m
 ```
 
-or run the migration by hand after the old colour is stopped
+Use the same reviewed DB/Secret/image settings and intended replica count for
+the upgrade. Substitute the namespace and workload name if overridden.
+
+Alternatively, run the migration by hand after the old colour is stopped
 (`--set migration.enabled=false`, then `kubectl run ... python -m app.db.migrate upgrade`), or stop
 the old colour of a blue/green pair before the upgrade. There is no supported window in which a pod
 of an earlier release runs against the post-drop schema.
@@ -42,11 +93,16 @@ older release reaches head in a single `helm upgrade` (or `python -m app.db.migr
 with those credentials intact. Nothing refuses the jump and no intermediate upgrade is needed — the
 only ordering requirement on this page is the one above.
 
-**Rollback is supported to the immediately previous release only.** Its downgrade re-creates the
+**This credential revision's downgrade restores its three columns; it is not a general release rollback guarantee.** Its downgrade re-creates the
 three columns and re-fills them from the bootstrap account, which the previous release ignores (it
 reads the account rows) and the release before that reads as the credential. If the bootstrap account
 was deleted there is nothing to re-fill from, and a build older than the previous release would read
 the empty columns as "never set up": an implicit local admin and a fresh bootstrap token.
+
+Other revisions crossed by the update can have different data-loss or downgrade
+constraints. An image/manifest rollback does not execute Alembic downgrade or
+restore a DB. Prefer the matching pre-upgrade database/key snapshot and old
+image, rehearsed separately; follow the [paired backup guide](../database.md#backup-restore-and-rollback).
 
 ## Upgrading to the release that drops the withdrawn overflow columns
 
@@ -66,11 +122,11 @@ revision, so this one logs nothing of its own — this page is the only warning.
 always NULL in practice (the feature never fired; production measured 0 pinned rows and 0 non-NULL
 values before the drop), so there is no data to lose, only the read path to protect.
 
-**Rollback re-creates both columns** as nullable, and the previous release reads them as "overflow
+**This revision's downgrade re-creates both columns** as nullable, and the previous release reads them as "overflow
 never configured", which is what they always were. Do not start a rolled-back replica while the drop
 is in flight; roll back the schema first, then the image.
 
-Contract: [database-migrations](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/database-migrations).
+Contract: [database-migrations](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/database-migrations).
 
 ## Multi-replica behavior
 
@@ -90,7 +146,7 @@ Practical consequences:
 - Persistent `account_stream_cap` errors with idle replicas are the undersizing signature; raise the cap first.
 - Run one process per pod: shares are partitioned across ring members, and worker processes inside one pod would silently multiply the share. `CODEX_LB_WORKERS_PER_INSTANCE` is a startup guard, not a setting — any value other than `1` fails startup.
 
-Semantics and sizing rationale: [proxy-admission-control](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/proxy-admission-control).
+Semantics and sizing rationale: [proxy-admission-control](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/proxy-admission-control).
 
 ## Graceful shutdown
 
@@ -126,8 +182,8 @@ The defaults satisfy the chart's timing guards. When tuning them, keep
 `preStopSleepSeconds <= config.shutdownDrainTimeoutSeconds` and
 `terminationGracePeriodSeconds >= config.shutdownDrainTimeoutSeconds + 32`.
 See the owning
-[deployment-installation](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/deployment-installation)
-contract and [replica-operations](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/replica-operations)
+[deployment-installation](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/deployment-installation)
+contract and [replica-operations](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/replica-operations)
 operational context.
 
 ## Gateway API path filters
@@ -230,8 +286,8 @@ preserves the default dashboard titles.
 ## Full chart reference
 
 For external database, production config, ingress, observability, and more see the
-[Helm chart README](https://github.com/Soju06/codex-lb/blob/main/deploy/helm/codex-lb/README.md).
+[Helm chart README](https://github.com/Frozen811/codex-lb/blob/main/deploy/helm/codex-lb/README.md).
 
 ---
 
-*Specs: [deployment-installation](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/deployment-installation) · [deployment-networking](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/deployment-networking) · [replica-operations](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/replica-operations) · [proxy-admission-control](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/proxy-admission-control)*
+*Specs: [deployment-installation](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/deployment-installation) · [deployment-networking](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/deployment-networking) · [replica-operations](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/replica-operations) · [proxy-admission-control](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/proxy-admission-control)*

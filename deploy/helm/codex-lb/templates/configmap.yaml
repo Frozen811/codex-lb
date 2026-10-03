@@ -10,6 +10,8 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 data:
+  # Writable scratch state; durable records use PostgreSQL and the key Secret.
+  CODEX_LB_DATA_DIR: /tmp/codex-lb
   # Database
   CODEX_LB_DATABASE_MIGRATE_ON_STARTUP: {{ .Values.config.databaseMigrateOnStartup | toString | quote }}
   CODEX_LB_DATABASE_POOL_SIZE: {{ .Values.config.databasePoolSize | toString | quote }}

@@ -7,9 +7,9 @@ type: application
 version: 1.25.1
 appVersion: 1.25.1
 kubeVersion: '>=1.32.0-0'
-home: https://github.com/soju06/codex-lb
+home: https://github.com/Frozen811/codex-lb
 sources:
-  - https://github.com/soju06/codex-lb
+  - https://github.com/Frozen811/codex-lb
 keywords:
   - load-balancer
   - openai

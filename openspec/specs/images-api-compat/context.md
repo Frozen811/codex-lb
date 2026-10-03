@@ -102,3 +102,9 @@ and suppression. With no candidate visible, they default to Sol. Default account
 probes retain their separate Luna-then-5.5 selection. Visibility does not
 establish account entitlement. Existing errors are preserved; no host retry is
 performed. Public image models and explicit account-probe models are unchanged.
+
+## Fan-out usage after interruption
+
+Non-streaming fan-out retains one public reservation; the internal Responses calls receive no reservation of their own. Completed image-tool usage survives a sibling failure or caller cancellation. Pending subcalls are cancelled and drained, including repeated caller cancellation while a child cleans up or settlement hands off to tracked persistence. An empty-success batch releases its reservation once. Model-log rewriting happens after settlement and cannot discard completed usage; unexpected exception text stays out of public errors. See [the fan-out requirement](spec.md#requirement-image-fan-out-preserves-completed-usage-through-partial-failures).
+
+For example, with `n=2`, one completed generation reporting 7 input and 13 output image tokens still charges 20 tokens when the sibling fails with 502 or the caller cancels before it finishes. This does not charge an unfinished subcall or turn cancellation into a successful image response. No additional operator setting is needed.

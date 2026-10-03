@@ -45,26 +45,31 @@ Four commands under the `codex-lb` entry point are the last resort. They act on 
 | `admin disable-provider <id>` | Turns one company sign-in provider off. Run it with an unknown id to list the providers in the database. |
 | `admin reset-login-policy` | Re-opens local sign-in *and* disables every company provider, keeping the password provider. Asks for confirmation, or takes `--yes`. |
 
-Run them on the host that holds the database. Three forms of the same command, one per way of running codex-lb — substitute the arguments from the table above:
+Run them on the host that holds the database. Choose the form matching your
+installation, and replace `YOUR_USERNAME`, `YOUR_PROVIDER_ID` and
+`YOUR_WORKLOAD_NAME` with actual values before execution. Kubernetes examples
+use the installed Helm StatefulSet (normally `codex-lb-workload`) and its
+`codex-lb` container in the selected namespace/context. These are **Bash**
+commands; password entry is interactive.
 
 ```bash
 # --- Standard image (the image ships a codex-lb shim) ---
-docker exec -it codex-lb codex-lb admin reset-password <username>
+docker exec -it codex-lb codex-lb admin reset-password YOUR_USERNAME
 docker exec -it codex-lb codex-lb admin local-login enable
-docker exec -it codex-lb codex-lb admin disable-provider <provider-id>
+docker exec -it codex-lb codex-lb admin disable-provider YOUR_PROVIDER_ID
 docker exec -it codex-lb codex-lb admin reset-login-policy --yes
 
 # --- Distroless image (no shell, no shim) ---
-docker exec -it codex-lb python -m app.cli admin reset-password <username>
+docker exec -it codex-lb python -m app.cli admin reset-password YOUR_USERNAME
 docker exec -it codex-lb python -m app.cli admin local-login enable
-docker exec -it codex-lb python -m app.cli admin disable-provider <provider-id>
+docker exec -it codex-lb python -m app.cli admin disable-provider YOUR_PROVIDER_ID
 docker exec -it codex-lb python -m app.cli admin reset-login-policy --yes
 
 # --- Kubernetes / Helm ---
-kubectl exec -it deploy/codex-lb -- python -m app.cli admin reset-password <username>
-kubectl exec -it deploy/codex-lb -- python -m app.cli admin local-login enable
-kubectl exec -it deploy/codex-lb -- python -m app.cli admin disable-provider <provider-id>
-kubectl exec -it deploy/codex-lb -- python -m app.cli admin reset-login-policy --yes
+kubectl exec -it statefulset/YOUR_WORKLOAD_NAME -c codex-lb -- python -m app.cli admin reset-password YOUR_USERNAME
+kubectl exec -it statefulset/YOUR_WORKLOAD_NAME -c codex-lb -- python -m app.cli admin local-login enable
+kubectl exec -it statefulset/YOUR_WORKLOAD_NAME -c codex-lb -- python -m app.cli admin disable-provider YOUR_PROVIDER_ID
+kubectl exec -it statefulset/YOUR_WORKLOAD_NAME -c codex-lb -- python -m app.cli admin reset-login-policy --yes
 
 # --- From a source checkout ---
 uv run codex-lb admin local-login enable
@@ -94,7 +99,7 @@ Notes that matter in the middle of an incident:
 3. **The locked-out account is the only administrator.** A designated account that holds a secret must always present it, so a new password alone will not let it in. Clear the secret with the password in one step:
 
    ```bash
-   docker exec -it codex-lb codex-lb admin reset-password <username> --clear-two-factor
+   docker exec -it codex-lb codex-lb admin reset-password YOUR_USERNAME --clear-two-factor
    ```
 
    Clearing the secret is also what stops the account *qualifying*, and under `break_glass_only` a designation that no longer qualifies is not admitted — the new password would meet a form that refuses it. So the command asks one question after the write: can anybody still use the local password form? When the answer is no it re-opens local sign-in in the same transaction and says so:
@@ -111,4 +116,4 @@ Native OIDC (the "Continue with your provider" button, the connection wizard and
 
 ---
 
-*Specs: [admin-auth](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/admin-auth) · [identity-providers](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/identity-providers) · [dashboard-users](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/dashboard-users)*
+*Specs: [admin-auth](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/admin-auth) · [identity-providers](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/identity-providers) · [dashboard-users](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/dashboard-users)*

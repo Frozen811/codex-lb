@@ -314,9 +314,13 @@ class OAuthCallbackServer:
         app = web.Application()
         app.router.add_get("/auth/callback", self._handler)
         self._runner = web.AppRunner(app, access_log=None)
-        await self._runner.setup()
-        self._site = web.TCPSite(self._runner, self._host, self._port)
-        await self._site.start()
+        try:
+            await self._runner.setup()
+            self._site = web.TCPSite(self._runner, self._host, self._port)
+            await self._site.start()
+        except BaseException:
+            await self.stop()
+            raise
 
     async def stop(self) -> None:
         if self._runner:
@@ -599,10 +603,17 @@ class OauthService:
         if callback_server is not None:
             try:
                 await callback_server.start()
-            except OSError:
+            except OSError as exc:
                 async with self._store.lock:
                     if self._store._callback_server is callback_server:
                         self._store._callback_server = None
+                logger.warning(
+                    "OAuth callback listener unavailable host=%s port=%s exception_type=%s; "
+                    "browser flow remains pending for manual callback",
+                    settings.oauth_callback_host,
+                    OAUTH_CALLBACK_PORT,
+                    type(exc).__name__,
+                )
 
         async with self._store.lock:
             self._ensure_browser_flow_expiry_task_locked()

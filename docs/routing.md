@@ -51,7 +51,7 @@ Limit warm-up sends **one small real request** (using the configured warm-up mod
 
 ## HTTP to WebSocket promotion
 
-Owning spec: [Responses API compatibility](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/responses-api-compat).
+Owning spec: [Responses API compatibility](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/responses-api-compat).
 
 With automatic upstream transport and the default `smart` HTTP policy, Responses
 and subscription-backed Chat Completions can reuse upstream WebSocket connections
@@ -87,7 +87,7 @@ with close code 1009 (message too big), that close is classified as the same
 terminal 400 `payload_too_large` client error — HTTP 400 when the response has
 not started, the SSE `response.failed` envelope when it has — with no retry,
 account exclusion, rotation or health penalty; see the
-[responses spec](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/responses-api-compat).
+[responses spec](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/responses-api-compat).
 
 Clients resending full history need not retain response headers to reuse a
 connection. Inferred locality uses complete initial user input and instructions,
@@ -105,4 +105,4 @@ queue latency metrics should be compared alongside reuse when measuring benefits
 
 ---
 
-*Specs: [account-routing](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/account-routing) · [frontend-architecture](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/frontend-architecture) · [responses-api-compat](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/responses-api-compat) · [usage-refresh-policy](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/usage-refresh-policy)*
+*Specs: [account-routing](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/account-routing) · [frontend-architecture](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/frontend-architecture) · [responses-api-compat](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/responses-api-compat) · [usage-refresh-policy](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/usage-refresh-policy)*

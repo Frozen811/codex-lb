@@ -394,6 +394,7 @@ jobs:
     if: >-
       ${{
         always() &&
+        github.repository == 'Soju06/codex-lb' &&
         github.event_name == 'release' &&
         (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
       }}

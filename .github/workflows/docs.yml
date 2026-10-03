@@ -31,6 +31,9 @@ jobs:
   build:
     name: Docs build (mkdocs --strict)
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: read
 
     steps:
       - name: Checkout repository
@@ -45,8 +48,18 @@ jobs:
           enable-cache: true
           prune-cache: true
 
+      - name: Read configured Pages URL
+        id: pages
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b
+        with:
+          enablement: false
+
       - name: Build docs
+        env:
+          PAGES_BASE_URL: ${{ steps.pages.outputs.base_url }}
         run: |
+          if [ -z "$PAGES_BASE_URL" ]; then unset PAGES_BASE_URL; fi
           uv sync --only-group docs --frozen
           uv run --no-sync mkdocs build --strict
 

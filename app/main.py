@@ -1095,7 +1095,11 @@ def create_app() -> FastAPI:
     static_dir = Path(__file__).parent / "static"
     index_html = static_dir / "index.html"
     static_root = static_dir.resolve()
-    frontend_build_hint = "Frontend assets are missing. Run `cd frontend && bun run build`."
+    frontend_build_hint = (
+        "Frontend assets are missing. For a source checkout, use the pinned Bun from frontend/package.json and run "
+        "`cd frontend && bun install --frozen-lockfile && bun --bun run build`. "
+        "For an installed package/image, reinstall or rebuild a complete fork artifact."
+    )
     # ``scim/`` is here for a reason the others are not: an identity provider
     # probes for resources this release does not implement (Groups,
     # ServiceProviderConfig), and answering those with index.html and a 200

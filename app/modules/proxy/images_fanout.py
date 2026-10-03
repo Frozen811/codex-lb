@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import TYPE_CHECKING, Any, Callable
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from app.core.clients.proxy import ProxyResponseError
-from app.core.clock import clock_for
+from app.core.clock import clock_for, scheduler_for
 from app.core.errors import openai_error
 from app.core.openai.images import V1ImageResponse, V1ImageUsage
 from app.core.types import JsonValue
+from app.core.utils.shared_future import _await_result_deferring_cancellation, wait_on_shared_future
 from app.modules.proxy import images_service as images_service_module
 from app.modules.proxy.images_observability import (
     ImageRoute,
@@ -21,6 +23,8 @@ if TYPE_CHECKING:
     from app.core.openai.requests import ResponsesRequest
     from app.dependencies import ProxyContext
     from app.modules.api_keys.service import ApiKeyData, ApiKeyUsageReservationData
+
+logger = logging.getLogger(__name__)
 
 
 async def execute_image_fanout(
@@ -44,9 +48,7 @@ async def execute_image_fanout(
 ) -> Response:
     """Execute ``n`` image generation calls concurrently and aggregate the results."""
 
-    async def _run_single_call(
-        idx: int,
-    ) -> tuple[V1ImageResponse | None, Response | None, dict[str, object]]:
+    async def _run_single_call() -> tuple[V1ImageResponse | None, Response | None, dict[str, object]]:
         captured: dict[str, object] = {}
         upstream = context.service.stream_responses(
             responses_payload,
@@ -105,10 +107,22 @@ async def execute_image_fanout(
             )
             return None, err_resp, captured
 
-    tasks = [_run_single_call(i) for i in range(n)]
+    scheduler = scheduler_for(context.service)
+    tasks = [scheduler.create_task(_run_single_call()) for _ in range(n)]
     reservation_settled = False
     try:
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        cancellation: asyncio.CancelledError | None = None
+        gathered = asyncio.gather(*tasks, return_exceptions=True)
+        try:
+            results = await wait_on_shared_future(gathered, scheduler=scheduler)
+        except asyncio.CancelledError as exc:
+            cancellation = exc
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            # Keep completed results, including their authoritative image usage.
+            # Repeated caller cancellation must not interrupt child cleanup.
+            results, _ = await _await_result_deferring_cancellation(gathered, scheduler=scheduler)
 
         first_error_resp: Response | None = None
         all_data = []
@@ -117,6 +131,7 @@ async def execute_image_fanout(
         total_cached = 0
         has_tokens = False
         successful_calls = 0
+        response_ids: list[str] = []
 
         for res in results:
             if isinstance(res, BaseException):
@@ -124,7 +139,7 @@ async def execute_image_fanout(
                     first_error_resp = logged_error_json_response(
                         request,
                         500,
-                        openai_error("internal_error", str(res) or "Internal server error", error_type="server_error"),
+                        openai_error("internal_error", "Internal server error", error_type="server_error"),
                         headers=rate_limit_headers,
                     )
                 continue
@@ -153,22 +168,38 @@ async def execute_image_fanout(
 
                 response_id = captured.get("response_id")
                 if response_id and isinstance(response_id, str):
-                    await context.service.rewrite_request_log_model(response_id, public_model)
+                    response_ids.append(response_id)
 
         if successful_calls > 0:
-            await finalize_image_reservation(
-                context.service,
-                api_key,
-                reservation,
-                model=public_model,
-                input_tokens=total_input if has_tokens else None,
-                output_tokens=total_output if has_tokens else None,
-                cached_input_tokens=total_cached if total_cached > 0 else None,
+            _, settlement_cancellation = await _await_result_deferring_cancellation(
+                finalize_image_reservation(
+                    context.service,
+                    api_key,
+                    reservation,
+                    model=public_model,
+                    input_tokens=total_input if has_tokens else None,
+                    output_tokens=total_output if has_tokens else None,
+                    cached_input_tokens=total_cached if total_cached > 0 else None,
+                ),
+                scheduler=scheduler,
             )
-            reservation_settled = True
         else:
-            await release_reservation(reservation)
-            reservation_settled = True
+            _, settlement_cancellation = await _await_result_deferring_cancellation(
+                release_reservation(reservation),
+                scheduler=scheduler,
+            )
+        reservation_settled = True
+
+        # Usage ownership transfers before optional request-log bookkeeping.
+        if cancellation is not None:
+            raise cancellation
+        if settlement_cancellation is not None:
+            raise settlement_cancellation
+        for response_id in response_ids:
+            try:
+                await context.service.rewrite_request_log_model(response_id, public_model)
+            except Exception:
+                logger.warning("Image fan-out request-log model rewrite failed")
 
         if first_error_resp is not None:
             status = getattr(first_error_resp, "status_code", 500)
@@ -213,4 +244,9 @@ async def execute_image_fanout(
         )
     finally:
         if not reservation_settled:
-            await release_reservation(reservation)
+            _, cancellation = await _await_result_deferring_cancellation(
+                release_reservation(reservation),
+                scheduler=scheduler,
+            )
+            if cancellation is not None:
+                raise cancellation

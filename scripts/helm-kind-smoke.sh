@@ -7,7 +7,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHART_DIR="${ROOT_DIR}/deploy/helm/codex-lb"
 KUBE_CONTEXT="${KUBE_CONTEXT:-kind-codex-lb-smoke}"
 IMAGE_REGISTRY="${IMAGE_REGISTRY:-ghcr.io}"
-IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-soju06/codex-lb}"
+IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-frozen811/codex-lb}"
 IMAGE_TAG="${IMAGE_TAG:-ci}"
 DB_PASSWORD="${DB_PASSWORD:-smoke-password}"
 HELM_TEST_TIMEOUT="${HELM_TEST_TIMEOUT:-60s}"
@@ -136,12 +136,14 @@ PY
 
   log_step "installing external PostgreSQL release ${db_release}"
   helm upgrade --install "${db_release}" oci://registry-1.docker.io/bitnamicharts/postgresql \
+    --version 18.6.7 \
     --kube-context "${KUBE_CONTEXT}" \
     --namespace "${namespace}" \
     --create-namespace \
     --set auth.username=codexlb \
     --set auth.password="${DB_PASSWORD}" \
     --set auth.database=codexlb \
+    --set image.digest=sha256:c7f76dc578e0a4bb7f49dadeb7a625239349b1e22b420fa9e4500c69c7d13f8f \
     --set primary.persistence.enabled=false \
     --wait \
     --timeout 10m
@@ -173,6 +175,28 @@ PY
 
   assert_bridge_ring "${release}" "${namespace}" 2
   wait_for_release "${release}" "${namespace}"
+
+  # A distinct empty DB proves the chart-managed Secret path progresses with
+  # --wait. Reusing the migrated DB would hide an install-order deadlock.
+  local direct_release="codex-lb-direct"
+  log_step "creating fresh database for chart-managed credentials"
+  kubectl --context "${KUBE_CONTEXT}" -n "${namespace}" exec "${db_release}-postgresql-0" -- \
+    env PGPASSWORD="${DB_PASSWORD}" psql -h 127.0.0.1 -U codexlb -d codexlb \
+    -c 'CREATE DATABASE codexlb_direct'
+  log_step "installing direct URL release ${direct_release} with --wait"
+  helm upgrade --install "${direct_release}" "${CHART_DIR}" \
+    --kube-context "${KUBE_CONTEXT}" --namespace "${namespace}" \
+    -f "${CHART_DIR}/values-external-db.yaml" \
+    --set image.registry="${IMAGE_REGISTRY}" \
+    --set image.repository="${IMAGE_REPOSITORY}" \
+    --set image.tag="${IMAGE_TAG}" \
+    --set test.image.registry="${IMAGE_REGISTRY}" \
+    --set test.image.repository="${IMAGE_REPOSITORY}" \
+    --set test.image.tag="${IMAGE_TAG}" \
+    --set externalDatabase.url="postgresql+asyncpg://codexlb:${DB_PASSWORD}@${db_release}-postgresql:5432/codexlb_direct" \
+    --set replicaCount=2 --wait --timeout 10m
+  assert_bridge_ring "${direct_release}" "${namespace}" 2
+  wait_for_release "${direct_release}" "${namespace}"
   trap - ERR
 }
 

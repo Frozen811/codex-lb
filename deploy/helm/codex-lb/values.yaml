@@ -28,7 +28,7 @@ image:
   # @param image.registry Container image registry
   registry: ghcr.io
   # @param image.repository Container image repository
-  repository: soju06/codex-lb
+  repository: frozen811/codex-lb
   # @param image.tag Container image tag (defaults to appVersion)
   tag: ""
   # @param image.digest Container image digest (overrides tag when set)
@@ -419,6 +419,9 @@ tracing:
 
 # @section Database parameters
 postgresql:
+  # Verified public PostgreSQL 18.6 image; the sub-chart defaults to latest.
+  image:
+    digest: sha256:c7f76dc578e0a4bb7f49dadeb7a625239349b1e22b420fa9e4500c69c7d13f8f
   # @param postgresql.enabled Deploy Bitnami PostgreSQL sub-chart (set false for external DB)
   enabled: true
   auth:

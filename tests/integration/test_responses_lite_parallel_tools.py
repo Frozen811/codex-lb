@@ -20,8 +20,9 @@ pytestmark = pytest.mark.integration
 @pytest.mark.asyncio
 @pytest.mark.parametrize("path", ["/v1/responses", "/v1/responses/", "/backend-api/codex/responses"])
 @pytest.mark.parametrize("lite", [False, True])
+@pytest.mark.parametrize("parallel", [None, True, False, "omitted"])
 async def test_routes_normalize_only_lite_parallel_calls(
-    async_client, promotion_transport, path: str, lite: bool
+    async_client, promotion_transport, path: str, lite: bool, parallel: bool | str | None
 ) -> None:
     upstreams, raw_calls, _ = promotion_transport
     items = [{"role": "user", "content": "hello"}]
@@ -32,17 +33,24 @@ async def test_routes_normalize_only_lite_parallel_calls(
         "instructions": "",
         "stream": True,
         "input": items,
-        "parallel_tool_calls": True,
         "prompt_cache_key": "lite-parallel-route",
         "reasoning": {"effort": "high"},
     }
+    if parallel != "omitted":
+        body["parallel_tool_calls"] = parallel
 
     events = await _collect_sse_events(async_client, path, json_body=body)
 
     _assert_created_text_delta_completed(events)
     assert len(upstreams) == 1 and not raw_calls
     sent = json.loads(upstreams[0].sent_text[0])
-    assert sent["parallel_tool_calls"] is (not lite)
+    if lite:
+        assert sent["parallel_tool_calls"] is False
+        assert sent["reasoning"]["context"] == "all_turns"
+    elif isinstance(parallel, bool):
+        assert sent["parallel_tool_calls"] is parallel
+    else:
+        assert "parallel_tool_calls" not in sent
     assert sent["prompt_cache_key"] == body["prompt_cache_key"]
     assert sent["input"] == items
     assert sent["reasoning"]["effort"] == "high"

@@ -184,6 +184,63 @@ async def test_scrape_refreshes_status_deletion_and_token_expiry_without_proxy_t
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("token_kind", ["future", "unknown", "unreadable"])
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "Authentication token revoked - re-login required",
+        "Authentication token invalidated - re-login required",
+        "Authentication failed after token refresh - re-login required",
+    ],
+)
+async def test_scrape_excludes_proven_access_rejection_until_credential_repair(
+    db_setup, monkeypatch: pytest.MonkeyPatch, token_kind: str, reason: str
+) -> None:
+    """Inventory keeps rejected credentials while baseline availability follows routing."""
+    from app.core.metrics.middleware import MetricsRefreshMiddleware
+
+    monkeypatch.setattr(get_settings(), "metrics_enabled", True)
+    clock = VirtualClock(epoch_value=2_000_000_000.0)
+    cache = RoutingAvailabilityCache(SessionLocal, clock=clock)
+    app = MetricsRefreshMiddleware(
+        prometheus_client.make_asgi_app(registry=_scrape_registry()), refresh=cache.refresh_from_db
+    )
+    token = (
+        jwt.encode({"exp": clock.time() + 600}, "test-key-with-at-least-32-characters", algorithm="HS256")
+        if token_kind == "future"
+        else "unknown-expiry"
+    )
+    account = _account("rejected", AccountStatus.REAUTH_REQUIRED, token)
+    account.deactivation_reason = reason
+    if token_kind == "unreadable":
+        account.access_token_encrypted = b"unreadable"
+    async with SessionLocal() as session:
+        session.add(account)
+        await session.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://metrics") as client:
+        response = await client.get("/metrics")
+        assert response.status_code == 200
+        assert cache.is_unavailable("rejected") is True
+        assert _samples(response.text) == _expected({AccountStatus.REAUTH_REQUIRED: 1}, 0)
+
+        async with SessionLocal() as session:
+            await session.execute(
+                update(Account)
+                .where(Account.id == "rejected")
+                .values(
+                    deactivation_reason="Refresh token expired - re-login required",
+                    access_token_encrypted=TokenEncryptor().encrypt(token),
+                )
+            )
+            await session.commit()
+        response = await client.get("/metrics")
+        assert response.status_code == 200
+        assert cache.is_unavailable("rejected") is False
+        assert _samples(response.text) == _expected({AccountStatus.REAUTH_REQUIRED: 1}, 1)
+
+
+@pytest.mark.asyncio
 async def test_failed_metrics_refresh_does_not_expose_stale_account_counts(db_setup, monkeypatch) -> None:
     """Fail a scrape without returning stale counts or internal exception details."""
     from app.core.metrics.middleware import MetricsRefreshMiddleware
@@ -195,16 +252,28 @@ async def test_failed_metrics_refresh_does_not_expose_stale_account_counts(db_se
         await session.commit()
     await cache.refresh_from_db()
 
-    async def fail_refresh() -> None:
-        """Model a failed database read after a populated snapshot."""
-        raise RuntimeError("database unavailable")
+    unavailable = True
 
-    app = MetricsRefreshMiddleware(prometheus_client.make_asgi_app(registry=_scrape_registry()), refresh=fail_refresh)
+    async def refresh() -> None:
+        """Model a failed read and subsequent database recovery."""
+        if unavailable:
+            raise RuntimeError("database unavailable")
+        await cache.refresh_from_db()
+
+    app = MetricsRefreshMiddleware(prometheus_client.make_asgi_app(registry=_scrape_registry()), refresh=refresh)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://metrics") as client:
         response = await client.get("/metrics")
-    assert response.status_code == 503
-    assert "codex_lb_accounts" not in response.text
-    assert "database unavailable" not in response.text
+        assert response.status_code == 503
+        assert "codex_lb_accounts" not in response.text
+        assert "database unavailable" not in response.text
+
+        async with SessionLocal() as session:
+            await session.execute(update(Account).where(Account.id == "active").values(status=AccountStatus.PAUSED))
+            await session.commit()
+        unavailable = False
+        response = await client.get("/metrics")
+        assert response.status_code == 200
+        assert _samples(response.text) == _expected({AccountStatus.PAUSED: 1}, 0)
 
 
 @pytest.mark.asyncio

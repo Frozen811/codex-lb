@@ -1,6 +1,16 @@
 # codex-lb Helm Chart
 
-Production-ready Helm chart for [codex-lb](https://github.com/soju06/codex-lb), an OpenAI API load balancer with account pooling, usage tracking, and dashboard.
+Source Helm chart for [Frozen811/codex-lb](https://github.com/Frozen811/codex-lb), an OpenAI API load balancer with account pooling, usage tracking, and dashboard.
+
+Use a fork checkout and run `helm dependency build deploy/helm/codex-lb` first.
+The upstream OCI chart selects upstream. Fork image defaults select
+`ghcr.io/frozen811/codex-lb`, whose public aliases are historical; they do not
+contain these new source fixes. For a verified source installation, build and
+load your image into kind or publish it to your own registry, then pass the
+explicit image repository/tag or immutable digest in every install/upgrade.
+See the [source Kubernetes guide](../../../docs/deployment/kubernetes.md).
+Preserve the database and encryption-key Secret together. Helm rollback does
+not roll back database migrations.
 
 ## Design Goal
 
@@ -41,7 +51,8 @@ Key properties:
 Example:
 
 ```bash
-helm install codex-lb oci://ghcr.io/soju06/charts/codex-lb \
+helm install codex-lb deploy/helm/codex-lb/ \
+  -f deploy/helm/codex-lb/values-bundled.yaml \
   --set postgresql.auth.password=change-me \
   --set config.databaseMigrateOnStartup=true \
   --set migration.schemaGate.enabled=false
@@ -67,7 +78,7 @@ Key properties:
 
 - `postgresql.enabled=false`
 - direct DB URL or DB secret is available at install time
-- migration Job runs `pre-install,pre-upgrade`
+- an existing application Secret uses `pre-install,pre-upgrade`; chart-created application credentials use a regular install Job and a `pre-upgrade` hook
 - application pods still keep the schema gate initContainer enabled
 
 Supported DB wiring:
@@ -80,7 +91,7 @@ Supported DB wiring:
 Example using a direct URL:
 
 ```bash
-helm install codex-lb oci://ghcr.io/soju06/charts/codex-lb \
+helm install codex-lb deploy/helm/codex-lb/ \
   --set postgresql.enabled=false \
   --set externalDatabase.url='postgresql+asyncpg://user:pass@db.example.com:5432/codexlb'
 ```
@@ -88,7 +99,7 @@ helm install codex-lb oci://ghcr.io/soju06/charts/codex-lb \
 Example using separate secrets:
 
 ```bash
-helm install codex-lb oci://ghcr.io/soju06/charts/codex-lb \
+helm install codex-lb deploy/helm/codex-lb/ \
   --set postgresql.enabled=false \
   --set externalDatabase.existingSecret=codex-lb-db \
   --set auth.existingSecret=codex-lb-app
@@ -115,13 +126,13 @@ Key properties:
 - requires External Secrets Operator v0.17.0 or newer (the first release that serves `external-secrets.io/v1`)
 - DB credentials are not assumed to exist at render time
 - remote secret keys and optional JSON properties are configurable independently
-- migration Job remains `post-install,pre-upgrade`
+- migration runs as a regular install Job, then a `pre-upgrade` hook
 - application pods keep the schema gate initContainer enabled and wait for schema head before starting the app container
 
 Example:
 
 ```bash
-helm install codex-lb oci://ghcr.io/soju06/charts/codex-lb \
+helm install codex-lb deploy/helm/codex-lb/ \
   --set postgresql.enabled=false \
   --set externalSecrets.enabled=true \
   --set externalSecrets.secretStoreRef.name=my-store
@@ -167,7 +178,8 @@ No repo clone required — install directly from the OCI registry.
 Bundled PostgreSQL:
 
 ```bash
-helm install codex-lb oci://ghcr.io/soju06/charts/codex-lb \
+helm install codex-lb deploy/helm/codex-lb/ \
+  -f deploy/helm/codex-lb/values-bundled.yaml \
   --set postgresql.auth.password=local-dev-password \
   --set config.databaseMigrateOnStartup=true \
   --set migration.schemaGate.enabled=false
@@ -176,7 +188,7 @@ helm install codex-lb oci://ghcr.io/soju06/charts/codex-lb \
 ### Managed PostgreSQL
 
 ```bash
-helm install codex-lb oci://ghcr.io/soju06/charts/codex-lb \
+helm install codex-lb deploy/helm/codex-lb/ \
   --set postgresql.enabled=false \
   --set externalDatabase.url='postgresql+asyncpg://user:pass@db.example.com:5432/codexlb'
 ```
@@ -434,7 +446,7 @@ four SQL panels follow that one runtime selection. The owning contract is in
 Install with:
 
 ```bash
-helm install codex-lb oci://ghcr.io/soju06/charts/codex-lb \
+helm install codex-lb deploy/helm/codex-lb/ \
   -f deploy/helm/codex-lb/values-prod.yaml \
   --set externalDatabase.url='postgresql+asyncpg://user:pass@db.example.com:5432/codexlb'
 ```
@@ -619,7 +631,8 @@ Advanced snippet-based keys via `ingress.responses.nginx.configurationSnippet` a
 ## Upgrade Contract
 
 ```bash
-helm upgrade codex-lb oci://ghcr.io/soju06/charts/codex-lb <your values...>
+# Replace YOUR_REVIEWED_VALUES.yaml with your reviewed values file.
+helm upgrade codex-lb deploy/helm/codex-lb/ -f YOUR_REVIEWED_VALUES.yaml
 ```
 
 **Upgrade warning:** the chart enforces a render-time timing guard. Existing
@@ -666,6 +679,11 @@ Service at StatefulSet pods that do not exist yet and drop traffic.
 
 Supported path for a release still on a chart older than 1.13.0:
 
+Before running these Bash commands, replace `YOUR_FULLNAME` and
+`YOUR_NAMESPACE` with the installed chart's rendered fullname and namespace.
+The older 1.24.x chart must be selected and checked separately; these
+instructions do not advertise an independently verified historical fork chart package.
+
 1. `helm upgrade` to a **1.24.x** chart first. It still ships the shim and runs
    the `Deployment` -> `StatefulSet` cutover. Plan it as a maintenance window,
    not a zero-downtime rollout: Helm removes the legacy Deployment during the
@@ -676,18 +694,18 @@ Supported path for a release still on a chart older than 1.13.0:
 
    ```bash
    # the Service selects the StatefulSet pods
-   kubectl get svc <fullname> -n <namespace> -o jsonpath='{.spec.selector}'
+   kubectl get svc YOUR_FULLNAME -n YOUR_NAMESPACE -o jsonpath='{.spec.selector}'
    # expected to contain "codex-lb.soju.dev/traffic":"workload"
 
    # the legacy Deployment is gone and the StatefulSet is ready
-   kubectl get deploy <fullname> -n <namespace>   # NotFound
-   kubectl get sts <fullname>-workload -n <namespace>
+   kubectl get deploy YOUR_FULLNAME -n YOUR_NAMESPACE   # NotFound
+   kubectl get sts YOUR_FULLNAME-workload -n YOUR_NAMESPACE
    ```
 
 3. `helm upgrade` to this release, and drop `migration.serviceSelectorMode`
    from your values file if it is still set.
 
-`<fullname>` above is the chart fullname (`codex-lb.fullname`): the release
+`YOUR_FULLNAME` above is the chart fullname (`codex-lb.fullname`): the release
 name itself when it contains `codex-lb` (release `codex-lb` -> `codex-lb`, the
 name used by the install commands in this README), otherwise
 `<release>-codex-lb`; `fullnameOverride` replaces both. A `NotFound` for the
@@ -745,7 +763,7 @@ effective value only while the dashboard field is left empty (shown as
 inherited). Once an operator saves a dashboard value, changing the chart value
 and rolling the pods has no effect until the dashboard field is cleared. The
 same precedence applies to every setting marked `T3 (dashboard)` in the
-[settings reference](https://soju06.github.io/codex-lb/reference/settings/) when
+[settings reference](https://github.com/Frozen811/codex-lb/blob/main/docs/reference/settings.md) when
 it is passed through `extraEnv` (request budgets, stream idle timeout, SSE
 keepalive, soft drain, deterministic failover, routing weights, overload
 isolation, per-account caps).
@@ -765,16 +783,23 @@ move persistent overrides into the dashboard.
 
 Recommended after install:
 
+These Bash examples require the installed release and selected kube context.
+Replace `YOUR_NAMESPACE`, `YOUR_RELEASE` and `YOUR_WORKLOAD_NAME` with the
+actual namespace, release and workload names (for the default local install:
+`default`, `codex-lb`, `codex-lb-workload`). Check generated resource names
+with `kubectl get jobs,statefulsets` rather than assuming a custom fullname.
+
 ```bash
-helm test codex-lb -n <namespace>
-kubectl get pods -n <namespace>
-kubectl logs job/<release>-migrate -n <namespace>
+helm test YOUR_RELEASE -n YOUR_NAMESPACE
+kubectl get pods -n YOUR_NAMESPACE
+kubectl logs job/YOUR_RELEASE-migrate -n YOUR_NAMESPACE
 ```
 
 If you are using a port-forwarded install:
 
 ```bash
-kubectl port-forward svc/codex-lb 2455:2455 -n <namespace>
+kubectl port-forward svc/YOUR_RELEASE 2455:2455 -n YOUR_NAMESPACE
+# In a second terminal while port-forward is running:
 curl -i http://127.0.0.1:2455/health/live
 curl -i http://127.0.0.1:2455/health/ready
 ```
@@ -784,20 +809,21 @@ curl -i http://127.0.0.1:2455/health/ready
 Migration Job:
 
 ```bash
-kubectl describe job <release>-migrate -n <namespace>
-kubectl logs job/<release>-migrate -n <namespace>
+kubectl describe job YOUR_RELEASE-migrate -n YOUR_NAMESPACE
+kubectl logs job/YOUR_RELEASE-migrate -n YOUR_NAMESPACE
 ```
 
 App pod stuck in init:
 
 ```bash
-kubectl describe pod -l app.kubernetes.io/name=codex-lb -n <namespace>
-kubectl logs deploy/<release> -c wait-for-schema-head -n <namespace>
+kubectl describe pod -l app.kubernetes.io/name=codex-lb -n YOUR_NAMESPACE
+kubectl logs statefulset/YOUR_WORKLOAD_NAME -c wait-for-schema-head -n YOUR_NAMESPACE
 ```
 
 Health failures:
 
 ```bash
-kubectl describe deploy <release> -n <namespace>
-kubectl logs deploy/<release> -n <namespace>
+kubectl get statefulset -n YOUR_NAMESPACE -l app.kubernetes.io/instance=YOUR_RELEASE
+kubectl describe statefulset YOUR_WORKLOAD_NAME -n YOUR_NAMESPACE
+kubectl logs statefulset/YOUR_WORKLOAD_NAME -n YOUR_NAMESPACE
 ```

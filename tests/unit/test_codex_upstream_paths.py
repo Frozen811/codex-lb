@@ -467,7 +467,11 @@ async def test_codex_control_request_keeps_root_namespaces_out_of_codex_prefix(
 
 
 @pytest.mark.asyncio
-async def test_codex_control_request_does_not_duplicate_content_type(route: ResolvedUpstreamRoute) -> None:
+@pytest.mark.parametrize("header_name", ["content-type", "Content-Type", "CONTENT-TYPE"])
+@pytest.mark.parametrize("content_type", ["application/json", "application/sdp"])
+async def test_codex_control_request_does_not_duplicate_content_type(
+    route: ResolvedUpstreamRoute, header_name: str, content_type: str
+) -> None:
     client = _CodexClient()
     trace = UpstreamProxyRouteTrace()
 
@@ -477,7 +481,7 @@ async def test_codex_control_request_does_not_duplicate_content_type(route: Reso
         payload=b'{"query": "test"}',
         query_params={},
         headers={
-            "content-type": "application/json",
+            header_name: content_type,
             "user-agent": "codex_cli_rs/0.1.0",
         },
         access_token="access",
@@ -492,7 +496,7 @@ async def test_codex_control_request_does_not_duplicate_content_type(route: Reso
     sent_headers = client.calls[0]["headers"]
     content_type_headers = [k for k in sent_headers if k.lower() == "content-type"]
     assert len(content_type_headers) == 1
-    assert sent_headers[content_type_headers[0]] == "application/json"
+    assert sent_headers[content_type_headers[0]] == content_type
 
 
 @pytest.mark.asyncio

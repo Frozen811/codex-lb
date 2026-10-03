@@ -174,3 +174,39 @@ chart-managed Gateway while ignoring `gatewayApi.parentRefs`.
 - **AND** the HTTPRoute attaches to the operator-supplied
   `gatewayApi.parentRefs`
 
+### Requirement: Remote reverse-proxy instructions preserve application transport
+
+Remote deployment guidance MUST provide a concrete reverse-proxy example that preserves Host including port, forwards WebSocket upgrades, disables response buffering for SSE, and bounds upstream timeouts. It MUST retain dashboard bootstrap and client API-key requirements and identify TLS termination and OAuth callback setup separately from basic proxy startup.
+
+#### Scenario: Proxy a dashboard request and a streaming client
+
+- **WHEN** an operator follows the documented reverse-proxy example
+- **THEN** readiness and dashboard assets are reachable through the proxy
+- **AND** request identity is preserved for dashboard origin checks
+- **AND** HTTP streaming and WebSocket upgrade traffic reach the application
+
+### Requirement: Setup endpoints distinguish listeners from reachable addresses
+
+Remote deployment guidance MUST distinguish bind hosts from client destinations, host loopback from container loopback, bridge service DNS from host-published DB ports, and the HTTP listener on 2455 from the separate temporary OAuth callback listener on 1455. It MUST explain Docker Desktop host access, Linux host-gateway prerequisites, WSL addressing limits, port collisions and separate inbound readiness versus outbound DNS/TLS checks.
+
+#### Scenario: Application container connects to a host or sibling database
+
+- **WHEN** an operator configures a database outside the application container
+- **THEN** the guide selects a shared-network service name or an explicitly reachable host endpoint
+- **AND** does not direct that connection to the application's own loopback address
+
+#### Scenario: Client on another machine
+
+- **WHEN** a client accesses a LAN or remote deployment
+- **THEN** its URL uses the server address and published HTTP port
+- **AND** the instructions do not use `0.0.0.0` as a client destination or assume that publishing 1455 starts an OAuth listener
+
+### Requirement: TLS reverse-proxy setup explains forwarding trust and transport verification
+
+Reverse-proxy guidance MUST provide a concrete TLS listener adaptation with certificate/key paths and certificate verification enabled on clients. It MUST distinguish forwarding projection trust from application firewall/identity trust and explain trusted source configuration for container proxies. It MUST distinguish HTTP/SSE and WebSocket transport evidence, idle timeout scopes and authenticated product requests from synthetic protocol probes.
+
+#### Scenario: TLS terminates in a trusted reverse proxy
+
+- **WHEN** an operator proxies an HTTPS dashboard request to plain HTTP codex-lb
+- **THEN** the guide configures both required trust layers and preserves Host/scheme/client identity
+- **AND** client verification uses a matching trusted certificate without disabling validation

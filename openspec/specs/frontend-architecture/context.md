@@ -80,3 +80,9 @@ The product-boundary regression renders the real `/dashboard` App route with the
 ## Estimated pool-allocation control
 
 The API-key create/edit dialogs present `Estimated pool allocation (%)` as a standalone optional policy above fixed usage rules. It is not rendered as a counter rule because it has no local current value or reset clock. Table and detail summaries describe only the configured cap and keep the approximation explicit.
+
+## Manual recovery for quota-exceeded accounts
+
+The [quota Resume requirement](spec.md#requirement-quota-exceeded-accounts-expose-manual-resume) exposes the existing reactivation API for an operator inspecting a quota hold. Reusing Resume keeps one recovery action and one backend compare-and-set transition; no new endpoint, setting, or navigation item is needed.
+
+For example, an operator selecting a weekly-only Pro account marked `quota_exceeded` can choose Resume. The existing mutation sends `POST /api/accounts/{id}/reactivate`, refreshes account data, and the detail returns to its active-account actions. Read-only and busy states retain the existing disabled control. This action does not replace credentials, so `reauth_required` still requires reauthentication. Automatic quota recovery continues to require its existing freshness and debounce evidence, and request-specific routing constraints remain in force.

@@ -1184,7 +1184,8 @@ text. A match MUST NOT consume CR or LF or any text from a following line.
 Unterminated JSON secret values MUST be redacted through the end of the
 current line. A Bearer credential MUST treat a glued `:` tail on the same
 line as credential material. Same-line comma and ampersand separators MUST
-keep their existing truncation behavior. Records below WARNING MUST still
+keep their existing truncation behavior except within an explicit authorization
+field, whose value MUST follow the authorization-field redaction requirement. Records below WARNING MUST still
 skip these keyed patterns.
 
 #### Scenario: Authorization does not swallow the next traceback line
@@ -1386,7 +1387,7 @@ SSE, WebSocket and HTTP bridge request logs MUST capture each upstream event's o
 
 ### Requirement: Output speed sample evidence is preserved
 
-New subscription-backed streaming logs MUST persist `latency_first_output_ms`, the first observed non-reasoning content time relative to the existing attempt/request-state anchor, and `output_delta_count`, the count of observed nonempty non-reasoning output chunks. Text, refusal and actual tool arguments/input MUST qualify; reasoning, metadata-only lifecycle events and empty deltas MUST NOT. These fields MUST remain nullable for historical and unsupported-source logs. Existing TTFT MAY still include visible reasoning or supported tool-start events and MUST be described as gateway-observed first output rather than model-internal or client end-to-end timing.
+New subscription-backed streaming logs MUST persist `latency_first_output_ms`, the first observed non-reasoning content time relative to the existing attempt/request-state anchor, and `output_delta_count`, the count of observed nonempty non-reasoning output chunks. Text, refusal and actual tool arguments/input MUST qualify; reasoning, metadata-only lifecycle events and empty deltas MUST NOT. These fields MUST remain nullable for historical and unsupported-source logs. Existing TTFT MAY still include visible reasoning or supported tool-start events and MUST be described as gateway-observed first output rather than model-internal or client end-to-end timing. Output sampling MUST use the event's actual content fields regardless of legal JSON key whitespace or escaping; unrelated nested fields MUST NOT create or hide output samples. Recording MUST preserve forwarded SSE bytes.
 
 #### Scenario: Reasoning precedes actual output
 
@@ -1402,6 +1403,19 @@ New subscription-backed streaming logs MUST persist `latency_first_output_ms`, t
 - **THEN** its receipt time may establish the first output and TTFT with one output chunk
 - **AND** its TPS sample is insufficient
 - **AND** positive usage alone MUST NOT synthesize first-output timestamps
+
+#### Scenario: Equivalent JSON output fields retain the same sample
+
+- **GIVEN** equivalent output delta events serialize their content keys with whitespace before the colon or JSON escapes
+- **WHEN** the HTTP stream relays those events after TTFT is established
+- **THEN** first output and output chunk counts match ordinary JSON serialization
+- **AND** request-log and report generation speed use the same qualified sample
+
+#### Scenario: Nested metadata does not establish output
+
+- **GIVEN** an event has an empty content delta and a nonempty nested metadata field named `delta`
+- **WHEN** that event is relayed
+- **THEN** the nested field does not establish first output or increment output chunk count
 
 ### Requirement: Request generation speed exposes sample quality
 
@@ -1449,7 +1463,7 @@ Source usage parsing MUST preserve reported nonnegative integer reasoning tokens
 
 When Prometheus support and metrics are enabled, the service MUST publish `codex_lb_accounts_total{status}` for every account status, including explicit zeroes, and a label-free `codex_lb_accounts_available` gauge. Accounts pending deletion MUST be excluded. Counts MUST derive from the committed account snapshot loaded by the existing routing-account cache refresh, without changing the cache's routing decisions. Each successful metrics scrape MUST refresh that snapshot before exposition; a failed refresh MUST return HTTP 503 instead of exposing an apparently current account snapshot.
 
-Availability MUST use `account_eligibility.ROUTABLE_STATUSES` and `reauth_access_token_is_expired`: active accounts count, and reauthentication-required accounts count unless their access token has a known expiry at or before the observation time. Unknown or unreadable expiry MUST retain the existing eligibility behavior. Availability MUST NOT apply model, API-key, affinity, quota, cooldown, health-tier, or concurrency filters and MUST NOT claim that a particular request can be served.
+Availability MUST use the shared routable-status and credential-availability rules: active accounts count, and reauthentication-required accounts count unless their access token is proven rejected by the stored reason or has a known expiry at or before the observation time. Unknown or unreadable expiry MUST retain the existing eligibility behavior when no blocking rejection reason exists. Refresh-only warnings MUST remain available with usable access credentials. Availability MUST NOT apply model, API-key, affinity, quota, cooldown, health-tier, or concurrency filters and MUST NOT claim that a particular request can be served.
 
 In multiprocess mode these shared-pool gauges MUST expose the most recently published live-worker observation per series without a PID label or summation across workers. A newer zero MUST replace an older nonzero count. When Prometheus is absent, account-cache refresh MUST continue without metric publication or token decryption for metrics.
 
@@ -1468,6 +1482,15 @@ In multiprocess mode these shared-pool gauges MUST expose the most recently publ
 - **THEN** availability counts the active account and the reauthentication accounts with future or unknown expiry
 - **WHEN** the future expiry is reached without a database mutation or proxy request
 - **THEN** the next scrape excludes that account from availability while preserving its stored status count
+
+#### Scenario: Proven access rejection remains unavailable until repaired
+
+- **GIVEN** a reauthentication-required account whose stored reason proves rejected access credentials
+- **AND** its access-token expiry is future, unknown, or unreadable
+- **WHEN** metrics are scraped
+- **THEN** its status remains in inventory and availability excludes it
+- **WHEN** credential repair replaces the blocking reason with a refresh-only warning while access credentials remain usable
+- **THEN** the next scrape includes it in availability without requiring proxy traffic
 
 #### Scenario: Replicated counts decrease
 
@@ -1565,4 +1588,27 @@ The server command MUST accept `--log-file PATH`. When given, every log record t
 - **WHEN** the server starts
 - **THEN** it exits with an error and no server starts
 
+### Requirement: Explicit authorization fields are masked without credential-boundary guesses
 
+At WARNING or higher, an explicit case-insensitive `authorization` field in rendered text or an error-log field MUST have its complete value masked. A complete single- or double-quoted value MUST retain its field delimiters and adjacent context. An unquoted or unterminated value MUST be masked through the current line end, including comma or ampersand separated parameters, diagnostic-looking keys, malformed parameters, whitespace-separated tails and tails following a redaction placeholder. A placeholder MUST NOT establish that a field is safe. In multiline rendered logs, CR and LF delimiters and subsequent lines MUST remain intact; repeated redaction MUST produce identical output. Existing standalone Basic/Bearer token redaction and structured secret-key masking MUST remain intact.
+
+#### Scenario: Quoted comma and malformed auth parameters cannot leave tails
+
+- **WHEN** an authorization value contains quoted commas, repeated commas, malformed parameters or a parameter named status
+- **THEN** no credential value reaches error fields, text/JSON log messages or rendered exceptions
+
+#### Scenario: Quoted complete fields preserve context
+
+- **WHEN** a Python-repr or JSON-style authorization field has a complete quoted value
+- **THEN** the entire value is masked while its quotes and following field context remain
+
+#### Scenario: Placeholder followed by credential material is not trusted
+
+- **WHEN** an unquoted authorization field contains Bearer followed by a redaction placeholder and further material
+- **THEN** all following material on that line is masked
+
+#### Scenario: Following diagnostic lines and idempotency are retained
+
+- **WHEN** an authorization field is followed by LF, CRLF or CR and a diagnostic line
+- **THEN** those terminators and the next line survive unchanged
+- **AND** applying the redactor again gives the same result

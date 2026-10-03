@@ -4,6 +4,20 @@ Point any OpenAI-compatible client at codex-lb. If [API key auth](api-keys.md) i
 
 Model availability is discovered from the upstream Codex model catalog and can vary by account plan, workspace, rollout, and upstream deprecation state. Prefer the live `GET /v1/models` or `GET /backend-api/codex/models` response over a copied static table when configuring clients or API-key model allowlists.
 
+Clients that validate a single model, including Visual Studio Copilot, can use
+`GET /v1/models/{model_id}`. It applies the same visibility rules as the model
+list; unknown or excluded models return `404 model_not_found`. A trailing `/`
+is accepted, including for IDs such as `vendor/model`. See the owning
+[model catalog specification](https://github.com/Frozen811/codex-lb/blob/main/openspec/specs/model-catalog-compat/spec.md).
+
+Native standalone search (`POST /alpha/search`) and history/notes v2 operations
+are available under both `/backend-api/codex` and `/v1`, including trailing `/`
+forms. Requests preserve opaque payloads and allowed encryption headers through
+the existing account selection and API-key scope policies. This is route
+compatibility; it does not merge private notes or history across accounts. See
+the owning [history/notes specification](https://github.com/Frozen811/codex-lb/blob/main/openspec/specs/native-history-notes-proxy/spec.md)
+and [Responses specification](https://github.com/Frozen811/codex-lb/blob/main/openspec/specs/responses-api-compat/spec.md).
+
 The examples below use the current frontier lineup: **`gpt-6-astra`** (recommended for complex reasoning and coding), alongside **`gpt-5.6-sol`**, **`gpt-5.6-terra`**, and **`gpt-5.6-luna`** — with GPT-5.6 family models featuring a 272k default input budget and an 872k upstream maximum ([opt-in, Codex CLI only](#opting-into-the-872k-context-window)). `gpt-5.5` and `gpt-5.4` are still served for older pinned clients; retired slugs such as `gpt-5.3-codex`, `gpt-5.3-codex-spark`, and `gpt-5.1-codex-mini` were dropped from the upstream bundled catalog and should no longer be used in new configs.
 
 | Client | Endpoint | Config |
@@ -16,7 +30,9 @@ The examples below use the current frontier lineup: **`gpt-6-astra`** (recommend
 
 ## Codex CLI / IDE Extension
 
-`~/.codex/config.toml`:
+Merge this ChatGPT-authenticated provider into `~/.codex/config.toml`. It uses
+the client's OpenAI login. If the deployment requires a Codex LB API key,
+use the [API-key configuration](#with-api-key-auth) below instead:
 
 ```toml
 model = "gpt-6-astra"
@@ -36,7 +52,6 @@ supports_standalone_web_search = true # requires codex-lb >= 1.22.0
 requires_openai_auth = true # required for codex app
 ```
 
-<<<<<<< HEAD
 ### Model discovery in the Codex app
 
 Verified with Codex 0.159.0: a provider configured with `env_key` uses API-key
@@ -50,7 +65,7 @@ The examples include both settings. Keep each catalog URL on the same host
 and port as its provider's `base_url`; update both when using a remote
 installation. Merge these keys into existing `[features]` and provider
 tables rather than duplicating the tables, then fully quit and reopen the
-Codex app. See the [model discovery context](https://github.com/Soju06/codex-lb/blob/main/openspec/specs/model-catalog-compat/context.md#codex-client-discovery)
+Codex app. See the [model discovery context](https://github.com/Frozen811/codex-lb/blob/main/openspec/specs/model-catalog-compat/context.md#codex-client-discovery)
 for the client-side conditions and verification scope.
 
 ### Native web search
@@ -64,13 +79,13 @@ preference. This provider capability is separate from the experimental
 `[features].standalone_web_search` flag; enabling that feature flag is not part
 of this setup. The Codex version and selected model must also support standalone
 search. See [OpenAI's web-search documentation](https://learn.chatgpt.com/docs/web-search)
-and the [standalone search proxy specification](https://github.com/Soju06/codex-lb/blob/main/openspec/specs/responses-api-compat/spec.md#requirement-standalone-codex-web-search-is-forwarded-faithfully).
+and the [standalone search proxy specification](https://github.com/Frozen811/codex-lb/blob/main/openspec/specs/responses-api-compat/spec.md#requirement-standalone-codex-web-search-is-forwarded-faithfully).
 
 ### Preserving built-in OpenAI provider (Codex Desktop)
 
 When routing ChatGPT-authenticated Codex Desktop through codex-lb, configuring a custom provider (`model_provider = "codex-lb"`) alters the provider identity seen by the Codex client stack. This can break conversation synchronization between web/mobile ChatGPT and Codex Desktop.
 
-To preserve the native provider identity and maintain seamless conversation synchronization without retagging sessions, override the built-in `[model_providers.openai]` provider definition directly:
+To preserve the provider key recorded by the client, override the built-in `[model_providers.openai]` definition directly. This can avoid a provider-tag change; it does not establish web/mobile conversation synchronization. Cloud synchronization, account access and the ChatGPT backend URL require separate verification:
 
 ```toml
 model = "gpt-6-astra"
@@ -83,10 +98,10 @@ base_url = "http://127.0.0.1:2455/backend-api/codex"
 
 ### Showing pooled quota in Codex
 
-By default Codex reads its rate-limit display from `chatgpt.com` for the
-account it is logged in as, so it shows that one account's quota even while
-codex-lb routes its requests to a different account. To show the pool's
-combined quota instead, point Codex's ChatGPT backend at codex-lb. Add this at
+For ChatGPT-authenticated Codex, the default backend can report the account
+the client is logged in as while generation routes through a different pool
+account. To request the pool's combined quota, point Codex's ChatGPT backend
+at codex-lb. Add this at
 the top level of `~/.codex/config.toml`, not under `[model_providers.codex-lb]`:
 
 ```toml
@@ -106,11 +121,16 @@ sessions will keep showing the logged-in account's quota. A `-c` flag applies
 immediately.
 
 Keep the `/backend-api` suffix. Codex then reads usage from
-`/backend-api/wham/usage`, which codex-lb answers with usage pooled across all
-accounts. Codex's other ChatGPT-backend calls (account checks, user settings,
+`/backend-api/wham/usage`. With an authenticated matching ChatGPT identity,
+codex-lb answers with the eligible pool's usage. With a Codex LB API key,
+the same endpoint reports that key's unfiltered **credit** limit windows
+(5h/daily, 7d/weekly and monthly where configured); without those limits,
+`rate_limit` can be null. It is not always a pool percentage, and token-count
+limits are not converted into credit windows. Codex's other ChatGPT-backend calls (account checks, user settings,
 plugins, cloud tasks) are forwarded to ChatGPT unchanged, under your own login.
-This works only if the account Codex is logged into is also in the codex-lb
-pool; otherwise those calls return `401`.
+The ChatGPT-authenticated passthrough path requires the caller's identity to
+match an account in the pool; otherwise those calls return `401`. A Codex LB
+API key is not an upstream ChatGPT credential for plugins/cloud requests.
 
 Two limits:
 
@@ -120,7 +140,7 @@ Two limits:
 - During a session, the display still updates from the rate-limit events of
   whichever account served the last turn.
 
-See [codex-backend-passthrough](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/codex-backend-passthrough).
+See [codex-backend-passthrough](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/codex-backend-passthrough).
 
 ### Opting into the 872k context window
 
@@ -231,7 +251,7 @@ pipeline. Consequently `$imagegen` fails closed inside the Daybreak profile;
 do not remove the carrier to make it work during a restricted task. Use the
 ordinary provider only for separate work that does not require Daybreak
 routing. Provider configurations that intentionally skip OpenAI login have a
-different eligibility path; see the [Images compatibility context](https://github.com/Soju06/codex-lb/blob/main/openspec/specs/images-api-compat/context.md#codex-provider-eligibility).
+different eligibility path; see the [Images compatibility context](https://github.com/Frozen811/codex-lb/blob/main/openspec/specs/images-api-compat/context.md#codex-provider-eligibility).
 
 ### WebSocket transport
 
@@ -270,13 +290,57 @@ wire_api = "responses"
 env_key = "CODEX_LB_API_KEY"
 supports_websockets = true
 supports_standalone_web_search = true # requires codex-lb >= 1.22.0
-requires_openai_auth = true # required for codex app
+requires_openai_auth = false # explicit provider-key CLI path
 ```
 
 ```bash
 export CODEX_LB_API_KEY="sk-clb-..."   # key from dashboard
 codex
 ```
+
+For PowerShell, set `$env:CODEX_LB_API_KEY = "sk-clb-..."` in the shell that
+launches the client, using your normal secret-loading method. Keep credentials
+out of TOML. This is a **Codex LB client key**, separate from the dashboard
+password/bootstrap token and upstream account credentials. Merge the provider
+table with top-level `model_provider = "codex-lb"`; a table alone does not
+select it.
+
+The [official authentication guide](https://learn.chatgpt.com/docs/auth#alternative-model-providers)
+separates OpenAI login and environment-key authentication. An isolated Codex
+**0.159.3** CLI rehearsal completed generation with `env_key` under both
+`requires_openai_auth=false` and `true`, despite the official guide's current
+statement that the latter ignores `env_key`. Use the explicit false CLI path
+above for an API key; advanced Desktop/Daybreak examples have separate
+eligibility requirements and retain their declared OpenAI-auth capability.
+Recheck behavior when upgrading the client.
+
+### Verify the selected deployment
+
+Run `codex --version` and check the selected provider, host/port and URL
+endings together:
+
+| Purpose | URL ending |
+|---|---|
+| Generation provider base | `/backend-api/codex` (Codex appends `/responses`) |
+| Explicit catalog URL | `/backend-api/codex/models` |
+| ChatGPT backend base | `/backend-api` (usage request is `/wham/usage`) |
+| Direct usage API | `/api/codex/usage`, authenticated by the intended identity/key |
+
+For a controlled check, run `codex exec "Reply with OK only. Do not use tools."`
+and correlate its request with a new server request record and selected
+account. A process exit or model picker alone does not prove generation.
+For Pause, pause the selected account before a **new** request and confirm it
+is not selected; an already running response may still finish. Quota can also
+move because of usage outside this proxy.
+
+Local verification on 2026-10-02 used Codex 0.159.3, isolated configuration,
+real codex-lb routing and a synthetic upstream. It verified generation,
+stored account identity, quota paths and new-request Pause refusal. It does
+not certify real OpenAI login, model entitlement, Desktop/cloud sync or
+upstream subscription accounting. Choose a model from your deployment's live
+catalog; the example slug is not an access grant.
+
+The setup/evidence contract belongs to [user-documentation](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/user-documentation).
 
 ### Verify WebSocket transport
 
@@ -296,7 +360,7 @@ If you run `codex-lb` behind a reverse proxy, make sure it forwards WebSocket up
 
 ### Migrating from direct OpenAI (session retagging)
 
-`codex resume` filters by `model_provider`; old sessions won't appear until you re-tag them. Use the built-in retag command instead of editing Codex files by hand; see [Codex session retagging](https://github.com/Soju06/codex-lb/blob/main/openspec/specs/runtime-portability/context.md#codex-session-retagging) for backups, Docker, WSL, and rollback details.
+`codex resume` filters by `model_provider`; old sessions won't appear until you re-tag them. Use the built-in retag command instead of editing Codex files by hand; see [Codex session retagging](https://github.com/Frozen811/codex-lb/blob/main/openspec/specs/runtime-portability/context.md#codex-session-retagging) for backups, Docker, WSL, and rollback details.
 
 ```bash
 # Preview what will change first.
@@ -499,4 +563,4 @@ print(response.choices[0].message.content)
 
 ---
 
-*Specs: [responses-api-compat](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/responses-api-compat) · [images-api-compat](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/images-api-compat) · [chat-completions-compat](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/chat-completions-compat) · [realtime-api-compat](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/realtime-api-compat) · [proxy-admission-control](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/proxy-admission-control) · [proxy-warmup](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/proxy-warmup) · [files-upload-protocol](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/files-upload-protocol) · [audio-transcriptions-compat](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/audio-transcriptions-compat) · [model-catalog-compat](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/model-catalog-compat) · [runtime-portability](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/runtime-portability) · [codex-backend-passthrough](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/codex-backend-passthrough)*
+*Specs: [responses-api-compat](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/responses-api-compat) · [images-api-compat](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/images-api-compat) · [chat-completions-compat](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/chat-completions-compat) · [realtime-api-compat](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/realtime-api-compat) · [proxy-admission-control](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/proxy-admission-control) · [proxy-warmup](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/proxy-warmup) · [files-upload-protocol](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/files-upload-protocol) · [audio-transcriptions-compat](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/audio-transcriptions-compat) · [model-catalog-compat](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/model-catalog-compat) · [runtime-portability](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/runtime-portability) · [codex-backend-passthrough](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/codex-backend-passthrough)*

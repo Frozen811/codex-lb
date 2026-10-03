@@ -9,6 +9,7 @@ import pytest
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from app.core.clock import REAL_SCHEDULER
 from app.core.openai.requests import ResponsesRequest
 from app.modules.proxy.images_fanout import execute_image_fanout
 
@@ -28,6 +29,7 @@ def _make_mock_request():
 @pytest.mark.asyncio
 async def test_execute_image_fanout_success():
     mock_context = MagicMock()
+    mock_context.service._scheduler = REAL_SCHEDULER
     mock_context.service.rewrite_request_log_model = AsyncMock()
 
     mock_request = _make_mock_request()
@@ -136,6 +138,7 @@ async def test_execute_image_fanout_success():
 @pytest.mark.asyncio
 async def test_execute_image_fanout_error_handling():
     mock_context = MagicMock()
+    mock_context.service._scheduler = REAL_SCHEDULER
     mock_request = _make_mock_request()
     payload = ResponsesRequest(
         model="gpt-4o",
@@ -180,6 +183,7 @@ async def test_execute_image_fanout_error_handling():
 @pytest.mark.asyncio
 async def test_execute_image_fanout_partial_failure_settles_usage():
     mock_context = MagicMock()
+    mock_context.service._scheduler = REAL_SCHEDULER
     mock_context.service.rewrite_request_log_model = AsyncMock()
     mock_request = _make_mock_request()
     payload = ResponsesRequest(
@@ -268,6 +272,7 @@ async def test_execute_image_fanout_partial_failure_settles_usage():
 @pytest.mark.asyncio
 async def test_execute_image_fanout_cancellation_releases_reservation():
     mock_context = MagicMock()
+    mock_context.service._scheduler = REAL_SCHEDULER
     mock_request = _make_mock_request()
     payload = ResponsesRequest(
         model="gpt-4o",

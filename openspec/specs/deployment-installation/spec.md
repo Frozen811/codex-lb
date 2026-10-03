@@ -1151,3 +1151,115 @@ The chart README's `Upgrading` section MUST state that the shim is removed in th
 - **THEN** it states that the shim is removed in this release
 - **AND** it tells the operator to upgrade to a `1.24.x` chart first, plan that step as a maintenance window, verify the cutover, and only then upgrade to this release
 
+### Requirement: Helm external installs progress before readiness waits
+
+External database installs MUST retain a schema gate and run the install migration before Helm readiness waits can block it. Installs that need a chart-created or asynchronously materialized application Secret MUST create a regular migration Job with the application resources. Pre-install migration hooks MUST be used only when the application Secret already exists. Upgrades MUST retain pre-upgrade migration ordering. Bundled installs SHALL retain startup migration and upgrade-only migration Jobs.
+
+#### Scenario: Direct URL with a generated encryption key
+
+- **WHEN** an operator installs against a fresh external database using a direct URL and `--wait`
+- **THEN** the migration Job can run alongside the chart-managed Secret
+- **AND** the schema gate allows the application to become Ready after migration completes
+
+#### Scenario: Existing database Secret without an application Secret
+
+- **WHEN** the DB URL Secret already exists but the chart creates the application Secret
+- **THEN** migration is a regular install Job and does not reference an unavailable pre-install encryption key
+
+#### Scenario: External Secrets materialization
+
+- **WHEN** the chart relies on External Secrets Operator to create application credentials
+- **THEN** the install migration is a regular Job that can wait for those credentials without a post-install readiness cycle
+
+#### Scenario: Existing application credentials and upgrades
+
+- **WHEN** an application Secret already exists at install time or the release is upgraded
+- **THEN** the chart retains the applicable pre-install or pre-upgrade migration hook
+
+#### Scenario: Read-only container root filesystem
+
+- **WHEN** the chart starts application pods with a read-only root filesystem
+- **THEN** runtime metadata and scratch data use a writable mounted directory
+- **AND** the shared encryption key remains explicitly mounted from its Secret
+
+### Requirement: Fork Helm and Nix guidance identifies source and artifact channels
+
+Helm image defaults and fork Nix quick-start commands MUST select Frozen811/codex-lb. Instructions MUST distinguish source checkout builds, pinned remote source and historical public artifacts. They MUST specify required install overlays, data/key retention and upgrade/rollback boundaries. Documentation MUST NOT assume an unshipped systemd unit exists.
+
+#### Scenario: Install the local Helm chart
+
+- **WHEN** an operator follows the fork Kubernetes guide
+- **THEN** the chart and explicitly selected image come from the fork checkout
+- **AND** the instructions name the installed StatefulSet when draining replicas
+
+#### Scenario: Bundled PostgreSQL dependency identity
+
+- **WHEN** an operator installs the bundled PostgreSQL overlay
+- **THEN** the dependency image is pinned by immutable digest rather than a mutable latest tag
+
+#### Scenario: Run the Nix package
+
+- **WHEN** an operator follows the Nix quick start from a fork checkout
+- **THEN** the package runs with dashboard assets and writable configured data outside the Nix store
+- **AND** the guide identifies tested platforms separately from declared flake systems
+
+### Requirement: Nix frontend installation does not depend on store hardlinks
+
+Nix frontend builds MUST install locked dependencies without requiring a build user to hardlink root-owned immutable store files into the writable build directory.
+
+#### Scenario: Protected hardlinks in a Linux build environment
+
+- **WHEN** the build user's filesystem rejects hardlinks to immutable dependency files
+- **THEN** the frontend dependency installation succeeds using a copying backend
+- **AND** the installed package contains usable dashboard assets
+
+### Requirement: Setup guidance identifies configuration discovery and precedence
+
+The configuration guide MUST identify module-root `.env` then `.env.local` discovery, the process-only `CODEX_LB_ENV_FILE` override and its platform path separator, process environment precedence, launch-directory-relative explicit paths, and the separate CLI listener environment. It MUST distinguish application dotenv parsing from Compose env injection and Nix wrapper discovery. It MUST retain dashboard precedence over environment for dashboard-owned settings and explain ignored unknown names and missing env files.
+
+#### Scenario: Launch a package outside its source directory
+
+- **WHEN** an operator launches the Python package from an unrelated working directory
+- **THEN** the guide supplies an explicit env-file selection example for that directory
+- **AND** explains that listener CLI flags override process listener variables and dotenv files do not supply those variables
+
+#### Scenario: Persist a dashboard override
+
+- **WHEN** an operator sets a dashboard-owned value and later changes its environment fallback
+- **THEN** the persisted dashboard value remains effective
+- **AND** clearing the override restores inheritance
+
+### Requirement: Invalid negative listener keep-alive fails before startup
+
+The CLI MUST reject a negative `--timeout-keep-alive` or `UVICORN_TIMEOUT_KEEP_ALIVE` value before server startup with a message naming the option and its non-negative integer constraint. Zero MUST remain valid.
+
+#### Scenario: Negative timeout from flag or environment
+
+- **WHEN** the selected keep-alive timeout is negative
+- **THEN** the CLI exits unsuccessfully before binding a listener or creating the application store
+
+### Requirement: Backup instructions preserve paired database and encryption material
+
+The database guide MUST distinguish a consistent SQLite snapshot from PostgreSQL/MySQL logical dumps. It MUST identify the effective DB/key/archive paths, writable-directory ownership, backup of external key paths, and restoring a matching database/key pair into an isolated rehearsal before cutover. It MUST NOT present a data-directory copy as a backup of an external SQL database or a newer binary's database downgrade as a safe rollback.
+
+#### Scenario: Recreate or restore an installation
+
+- **WHEN** an operator recreates an application instance or restores a backup
+- **THEN** the documented steps preserve encrypted account credentials and dashboard settings using matching database/key material
+- **AND** schema checks and application verification precede replacing the original store
+
+### Requirement: Update and rollback guidance selects source and paired storage explicitly
+
+Update instructions MUST identify the intended fork repository independently of local remote names. They MUST distinguish a cached mutable image tag, a pinned digest, source revision, package metadata and runtime version. They MUST instruct operators to preserve DB/key/configuration, stop old writers before replacement, prepare changed frontend assets, and verify selected executable/image and retained application data after recreation. Rollback MUST use a compatible old executable and its paired pre-upgrade database/key snapshot unless an explicitly verified migration-specific downgrade applies.
+
+#### Scenario: Origin points at upstream
+
+- **WHEN** an operator follows fork source update instructions in a checkout whose origin points at upstream
+- **THEN** the instructions explicitly fetch/select the intended fork source
+- **AND** do not merge or update from origin merely because of its remote name
+
+#### Scenario: Recreate and restore an isolated installation
+
+- **WHEN** an operator follows the verified update/rollback rehearsal
+- **THEN** runtime/image identity and preserved settings/account decryptability are checked separately
+- **AND** rollback does not assume an older image can open a newer schema

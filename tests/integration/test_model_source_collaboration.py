@@ -119,6 +119,7 @@ async def _capture_source_request(
     [
         pytest.param({"multi_agent_version": "v1"}, id="v1"),
         pytest.param({"multi_agent_version": "v2"}, id="v2"),
+        pytest.param({"multi_agent_version": " \tv99\n"}, id="future-whitespace-version"),
         pytest.param({"experimental_supported_tools": ["namespace"]}, id="explicit-namespace"),
     ],
 )
@@ -127,6 +128,14 @@ async def _capture_source_request(
     [
         pytest.param({"type": "namespace", "name": "collaboration"}, id="namespace-choice"),
         pytest.param({"type": "function", "namespace": "collaboration", "name": "spawn_agent"}, id="function-choice"),
+        pytest.param(
+            {
+                "type": "allowed_tools",
+                "mode": "required",
+                "tools": [{"type": "function", "namespace": "collaboration", "name": "spawn_agent"}],
+            },
+            id="allowed-function-choice",
+        ),
         pytest.param(
             {"type": "allowed_tools", "mode": "required", "tools": [{"type": "namespace", "name": "collaboration"}]},
             id="allowed-choice",
@@ -146,6 +155,54 @@ async def test_source_responses_preserves_collaboration_tools_and_choices(
 
     assert captured["tools"] == [_NAMESPACE, _FUNCTION]
     assert captured["tool_choice"] == choice
+    assert captured["parallel_tool_calls"] is True
+    assert captured["include"] == ["reasoning.encrypted_content"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", _RESPONSE_PATHS)
+@pytest.mark.parametrize(
+    ("choice", "expected"),
+    [
+        pytest.param(
+            {"type": "function", "namespace": "collaboration", "name": "spawn_agent"},
+            None,
+            id="forced-namespace-function",
+        ),
+        pytest.param(
+            {
+                "type": "allowed_tools",
+                "mode": "required",
+                "tools": [{"type": "function", "namespace": "collaboration", "name": "spawn_agent"}],
+            },
+            None,
+            id="only-namespace-function",
+        ),
+        pytest.param(
+            {
+                "type": "allowed_tools",
+                "mode": "required",
+                "tools": [
+                    {"type": "function", "namespace": "collaboration", "name": "spawn_agent"},
+                    {"type": "function", "name": "shell"},
+                    {"type": "web_search"},
+                ],
+            },
+            {"type": "allowed_tools", "mode": "required", "tools": [{"type": "function", "name": "shell"}]},
+            id="mixed-allowed-functions",
+        ),
+    ],
+)
+async def test_source_without_namespace_support_prunes_namespaced_function_choices(
+    async_client: AsyncClient,
+    source_upstream: Callable[..., Awaitable[str]],
+    path: str,
+    choice: dict[str, JsonValue],
+    expected: dict[str, JsonValue] | None,
+) -> None:
+    captured = await _capture_source_request(async_client, source_upstream, path=path, metadata={}, tool_choice=choice)
+    assert captured["tools"] == [_FUNCTION]
+    assert captured.get("tool_choice") == expected
     assert captured["parallel_tool_calls"] is True
     assert captured["include"] == ["reasoning.encrypted_content"]
 

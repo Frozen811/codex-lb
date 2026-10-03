@@ -126,17 +126,14 @@ This is used in secret.yaml to populate the database-url secret key.
 {{- end }}
 
 {{/*
-Migration hook phases — default to pre-install when DB credentials are already available without ExternalSecrets materialization.
+Migration hook phases. Only an existing app Secret makes every credential
+available before install. Other external installs use a regular Job.
 */}}
 {{- define "codex-lb.migrationHookPhases" -}}
-{{- if .Values.externalSecrets.enabled -}}
-post-install,pre-upgrade
-{{- else if .Values.postgresql.enabled -}}
-pre-upgrade
-{{- else if or .Values.auth.existingSecret .Values.externalDatabase.existingSecret -}}
+{{- if and (not .Values.postgresql.enabled) (not .Values.externalSecrets.enabled) .Values.auth.existingSecret -}}
 pre-install,pre-upgrade
 {{- else -}}
-post-install,pre-upgrade
+pre-upgrade
 {{- end -}}
 {{- end }}
 

@@ -30,13 +30,15 @@ _NOTES_OPERATIONS = (
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("operation", _HISTORY_OPERATIONS)
-@pytest.mark.parametrize("prefix", ["/backend-api/codex", "/v1"])
-async def test_native_history_v2_post_operations(async_client, monkeypatch, operation: str, prefix: str):
+@pytest.mark.parametrize("prefix", ["/backend-api/codex", "/v1", "/backend-api/codex/v1"])
+@pytest.mark.parametrize("suffix", ["", "/"])
+async def test_native_history_v2_post_operations(async_client, monkeypatch, operation: str, prefix: str, suffix: str):
     await _import_account(async_client, f"acc_hist_{operation}", f"hist-{operation}@example.com")
     calls: list[dict[str, Any]] = []
 
     async def fake_codex_control(path, *, method, payload, query_params, headers, **kwargs):
-        del headers, kwargs
+        assert headers["x-codex-encryption-key"] == "synthetic-encryption-header"
+        del kwargs
         calls.append({"path": path, "method": method, "payload": payload, "query_params": query_params})
         return CodexControlResponse(
             status_code=200,
@@ -46,27 +48,34 @@ async def test_native_history_v2_post_operations(async_client, monkeypatch, oper
 
     monkeypatch.setattr(proxy_module, "core_codex_control_request", fake_codex_control)
     payload = {"query": "test query", "window_id": "win_123"}
+    body = json.dumps(payload, indent=2).encode()
 
     response = await async_client.post(
-        f"{prefix}/alpha/history/v2/{operation}",
-        json=payload,
+        f"{prefix}/alpha/history/v2/{operation}{suffix}?window=a&window=b",
+        content=body,
+        headers={"content-type": "application/json", "x-codex-encryption-key": "synthetic-encryption-header"},
+        follow_redirects=False,
     )
     assert response.status_code == 200
     assert response.json() == {"operation": operation, "status": "ok"}
     assert len(calls) == 1
     assert calls[0]["path"] == f"alpha/history/v2/{operation}"
     assert calls[0]["method"] == "POST"
+    assert calls[0]["payload"] == body
+    assert calls[0]["query_params"] == [("window", "a"), ("window", "b")]
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("operation", _NOTES_OPERATIONS)
-@pytest.mark.parametrize("prefix", ["/backend-api/codex", "/v1"])
-async def test_native_notes_v2_post_operations(async_client, monkeypatch, operation: str, prefix: str):
+@pytest.mark.parametrize("prefix", ["/backend-api/codex", "/v1", "/backend-api/codex/v1"])
+@pytest.mark.parametrize("suffix", ["", "/"])
+async def test_native_notes_v2_post_operations(async_client, monkeypatch, operation: str, prefix: str, suffix: str):
     await _import_account(async_client, f"acc_notes_{operation}", f"notes-{operation}@example.com")
     calls: list[dict[str, Any]] = []
 
     async def fake_codex_control(path, *, method, payload, query_params, headers, **kwargs):
-        del headers, kwargs
+        assert headers["x-codex-encryption-key"] == "synthetic-encryption-header"
+        del kwargs
         calls.append({"path": path, "method": method, "payload": payload, "query_params": query_params})
         return CodexControlResponse(
             status_code=200,
@@ -76,20 +85,28 @@ async def test_native_notes_v2_post_operations(async_client, monkeypatch, operat
 
     monkeypatch.setattr(proxy_module, "core_codex_control_request", fake_codex_control)
     payload = {"path": "notes.md", "content": "# Notes"}
+    body = json.dumps(payload, indent=2).encode()
 
     response = await async_client.post(
-        f"{prefix}/alpha/notes/v2/{operation}",
-        json=payload,
+        f"{prefix}/alpha/notes/v2/{operation}{suffix}?path=a&path=b",
+        content=body,
+        headers={"content-type": "application/json", "x-codex-encryption-key": "synthetic-encryption-header"},
+        follow_redirects=False,
     )
     assert response.status_code == 200
     assert response.json() == {"operation": operation, "status": "ok"}
     assert len(calls) == 1
     assert calls[0]["path"] == f"alpha/notes/v2/{operation}"
     assert calls[0]["method"] == "POST"
+    assert calls[0]["payload"] == body
+    assert calls[0]["query_params"] == [("path", "a"), ("path", "b")]
 
 
 @pytest.mark.asyncio
-async def test_native_notes_v2_get_thread_hint(async_client, monkeypatch):
+@pytest.mark.parametrize("operation", _NOTES_OPERATIONS)
+@pytest.mark.parametrize("prefix", ["/backend-api/codex", "/v1", "/backend-api/codex/v1"])
+@pytest.mark.parametrize("suffix", ["", "/"])
+async def test_native_notes_v2_get_operations(async_client, monkeypatch, operation, prefix, suffix):
     await _import_account(async_client, "acc_notes_hint", "notes-hint@example.com")
     calls: list[dict[str, Any]] = []
 
@@ -105,13 +122,16 @@ async def test_native_notes_v2_get_thread_hint(async_client, monkeypatch):
     monkeypatch.setattr(proxy_module, "core_codex_control_request", fake_codex_control)
 
     response = await async_client.get(
-        "/backend-api/codex/alpha/notes/v2/thread_hint?thread_id=t_abc",
+        f"{prefix}/alpha/notes/v2/{operation}{suffix}?thread_id=t_abc",
+        follow_redirects=False,
     )
     assert response.status_code == 200
     assert response.json() == {"thread_hint": "prior context summary"}
     assert len(calls) == 1
-    assert calls[0]["path"] == "alpha/notes/v2/thread_hint"
+    assert calls[0]["path"] == f"alpha/notes/v2/{operation}"
     assert calls[0]["method"] == "GET"
+    assert calls[0]["payload"] is None
+    assert calls[0]["query_params"] == [("thread_id", "t_abc")]
 
 
 @pytest.mark.asyncio
@@ -145,15 +165,63 @@ async def test_native_history_notes_trailing_slash_equivalent(async_client, monk
 
 
 @pytest.mark.asyncio
-async def test_native_history_notes_unknown_operation_returns_404(async_client):
-    response = await async_client.post(
-        "/backend-api/codex/alpha/history/v2/unknown_operation",
+@pytest.mark.parametrize("prefix", ["/backend-api/codex", "/v1", "/backend-api/codex/v1"])
+@pytest.mark.parametrize("suffix", ["", "/"])
+@pytest.mark.parametrize("family,method", [("history", "POST"), ("notes", "POST"), ("notes", "GET")])
+async def test_native_history_notes_unknown_operation_returns_404(async_client, prefix, suffix, family, method):
+    response = await async_client.request(
+        method,
+        f"{prefix}/alpha/{family}/v2/unknown_operation{suffix}",
         json={},
+        follow_redirects=False,
     )
     assert response.status_code == 404
     error = response.json()["error"]
     assert error["code"] == "not_found"
     assert "unknown_operation" in error["message"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("prefix", ["/backend-api/codex", "/v1", "/backend-api/codex/v1"])
+@pytest.mark.parametrize("account_count", [1, 2])
+async def test_native_notes_child_thread_honors_placement_and_retains_own_affinity(
+    async_client, monkeypatch, prefix, account_count
+):
+    await _import_account(async_client, "parent-owner-a", "parent-owner-a@example.com")
+    if account_count == 2:
+        await _import_account(async_client, "parent-owner-b", "parent-owner-b@example.com")
+    settings = await async_client.put(
+        "/api/settings",
+        json={"subagentAccountPreference": "always", "stickyThreadsEnabled": True, "routingStrategy": "usage_weighted"},
+    )
+    assert settings.status_code == 200
+    calls = []
+
+    async def upstream(path, *, account_id, headers, **kwargs):
+        calls.append((path, account_id, headers["thread-id"]))
+        return CodexControlResponse(200, b'{"ok":true}', {"content-type": "application/json"})
+
+    monkeypatch.setattr(proxy_module, "core_codex_control_request", upstream)
+    parent = await async_client.post(
+        "/backend-api/codex/alpha/notes/v2/write_file",
+        json={},
+        headers={"thread-id": "parent-thread"},
+    )
+    assert parent.status_code == 200
+    child_headers = {
+        "thread-id": "child-thread",
+        "x-codex-parent-thread-id": "parent-thread",
+        "x-openai-subagent": "explorer",
+    }
+    child = await async_client.get(f"{prefix}/alpha/notes/v2/thread_hint/", headers=child_headers)
+    assert child.status_code == 200
+    repeated = await async_client.post(f"{prefix}/alpha/notes/v2/write_file/", json={}, headers=child_headers)
+    assert repeated.status_code == 200
+    assert len(calls) == 3
+    assert (calls[1][1] == calls[0][1]) is (account_count == 1)
+    assert calls[1][0] == "alpha/notes/v2/thread_hint"
+    assert calls[1][2] == "child-thread"
+    assert calls[2] == ("alpha/notes/v2/write_file", calls[1][1], "child-thread")
 
 
 @pytest.mark.asyncio

@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 from unittest.mock import AsyncMock
 
+import aiohttp
 import pytest
 from sqlalchemy import select
 
-from app.core.clients.proxy_websocket import UpstreamWebSocketMessage
+from app.core.clients.proxy_websocket import CodexUpstreamWebSocket, UpstreamWebSocketMessage
 from app.core.utils.sse import parse_sse_data_json
 from app.db.models import ApiKeyUsageReservation
 from app.db.session import SessionLocal
@@ -28,9 +29,10 @@ pytestmark = pytest.mark.integration
 
 
 class _TooBigUpstream(_PromotionUpstreamWebSocket):
-    def __init__(self, after_output: bool) -> None:
+    def __init__(self, after_output: bool, adapter_error: bool = False) -> None:
         super().__init__("resp_too_big")
         self.after_output = after_output
+        self.adapter_error = adapter_error
 
     async def send_text(self, text: str) -> None:
         self.sent_text.append(text)
@@ -49,17 +51,29 @@ class _TooBigUpstream(_PromotionUpstreamWebSocket):
                 },
             ):
                 await self._messages.put(UpstreamWebSocketMessage("text", text=json.dumps(event)))
-        await self._messages.put(UpstreamWebSocketMessage("close", close_code=1009))
+        if self.adapter_error:
+
+            class SizeErrorSocket:
+                async def receive(self) -> aiohttp.WSMessage:
+                    return aiohttp.WSMessage(
+                        aiohttp.WSMsgType.ERROR, aiohttp.WebSocketError(1009, "message exceeds limit"), None
+                    )
+
+            message = await CodexUpstreamWebSocket(SizeErrorSocket()).receive()
+        else:
+            message = UpstreamWebSocketMessage("close", close_code=1009)
+        await self._messages.put(message)
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("path", ["/v1/responses", "/v1/responses/", "/backend-api/codex/responses"])
 @pytest.mark.parametrize("after_output", [False, True])
+@pytest.mark.parametrize("adapter_error", [False, True])
 async def test_close_1009_is_terminal_and_same_account_can_recover(
-    async_client, app_instance, promotion_transport, monkeypatch, path: str, after_output: bool
+    async_client, app_instance, promotion_transport, monkeypatch, path: str, after_output: bool, adapter_error: bool
 ) -> None:
     upstreams, raw_calls, _ = promotion_transport
-    rejected = _TooBigUpstream(after_output)
+    rejected = _TooBigUpstream(after_output, adapter_error)
     healthy = _PromotionUpstreamWebSocket("resp_recovered")
     connect = AsyncMock(side_effect=[rejected, healthy])
     monkeypatch.setattr(proxy_service, "connect_responses_websocket", connect)

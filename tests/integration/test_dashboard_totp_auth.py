@@ -39,7 +39,7 @@ async def _force_totp_policy(enabled: bool) -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("code", ["１２３４５６", "١٢٣٤٥٦", "123４５６"])
+@pytest.mark.parametrize("code", ["１２３４５６", "١٢٣٤٥٦", "۱۲۳۴۵۶", "²³⁴⁵⁶⁷", "123４５６"])
 async def test_totp_non_ascii_digits_return_invalid_code(async_client, monkeypatch, code: str):
     import app.core.auth.totp as totp_module
     import app.modules.dashboard_auth.service as dashboard_auth_service_module
@@ -53,6 +53,7 @@ async def test_totp_non_ascii_digits_return_invalid_code(async_client, monkeypat
     assert start.status_code == 200
     secret = start.json()["secret"]
     before = await _compat_user()
+    original_session = async_client.cookies.get(DASHBOARD_SESSION_COOKIE)
 
     invalid_setup = await async_client.post(
         "/api/dashboard-auth/totp/setup/confirm", json={"secret": secret, "code": code}
@@ -62,23 +63,28 @@ async def test_totp_non_ascii_digits_return_invalid_code(async_client, monkeypat
     rejected = await _compat_user()
     assert rejected.totp_secret_encrypted == before.totp_secret_encrypted
     assert rejected.totp_last_verified_step == before.totp_last_verified_step
+    assert async_client.cookies.get(DASHBOARD_SESSION_COOKIE) == original_session
 
     confirmed = await async_client.post(
         "/api/dashboard-auth/totp/setup/confirm", json={"secret": secret, "code": pyotp.TOTP(secret).at(epoch)}
     )
     assert confirmed.status_code == 200
     enrolled = await _compat_user()
+    enrolled_session = async_client.cookies.get(DASHBOARD_SESSION_COOKIE)
     epoch += 30
 
     invalid_verify = await async_client.post("/api/dashboard-auth/totp/verify", json={"code": code})
     assert invalid_verify.status_code == 400
     assert invalid_verify.json()["error"]["code"] == "invalid_totp_code"
     assert (await _compat_user()).totp_last_verified_step == enrolled.totp_last_verified_step
+    assert async_client.cookies.get(DASHBOARD_SESSION_COOKIE) == enrolled_session
 
+    valid_code = pyotp.TOTP(secret).at(epoch)
     valid_verify = await async_client.post(
-        "/api/dashboard-auth/totp/verify", json={"code": pyotp.TOTP(secret).at(epoch)}
+        "/api/dashboard-auth/totp/verify", json={"code": f" {valid_code[:3]}-{valid_code[3:]} "}
     )
     assert valid_verify.status_code == 200
+    assert (await _compat_user()).totp_last_verified_step == epoch // 30
 
 
 @pytest.mark.asyncio

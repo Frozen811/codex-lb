@@ -11,7 +11,9 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config.settings import get_settings
+from app.core.request_locality import has_forwarded_client_ip_hint
 from app.core.shutdown import DRAIN_DEADLINE_HEADER
+from app.core.socket_peer import raw_socket_peer_host
 from app.core.utils.time import utcnow
 from app.db.models import BridgeRingMember
 from app.db.session import get_session
@@ -31,6 +33,17 @@ def _is_internal_client_host(client_host: str | None) -> bool:
     except ValueError:
         return False
     return address.is_loopback
+
+
+def _require_internal_client(request: Request) -> None:
+    peer_host = raw_socket_peer_host(request)
+    client_host = request.client.host if request.client is not None else None
+    if (
+        not _is_internal_client_host(peer_host)
+        or not _is_internal_client_host(client_host)
+        or has_forwarded_client_ip_hint(request.headers)
+    ):
+        raise HTTPException(status_code=403, detail="Internal access required")
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -94,9 +107,7 @@ async def health_ready() -> HealthCheckResponse:
 
 @router.post("/internal/drain/start", include_in_schema=False)
 async def start_internal_drain(request: Request) -> HealthCheckResponse:
-    client_host = request.client.host if request.client is not None else None
-    if not _is_internal_client_host(client_host):
-        raise HTTPException(status_code=403, detail="Internal access required")
+    _require_internal_client(request)
 
     import app.core.shutdown as shutdown_state
 
@@ -135,9 +146,7 @@ async def start_internal_drain(request: Request) -> HealthCheckResponse:
 
 @router.post("/internal/drain/stop", include_in_schema=False)
 async def stop_internal_drain(request: Request) -> HealthCheckResponse:
-    client_host = request.client.host if request.client is not None else None
-    if not _is_internal_client_host(client_host):
-        raise HTTPException(status_code=403, detail="Internal access required")
+    _require_internal_client(request)
 
     import app.core.shutdown as shutdown_state
 
@@ -149,9 +158,7 @@ async def stop_internal_drain(request: Request) -> HealthCheckResponse:
 
 @router.get("/internal/drain/status", include_in_schema=False)
 async def internal_drain_status(request: Request) -> HealthCheckResponse:
-    client_host = request.client.host if request.client is not None else None
-    if not _is_internal_client_host(client_host):
-        raise HTTPException(status_code=403, detail="Internal access required")
+    _require_internal_client(request)
 
     import app.core.shutdown as shutdown_state
 

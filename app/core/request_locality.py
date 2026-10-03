@@ -419,7 +419,7 @@ def _is_test_server_request(request: HTTPConnection) -> bool:
     return host.strip().lower() in _TEST_SERVER_HOSTS
 
 
-def _has_forwarded_client_ip_hint(headers: Mapping[str, str]) -> bool:
+def has_forwarded_client_ip_hint(headers: Mapping[str, str]) -> bool:
     if isinstance(headers, Headers):
         return any(value for header_name in _FORWARDED_CLIENT_IP_HEADERS for value in headers.getlist(header_name))
     return any(headers.get(header_name) for header_name in _FORWARDED_CLIENT_IP_HEADERS)
@@ -469,5 +469,5 @@ def is_local_request(request: HTTPConnection) -> bool:
                 and socket_ip is not None
                 and is_trusted_proxy_source(socket_ip, trusted_proxy_networks)
             )
-        return is_local_host(host_name) and not _has_forwarded_client_ip_hint(request.headers)
+        return is_local_host(host_name) and not has_forwarded_client_ip_hint(request.headers)
     return address.is_loopback

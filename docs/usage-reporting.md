@@ -29,11 +29,11 @@ When a model's price becomes available, retained subscription requests with miss
 
 The Codex client-version fallback is also retained across restarts. Bundled prices and the stable Codex version are maintained by a daily update workflow that opens a reviewable PR. Operators do not need an extra API key or configuration setting.
 
-*Spec: [upstream-metadata](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/upstream-metadata)*
+*Spec: [upstream-metadata](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/upstream-metadata)*
 
 ---
 
-*Spec: [frontend-architecture](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/frontend-architecture)*
+*Spec: [frontend-architecture](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/frontend-architecture)*
 
 ## Paused Account Reset Credits
 
@@ -41,4 +41,4 @@ Open a paused account in **Accounts** to read its current reset-credit count wit
 
 List badges and expiry times reflect the last cached credit snapshot; background credit polling remains stopped while paused. After a restart, the badge can be absent until a snapshot is available, but the selected-account count can still be read. Weekly reset times likewise come from the last persisted usage sample. A failed count read shows unavailable when no earlier successful value is cached.
 
-*Spec: [rate-limit-reset-credits](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/rate-limit-reset-credits)*
+*Spec: [rate-limit-reset-credits](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/rate-limit-reset-credits)*

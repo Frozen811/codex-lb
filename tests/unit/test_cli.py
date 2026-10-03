@@ -103,6 +103,21 @@ def test_main_passes_custom_keep_alive_timeout(monkeypatch):
     assert captured["kwargs"]["timeout_keep_alive"] == 900
 
 
+@pytest.mark.parametrize("from_env", [False, True])
+def test_main_rejects_negative_keep_alive_before_startup(monkeypatch, from_env):
+    monkeypatch.setenv("UVICORN_TIMEOUT_KEEP_ALIVE", "-1" if from_env else "300")
+    monkeypatch.setattr(cli, "_run_server", lambda *args, **kwargs: pytest.fail("server must not start"))
+    with pytest.raises(SystemExit, match="--timeout-keep-alive/UVICORN_TIMEOUT_KEEP_ALIVE must be non-negative"):
+        cli.main([] if from_env else ["--timeout-keep-alive", "-1"])
+
+
+def test_main_accepts_zero_keep_alive(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(cli, "_run_server", lambda *args, **kwargs: captured.update(kwargs))
+    cli.main(["--timeout-keep-alive", "0"])
+    assert captured["timeout_keep_alive"] == 0
+
+
 def test_main_passes_custom_ws_max_size_flag(monkeypatch):
     captured: dict[str, Any] = {}
 

@@ -2,7 +2,37 @@
 
 codex-lb runs with zero configuration — every setting has a working default, and container vs. host environments are auto-detected. Configure only what a docs page for your scenario tells you to.
 
-Settings are environment variables with the `CODEX_LB_` prefix, or a `.env.local` file next to the process. The commented sample lives at [`.env.example`](https://github.com/Soju06/codex-lb/blob/main/.env.example).
+Settings use the `CODEX_LB_` prefix. The commented [`.env.example`](https://github.com/Frozen811/codex-lb/blob/main/.env.example) lists optional bootstrap/topology values; choose paths and database hostnames for your launch mode before copying it.
+
+## Configuration sources and precedence
+
+For Python launches, application settings load in this order (later wins): defaults, `.env`, `.env.local`, process environment. The default env-file location is the **module root**: the checkout for a source launch, or the installed package's root for a Python installation. It is not automatically your working directory. Missing env files and unknown names are ignored; a typo can therefore leave the default active. Invalid values for recognized fields fail validation and name the field.
+
+Select files before starting a relocated Python installation with the process variable `CODEX_LB_ENV_FILE`. A nonblank value replaces default discovery. It is an ordered path list separated by `:` on Unix or `;` on Windows. Relative paths resolve from the launch directory; absolute paths avoid working-directory dependence. Later files override earlier files. For example:
+
+```bash
+export CODEX_LB_ENV_FILE="$PWD/.env:$PWD/.env.local"
+codex-lb --host 127.0.0.1 --port 2455
+```
+
+```powershell
+$env:CODEX_LB_ENV_FILE = "$PWD\.env;$PWD\.env.local"
+codex-lb --host 127.0.0.1 --port 2455
+```
+
+The selection is resolved at settings import; changing a file or this variable requires restarting the process. Blank selection falls back to module-root discovery. An explicitly selected missing file is also ignored, so check spelling and the effective data path.
+
+| Launch mode | How configuration reaches the application |
+|---|---|
+| Source / installed Python / uvx | Module-root discovery, or explicit `CODEX_LB_ENV_FILE` |
+| Nix wrapper | Defaults to launch-directory `.env` then `.env.local`; an explicit nonblank selection wins |
+| Standalone Docker | Pass `--env-file /host/path/settings.env` or `-e` to Docker; host files are not discovered inside the image |
+| Stock Compose | `server.env_file` injects `.env.local` as process environment. Compose's project `.env` supplies interpolation; it does not automatically inject every variable into the server |
+| Helm | Rendered ConfigMap/Secret and explicit chart env entries supply process environment; host `.env.local` is not read |
+
+Listener options are separate: CLI flags override process `HOST`, `PORT`, `SSL_CERTFILE`, `SSL_KEYFILE`, `UVICORN_TIMEOUT_KEEP_ALIVE` and `UVICORN_WS_MAX_SIZE`; defaults are loopback, 2455, no TLS, 300 seconds and 128 MiB respectively. Application dotenv files do not set these unprefixed listener variables. The stock Docker entrypoint supplies `--host 0.0.0.0 --port 2455`, so change the published host port instead. The keep-alive value must be a non-negative integer; zero is accepted. A TLS launch requires both certificate and key paths. No database URL or encryption key is mandatory for a fresh single-instance SQLite launch; shared deployments need the explicit database/key setup described in the [Kubernetes guide](deployment/kubernetes.md).
+
+Dashboard-owned settings resolve as default, environment fallback, then a non-NULL persisted dashboard override. Restarting or changing the environment does not replace that saved override. Clearing it returns to inheritance. Bootstrap paths and listener settings remain outside the dashboard. See the [storage](database.md#backup-restore-and-rollback) and [endpoint matrix](deployment/remote.md#listeners-and-client-endpoints) before moving an installation.
 
 ## The settings that matter
 
@@ -10,7 +40,7 @@ Settings are environment variables with the `CODEX_LB_` prefix, or a `.env.local
 |----------|---------|----------------|
 | `CODEX_LB_DATA_DIR` | `~/.codex-lb` (host) / `/var/lib/codex-lb` (Docker) | Move the data directory (DB, encryption key, archives) |
 | `PORT` | `2455` | Change the listen port on host (uvx/local) runs — process environment only, not `.env.local` (env files map only `CODEX_LB_`-prefixed variables). In Docker the container always listens on 2455 (the entrypoint pins `--port 2455`); change the host side of the compose `ports` mapping instead (e.g. `"8080:2455"`) |
-| `CODEX_LB_DATABASE_URL` | SQLite in the data dir | Use PostgreSQL — see [Database](database.md) |
+| `CODEX_LB_DATABASE_URL` | SQLite in the data dir | Use PostgreSQL or MySQL — see [Database](database.md) |
 | `CODEX_LB_ENCRYPTION_KEY_FILE` | auto-generated in the data dir | Pin the key location (recommended for Docker volumes and required to be shared across replicas) |
 | `CODEX_LB_DASHBOARD_AUTH_MODE` | `standard` | `trusted_header` / `disabled` — see [Authentication](authentication.md) |
 | `CODEX_LB_FIREWALL_TRUST_PROXY_HEADERS` | `false` | Behind a reverse proxy — see [Remote Access](deployment/remote.md) |
@@ -32,8 +62,8 @@ Runtime behavior such as the routing strategy, upstream stream transport, per-ac
 
 The dashboard is the primary configuration surface. Environment variables are for two things only: values needed before the database is reachable (data directory, database URL, encryption key, port) and values that legitimately differ between replicas (advertise URLs, trusted-proxy CIDRs, bind hosts). Everything an operator might change while the proxy is running — caps, timeouts, retries, feature toggles, retention — belongs in the dashboard and takes effect on every replica without a restart. Where a dashboard setting also has an environment fallback, precedence is fixed: code default, then environment, then a value set in the dashboard; the environment never overrides a value you set in the dashboard, and clearing the dashboard value returns to the environment (or default). When scripting `PUT /api/settings`, send only the fields you intend to change: effective values echoed back from `GET` are stored as explicit dashboard values.
 
-This is the placement rule for new and migrated settings. Environment-only values that remain are bootstrap and per-replica topology (T0/T1) and the incident-debug switches (T4), plus the deprecated aliases of settings the dashboard already owns. `CODEX_LB_TELEMETRY_ENABLED` follows the rule: it is a fallback that applies only until a telemetry decision is saved in the dashboard, and a saved decision is never overridden by it (see [telemetry](telemetry.md)). The [settings reference](reference/settings.md) lists what is currently read from the environment; the `MIGRATING` registry in `app/core/config/tiers.py` that tracked the remaining moves is now empty — every behaviour tunable either has a dashboard home or became a fixed constant. The rule, the tier of each setting, and the deprecation path for environment variables are specified in [configuration-tiers](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/configuration-tiers).
+This is the placement rule for new and migrated settings. Environment-only values that remain are bootstrap and per-replica topology (T0/T1) and the incident-debug switches (T4), plus the deprecated aliases of settings the dashboard already owns. `CODEX_LB_TELEMETRY_ENABLED` follows the rule: it is a fallback that applies only until a telemetry decision is saved in the dashboard, and a saved decision is never overridden by it (see [telemetry](telemetry.md)). The [settings reference](reference/settings.md) lists what is currently read from the environment; the `MIGRATING` registry in `app/core/config/tiers.py` that tracked the remaining moves is now empty — every behaviour tunable either has a dashboard home or became a fixed constant. The rule, the tier of each setting, and the deprecation path for environment variables are specified in [configuration-tiers](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/configuration-tiers).
 
 ---
 
-*Specs: [deployment-installation](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/deployment-installation) · [replica-operations](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/replica-operations) · [configuration-tiers](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/configuration-tiers)*
+*Specs: [deployment-installation](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/deployment-installation) · [replica-operations](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/replica-operations) · [configuration-tiers](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/configuration-tiers)*

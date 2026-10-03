@@ -1,6 +1,6 @@
 <!--
 About
-Codex/ChatGPT account load balancer & proxy with usage tracking, dashboard, and OpenCode-compatible endpoints
+Community fork of codex-lb for ChatGPT account pooling, proxy routing and usage tracking; independent verification in progress
 
 Topics
 python oauth sqlalchemy dashboard load-balancer openai rate-limit api-proxy codex fastapi usage-tracking chatgpt opencode
@@ -11,9 +11,9 @@ python oauth sqlalchemy dashboard load-balancer openai rate-limit api-proxy code
 ![codex-lb](docs/screenshots/banner.jpg)
 
 <p align="left">
-  <a href="https://github.com/Frozen811/codex-lb/releases/tag/v1.25.0-hardened.3"><img src="https://img.shields.io/badge/Hardened%20Release-v1.25.0--hardened.3-blue" alt="Release" /></a>
-  <a href="https://github.com/Frozen811/codex-lb/tree/main/openspec"><img src="https://img.shields.io/badge/OpenSpec-68%2F68%20Passed-success" alt="OpenSpec" /></a>
-  <a href="https://github.com/Frozen811/codex-lb/blob/main/ISSUES.md"><img src="https://img.shields.io/badge/Tracked%20Issues-165%2F165%20Resolved-brightgreen" alt="Issues" /></a>
+  <a href="https://github.com/Frozen811/codex-lb/releases/tag/v1.25.0-hardened.3"><img src="https://img.shields.io/badge/Historical%20Release-v1.25.0--hardened.3-blue" alt="Historical release" /></a>
+  <a href="https://github.com/Frozen811/codex-lb/tree/main/openspec"><img src="https://img.shields.io/badge/OpenSpec-Specifications-blue" alt="OpenSpec specifications" /></a>
+  <a href="https://github.com/Frozen811/codex-lb/blob/main/issues-check.md"><img src="https://img.shields.io/badge/Independent%20Audit-In%20Progress-orange" alt="Independent audit in progress" /></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License" /></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-%3E%3D3.13-blue.svg" alt="Python" /></a>
 </p>
@@ -22,11 +22,11 @@ python oauth sqlalchemy dashboard load-balancer openai rate-limit api-proxy code
 
 Load balancer for ChatGPT accounts. Pool multiple accounts, track usage, manage API keys, view everything in a dashboard.
 
-**Fork Docker guide: [Docker](docs/deployment/docker.md)** · [Upstream documentation](https://soju06.github.io/codex-lb/) — client setup, configuration, troubleshooting, and screenshots.
+**Fork documentation: [docs/](docs/index.md)** · [Docker](docs/deployment/docker.md) · [Python / Windows](docs/deployment/python.md) · [Nix](docs/deployment/nix.md). [Upstream documentation](https://soju06.github.io/codex-lb/) describes upstream and may differ.
 
 > [!NOTE]
 > ### 🛡️ Hardened Community Edition (by [@Frozen811](https://github.com/Frozen811))
-> This production-ready fork includes **100% verified in-code fixes for all 164 tracked issues and community PRs**:
+> This fork integrates community changes in source. [Independent verification](issues-check.md) remains in progress; historical release artifacts do not contain every later source fix. Integration notes include:
 > - Fixes HTTP/2 Native Egress cascade stream drops and stream-cap exhaustion ([#2471](https://github.com/Soju06/codex-lb/issues/2471), [#2470](https://github.com/Soju06/codex-lb/issues/2470))
 > - Delivers terminal error frames on injected anchor rejection ([#2493](https://github.com/Soju06/codex-lb/issues/2493))
 > - Integrates Replay Relocation engine and account-neutral transcript rebuilding ([PR #2428](https://github.com/Soju06/codex-lb/pull/2428))
@@ -34,12 +34,14 @@ Load balancer for ChatGPT accounts. Pool multiple accounts, track usage, manage 
 > - Adds dashboard single & bulk API key usage reset ([#2492](https://github.com/Soju06/codex-lb/issues/2492))
 > - Supports MySQL / MariaDB databases alongside PostgreSQL & SQLite with dialect abstraction and facet indexes ([#2502](https://github.com/Soju06/codex-lb/issues/2502), [#2522](https://github.com/Soju06/codex-lb/issues/2522), [#2532](https://github.com/Soju06/codex-lb/issues/2532))
 > - Enables bounded inline image streaming and upstream transport label recording ([#2508](https://github.com/Soju06/codex-lb/issues/2508), [#2534](https://github.com/Soju06/codex-lb/issues/2534), [#2503](https://github.com/Soju06/codex-lb/issues/2503))
-> - Fully bumped and verified frontend and Python dependency stacks ([PR #2509](https://github.com/Soju06/codex-lb/pull/2509), [PR #2533](https://github.com/Soju06/codex-lb/pull/2533))
+> - Frontend and Python dependency updates ([PR #2509](https://github.com/Soju06/codex-lb/pull/2509), [PR #2533](https://github.com/Soju06/codex-lb/pull/2533))
 > 
 > Release notes: [COMMUNITY_RELEASE.md](COMMUNITY_RELEASE.md) | Release: [v1.25.0-hardened.3](https://github.com/Frozen811/codex-lb/releases/tag/v1.25.0-hardened.3) | How to update: [Update Guide](COMMUNITY_RELEASE.md#how-to-update)
 > 
 > ### 🚀 Quick Install & Run:
 > 
+> The multi-line Docker command uses Bash; [Windows PowerShell](docs/deployment/docker.md#basic-run) uses a separate example. Choose one option.
+>
 > **Option 1: Historical public Docker image (linux/amd64, source `f622c563`; newer fixes require [a source build](docs/deployment/docker.md))**
 > ```bash
 > docker network inspect codex-lb-net >/dev/null 2>&1 || docker network create codex-lb-net
@@ -60,20 +62,12 @@ Load balancer for ChatGPT accounts. Pool multiple accounts, track usage, manage 
 > codex-lb
 > ```
 > 
-> **Option 3: Local Clone with 1-Click Launchers**
-> ```bash
-> git clone https://github.com/Frozen811/codex-lb.git
-> cd codex-lb
-> 
-> # Source prerequisites: uv + Bun 1.3.14; see docs/deployment/python.md
-> # Windows: double-click start.bat or run:
-> .\run.ps1
-> 
-> # Linux / macOS:
-> ./run.sh
-> ```
+> **Option 3: Fork checkout launchers (uv + Bun 1.3.14)**
+> See [Python / Windows installation](docs/deployment/python.md#run-from-a-fork-checkout) for separate PowerShell and Bash commands and source selection.
 
 ## ⚖️ Upstream vs. Hardened Edition Comparison
+
+Historical source integration claims below are checked per entry in the [independent audit](issues-check.md); the upstream column is not a current upstream inventory, and this table does not certify public artifacts.
 
 | Feature / Defect Area | Upstream (`Soju06/codex-lb`) | Hardened Edition (`Frozen811/codex-lb`) |
 | :--- | :---: | :---: |
@@ -86,7 +80,7 @@ Load balancer for ChatGPT accounts. Pool multiple accounts, track usage, manage 
 | **Replay Relocation Engine ([PR #2428](https://github.com/Soju06/codex-lb/pull/2428))** | ❌ Unmerged open PR | ✅ Fully integrated & regression-tested |
 | **Log Credential Redaction ([#2028](https://github.com/Soju06/codex-lb/issues/2028))** | ❌ Unhandled loop errors leak credentials | ✅ Sanitized with `_RedactedRepr` |
 | **Pre-built Docker Image** | Separate upstream artifact | Historical fork image; see [Docker provenance](docs/deployment/docker.md#public-fork-image) |
-| **OpenSpec Validation** | ⚠️ Partial / Untracked PRs | ✅ 67/67 Specifications strictly validated |
+| **OpenSpec Validation** | Separate upstream state | Dated strict validation evidence in [independent audit](issues-check.md); not release certification |
 
 ## Features
 
@@ -108,6 +102,8 @@ Load balancer for ChatGPT accounts. Pool multiple accounts, track usage, manage 
 
 ## Quick Start
 
+Bash below; Windows PowerShell commands are in the [Docker](docs/deployment/docker.md#basic-run) and [Python](docs/deployment/python.md#run-from-a-fork-checkout) guides. Choose one installation channel.
+
 ```bash
 # Docker (run from a fork checkout; see the Docker guide)
 docker build -t codex-lb:local .
@@ -121,14 +117,14 @@ docker run -d --name codex-lb \
 # or the historical fork wheel (see the Python guide for current source)
 uvx --from https://github.com/Frozen811/codex-lb/releases/download/v1.25.0-hardened.3/codex_lb-1.25.1-py3-none-any.whl codex-lb
 
-# or nix
-nix run github:Soju06/codex-lb
+# or Nix from a fork checkout (see docs/deployment/nix.md)
+nix run .
 ```
 
 Open [localhost:2455](http://localhost:2455) → Add account → Done.
 
 Accessing the dashboard remotely for the first time? You need a one-time bootstrap token —
-see [Getting started](https://soju06.github.io/codex-lb/getting-started/).
+see [Getting started](docs/getting-started.md).
 
 ## Client Setup
 
@@ -150,18 +146,18 @@ requires_openai_auth = true # required for codex app
 
 | Logo | Client | Endpoint | Guide |
 |---|--------|----------|-------|
-| <img src="https://avatars.githubusercontent.com/u/14957082?s=200" width="32" alt="OpenAI"> | **Codex CLI / IDE** | `http://127.0.0.1:2455/backend-api/codex` | [Client setup → Codex CLI](https://soju06.github.io/codex-lb/client-setup/#codex-cli-ide-extension) |
-| <img src="https://avatars.githubusercontent.com/u/66570915?s=200" width="32" alt="OpenCode (Anomaly)"> | **OpenCode** | `http://127.0.0.1:2455/v1` | [Client setup → OpenCode](https://soju06.github.io/codex-lb/client-setup/#opencode) |
-| <img src="https://avatars.githubusercontent.com/u/252820863?s=200" width="32" alt="OpenClaw"> | **OpenClaw** | `http://127.0.0.1:2455/v1` | [Client setup → OpenClaw](https://soju06.github.io/codex-lb/client-setup/#openclaw) |
-| <img src="https://avatars.githubusercontent.com/u/134168893?s=200" width="32" alt="Hermes Agent (Nous Research)"> | **Hermes Agent** | `http://127.0.0.1:2455/v1` | [Client setup → Hermes Agent](https://soju06.github.io/codex-lb/client-setup/#hermes-agent) |
-| <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg" width="32" alt="Python"> | **OpenAI Python SDK** | `http://127.0.0.1:2455/v1` | [Client setup → Python SDK](https://soju06.github.io/codex-lb/client-setup/#openai-python-sdk) |
+| <img src="https://avatars.githubusercontent.com/u/14957082?s=200" width="32" alt="OpenAI"> | **Codex CLI / IDE** | `http://127.0.0.1:2455/backend-api/codex` | [Client setup → Codex CLI](docs/client-setup.md#codex-cli-ide-extension) |
+| <img src="https://avatars.githubusercontent.com/u/66570915?s=200" width="32" alt="OpenCode (Anomaly)"> | **OpenCode** | `http://127.0.0.1:2455/v1` | [Client setup → OpenCode](docs/client-setup.md#opencode) |
+| <img src="https://avatars.githubusercontent.com/u/252820863?s=200" width="32" alt="OpenClaw"> | **OpenClaw** | `http://127.0.0.1:2455/v1` | [Client setup → OpenClaw](docs/client-setup.md#openclaw) |
+| <img src="https://avatars.githubusercontent.com/u/134168893?s=200" width="32" alt="Hermes Agent (Nous Research)"> | **Hermes Agent** | `http://127.0.0.1:2455/v1` | [Client setup → Hermes Agent](docs/client-setup.md#hermes-agent) |
+| <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg" width="32" alt="Python"> | **OpenAI Python SDK** | `http://127.0.0.1:2455/v1` | [Client setup → Python SDK](docs/client-setup.md#openai-python-sdk) |
 
-Remote clients need an [API key](https://soju06.github.io/codex-lb/api-keys/) created from the dashboard.
+Remote clients need an [API key](docs/api-keys.md) created from the dashboard.
 
 ## Configuration
 
 Environment variables with `CODEX_LB_` prefix or `.env.local` — see [`.env.example`](.env.example) and the
-[configuration guide](https://soju06.github.io/codex-lb/configuration/). SQLite is the default database backend;
+[configuration guide](docs/configuration.md). SQLite is the default database backend;
 PostgreSQL and MySQL are optional via `CODEX_LB_DATABASE_URL`.
 
 ## Data
@@ -175,22 +171,22 @@ Backup this directory to preserve your data.
 
 ## Documentation
 
-Full docs live at **<https://soju06.github.io/codex-lb/>**:
+Fork guides live in **[docs/](docs/index.md)** (English; owning OpenSpec links are included):
 
-- [Getting started](https://soju06.github.io/codex-lb/getting-started/) — quick start, remote bootstrap token
-- [Client setup](https://soju06.github.io/codex-lb/client-setup/) — Codex CLI, OpenCode, OpenClaw, Python SDK
-- [Configuration](https://soju06.github.io/codex-lb/configuration/) — the few settings that matter
-- [Authentication](https://soju06.github.io/codex-lb/authentication/) — dashboard auth modes
-- [API keys](https://soju06.github.io/codex-lb/api-keys/) — protecting proxy routes
-- [Routing](https://soju06.github.io/codex-lb/routing/) — strategy guide
-- [Database](https://soju06.github.io/codex-lb/database/) — SQLite / PostgreSQL / MySQL, Postgres 16 → 18 upgrade
-- [Deployment](https://soju06.github.io/codex-lb/deployment/docker/) — [Docker](https://soju06.github.io/codex-lb/deployment/docker/), [Kubernetes](https://soju06.github.io/codex-lb/deployment/kubernetes/), [remote access](https://soju06.github.io/codex-lb/deployment/remote/)
-- [Troubleshooting](https://soju06.github.io/codex-lb/troubleshooting/)
+- [Getting started](docs/getting-started.md) — quick start, remote bootstrap token
+- [Client setup](docs/client-setup.md) — Codex CLI, OpenCode, OpenClaw, Python SDK
+- [Configuration](docs/configuration.md) — the few settings that matter
+- [Authentication](docs/authentication.md) — dashboard auth modes
+- [API keys](docs/api-keys.md) — protecting proxy routes
+- [Routing](docs/routing.md) — strategy guide
+- [Database](docs/database.md) — SQLite / PostgreSQL / MySQL, Postgres 16 → 18 upgrade
+- [Deployment](docs/deployment/docker.md) — [Docker](docs/deployment/docker.md), [Kubernetes](docs/deployment/kubernetes.md), [remote access](docs/deployment/remote.md)
+- [Troubleshooting](docs/troubleshooting.md)
 
 ### Community companions
 
 Independent projects that consume the dashboard API, maintained outside codex-lb
-(see [the docs listing](https://soju06.github.io/codex-lb/#community-companions)
+(see [the docs listing](docs/index.md#community-companions)
 for access guidance):
 
 - [Codex LB Status Bar](https://github.com/sm1ee/codex-lb-statusbar) — native macOS app: account status, quota details, account controls

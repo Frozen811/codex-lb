@@ -1,6 +1,6 @@
 # Rust migration architecture
 
-Normative owner: [Proxy architecture OpenSpec](https://github.com/Soju06/codex-lb/blob/main/openspec/specs/proxy-architecture/spec.md).
+Normative owner: [Proxy architecture OpenSpec](https://github.com/Frozen811/codex-lb/blob/main/openspec/specs/proxy-architecture/spec.md).
 
 codex-lb uses one virtual Cargo workspace at the repository root. Rust source
 lives under `crates/`; it is not nested under `rust/` or `native/`. This is the
@@ -41,7 +41,7 @@ Retryable status responses close before backoff without waiting for their body.
 Final body failures retain transport errors, while plain-text error bodies keep
 their message. Only an unavailable helper on the first attempt permits Python
 fallback. Routed usage remains owned by `CodexClient`; credit consumption is a
-separate call. See the [outbound client contract](https://github.com/Soju06/codex-lb/blob/main/openspec/specs/outbound-http-clients/spec.md).
+separate call. See the [outbound client contract](https://github.com/Frozen811/codex-lb/blob/main/openspec/specs/outbound-http-clients/spec.md).
 
 Direct and account-routed streaming and compact Responses requests delegate SSE byte framing to egress.
 The adapter requires `http_sse_v1` and supplies the existing idle timeout and
@@ -113,8 +113,8 @@ Compact result envelopes use the same text-fragment bound. Intermediate compact
 events remain inside Rust, including output-item updates; Python only decodes
 the resulting response, terminal error, or invalid-completion envelope.
 The framing contract and cancellation behavior are specified by
-[outbound HTTP clients](https://github.com/Soju06/codex-lb/blob/main/openspec/specs/outbound-http-clients/spec.md) and
-[Responses compatibility](https://github.com/Soju06/codex-lb/blob/main/openspec/specs/responses-api-compat/spec.md).
+[outbound HTTP clients](https://github.com/Frozen811/codex-lb/blob/main/openspec/specs/outbound-http-clients/spec.md) and
+[Responses compatibility](https://github.com/Frozen811/codex-lb/blob/main/openspec/specs/responses-api-compat/spec.md).
 
 ## Compatibility contract
 

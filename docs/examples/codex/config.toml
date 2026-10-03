@@ -1,10 +1,12 @@
 # Machine-local Codex configuration: ~/.codex/config.toml
 # The default provider remains ordinary codex-lb traffic.
+# Default authentication uses OpenAI login. For API-key CLI auth, see client-setup.md.
+# Setup contract: https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/user-documentation
 model = "gpt-6-astra"
 model_reasoning_effort = "xhigh"
 model_provider = "codex-lb"
 # Optional: make /status report the pool's limits instead of one local account.
-# chatgpt_base_url = "http://127.0.0.1:2455"
+# chatgpt_base_url = "http://127.0.0.1:2455/backend-api"
 
 [features]
 api_key_model_discovery = true
@@ -19,7 +21,7 @@ supports_standalone_web_search = true # requires codex-lb >= 1.22.0
 requires_openai_auth = true
 
 # Alternative: Preserve built-in OpenAI provider (Codex Desktop)
-# To preserve the built-in provider identity and keep web/mobile conversations in sync:
+# To preserve the built-in provider key (cloud conversation sync needs separate verification):
 # model_provider = "openai"
 # [model_providers.openai]
 # base_url = "http://127.0.0.1:2455/backend-api/codex"

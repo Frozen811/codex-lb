@@ -148,3 +148,9 @@ The scheduler locates the first retained observation of the current reset identi
 For example, live ingestion can record weekly usage falling from 51% to 0%, then receive more snapshots before the scheduler runs. The earlier pair remains usable even though the latest two rows show the same reset deadline. An expired or superseded identity is not replayed, and a missing predecessor supplies no proof.
 
 The first-reset lookup can scan retained history for the selected account/window, and the following span is not row-capped. Already-claimed windows skip this lookup. This cost avoids discarding evidence at an arbitrary time or row limit; no new setting or migration is required.
+
+## Pooled reset-credit target identity
+
+The [cross-account target requirement](spec.md#requirement-cross-account-reset-credit-consumption-requires-target-identity) covers Codex consume requests whose explicit credit ID or `default`/`auto` choice belongs to another account. The caller must authenticate as ChatGPT, and the refreshed target needs its own ChatGPT account ID. A missing or empty target ID returns the normal 401 OpenAI authentication envelope, consumes no credit, keeps the observed credit snapshot, and starts no post-redemption usage refresh.
+
+For example, caller A can select a cached credit on B, but B's missing workspace identity cannot be replaced with A's identity or an omitted upstream account header. These consume routes have no API-key usage reservation: refusal preserves the credit snapshot rather than settling a token reservation. The canonical `/api/codex` and backend WHAM/Codex aliases, with and without trailing slashes, use the same refusal. Tests use inert upstream stubs and never redeem real credits.

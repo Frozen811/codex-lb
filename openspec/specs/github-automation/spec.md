@@ -2,7 +2,9 @@
 
 ## Purpose
 Repository automation around the Codex review merge gate: the `Codex review labels` workflow and its synchronization script keep `🤖 codex: ok` / `🤖 codex: needs work` labels faithful to current-head CI state and Codex review evidence, keep `needs rebase` faithful to confirmed merge-conflict state, and use token sourcing that stays within GitHub API quotas and degrades safely when privileged credentials are unavailable.
+
 ## Requirements
+
 ### Requirement: Windows startup is checked automatically
 
 The Windows startup regression workflow SHALL run on main pushes, pull-request source updates, merge-group events and manual dispatches with read-only repository permissions. It MUST test platform portability and architecture diagnostics on a Windows runner and smoke-test an installed wheel outside the checkout using isolated storage. The smoke MUST observe successful readiness, dashboard HTML, JavaScript and CSS rather than only importing the application.
@@ -236,3 +238,26 @@ The repository SHALL provide workflow automation to reconcile status labels on i
 - **WHEN** an automated bot leaves a comment
 - **THEN** `needs-info` is preserved
 
+### Requirement: CI area detection includes complete change evidence
+
+Pull-request CI SHALL select affected areas from every changed file, including both names of renamed files. If file evidence is unavailable, malformed, cyclic, or incomplete relative to the pull request's changed-file count, CI MUST select every area. Changes to CI selection or workflow definitions MUST select every area. Packaging hooks MUST trigger backend, Docker and Nix checks, and changes to Nix package source inputs MUST trigger Nix checks.
+
+#### Scenario: Backend source is renamed outside backend
+
+- **WHEN** a PR renames a file from `app/` into another area
+- **THEN** backend CI runs for the removed source path as well as checks for the new path
+
+#### Scenario: API returns only part of the change
+
+- **WHEN** the PR reports more changed files than the API returns, or a page is malformed or repeats
+- **THEN** all CI areas are selected without claiming the partial list is complete
+
+#### Scenario: Packaging or selector changes
+
+- **WHEN** a packaging hook or CI selector changes
+- **THEN** packaging checks run for the hook, and all areas run for the selector
+
+#### Scenario: Nix source changes
+
+- **WHEN** application, frontend, configuration or build-helper inputs consumed by the Nix package change
+- **THEN** Nix validation runs

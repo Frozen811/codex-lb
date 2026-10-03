@@ -2,7 +2,9 @@
 
 ## Purpose
 Governs how replicas join, stay in, and leave the shared bridge ring that routes hard-affinity HTTP bridge requests to the owning replica. Sibling replicas must converge on the same view of which instances are alive, so a replica registers before serving bridge traffic, heartbeats on a fixed cadence, ages its row on shutdown rather than deleting it, and dead rows are eventually purged.
+
 ## Requirements
+
 ### Requirement: Replicas register in the bridge ring before serving bridge traffic
 Each replica MUST register its instance id (and advertised endpoint when configured) in the shared `bridge_ring_members` table before hard-affinity HTTP bridge requests are admitted. While registration is incomplete in a multi-replica deployment, hard-affinity bridge requests MUST wait for registration up to the configured connect timeout and fail with a retryable `bridge_owner_unreachable` error when the wait expires.
 
@@ -41,3 +43,18 @@ The background cleanup loop MUST delete `bridge_ring_members` rows whose heartbe
 - **THEN** the old row is deleted
 - **AND** the recent row is preserved
 
+### Requirement: Bridge signing uses the configured shared encryption key
+
+Internal bridge request signing and verification MUST use the configured encryption key. A nonempty `CODEX_LB_ENCRYPTION_KEY` MUST take precedence over `CODEX_LB_ENCRYPTION_KEY_FILE` without reading or creating a file key. With no environment key, the configured file key MUST be used. Replicas sharing the effective key MUST accept each other's authentic forwards; a replica with a different effective key MUST reject the signature before forwarding upstream.
+
+#### Scenario: Shared environment key and distinct file keys
+- **WHEN** two replicas share an environment key and have distinct configured file keys
+- **THEN** the receiver accepts the signed request using the environment key and the file keys remain unchanged
+
+#### Scenario: File-only shared key
+- **WHEN** replicas have no environment key and share the configured file key
+- **THEN** the receiver accepts the signed request
+
+#### Scenario: Mismatched effective key
+- **WHEN** the receiver's effective key differs from the signing replica's key
+- **THEN** signature verification refuses the forward

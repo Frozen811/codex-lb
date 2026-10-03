@@ -1,8 +1,8 @@
 site_name: codex-lb
 site_description: Codex load balancer and proxy for ChatGPT accounts with usage dashboard
-site_url: https://soju06.github.io/codex-lb/
-repo_url: https://github.com/Soju06/codex-lb
-repo_name: Soju06/codex-lb
+site_url: !ENV [PAGES_BASE_URL, "https://frozen811.github.io/codex-lb/"]
+repo_url: https://github.com/Frozen811/codex-lb
+repo_name: Frozen811/codex-lb
 edit_uri: edit/main/docs/
 docs_dir: docs
 
@@ -70,6 +70,7 @@ nav:
   - Database: database.md
   - Deployment:
       - Python: deployment/python.md
+      - Nix: deployment/nix.md
       - Docker: deployment/docker.md
       - Kubernetes: deployment/kubernetes.md
       - Remote Access: deployment/remote.md

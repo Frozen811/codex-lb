@@ -8,7 +8,7 @@ from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
-from sqlalchemy import inspect
+from sqlalchemy import inspect, select
 
 from app.core.auth import generate_unique_account_id
 from app.core.auth.refresh import RefreshError
@@ -130,6 +130,55 @@ async def test_force_probe_settles_after_repository_session_closes(
         assert runtime.health_tier == (
             HEALTH_TIER_HEALTHY if completed == PROBE_SUCCESS_STREAK_REQUIRED else HEALTH_TIER_PROBING
         )
+    assert "Force Probe advisory settlement failed" not in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("usage_case", ["weekly_primary", "elapsed_primary", "elapsed_secondary"])
+async def test_force_probe_settlement_normalizes_usage_after_real_teardown(
+    async_client, app_instance, monkeypatch, caplog, usage_case
+):
+    """Raw storage slots and expired rows must not pin accepted probes in draining."""
+
+    async def fake_probe(self, **kwargs):  # noqa: ARG001
+        return 200
+
+    async def fake_fetch_usage(**_kwargs):
+        return UsagePayload(plan_type="pro")
+
+    monkeypatch.setattr(AccountsService, "_send_probe_request", fake_probe)
+    monkeypatch.setattr("app.modules.usage.updater.fetch_usage", fake_fetch_usage)
+    account_id = await _import_test_account(
+        async_client, email="probe-normalization@example.test", account_id="probe-normalization"
+    )
+    now = utcnow()
+    window = "secondary" if usage_case == "elapsed_secondary" else "primary"
+    used = 87.0 if usage_case == "weekly_primary" else 100.0
+    reset_at = int(now.timestamp()) + (86400 if usage_case == "weekly_primary" else -1)
+    async with SessionLocal() as session:
+        session.add(
+            UsageHistory(
+                account_id=account_id,
+                window=window,
+                used_percent=used,
+                recorded_at=now,
+                reset_at=reset_at,
+                window_minutes=10080 if usage_case != "elapsed_primary" else 300,
+            )
+        )
+        await session.commit()
+    balancer = accounts_api.get_proxy_service_for_app(app_instance)._load_balancer
+    runtime = RuntimeState(health_tier=HEALTH_TIER_PROBING, error_count=2, last_error_at=1.0)
+    balancer._runtime[account_id] = runtime
+    for _ in range(PROBE_SUCCESS_STREAK_REQUIRED):
+        response = await async_client.post(f"/api/accounts/{account_id}/probe")
+        assert response.status_code == 200, response.text
+        assert response.json()["probeStatusCode"] == 200
+        assert runtime.error_count == 0
+    assert runtime.health_tier == HEALTH_TIER_HEALTHY
+    async with SessionLocal() as session:
+        row = (await session.execute(select(UsageHistory).where(UsageHistory.account_id == account_id))).scalar_one()
+        assert (row.window, row.used_percent, row.reset_at) == (window, used, reset_at)
     assert "Force Probe advisory settlement failed" not in caplog.text
 
 

@@ -24,3 +24,18 @@ Supported `notes/v2` operations (GET and POST):
 
 Unrecognized operation names return HTTP 404 with OpenAI-style error envelope.
 Requests route to the thread owner via `thread-id` headers and retain child-thread/subagent placement preferences.
+
+## Transport parity and verification scope
+
+The [opaque transport requirement](spec.md#requirement-native-history-and-notes-preserve-opaque-transport-data)
+keeps native payloads and allowed encryption headers unmodified. For example,
+`POST /v1/alpha/notes/v2/write_file/?path=a&path=b` forwards the original bytes
+and both query values to the selected account's `codex/alpha/notes/v2/write_file`.
+The duplicated `/backend-api/codex/v1/` prefix uses the same operation.
+
+Local route coverage exercises every supported operation and slash variant,
+unknown operations, scoped API-key admission, repeated thread affinity and
+child-thread placement. A loopback HTTP upstream additionally checks raw media
+type and gzip decoding. Encryption-header values in these tests are synthetic;
+no hosted encryption/decryption or account-pool history recovery is claimed.
+Unavailable upstreams retain the existing control error and failover policy.

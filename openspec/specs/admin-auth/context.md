@@ -73,3 +73,21 @@ Password login and TOTP verification: max 8 attempts per 60-second window per cl
 ## Audit Logging
 
 Events: `login_success`, `login_failed`, `totp_enabled`, `totp_disabled`, `settings_changed`. Stored in `audit_logs` table via `AuditService.log_async()`.
+
+## Trusted proxy socket provenance (SETUP-06, 2026-10-02)
+
+The outer middleware captures the server-observed peer before projecting the
+forwarded user's address. Identity-header sanitization and principal resolution
+now authorize that captured peer. This prevents a remote user IP from removing
+valid proxy authority, or a projected loopback IP from creating authority for an
+untrusted socket. Missing capture fails closed; no client-address fallback is
+introduced. Caller projection remains available for locality/firewall/audit IP.
+
+For example, a loopback nginx peer may assert Remote-User for a user at
+203.0.113.42 even when only 127.0.0.1/32 is trusted. The same forwarded fields
+from an untrusted peer do not authorize the identity. Route regressions verify
+settings access/session, duplicate denial and audit actor with the projected IP.
+This does not grant an identity new role permissions or change password fallback.
+TLS scheme projection has its own allowlist; see deployment-networking context.
+Production login and physical remote-host evidence remain separate from the
+isolated tests and runtime rehearsal recorded in issues-check section 25.

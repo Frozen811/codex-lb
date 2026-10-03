@@ -50,3 +50,81 @@ docker exec codex-lb getent ahostsv4 chatgpt.com
 The listener exposes host DNS to containers that can reach that bridge, so limit it to the bridge gateway rather than `0.0.0.0`. A future container recreation must pass `--dns "$gateway"` or reapply the resolver override. Operators whose host already has a stable local resolver can instead recreate once with the documented Linux `--network host` launch.
 
 Runtime logs use the `process_network_recovery` marker with low-cardinality stages such as `detected`, `retrying`, `recovered`, and `exhausted`. They intentionally omit resolver addresses, request bodies, tokens, raw continuity keys, and account email addresses.
+
+## Verified standalone nginx example (2026-10-02)
+
+`deploy/nginx.conf` belongs in nginx's http context. The local example listens
+on 8080 and forwards to loopback 2455 with Host including port, HTTP/1.1
+WebSocket upgrade headers, overwritten forwarded client identity, disabled SSE
+buffering and bounded read/send timeouts. Configure TLS separately for public
+access; OAuth callback 1455 is not served by the dashboard proxy.
+
+Example: the owned CLI binds loopback and trusts forwarded headers only from
+127.0.0.1/32. This keeps remote clients subject to bootstrap/API-key policies.
+Container deployments must adapt the upstream and trusted peer address to
+their network. A shared network namespace was used for the local audit so the
+shipped loopback example ran unchanged. Readiness/HTML/assets and Origin/auth
+refusals passed against the actual app. SSE timing and WebSocket 101/echo were
+verified against a disposable synthetic backend. TLS/provider authentication
+and actual Codex generation are not inferred from those checks.
+
+No systemd unit or standalone remote installer is shipped. Independently
+configured supervisors retain their own executable/env/data configuration.
+See docs/deployment/remote.md and issues-check.md section 22.
+
+## Setup endpoint matrix (2026-10-02)
+
+Purpose: distinguish a listener, a host-published endpoint and an outbound
+destination for SETUP-04. For example, `8080:2455` makes a host client use 8080,
+while a sibling container uses the service name and 2455. A container's loopback
+does not reach a sibling or a host DB; Docker Desktop provides a host endpoint,
+and native Linux needs an explicit gateway mapping plus a reachable DB listener.
+WSL NAT/mirrored and LAN clients require their own reachability probes; a local
+dashboard does not certify those routes.
+
+The existing Docker entrypoint binds all IPv4 interfaces inside its namespace;
+host-loopback port publication is used for isolated rehearsals. No routing or
+authentication behavior changes. HTTP 2455 and login-only OAuth callback 1455 are
+independent; opening a port does not start a listener. Callback setup belongs to
+the OAuth flow rather than general inbound readiness.
+
+Disposable source-mounted Docker Desktop runtime verified bridge readiness/HTML,
+container-local HTTP, host.docker.internal to a synthetic host listener, sibling
+PostgreSQL/MySQL DNS, and DNS/TLS transport. An auth.openai.com probe received HTTP
+403, which proves an HTTP response after transport, not login or generation.
+An invalid reserved hostname failed at DNS. Busy published/CLI listener ports
+were tested separately from upstream errors. The guide preserves bootstrap and
+client auth requirements and explains these diagnostic stages. Network-switching,
+physical LAN, WSL mode transitions and native Linux host networking remain
+distinct runtime evidence; see issues-check.md section 24.
+
+## TLS/authenticated transport rehearsal (SETUP-05, 2026-10-02)
+
+The shipped nginx HTTP example remains unchanged. Its TLS adaptation retains
+headers/buffering/timeouts and substitutes a TLS listener with certificate/key
+paths. Clients verify the certificate using their normal store or explicit CA.
+Projection trust (`FORWARDED_ALLOW_IPS`, default loopback) and application
+identity/firewall trust (trusted proxy CIDRs plus opt-in) are separate: container
+proxies need both sets to match their actual socket source.
+
+Purpose: verify transport and authentication through the actual product, rather
+than inferring them from an echo backend. Example: TLS port 8443 proxies plain
+HTTP 2455, retaining Host including port and forwarded scheme. Remote bootstrap
+without a token refuses, authenticated setup succeeds, a foreign Origin refuses,
+and keyless generation refuses after API-key auth is enabled. Real proxy routes
+stream a synthetic upstream response over HTTP and WebSocket.
+
+The local Docker Desktop rehearsal verified direct/nginx HTTP/nginx TLS SSE
+first events before delayed completion; WebSocket application completion and
+fresh reconnect on all three paths; certificate trust positive/negative probes;
+and actual Codex CLI HTTP/WS generation. The fixture uses IPv4 publication and
+an IP SAN certificate: localhost resolution on this Windows host tried an IPv6
+path that delayed TLS or exhausted a handshake deadline. Using the verified
+IPv4 address isolated that addressing issue; no app/network timeout threshold
+was raised to conceal it. This is not physical LAN, TLS-provider or VPN evidence.
+
+Timeout settings describe different scopes; voluntary WS reconnect is not proof
+of every idle disconnect condition. Outbound proxy-env contract tests retained
+their assertions after Windows setup stopped deleting lowercase values through
+uppercase aliases. Runtime egress used a direct local fixture; a live external
+authenticated forward proxy remains separate evidence. See issues-check §25.

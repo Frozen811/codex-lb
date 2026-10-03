@@ -1,5 +1,42 @@
 # Responses API Compatibility Context
 
+## Collaboration namespaces on model sources
+
+The [source tool-filtering contract](spec.md#requirement-source-routed-responses-tools-are-capability-filtered)
+uses a nonblank string `multi_agent_version` as an explicit namespace opt-in,
+including future versions. `{"multi_agent_version":" v99 "}` therefore keeps
+the client's complete `collaboration` namespace and nested schemas. Missing,
+blank or non-string declarations stay conservative; explicit
+`experimental_supported_tools: ["namespace"]` also permits namespaces.
+This declaration does not enable source WebSocket transport or modify the
+source's instructions, and clients using a pinned catalog need to refresh it.
+
+Choice filtering follows the tools that survived. For example, if a source
+keeps `shell` but drops `collaboration`, a forced
+`{"type":"function","namespace":"collaboration","name":"spawn_agent"}`
+is removed. In an `allowed_tools` choice, that entry is pruned while the bare
+`shell` entry and `mode` remain. Previously the dangling function choice could
+make an otherwise repaired request fail upstream. A declared namespace keeps
+the namespaced function choice intact.
+
+Recording loopback upstreams verify both Responses routes and slash variants,
+including schemas, choices and hosted-tool include pruning. Real provider
+collaboration behavior and public/cloud artifacts require separate evidence.
+
+## Standalone search ingress
+
+The [search alias requirement](spec.md#requirement-standalone-search-ingress-aliases-are-slash-equivalent)
+covers canonical Codex, `/v1` and duplicated Codex-prefix paths. For example,
+`POST /v1/alpha/search/?tag=a&tag=b` dispatches directly to `codex/alpha/search`
+with the original bytes and both query values. Previously the slash form hit
+the catch-all route and returned 405 rather than reaching search.
+
+Hidden slash routes reuse the control handler and its authentication, scope,
+media-type replacement and error normalization. Local HTTP upstream tests
+verify gzip decoding and a single Content-Type field; native routed transport
+tests cover JSON/SDP casing and bodyless removal. These checks use synthetic
+search output and do not establish live hosted search or public image parity.
+
 ## Purpose and Scope
 
 This capability implements OpenAI-compatible behavior for `POST /v1/responses`, including request validation, streaming events, non-streaming aggregation, and OpenAI-style error envelopes. The scope is limited to what the ChatGPT upstream can provide; unsupported features are explicitly rejected.
@@ -371,3 +408,13 @@ account-selection change, or new event-size policy is involved.
 ## Detached retirement sweep deadline
 
 Issue #2149 bounds aggregate detached-session lock waiting during request finalization. A sweep shares five seconds: if its first attempt consumes three seconds, the next receives two, and later attempts stop at expiry. Deferred generations remain tracked for later requests and their lifecycle owners. The deadline does not cancel resource-close owners or replace their existing close timeout.
+
+## Multiline bridge frames, Lite payloads and message-size evidence
+
+The [complete-document framing](spec.md#requirement-http-bridge-preserves-complete-websocket-json-documents), [Lite tool-call serialization](spec.md#requirement-responses-lite-signals-serialize-tool-calls) and [close-1009 contract](spec.md#requirement-websocket-close-1009-is-terminal-and-account-neutral) apply at the final upstream/relay boundary. LF/CRLF formatting is JSON whitespace, not an SSE delimiter inside an upstream WebSocket message. Parsed output-item events are reserialized after any duplicate-tool rewrite; other unchanged single-line frames retain the existing fast path.
+
+For example, a pretty error whose parameter is `parallel_tool_calls` reaches the client as that error without a two-minute eventless timeout. A body-derived Lite request sends `parallel_tool_calls=false` and `reasoning.context=all_turns`; inbound client headers do not create Lite trust.
+
+aiohttp can report its own reader limit as `ERROR(WebSocketError(1009))` rather than a received close frame. Preserve this typed size evidence before generic transport recovery so an oversized message produces `payload_too_large` and releases the turn instead of penalizing the account or replaying the request. Other protocol codes retain their existing behavior. This classification does not change the configured message-size limit and makes no claim that switching accounts could repair the oversized message.
+
+The loopback wire tests use a bounded client reader and actual aiohttp socket traffic. They establish local transport and route behavior only; public artifacts, deployed services and real upstream/client traffic require separate evidence.

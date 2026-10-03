@@ -321,10 +321,13 @@ def _parse_server_port(raw_port: str) -> int:
 
 def _parse_server_timeout_keep_alive(raw_timeout: str) -> int:
     try:
-        return int(raw_timeout)
+        timeout = int(raw_timeout)
     except ValueError as exc:
         message = f"--timeout-keep-alive/UVICORN_TIMEOUT_KEEP_ALIVE must be an integer, got {raw_timeout!r}."
         raise SystemExit(message) from exc
+    if timeout < 0:
+        raise SystemExit(f"--timeout-keep-alive/UVICORN_TIMEOUT_KEEP_ALIVE must be non-negative, got {raw_timeout!r}.")
+    return timeout
 
 
 def _parse_server_ws_max_size(raw_ws_max_size: str) -> int:

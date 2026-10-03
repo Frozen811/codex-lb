@@ -91,8 +91,10 @@ def _deployment_annotation(rendered: str, key: str) -> str:
     return match.group(1).strip().strip('"')
 
 
-def test_external_secrets_install_uses_startup_migration_and_skips_pre_install_hook() -> None:
+def test_external_secrets_install_creates_migration_before_readiness_wait() -> None:
     rendered = _helm_template(
+        "--set",
+        "postgresql.enabled=false",
         "--set",
         "externalSecrets.enabled=true",
         "--set",
@@ -102,8 +104,9 @@ def test_external_secrets_install_uses_startup_migration_and_skips_pre_install_h
     )
 
     assert 'CODEX_LB_DATABASE_MIGRATE_ON_STARTUP: "false"' in rendered
-    assert '"helm.sh/hook": "post-install,pre-upgrade"' in rendered
-    assert '"helm.sh/hook": "pre-install,pre-upgrade"' not in rendered
+    migration = next(doc for doc in _helm_documents(rendered) if doc["kind"] == "Job")
+    assert "helm.sh/hook" not in migration["metadata"].get("annotations", {})
+    assert "name: wait-for-schema-head" in rendered
 
 
 def test_external_secrets_upgrade_keeps_startup_migration_disabled_and_runs_hook() -> None:
@@ -118,7 +121,7 @@ def test_external_secrets_upgrade_keeps_startup_migration_disabled_and_runs_hook
     )
 
     assert 'CODEX_LB_DATABASE_MIGRATE_ON_STARTUP: "false"' in rendered
-    assert '"helm.sh/hook": "post-install,pre-upgrade"' in rendered
+    assert '"helm.sh/hook": "pre-upgrade"' in rendered
 
 
 def test_external_secret_uses_v1_api_and_default_json_properties() -> None:
@@ -260,6 +263,7 @@ def test_statefulset_translates_legacy_recreate_strategy_to_rolling_update() -> 
 
 def test_migration_hook_job_includes_image_pull_secrets() -> None:
     rendered = _helm_template(
+        "--is-upgrade",
         "--show-only",
         "templates/hooks/migration-job.yaml",
         "--set",
@@ -270,7 +274,7 @@ def test_migration_hook_job_includes_image_pull_secrets() -> None:
     assert "name: private-registry" in rendered
 
 
-def test_chart_managed_secret_uses_post_install_hook_path() -> None:
+def test_chart_managed_secret_install_uses_regular_migration_job() -> None:
     rendered = _helm_template(
         "--set",
         "postgresql.enabled=false",
@@ -283,12 +287,14 @@ def test_chart_managed_secret_uses_post_install_hook_path() -> None:
     )
 
     assert 'CODEX_LB_DATABASE_MIGRATE_ON_STARTUP: "false"' in rendered
-    assert '"helm.sh/hook": "post-install,pre-upgrade"' in rendered
+    migration = next(doc for doc in _helm_documents(rendered) if doc["kind"] == "Job")
+    assert "helm.sh/hook" not in migration["metadata"].get("annotations", {})
     assert "serviceAccountName: default" in rendered
 
 
-def test_direct_external_database_install_uses_post_install_hook_path() -> None:
+def test_direct_external_database_upgrade_replaces_install_job_with_hook() -> None:
     rendered = _helm_template(
+        "--is-upgrade",
         "--set",
         "postgresql.enabled=false",
         "--set",
@@ -297,7 +303,7 @@ def test_direct_external_database_install_uses_post_install_hook_path() -> None:
         "migration.enabled=true",
     )
 
-    assert '"helm.sh/hook": "post-install,pre-upgrade"' in rendered
+    assert '"helm.sh/hook": "pre-upgrade"' in rendered
     assert "serviceAccountName: default" in rendered
 
 
@@ -312,7 +318,15 @@ def test_bundled_mode_overlay_enables_startup_migration_and_skips_schema_gate() 
     assert 'CODEX_LB_DATABASE_MIGRATE_ON_STARTUP: "true"' in rendered
     assert "name: wait-for-schema-head" not in rendered
     assert "name: wait-for-database" in rendered
-    assert '"helm.sh/hook": "pre-upgrade"' in rendered
+    assert not any(doc["kind"] == "Job" for doc in _helm_documents(rendered))
+    upgrade = _helm_template(
+        "--is-upgrade",
+        "-f",
+        str(_CHART_DIR / "values-bundled.yaml"),
+        "--set",
+        "postgresql.auth.password=local-password",
+    )
+    assert '"helm.sh/hook": "pre-upgrade"' in upgrade
 
 
 def test_existing_secret_install_keeps_pre_install_hook_path() -> None:
@@ -345,6 +359,52 @@ def test_external_database_existing_secret_install_keeps_pre_install_hook_path()
     )
 
     assert '"helm.sh/hook": "pre-install,pre-upgrade"' in rendered
+
+
+def test_existing_db_secret_with_generated_app_secret_uses_regular_install_job() -> None:
+    rendered = _helm_template(
+        "--set",
+        "postgresql.enabled=false",
+        "--set",
+        "externalDatabase.existingSecret=db-only",
+    )
+    documents = _helm_documents(rendered)
+    migration = next(doc for doc in documents if doc["kind"] == "Job")
+    secret = next(doc for doc in documents if doc["kind"] == "Secret")
+    assert "helm.sh/hook" not in migration["metadata"].get("annotations", {})
+    volumes = migration["spec"]["template"]["spec"]["volumes"]
+    assert volumes[0]["secret"]["secretName"] == secret["metadata"]["name"]
+    env = migration["spec"]["template"]["spec"]["containers"][0]["env"]
+    database_env = next(item for item in env if item["name"] == "CODEX_LB_DATABASE_URL")
+    assert database_env["valueFrom"]["secretKeyRef"]["name"] == "db-only"
+    key_env = next(item for item in env if item["name"] == "CODEX_LB_ENCRYPTION_KEY_FILE")
+    assert key_env["value"] == "/var/lib/codex-lb/encryption.key"
+
+
+def test_read_only_app_root_uses_mounted_scratch_directory() -> None:
+    documents = _helm_documents(_helm_template())
+    config = next(doc for doc in documents if doc["kind"] == "ConfigMap" and doc["metadata"]["name"] == "codex-lb")
+    assert config["data"]["CODEX_LB_DATA_DIR"] == "/tmp/codex-lb"
+    workload = next(
+        doc for doc in documents if doc["kind"] == "StatefulSet" and doc["metadata"]["name"] == "codex-lb-workload"
+    )
+    container = workload["spec"]["template"]["spec"]["containers"][0]
+    assert container["securityContext"]["readOnlyRootFilesystem"] is True
+    assert any(mount["mountPath"] == "/tmp" for mount in container["volumeMounts"])
+
+
+def test_default_chart_selects_fork_for_app_and_migration() -> None:
+    documents = _helm_documents(_helm_template("--is-upgrade"))
+    app_version = yaml.safe_load((_CHART_DIR / "Chart.yaml").read_text(encoding="utf-8"))["appVersion"]
+    for kind in ("StatefulSet", "Job"):
+        resource = next(
+            doc
+            for doc in documents
+            if doc["kind"] == kind and doc["metadata"]["name"] in ("codex-lb-workload", "codex-lb-migrate")
+        )
+        assert resource["spec"]["template"]["spec"]["containers"][0]["image"] == (
+            f"ghcr.io/frozen811/codex-lb:{app_version}"
+        )
 
 
 def test_external_db_mode_overlay_renders_schema_gate_init_container() -> None:
@@ -650,7 +710,7 @@ def test_gateway_api_does_not_render_gateway_by_default() -> None:
 
 
 def test_bundled_kind_smoke_preserves_primary_ingress_paths() -> None:
-    script = (_REPO_ROOT / "scripts" / "helm-kind-smoke.sh").read_text()
+    script = (_REPO_ROOT / "scripts" / "helm-kind-smoke.sh").read_text(encoding="utf-8")
 
     assert "--set-string 'ingress.hosts[0].host=codex-lb.localtest.me'" in script
     assert "--set-string 'ingress.hosts[0].paths[0].path=/'" in script
@@ -702,7 +762,7 @@ def test_helm_test_pod_image_can_be_overridden() -> None:
 
 
 def test_kind_smoke_overrides_helm_test_image_and_external_db_replicas() -> None:
-    script = (_REPO_ROOT / "scripts" / "helm-kind-smoke.sh").read_text()
+    script = (_REPO_ROOT / "scripts" / "helm-kind-smoke.sh").read_text(encoding="utf-8")
     bundled_install = _smoke_install_command(script, "installing bundled release ${release}")
     external_db_install = _smoke_install_command(script, "installing external DB release ${release}")
 
@@ -715,7 +775,7 @@ def test_kind_smoke_overrides_helm_test_image_and_external_db_replicas() -> None
 
 
 def test_kind_smoke_logs_timestamped_major_steps() -> None:
-    script = (_REPO_ROOT / "scripts" / "helm-kind-smoke.sh").read_text()
+    script = (_REPO_ROOT / "scripts" / "helm-kind-smoke.sh").read_text(encoding="utf-8")
 
     assert 'date -u +"%Y-%m-%dT%H:%M:%SZ"' in script
     assert "log_step" in script
@@ -726,7 +786,7 @@ def test_kind_smoke_logs_timestamped_major_steps() -> None:
 
 
 def test_kind_smoke_bounds_helm_test_wait() -> None:
-    script = (_REPO_ROOT / "scripts" / "helm-kind-smoke.sh").read_text()
+    script = (_REPO_ROOT / "scripts" / "helm-kind-smoke.sh").read_text(encoding="utf-8")
 
     assert 'HELM_TEST_TIMEOUT="${HELM_TEST_TIMEOUT:-60s}"' in script
     assert (
@@ -748,6 +808,7 @@ def test_auto_advertise_bridge_url_uses_service_port() -> None:
 
 def test_migration_job_image_does_not_duplicate_registry_prefix() -> None:
     rendered = _helm_template(
+        "--is-upgrade",
         "--show-only",
         "templates/hooks/migration-job.yaml",
         "--set",

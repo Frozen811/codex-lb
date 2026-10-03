@@ -6,6 +6,26 @@ This capability defines what operators should be able to see in the live server 
 
 See `openspec/specs/proxy-runtime-observability/spec.md` for normative requirements.
 
+## Authorization field redaction
+
+Unquoted authorization values are masked through the current line end. Commas,
+ampersands, malformed parameters and names like `status` cannot identify a safe
+diagnostic boundary; a previous `[REDACTED]` marker also does not prove that a
+following credential tail is safe. Complete quoted values retain their quotes
+and adjacent fields. Subsequent lines and structured log extras remain useful
+for diagnostics. This policy applies to explicit Authorization fields at WARNING
+or higher and to error-log fields; existing lower-level redaction boundaries stay
+unchanged.
+
+For example, `authorization=Digest username="a,b", response="QA_SENTINEL", status=failed`
+renders as `authorization=[REDACTED]`. Put `status=failed` in a structured extra
+or on the next line to retain it. Generic Basic/Bearer tokens outside an explicit
+authorization field keep their existing separator behavior.
+
+The independent UP-ISSUE-2028 audit found partial masking in the earlier source;
+text/JSON formatting, exception rendering, actual log-file writes, quoted fields
+and CR/LF idempotency now have regression coverage.
+
 ## Decisions
 
 - **Timestamps are always on:** timestamped console logs are a baseline operator need, not a debug-only feature.
@@ -57,6 +77,23 @@ The affinity history converges with dashboard roles, users, the final compatibil
 
 The subsequent invite migration converges through a second no-op join. Pending, consumed and revoked invite rows retain their hashes, expiry/consumption/revocation times, creator snapshots and flags. The older affinity history creates an empty invite table through the unchanged upstream migration.
 
+## Output sampling across JSON serialization
+
+Timing observation uses the same decoded content fields as structured streaming,
+including the verbatim relay path. Upstream SSE carriers retain their parsed
+payload, so reading it for output sampling does not require a second decode.
+Plain string producers need a parse; a lexical substring check cannot distinguish
+a root `delta` from nested metadata or recognize JSON-escaped property names.
+The observation changes no relayed bytes or routing/settlement decisions.
+
+For example, reasoning observed at 125 ms, first text at 500 ms, second text at
+750 ms and completion at 1,000 ms produce TTFT 125 ms and two output chunks.
+With 24 output tokens including four reasoning tokens, qualified TPS is
+`(24 - 4) / ((1000 - 500) / 1000) = 40`. Two seconds of cleanup after terminal
+receipt can make total latency 3,000 ms without changing that estimate.
+`"delta" : "hello"` and `"\u0064elta":"hello"` describe the same content;
+`"metadata":{"delta":"hello"},"delta":""` contains no output sample.
+
 ## Optional model-source telemetry
 
 Source metadata is ancillary to the forwarded response. Preserve reported reasoning
@@ -78,4 +115,6 @@ The existing routing cache is seeded at startup and refreshed on account-routing
 
 The routing cache continues to load its existing complete status map. Metrics omit rows pending deletion, matching the account repository's operator-facing inventory. Only reauthentication-required tokens need decryption for the expiry predicate. Active tokens are counted even when their JWT expiry is past because ordinary routing can refresh them; unknown expiry on a reauthentication-required account remains eligible under the existing predicate.
 
-For example, two active accounts and one reauthentication-required account with a future token expiry produce `accounts_available = 3`. If all three are occupied by streams, the metric remains 3. When the reauthentication token expires, the next scrape reports 2 without changing the status inventory.
+For example, two active accounts and one reauthentication-required account with a refresh-only warning and future token expiry produce `accounts_available = 3`. If all three are occupied by streams, the metric remains 3. When the reauthentication token expires, the next scrape reports 2 without changing the status inventory.
+
+The availability projection also carries the committed credential rejection reason into the same shared eligibility predicate used by routing. A revoked or invalidated access credential remains unavailable even if its JWT expires tomorrow or cannot be parsed. Its `reauth_required` inventory count remains visible. A refresh-only warning with usable access credentials remains eligible; after credential repair clears the blocking reason, the next scrape reflects recovery. This does not add request-specific quota, cooldown, or concurrency filters or another database query.

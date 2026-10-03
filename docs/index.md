@@ -2,6 +2,12 @@
 
 Load balancer for ChatGPT accounts. Pool multiple accounts, track usage, manage API keys, view everything in a dashboard.
 
+These are the English guides for **Frozen811/codex-lb**, a community fork of
+[Soju06/codex-lb](https://github.com/Soju06/codex-lb). Independent verification
+remains in progress; historical public artifacts do not contain every later
+source fix. Choose [Python](deployment/python.md), [Docker](deployment/docker.md)
+or [Nix](deployment/nix.md) for the channel's source and runtime identity.
+
 | ![dashboard](screenshots/dashboard.jpg) | ![accounts](screenshots/accounts.jpg) |
 |:---:|:---:|
 
@@ -64,10 +70,10 @@ codex-lb SwiftBar is read-only; consult its compatibility table for the
 authentication modes supported by the current release. Review each project's
 repository and release notes before connecting it.
 
-OpenSpec: the [user-documentation capability](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/user-documentation)
-governs this listing, while [admin-auth](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/admin-auth)
+OpenSpec: the [user-documentation capability](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/user-documentation)
+governs this listing, while [admin-auth](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/admin-auth)
 defines the guest and admin access contracts.
 
 ---
 
-codex-lb is spec-driven: normative behavior lives in [OpenSpec capabilities](https://github.com/Soju06/codex-lb/tree/main/openspec/specs) in the repository. Docs pages describe how to use the project and link back to the specs that govern them.
+codex-lb is spec-driven: normative behavior lives in [OpenSpec capabilities](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs) in the repository. Docs pages describe how to use the project and link back to the specs that govern them.

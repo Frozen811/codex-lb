@@ -1099,7 +1099,9 @@ async def codex_safety_arc(
 
 
 @router.post("/alpha/search")
+@router.post("/alpha/search/", include_in_schema=False)
 @v1_router.post("/alpha/search")
+@v1_router.post("/alpha/search/", include_in_schema=False)
 async def codex_alpha_search(
     request: Request,
     context: ProxyContext = Depends(get_proxy_context),
@@ -1858,6 +1860,7 @@ async def v1_models(
 
 
 @v1_router.get("/models/{model_id:path}", response_model=None)
+@v1_router.get("/models/{model_id:path}/", response_model=None, include_in_schema=False)
 async def v1_model(
     model_id: str,
     api_key: ApiKeyData | None = Security(validate_proxy_api_key),
@@ -4647,7 +4650,7 @@ def _resolved_context_window(model: UpstreamModel, overrides: Mapping[str, int])
 
 def _v1_max_output_tokens(model: UpstreamModel) -> int | None:
     raw_value = model.raw.get("max_output_tokens")
-    if isinstance(raw_value, int):
+    if isinstance(raw_value, int) and not isinstance(raw_value, bool) and raw_value > 0:
         return raw_value
     return _V1_MAX_OUTPUT_TOKEN_OVERRIDES.get(model.slug)
 
@@ -5924,13 +5927,19 @@ def _drop_unsupported_source_response_tools(
     _drop_dangling_source_tool_choice(payload, frozenset(kept_types))
 
 
+def _source_tool_choice_supported(choice: Mapping[str, JsonValue], kept_types: frozenset[str]) -> bool:
+    if choice.get("type") == "function" and choice.get("namespace") is not None:
+        return "namespace" in kept_types
+    return _source_tool_type_supported(choice.get("type"), kept_types)
+
+
 def _drop_dangling_source_tool_choice(payload: dict[str, JsonValue], kept_types: frozenset[str]) -> None:
     """Keep tool_choice consistent with the tools that survived filtering.
 
     A forced tool_choice that references a dropped hosted tool (for example
     ``{"type": "web_search"}``) would make the source reject the request, so it
-    falls back to the provider default by removing the key. ``function``-typed
-    choices always stay: function tools are never dropped by the filter.
+    falls back to the provider default by removing the key. Bare function
+    choices stay; namespaced functions require a retained namespace tool.
 
     Entries under ``allowed_tools`` carry the same tool-type alias
     normalization as the ``tools`` list by the time this runs (see
@@ -5941,16 +5950,12 @@ def _drop_dangling_source_tool_choice(payload: dict[str, JsonValue], kept_types:
     if not is_json_mapping(tool_choice):
         return
     choice_type = tool_choice.get("type")
-    if choice_type == "function":
-        return
     if choice_type == "allowed_tools":
         allowed = tool_choice.get("tools")
         if not is_json_list(allowed):
             return
         kept_allowed: list[JsonValue] = [
-            entry
-            for entry in allowed
-            if is_json_mapping(entry) and _source_tool_type_supported(entry.get("type"), kept_types)
+            entry for entry in allowed if is_json_mapping(entry) and _source_tool_choice_supported(entry, kept_types)
         ]
         if len(kept_allowed) == len(allowed):
             return
@@ -5961,7 +5966,7 @@ def _drop_dangling_source_tool_choice(payload: dict[str, JsonValue], kept_types:
         updated_choice["tools"] = kept_allowed
         payload["tool_choice"] = updated_choice
         return
-    if not _source_tool_type_supported(choice_type, kept_types):
+    if not _source_tool_choice_supported(tool_choice, kept_types):
         payload.pop("tool_choice", None)
 
 

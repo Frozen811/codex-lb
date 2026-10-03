@@ -572,6 +572,11 @@ class CodexUpstreamWebSocket:
             exception = (
                 msg.data if isinstance(msg.data, Exception) else _aiohttp_stored_liveness_exception(self._websocket)
             )
+            if isinstance(exception, aiohttp.WebSocketError) and is_upstream_message_too_big_close_code(exception.code):
+                return UpstreamWebSocketMessage(
+                    kind="close",
+                    close_code=UPSTREAM_WEBSOCKET_MESSAGE_TOO_BIG_CLOSE_CODE,
+                )
             error_code = (
                 _websocket_transport_error_code(exception, uses_proxy=True)
                 if exception is not None

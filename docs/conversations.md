@@ -125,4 +125,4 @@ conversation entry.
 
 ---
 
-*Spec: [conversations-api](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/conversations-api)*
+*Spec: [conversations-api](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/conversations-api)*

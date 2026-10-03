@@ -143,3 +143,11 @@ Working-hour writes accept real ASCII 24-hour times from `00:00` through
 fields. Null and omitted fields keep the saved time. Legacy malformed values
 remain readable and use the existing scheduler defaults until corrected.
 
+The response schema returns historical clock strings verbatim. A format rule
+on the response used to make `9:00`, `bad`, and empty historical strings fail
+before an operator could correct them. For example, correcting only the start
+to `00:00` now succeeds while the malformed end remains visible; the next
+update can correct the end to `23:59`. Strict admission belongs on the update
+schema, and forecast evaluation keeps the existing fallback without rewriting
+stored values. The frontend already accepts string values in this response.
+

@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import os
 import stat
+import sys
 from pathlib import Path
 
 import anyio
@@ -67,6 +68,20 @@ def _write_helper(path: Path, source: str) -> None:
         )
     path.write_text(source, encoding="utf-8")
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
+
+
+def _write_discoverable_helper(directory: Path, source: str) -> Path:
+    if os.name != "nt":
+        helper = directory / "codex-lb-native-egress"
+        _write_helper(helper, source)
+        return helper
+    # Windows PATH discovery requires a PATHEXT launcher; a shebang-only
+    # file remains usable by the protocol tests but isn't discoverable.
+    script = directory / "native-protocol-helper.py"
+    _write_helper(script, "raise SystemExit(0)\n" if source.startswith("#!/bin/sh") else source)
+    helper = directory / "codex-lb-native-egress.cmd"
+    helper.write_text(f'@echo off\n"{sys.executable}" "{script}"\n', encoding="utf-8")
+    return helper
 
 
 def _echo_helper_source() -> str:
@@ -519,8 +534,7 @@ for line in sys.stdin:
 
 
 def test_native_helper_is_discovered_only_by_fixed_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    helper = tmp_path / "codex-lb-native-egress"
-    _write_helper(helper, "#!/bin/sh\nexit 0\n")
+    helper = _write_discoverable_helper(tmp_path, "#!/bin/sh\nexit 0\n")
     monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ.get('PATH', '')}")
     discover_native_egress_client.cache_clear()
 
@@ -536,12 +550,12 @@ async def test_close_discovered_helper_awaits_process_and_clears_cache(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    helper = tmp_path / "codex-lb-native-egress"
-    _write_helper(helper, _echo_helper_source())
+    helper = _write_discoverable_helper(tmp_path, _echo_helper_source())
     monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ.get('PATH', '')}")
     discover_native_egress_client.cache_clear()
     client = discover_native_egress_client()
     assert client is not None
+    assert client.executable == helper
     response = await client.request(
         NativeEgressRequest(
             method="GET",

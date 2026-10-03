@@ -8,8 +8,46 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import HTTPException
 from sqlalchemy.exc import OperationalError
+from starlette.requests import Request
+from starlette.types import Scope
+
+from app.core.socket_peer import _capture_raw_socket_peer
 
 pytestmark = pytest.mark.unit
+
+
+def _internal_request(
+    *,
+    client_host: str = "127.0.0.1",
+    headers: dict[str, str] | None = None,
+    proxy_service: Any = None,
+) -> Request:
+    scope: Scope = {
+        "type": "http",
+        "http_version": "1.1",
+        "method": "POST",
+        "path": "/internal/drain/start",
+        "scheme": "http",
+        "query_string": b"",
+        "client": (client_host, 12345),
+        "server": ("127.0.0.1", 2455),
+        "headers": [(b"host", b"127.0.0.1:2455")],
+        "app": SimpleNamespace(state=SimpleNamespace(proxy_service=proxy_service)),
+    }
+    scope["headers"].extend((key.encode(), value.encode()) for key, value in (headers or {}).items())
+    _capture_raw_socket_peer(scope)
+    return Request(scope)
+
+
+@pytest.mark.asyncio
+async def test_internal_drain_status_refuses_uncaptured_loopback():
+    from app.modules.health.api import internal_drain_status
+
+    request = _internal_request()
+    request.scope.pop("_codex_lb_raw_socket_peer")
+    with pytest.raises(HTTPException) as caught:
+        await internal_drain_status(request)
+    assert caught.value.status_code == 403
 
 
 def _bridge_ring_ok():
@@ -365,10 +403,7 @@ async def test_internal_drain_start_sets_draining_and_marks_bridge_sessions():
     from app.modules.health.api import start_internal_drain
 
     proxy_service = SimpleNamespace(mark_http_bridge_draining=AsyncMock())
-    request = SimpleNamespace(
-        client=SimpleNamespace(host="127.0.0.1"),
-        app=SimpleNamespace(state=SimpleNamespace(proxy_service=proxy_service)),
-    )
+    request = _internal_request(client_host="127.0.0.1", proxy_service=proxy_service)
 
     with (
         patch("app.core.shutdown.time.monotonic", return_value=100),
@@ -395,10 +430,8 @@ async def test_internal_drain_start_uses_hook_deadline_without_extension() -> No
     from app.core import shutdown as shutdown_state
     from app.modules.health.api import start_internal_drain, stop_internal_drain
 
-    request = SimpleNamespace(
-        client=SimpleNamespace(host="127.0.0.1"),
-        headers={"x-codex-lb-drain-deadline-monotonic": "110"},
-        app=SimpleNamespace(state=SimpleNamespace(proxy_service=None)),
+    request = _internal_request(
+        client_host="127.0.0.1", headers={"x-codex-lb-drain-deadline-monotonic": "110"}, proxy_service=None
     )
 
     with (
@@ -430,10 +463,8 @@ async def test_internal_drain_start_rejects_invalid_hook_deadline() -> None:
     from app.core import shutdown as shutdown_state
     from app.modules.health.api import start_internal_drain
 
-    request = SimpleNamespace(
-        client=SimpleNamespace(host="127.0.0.1"),
-        headers={"x-codex-lb-drain-deadline-monotonic": "nan"},
-        app=SimpleNamespace(state=SimpleNamespace(proxy_service=None)),
+    request = _internal_request(
+        client_host="127.0.0.1", headers={"x-codex-lb-drain-deadline-monotonic": "nan"}, proxy_service=None
     )
 
     with pytest.raises(HTTPException) as exc_info:
@@ -451,11 +482,7 @@ async def test_headerless_internal_drain_remains_reversible() -> None:
     from app.core import shutdown as shutdown_state
     from app.modules.health.api import start_internal_drain, stop_internal_drain
 
-    request = SimpleNamespace(
-        client=SimpleNamespace(host="127.0.0.1"),
-        headers={},
-        app=SimpleNamespace(state=SimpleNamespace(proxy_service=None)),
-    )
+    request = _internal_request(client_host="127.0.0.1", headers={}, proxy_service=None)
 
     with (
         patch("app.core.shutdown.time.monotonic", return_value=100),
@@ -489,12 +516,10 @@ async def test_deadline_drain_commit_survives_route_cancellation() -> None:
         bridge_mark_started.set()
         await block_bridge_mark.wait()
 
-    request = SimpleNamespace(
-        client=SimpleNamespace(host="127.0.0.1"),
+    request = _internal_request(
+        client_host="127.0.0.1",
         headers={"x-codex-lb-drain-deadline-monotonic": "110"},
-        app=SimpleNamespace(
-            state=SimpleNamespace(proxy_service=SimpleNamespace(mark_http_bridge_draining=mark_http_bridge_draining))
-        ),
+        proxy_service=SimpleNamespace(mark_http_bridge_draining=mark_http_bridge_draining),
     )
 
     with (
@@ -519,10 +544,7 @@ async def test_deadline_drain_commit_survives_route_cancellation() -> None:
 async def test_internal_drain_start_rejects_non_loopback_clients():
     from app.modules.health.api import start_internal_drain
 
-    request = SimpleNamespace(
-        client=SimpleNamespace(host="8.8.8.8"),
-        app=SimpleNamespace(state=SimpleNamespace(proxy_service=None)),
-    )
+    request = _internal_request(client_host="8.8.8.8", proxy_service=None)
 
     with pytest.raises(HTTPException) as exc_info:
         await start_internal_drain(cast(Any, request))
@@ -534,7 +556,7 @@ async def test_internal_drain_start_rejects_non_loopback_clients():
 async def test_internal_drain_stop_clears_draining_flags():
     from app.modules.health.api import stop_internal_drain
 
-    request = SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"))
+    request = _internal_request(client_host="127.0.0.1")
 
     with patch("app.core.shutdown.stop_drain", return_value=True) as stop_drain:
         response = await stop_internal_drain(cast(Any, request))
@@ -548,7 +570,7 @@ async def test_internal_drain_stop_clears_draining_flags():
 async def test_internal_drain_stop_rejects_committed_process_shutdown():
     from app.modules.health.api import stop_internal_drain
 
-    request = SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"))
+    request = _internal_request(client_host="127.0.0.1")
 
     with patch("app.core.shutdown.stop_drain", return_value=False):
         with pytest.raises(HTTPException) as exc_info:
@@ -562,7 +584,7 @@ async def test_internal_drain_stop_rejects_committed_process_shutdown():
 async def test_internal_drain_stop_rejects_non_loopback_clients():
     from app.modules.health.api import stop_internal_drain
 
-    request = SimpleNamespace(client=SimpleNamespace(host="8.8.8.8"))
+    request = _internal_request(client_host="8.8.8.8")
 
     with pytest.raises(HTTPException) as exc_info:
         await stop_internal_drain(cast(Any, request))
@@ -574,10 +596,7 @@ async def test_internal_drain_stop_rejects_non_loopback_clients():
 async def test_internal_drain_start_rejects_private_network_clients():
     from app.modules.health.api import start_internal_drain
 
-    request = SimpleNamespace(
-        client=SimpleNamespace(host="10.42.0.12"),
-        app=SimpleNamespace(state=SimpleNamespace(proxy_service=None)),
-    )
+    request = _internal_request(client_host="10.42.0.12", proxy_service=None)
 
     with pytest.raises(HTTPException) as exc_info:
         await start_internal_drain(cast(Any, request))
@@ -589,7 +608,7 @@ async def test_internal_drain_start_rejects_private_network_clients():
 async def test_internal_drain_status_reports_shutdown_state():
     from app.modules.health.api import internal_drain_status
 
-    request = SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"))
+    request = _internal_request(client_host="127.0.0.1")
 
     with (
         patch("app.core.shutdown.is_draining", return_value=True),
@@ -622,10 +641,7 @@ async def test_internal_drain_status_reports_bridge_activity():
             }
         )
     )
-    request = SimpleNamespace(
-        client=SimpleNamespace(host="127.0.0.1"),
-        app=SimpleNamespace(state=SimpleNamespace(proxy_service=proxy_service)),
-    )
+    request = _internal_request(client_host="127.0.0.1", proxy_service=proxy_service)
 
     with (
         patch("app.core.shutdown.is_draining", return_value=False),
@@ -646,7 +662,7 @@ async def test_internal_drain_status_reports_bridge_activity():
 async def test_internal_drain_status_rejects_non_loopback_clients():
     from app.modules.health.api import internal_drain_status
 
-    request = SimpleNamespace(client=SimpleNamespace(host="8.8.8.8"))
+    request = _internal_request(client_host="8.8.8.8")
 
     with pytest.raises(HTTPException) as exc_info:
         await internal_drain_status(cast(Any, request))
@@ -668,10 +684,7 @@ async def test_internal_drain_status_reports_persistence_activity():
             }
         )
     )
-    request = SimpleNamespace(
-        client=SimpleNamespace(host="127.0.0.1"),
-        app=SimpleNamespace(state=SimpleNamespace(proxy_service=proxy_service)),
-    )
+    request = _internal_request(client_host="127.0.0.1", proxy_service=proxy_service)
 
     with (
         patch("app.core.shutdown.is_draining", return_value=True),

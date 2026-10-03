@@ -252,7 +252,10 @@ class RoutingAvailabilityCache:
                             encryptor = TokenEncryptor()
                         enc = getattr(row, "access_token_encrypted", None)
                         expires_at = stored_access_token_expires_at(enc, encryptor)
-                    available += not reauth_access_token_is_expired(status, expires_at, now=now)
+                    account_id = row.id if hasattr(row, "id") else row[0]
+                    available += not reauth_access_token_is_expired(
+                        status, expires_at, now=now, deactivation_reason=snapshot[account_id][1]
+                    )
             else:
                 result = await session.execute(select(Account.id, Account.status, Account.deactivation_reason))
                 snapshot = {account_id: (status, reason) for account_id, status, reason in result.all()}

@@ -2,10 +2,73 @@ from __future__ import annotations
 
 import pytest
 
-from app.modules.proxy._service.response_timing import ResponseTiming, observe_output_timing
+from app.core.types import JsonValue
+from app.core.utils.sse import ParsedSseBlock
+from app.modules.proxy._service.response_timing import (
+    ResponseTiming,
+    observe_output_timing,
+    observe_verbatim_output_timing,
+)
 from app.modules.proxy._service.support import _ttft_event_visible_at
 
 pytestmark = pytest.mark.unit
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        ('{"delta" : "hello"}', 1),
+        (r'{"\u0064elta":"hello"}', 1),
+        ('{"metadata":{"delta":""},"delta":"hello"}', 1),
+        ('{"metadata":{"delta":"metadata only"},"delta":""}', 0),
+    ],
+)
+def test_verbatim_output_sampling_uses_actual_json_fields(body: str, expected: int) -> None:
+    timing = ResponseTiming(started_at=100.0)
+    observe_verbatim_output_timing(
+        timing, "response.output_text.delta", f"event: response.output_text.delta\ndata: {body}\n\n", observed_at=100.25
+    )
+    assert timing.output_delta_count == expected
+    assert timing.latency_first_output_ms == (250 if expected else None)
+
+
+def test_verbatim_output_sampling_reuses_parsed_upstream_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    import app.core.utils.sse as sse
+
+    event_type = "response.output_text.delta"
+    payload: dict[str, JsonValue] = {"type": event_type, "delta": "hello"}
+    block = ParsedSseBlock('event: response.output_text.delta\ndata: {"delta" : "hello"}\n\n', payload)
+
+    def unexpected_decode(*args, **kwargs):
+        raise AssertionError("upstream payload must be reused without a second JSON decode")
+
+    monkeypatch.setattr(sse.json, "loads", unexpected_decode)
+    timing = ResponseTiming(started_at=100.0)
+    observe_verbatim_output_timing(timing, event_type, block, observed_at=100.25)
+    assert timing.output_delta_count == 1
+    assert timing.latency_first_output_ms == 250
+
+
+def test_verbatim_optional_sampling_cannot_interrupt_relay_on_integer_limit() -> None:
+    metadata = "9" * 5000
+    block = f'event: response.output_text.delta\ndata: {{"delta":"hello","metadata":{metadata}}}\n\n'
+    timing = ResponseTiming(started_at=100.0)
+    observe_verbatim_output_timing(timing, "response.output_text.delta", block, observed_at=100.25)
+    assert timing.output_delta_count == 0
+    assert timing.latency_first_output_ms is None
+
+
+def test_verbatim_optional_sampling_cannot_interrupt_relay_on_recursion_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    import app.modules.proxy._service.response_timing as timing_module
+
+    def limited_decoder(_block: str):
+        raise RecursionError("decoder recursion limit")
+
+    monkeypatch.setattr(timing_module, "parse_sse_data_json", limited_decoder)
+    timing = ResponseTiming(started_at=100.0)
+    observe_verbatim_output_timing(timing, "response.output_text.delta", "upstream bytes", observed_at=100.25)
+    assert timing.output_delta_count == 0
+    assert timing.latency_first_output_ms is None
 
 
 @pytest.mark.parametrize(

@@ -1424,4 +1424,66 @@ opt-in capability routing.
 - **THEN** that provider also supplies an explicit native catalog URL
 - **AND** its capability header remains absent from the ordinary provider
 
+### Requirement: Individual model retrieval matches the visible catalog
 
+`GET /v1/models/{model_id}` MUST return the same model fields as the matching visible `/v1/models` catalog entry, apart from independently generated creation timestamps. It MUST apply the same proxy authentication, model allowlist and source assignment scope. Missing or hidden models MUST return HTTP 404 with an OpenAI error envelope whose code is `model_not_found` and param is `model`. A trailing slash delimiter MUST be accepted directly without changing the model identifier; identifiers containing internal slashes MUST remain intact.
+
+#### Scenario: Retrieve a visible nested model ID with a trailing slash
+- **WHEN** a client retrieves a visible model whose ID contains an internal slash, with or without the final slash delimiter
+- **THEN** both requests return the matching catalog model object directly with HTTP 200
+
+#### Scenario: Excluded or missing models fail closed
+- **WHEN** a client retrieves an unknown model or a model excluded by its allowlist or source scope
+- **THEN** the proxy returns HTTP 404 `model_not_found`
+- **AND** hidden model metadata is not exposed
+
+### Requirement: Source base instructions are preserved in Codex catalogs
+
+For an enabled Responses-capable model source, `GET /backend-api/codex/models`
+and the Codex catalog view of `GET /v1/models?client_version=...` MUST report
+string-valued `base_instructions` from its stored model metadata unchanged,
+including whitespace and Unicode. Missing or non-string values MUST report
+an empty string. Updating source metadata MUST affect the next catalog read
+without a restart and MUST preserve unrelated capability metadata. Server-side
+request overrides and source credentials MUST NOT appear in catalog entries.
+
+#### Scenario: Stored instructions retain exact content after an update
+
+- **WHEN** an operator stores and then updates string-valued source instructions containing whitespace and Unicode
+- **THEN** both Codex catalog views return the latest exact string
+- **AND** the source's other declared capabilities remain available
+
+#### Scenario: Missing or malformed instructions retain the empty default
+
+- **WHEN** stored source instructions are absent, null or a non-string JSON value
+- **THEN** both Codex catalog views return an empty string
+- **AND** neither server-side overrides nor source credentials appear in the catalog
+
+### Requirement: Compatible output budgets use valid upstream counts
+
+OpenAI-compatible model entries in `GET /v1/models`, individual model retrieval
+and the `data` alias of `GET /backend-api/codex/models` MUST prefer a positive
+non-boolean integer upstream `max_output_tokens`. If no such count exists,
+`gpt-6-astra`, `gpt-6-sol` and `gpt-6-luna` MUST report the existing compatibility
+fallback of 128000. Booleans, zero, negatives, strings and floats MUST NOT
+override known compatibility fallbacks; a model with no valid count or known
+fallback MUST report null. `metadata.max_output_tokens`,
+`capabilities.max_output_tokens`, `max_output_tokens` and `maxOutputTokens`
+MUST agree. Resolving an output budget MUST NOT alter input context budgets,
+raw registry metadata or native Codex catalog entries.
+
+#### Scenario: GPT-6 missing or malformed output budgets use the fallback
+
+- **WHEN** a GPT-6 Astra, Sol or Luna entry has no positive non-boolean integer upstream output budget
+- **THEN** all compatible output-budget fields report 128000 on list, retrieval and data-alias surfaces
+- **AND** its input context budget and native metadata remain unchanged
+
+#### Scenario: Valid upstream budget wins even when smaller than the fallback
+
+- **WHEN** a GPT-6 model has upstream `max_output_tokens=96000`
+- **THEN** every compatible output-budget field reports 96000
+
+#### Scenario: Unknown model does not invent an output budget
+
+- **WHEN** a model without a known fallback supplies an invalid output budget
+- **THEN** compatible output-budget fields report null

@@ -1,5 +1,11 @@
 # Release publishing context
 
+## Repository boundaries
+
+The upstream release-please/beta/artifact workflows are intentionally skipped in this fork; they are not the fork release channel. Their failure cleanup has the same `Soju06/codex-lb` boundary as their publisher. A cancelled upstream job in `Frozen811/codex-lb` cannot draft a fork release. Fork withdrawal remains owned by `docker-publish.yml`, whose exact-source gate and partial-publication limits still apply.
+
+For example, dispatching upstream `release.yml` in the fork does not publish to upstream PyPI and does not invoke upstream cleanup on a fork tag. Local YAML tests verify these conditions; actual cloud runs remain evidence for their specific source SHA, not an inferred consequence of those tests.
+
 Normative contracts: [spec.md](spec.md).
 
 ## Independent fork publisher

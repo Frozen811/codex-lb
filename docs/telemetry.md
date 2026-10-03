@@ -37,7 +37,7 @@ verify signed updates. Activation sends only `{"action": "activate"}`.
 The schema never includes account emails, workspace identifiers, client IP addresses, API keys,
 request or response content, raw user-agent strings, per-account records, custom model names, or
 free-text errors. Exact schemas and privacy constraints live in the
-[telemetry OpenSpec capability](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/telemetry).
+[telemetry OpenSpec capability](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/telemetry).
 
 ## Consent and disabling
 
@@ -45,10 +45,12 @@ Telemetry uses informed opt-out consent. With no override or saved decision, it 
 the dashboard presents a one-time dialog with the current payload. Enabling or disabling saves
 the decision, and the Settings toggle can change it later.
 
-For a headless opt-out before the first dashboard visit, set:
+For a headless opt-out before the first dashboard visit, export this in the
+Bash process that will launch the service (or add the assignment to your
+configured env file / container environment):
 
 ```bash
-CODEX_LB_TELEMETRY_ENABLED=false
+export CODEX_LB_TELEMETRY_ENABLED=false
 ```
 
 The environment value applies only while no dashboard decision has been saved; a saved
@@ -89,4 +91,4 @@ Snapshot and opt-out endpoint failures use a five-second total timeout, retry no
 are logged only at debug level, and never interrupt proxy traffic or change the dashboard
 settings response.
 
-*Source of truth: [telemetry OpenSpec capability](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/telemetry)*
+*Source of truth: [telemetry OpenSpec capability](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/telemetry)*

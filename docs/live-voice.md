@@ -36,4 +36,4 @@ The dashboard's Recent Requests data accepts the sideband as a typed `realtime_l
 
 ---
 
-*Spec: [realtime-api-compat](https://github.com/Soju06/codex-lb/tree/main/openspec/specs/realtime-api-compat)*
+*Spec: [realtime-api-compat](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/realtime-api-compat)*

@@ -3951,12 +3951,19 @@ upstream).
 When forwarding a Responses request to an OpenAI-compatible source, the proxy MUST forward `function` tools unchanged and MUST drop non-`function` tools the
 source model has not declared support for. A source model declares support in
 its `raw_metadata_json`: `"supports_search_tool": true` keeps web-search tools
-(`web_search`, including the `web_search_preview` alias), and
+(`web_search`, including the `web_search_preview` alias), a nonblank string
+`"multi_agent_version"` keeps `namespace` tools, and
 `"experimental_supported_tools"` MAY list additional supported tool types.
+The version declaration MUST accept future nonblank strings and MUST NOT opt
+in for missing, blank or non-string values. Declared namespace definitions,
+including nested function schemas, MUST be forwarded unchanged.
 When only some tools are dropped, a `tool_choice` that references a dropped
 tool MUST be removed so the forwarded payload never names a tool that is not
-present; `function`-typed choices MUST be preserved. When all tools are
-dropped, `tools`, `tool_choice`, and `parallel_tool_calls` MUST be removed
+present. Bare `function`-typed choices MUST be preserved; a function choice
+with a namespace MUST be removed when namespace tools were dropped. The same
+rule MUST prune entries inside `allowed_tools`, preserving the remaining
+choice fields and removing `tool_choice` if no entries remain. When all tools
+are dropped, `tools`, `tool_choice`, and `parallel_tool_calls` MUST be removed
 together. Whenever a hosted tool is dropped, `include` entries specific to
 that tool type (for example `web_search_call.*` for `web_search`,
 `file_search_call.*` for `file_search`, `code_interpreter_call.*` for
@@ -3965,7 +3972,7 @@ be pruned from the forwarded payload; non-tool-specific entries (for example
 `reasoning.encrypted_content`) MUST be kept, and the `include` field MUST be
 removed entirely when pruning empties it. This filtering MUST apply on every
 source-routed Responses surface (`/backend-api/codex/responses` and
-`/v1/responses`).
+`/v1/responses`), including their trailing-slash forms.
 
 #### Scenario: Codex-only tools are dropped for a plain source model
 
@@ -3999,6 +4006,23 @@ source-routed Responses surface (`/backend-api/codex/responses` and
 - **GIVEN** a source model with no tool capability opt-ins
 - **WHEN** a Responses request whose tools are all unsupported is forwarded to it
 - **THEN** the forwarded payload contains no `tools`, `tool_choice`, or `parallel_tool_calls` keys
+
+#### Scenario: Future collaboration versions preserve complete namespaces
+
+- **WHEN** a source declares a nonblank collaboration version and receives a namespace with nested function schemas and a matching forced or allowed choice
+- **THEN** the upstream receives that namespace and matching choice unchanged
+- **AND** unsupported hosted tools and their include entries remain pruned
+
+#### Scenario: Missing namespace capability removes namespaced function choices
+
+- **WHEN** a source without namespace support receives a namespaced function choice or an allowed choice mixing namespaced and bare functions
+- **THEN** dropped namespace functions are absent from the forwarded choice
+- **AND** bare function choices and unrelated allowed-choice fields remain intact
+
+#### Scenario: Explicit namespace opt-in works without a version declaration
+
+- **WHEN** a source explicitly lists `namespace` in `experimental_supported_tools` without a valid collaboration version
+- **THEN** complete namespace tools and matching choices are preserved
 
 ### Requirement: Source request overrides apply without clobbering proxy-owned keys
 
@@ -11227,6 +11251,11 @@ existing terminal SSE error contract without duplicating visible output.
 The direct WebSocket route MUST use its existing terminal error envelope.
 Explicit request-state overrides MUST remain authoritative.
 
+Typed WebSocket message-size errors with exact code 1009 MUST preserve the
+same terminal size evidence even when the transport reports an error event
+instead of a received close frame. Other protocol or transport errors MUST
+retain their existing classification.
+
 #### Scenario: Single account rejects the message size
 
 - **WHEN** the only selected account closes 1009 before response.created
@@ -11243,3 +11272,52 @@ Explicit request-state overrides MUST remain authoritative.
 
 - **WHEN** the adapter exposes 1000, 1006, another close code, or no close code
 - **THEN** this exception does not replace the existing retry and error classification
+
+#### Scenario: Reader reports a typed size error
+
+- **WHEN** the WebSocket reader reports an exact-code 1009 message-size exception
+- **THEN** the client receives terminal payload_too_large without account penalty or identical replay
+- **AND** reservations, pending requests and response-create ownership are released
+
+### Requirement: Standalone search ingress aliases are slash equivalent
+
+The proxy MUST serve `POST /backend-api/codex/alpha/search`, `POST /v1/alpha/search` and their duplicated Codex-prefix alias, both with and without a trailing slash, directly without redirecting. Every form MUST retain the existing authenticated control request, account scope, response normalization and media-type policy.
+
+#### Scenario: Search trailing slash dispatches directly
+- **WHEN** a client posts an opaque search body to any supported ingress form ending in `/`
+- **THEN** the request reaches the upstream `codex/alpha/search` operation without an HTTP redirect
+- **AND** original body bytes and repeated query parameters are preserved
+
+### Requirement: HTTP bridge preserves complete WebSocket JSON documents
+
+The HTTP bridge MUST parse each upstream text message as one complete JSON document regardless of indentation, LF, CRLF or surrounding JSON whitespace. Interpreted native payloads and parsed text MUST have equivalent event semantics. All relayed JSON events MUST use valid SSE framing that preserves their complete payload, including tool items and escaped newlines in strings.
+
+#### Scenario: Formatted upstream error is terminal
+
+- **WHEN** upstream sends a compact, indented or CRLF-formatted invalid_request_error before response creation
+- **THEN** the client receives the actual code, type and parameter without an eventless timeout or identical replay
+- **AND** a following valid request can complete on the same account
+
+#### Scenario: Formatted lifecycle and tool items survive
+
+- **WHEN** upstream emits formatted response.created, output_item.done and response.completed documents
+- **THEN** each delivered SSE payload is complete JSON with its original content and the turn settles normally
+
+### Requirement: Responses Lite signals serialize tool calls
+
+Every final upstream Responses payload advertised as Lite by the trusted canonical HTTP header or WebSocket marker MUST set parallel_tool_calls to false, whether the client omitted it, supplied null, true or false. This normalization MUST preserve input, tools, cache identity and unrelated reasoning members. It MUST NOT establish Lite trust from arbitrary inbound headers or metadata. Non-Lite payloads MUST retain their existing transport-specific serialization policy.
+
+#### Scenario: Lite bridge request reaches upstream serialized
+
+- **WHEN** a body-derived Lite request reaches the upstream WebSocket through a public HTTP route
+- **THEN** the outgoing body contains parallel_tool_calls=false and reasoning.context=all_turns with the original input and cache identity
+
+#### Scenario: Lite direct HTTP and fallback agree
+
+- **WHEN** a body-derived Lite request uses direct HTTP or WebSocket-to-HTTP fallback
+- **THEN** the final HTTP payload contains parallel_tool_calls=false and the canonical Lite HTTP header
+
+#### Scenario: Untrusted marker remains non-Lite
+
+- **WHEN** a non-Lite client supplies a Lite header or marker without trusted continuity
+- **THEN** it does not acquire Lite classification or Lite-specific normalization

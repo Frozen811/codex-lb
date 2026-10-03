@@ -146,6 +146,60 @@ async def test_pause_via_api_marks_peer_routing_unavailable(async_client, db_set
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["locked", "driver", "cancelled"])
+async def test_failed_pause_publication_retries_and_refreshes_peer_routing(
+    async_client, db_setup, poller_slot, monkeypatch, failure: str
+) -> None:
+    account_id = f"acct-bus-failed-pause-{failure}"
+    await _insert_account(account_id)
+    peer_cache, peer = _make_replica_b_routing()
+    await peer.initialize()
+    await peer_cache.refresh_from_db()
+    assert peer_cache.is_unavailable(account_id) is False
+
+    source = CacheInvalidationPoller(SessionLocal)
+    await source.initialize()
+    set_cache_invalidation_poller(source)
+    real_bump_once = source._bump_once
+    attempts = 0
+
+    async def failed_write(namespace: str) -> None:
+        nonlocal attempts
+        attempts += 1
+        if failure == "cancelled":
+            raise asyncio.CancelledError
+        if failure == "locked":
+            raise OperationalError("test publication", {}, Exception("database is locked"))
+        raise RuntimeError("test driver failure")
+
+    monkeypatch.setattr(source, "_bump_once", failed_write)
+    if failure == "cancelled":
+        with pytest.raises(asyncio.CancelledError):
+            await async_client.post(f"/api/accounts/{account_id}/pause")
+    else:
+        response = await async_client.post(f"/api/accounts/{account_id}/pause")
+        assert response.status_code == 200
+    assert attempts == (3 if failure == "locked" else 1)
+    async with SessionLocal() as session:
+        account = await session.get(Account, account_id)
+        assert account is not None and account.status == AccountStatus.PAUSED
+    assert is_account_routing_unavailable(account_id) is True
+    assert NAMESPACE_ACCOUNT_ROUTING in source._pending_bumps
+    assert await _namespace_version(NAMESPACE_ACCOUNT_ROUTING) is None
+    await peer._poll_once()
+    assert peer_cache.is_unavailable(account_id) is False
+
+    monkeypatch.setattr(source, "_bump_once", real_bump_once)
+    await source._poll_once()
+    assert NAMESPACE_ACCOUNT_ROUTING not in source._pending_bumps
+    assert await _namespace_version(NAMESPACE_ACCOUNT_ROUTING) == 1
+    await peer._poll_once()
+    assert peer_cache.is_unavailable(account_id) is True
+    monkeypatch.setattr("app.modules.proxy.account_cache._routing_availability_cache", peer_cache)
+    assert _http_bridge_session_account_active(_fake_bridge_session(_make_account(account_id))) is False
+
+
+@pytest.mark.asyncio
 async def test_remote_pause_stops_stale_bridge_session_reuse(db_setup, poller_slot) -> None:
     """A warm bridge session pinned to a stale ACTIVE account snapshot is refused
     once a peer's pause converges over the bus (product path: helpers.py reuse gate)."""

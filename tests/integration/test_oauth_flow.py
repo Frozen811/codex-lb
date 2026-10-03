@@ -5,6 +5,7 @@ import base64
 import contextlib
 import json
 import logging
+import socket
 import time
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -30,6 +31,52 @@ from app.modules.oauth.repository import OAuthFlowRepository
 from app.modules.oauth.schemas import ManualCallbackRequest
 
 pytestmark = pytest.mark.integration
+
+
+@pytest.mark.asyncio
+async def test_occupied_browser_callback_port_keeps_manual_flow_and_warns(
+    async_client,
+    monkeypatch,
+    unused_tcp_port,
+    caplog,
+):
+    monkeypatch.setattr(oauth_module, "OAUTH_CALLBACK_PORT", unused_tcp_port)
+    with socket.socket() as occupied:
+        occupied.bind(("127.0.0.1", unused_tcp_port))
+        occupied.listen()
+        with caplog.at_level(logging.WARNING, logger="app.modules.oauth.service"):
+            response = await async_client.post("/api/oauth/start", json={"forceMethod": "browser"})
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["method"] == "browser"
+        status = await async_client.get("/api/oauth/status", params={"flowId": payload["flowId"]})
+        assert status.json()["status"] == "pending"
+        assert oauth_module._OAUTH_STORE._callback_server is None
+        assert "OAuth callback listener unavailable" in caplog.text
+        assert str(unused_tcp_port) in caplog.text
+        state = _oauth_state_token(payload["authorizationUrl"])
+        assert state not in caplog.text
+        assert "code_challenge=" not in caplog.text
+
+        async def synthetic_exchange(**_kwargs):
+            return OAuthTokens(
+                access_token="synthetic-access",
+                refresh_token="synthetic-refresh",
+                id_token=_encode_jwt({"email": "setup@example.invalid", "chatgpt_account_id": "setup-callback"}),
+            )
+
+        monkeypatch.setattr(oauth_module, "exchange_authorization_code", synthetic_exchange)
+        completed = await async_client.post(
+            "/api/oauth/manual-callback",
+            json={
+                "flowId": payload["flowId"],
+                "callbackUrl": f"http://localhost:1455/auth/callback?code=synthetic-code&state={state}",
+            },
+        )
+        assert completed.status_code == 200
+        assert completed.json()["status"] == "success"
+        assert state not in caplog.text
+        assert "synthetic-code" not in caplog.text
 
 
 @pytest.fixture(autouse=True)

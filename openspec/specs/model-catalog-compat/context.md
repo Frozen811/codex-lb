@@ -2,6 +2,43 @@
 
 The requirements are in [spec.md](spec.md).
 
+## Stored source instructions and compatible output budgets
+
+The [source instruction contract](spec.md#requirement-source-base-instructions-are-preserved-in-codex-catalogs)
+projects the operator's stored string directly into the typed catalog entry.
+For example, `{"base_instructions":"  Keep 日本語 comments.\r\n"}` keeps the
+two leading spaces and CRLF on both native catalog views. A missing, null or
+object-valued instruction keeps the empty default. Updating metadata replaces
+the next catalog response; a pinned client catalog still needs its own refresh.
+Server-side request overrides remain private to forwarding.
+
+The [output-budget contract](spec.md#requirement-compatible-output-budgets-use-valid-upstream-counts)
+uses a positive non-boolean integer as explicit upstream evidence. For
+example, GPT-6 Sol with a raw limit of 96000 exposes 96000 in every compatible
+output field; `true`, zero or a negative count instead uses its existing
+128000 fallback. An unknown model with malformed metadata keeps null.
+This is a compatibility projection, so it neither edits native raw metadata
+nor changes the input budget or how many tokens a generation requests.
+
+The audit verifies dashboard persistence/update and local catalog routes,
+including individual retrieval and the native data alias. It does not certify
+hosted model limits, live client catalog refresh or published artifacts.
+
+## Individual model retrieval
+
+OpenAI-compatible clients such as Visual Studio Copilot can validate a model
+with `GET /v1/models/{model_id}` before using it. The [retrieval contract](spec.md#requirement-individual-model-retrieval-matches-the-visible-catalog)
+uses the visible list catalog's allowlist and source-assignment policies.
+For example, `/v1/models/vendor/model/` retrieves the `vendor/model` entry;
+the final slash is a route delimiter and the internal slash stays in the ID.
+
+The direct slash route precedes the greedy ID route to avoid an incorrect 404.
+Unknown, allowlist-excluded and unassigned-source models use `model_not_found`,
+without exposing hidden metadata. Independent requests can generate different
+`created` timestamps; all other fields match the list item. Local HTTP tests
+verify these cases and reservation release on catalog failure. Actual Visual
+Studio registration and hosted model availability remain external evidence.
+
 ## Codex client discovery
 
 The native catalog can advertise a model correctly while a client still uses
