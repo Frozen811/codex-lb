@@ -9,5 +9,5 @@
 ## 2. Publish and verify
 
 - [x] 2.1 Pass focused tests, full typing/lint and applicable static/OpenSpec checks; synchronize spec/context and registry evidence.
-- [ ] 2.2 Commit and publish to fork main after checking current remote ancestry and exact staged scope.
-- [ ] 2.3 Observe all required exact-head cloud jobs to successful completion; record run/SHA evidence and retain unrelated residuals.
+- [x] 2.2 Commit and publish to fork main after checking current remote ancestry and exact staged scope.
+- [x] 2.3 Observe all required exact-head cloud jobs to successful completion; record run/SHA evidence and retain unrelated residuals.

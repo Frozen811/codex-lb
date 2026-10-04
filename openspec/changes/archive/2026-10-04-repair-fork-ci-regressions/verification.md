@@ -37,4 +37,8 @@ Focused selections are separate from cloud full-suite evidence. The harmless war
 
 ## Cloud verification
 
-Pending publication and exact-head CI completion. CI-01 remains open until the required jobs, including every core shard, both aggregates, native wire, database jobs and Windows installed-wheel smoke, finish successfully. Expected upstream-only release/beta skips are distinct from required test success. Unrelated F-045, native aggregate residuals, release artifacts, deployment and provider traffic retain their existing scope.
+Published repair: **575c18f4e55ab1138086523cc81edf00c03bfb4b**, [CI run 37224667796](https://github.com/Frozen811/codex-lb/actions/runs/37224667796), attempt 1, push to fork main. The completed GitHub API evidence confirms **29/29 CI jobs successful**, including all three core shards, the integration-core aggregate, CI Required, native wire, complete ty, both database test jobs, frontend, Docker, Nix, Helm and migration checks. Full bridge selection: **414 passed**, 420.43 s. Windows Startup Regression, release guards and simplicity budgets also completed successfully for the same SHA. The only skipped workflow entries are the expected upstream-only release/beta automation.
+
+Machine-readable exact-SHA job identities, results and public links are saved in [cloud-ci.json](cloud-ci.json). The cloud results were reread independently after the watcher completed, including the run head SHA, total job count, success of every required aggregate and mandatory side workflow. CI-01 is closed for this verified source snapshot. Unrelated F-045/CI-04 platform stability, published release artifacts, deployment and provider traffic remain outside this CI repair.
+
+A subsequent documentation-only commit records this evidence and archives the verified change; its main-push checks must also be observed before the final task report. Historical and source-code verification records above remain pinned to their actual tested SHA.
