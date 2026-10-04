@@ -1105,6 +1105,15 @@ class _HTTPBridgeRequestSubmitMixin:
             session.admission_waiter_count += 1
         request_state.admission_waiter_preregistered = True
         recovery_attempt_consumed = False
+        # These local admission fences run before queue publication and send.
+        # Re-entered states may already have attempted a send; they retain the
+        # native transport-ending lifecycle even if no response frame arrived.
+        request_is_undispatched = (
+            request_state.response_create_attempt_count == 0
+            and request_state.response_id is None
+            and request_state.response_event_count == 0
+            and request_state.replay_count == 0
+        )
         # Eventless upstream timeouts retire the current socket.  A client
         # reconnect can otherwise create a fresh socket for the same hard key
         # and submit the identical request repeatedly while the retry circuit
@@ -1166,6 +1175,7 @@ class _HTTPBridgeRequestSubmitMixin:
                     _http_bridge_retry_circuit_suppression_message(block_reason, retry_after_seconds),
                 ),
                 retry_after_seconds=retry_after_seconds,
+                local_pre_dispatch_refusal=request_is_undispatched,
             )
             if _http_bridge_cooldown_suppression_is_replay_safe(request_state):
                 setattr(cooldown_error, _HTTP_BRIDGE_PRE_SUBMIT_FAILURE_ATTR, True)
@@ -1720,6 +1730,7 @@ class _HTTPBridgeRequestSubmitMixin:
             raise ProxyResponseError(
                 502,
                 openai_error("upstream_unavailable", "HTTP responses session bridge is retiring"),
+                local_pre_dispatch_refusal=request_is_undispatched,
             )
         if session.closed:
             async with session.lifecycle_lock:
@@ -1747,6 +1758,7 @@ class _HTTPBridgeRequestSubmitMixin:
                         raise ProxyResponseError(
                             502,
                             openai_error("upstream_unavailable", "HTTP responses session bridge is closed"),
+                            local_pre_dispatch_refusal=request_is_undispatched,
                         )
                     if current_session is not session:
                         _log_http_bridge_event(
@@ -1792,6 +1804,7 @@ class _HTTPBridgeRequestSubmitMixin:
                         raise ProxyResponseError(
                             502,
                             openai_error("upstream_unavailable", "HTTP responses session bridge is closed"),
+                            local_pre_dispatch_refusal=request_is_undispatched,
                         )
         text_data = self._http_bridge_text_with_account_installation_id(session, request_state, text_data)
         request_state.session_previous_gap_ms = int(max(0.0, request_state.started_at - session.last_used_at) * 1000)
@@ -1998,6 +2011,7 @@ class _HTTPBridgeRequestSubmitMixin:
                     raise ProxyResponseError(
                         502,
                         openai_error("upstream_unavailable", "HTTP responses session bridge is closed"),
+                        local_pre_dispatch_refusal=request_is_undispatched,
                     )
                 recovery_receipt: DurableBridgeAliasRegistrationReceipt | None = None
                 upstream_send_started = False
@@ -2286,6 +2300,7 @@ class _HTTPBridgeRequestSubmitMixin:
                                     ),
                                 ),
                                 retry_after_seconds=suppressed_retry_after_seconds,
+                                local_pre_dispatch_refusal=request_is_undispatched,
                             )
                     async with session.pending_lock:
                         session.pending_requests.append(request_state)
@@ -3033,6 +3048,13 @@ class _HTTPBridgeRequestSubmitMixin:
             raise ProxyResponseError(
                 502,
                 openai_error("upstream_unavailable", "HTTP responses session bridge is closed"),
+                local_pre_dispatch_refusal=(
+                    request_state is not None
+                    and request_state.response_create_attempt_count == 0
+                    and request_state.response_id is None
+                    and request_state.response_event_count == 0
+                    and request_state.replay_count == 0
+                ),
             )
         session.account_lease = lease
 

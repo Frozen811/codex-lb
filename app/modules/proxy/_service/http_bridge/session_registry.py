@@ -759,6 +759,7 @@ class _HTTPBridgeSessionRegistryMixin:
                     raise ProxyResponseError(
                         502,
                         _http_bridge_owner_lookup_unavailable_error_envelope(),
+                        local_pre_dispatch_refusal=True,
                     ) from exc
                 logger.warning("Durable bridge tables missing; using in-memory bridge session fallback", exc_info=True)
                 return

@@ -528,3 +528,15 @@ This is a per-stream HTTP bridge contract, not a fixed process-wide RSS ceiling.
 ## Independent transcript backlog verification (2026-10-04)
 
 Eligible nonterminal events drain in bounded fair passes; the loop yields before each next pass. For example, 320 events with batch size 32 require ten writes without nine interval waits. Other operations each get a batch opportunity; a failed optional spool does not stall their backlog. Closing operations, queue limits and shutdown retain their existing behavior. Deterministic tests count wait cycles and verify order and failure isolation. Real SQLite checks verify 320 events followed by one completed terminal in rows_v1 and chunks_v2 and reject a stale owner epoch. Fake-writer timings isolate scheduling and do not establish production speedup. See [verification](../../changes/archive/2026-10-04-verify-sqlite-history-reports-transcript/verification.md).
+
+## Local bridge refusal and successor verification (2026-10-04)
+
+See [spec.md](spec.md) and the [verification report](../../changes/archive/2026-10-04-repair-bridge-refusal-transition-terminal/verification.md). This batch concerns exactly UP-ISSUE-2389, UP-ISSUE-2388 and UP-ISSUE-2033. The per-producer verdicts live in the archived refusal-audit.md.
+
+Model-transition recovery already preserves the downstream token for reversible alias registration while clearing parent identity from submission. A real balancer conflict between required owner A and a sticky owner B creates one child. The next request with the same token resolves to B even when its history includes reasoning output. Existing protected recovery aliases, rollback, cancellation and second-conflict fences remain in place. No further model-transition runtime rewrite was needed.
+
+Local provenance is independent of error code and replay permission. For example, an anchored stale-generation refusal retains HTTP 503, upstream_request_timeout and its retry hint; it now reaches the native client as a structured refusal, or one terminal plus DONE after commitment. This does not grant raw-HTTP replay. Mixed reconnect, prewarm and post-dispatch producers retain their transport classification. New submit fences require proof that the request has not previously attempted a send or observed response events or a replay.
+
+Post-terminal exception containment already existed. A real-settlement probe found an unanchored keyed failure could start health persistence while its reservation was still reserved. The shared settlement helper now waits whenever account-error health is pending, so the health callback observes committed settlement. Ordinary health failure is logged without another terminal. Successful requests keep their existing asynchronous settlement path.
+
+No configuration, schema or deployment is added. The evidence is scoped to ASGI routes, loopback upstreams, real SQLite settlement and injected metadata/CAS/lease failure conditions. Actual clients/providers, PostgreSQL/MySQL runtime, distributed races, cloud gates, public artifacts and production are separate scopes.

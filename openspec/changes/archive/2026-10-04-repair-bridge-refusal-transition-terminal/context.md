@@ -1,0 +1,11 @@
+# Bridge refusal, model transition and health settlement
+
+This batch handles exactly UP-ISSUE-2389, UP-ISSUE-2388 and UP-ISSUE-2033. See the normative [delta spec](specs/responses-api-compat/spec.md), [per-site audit](refusal-audit.md) and [verification](verification.md).
+
+Model-transition recovery already retains the downstream token for reversible registration while clearing parent identity from submission. A real balancer conflict between required owner A and a sticky mapping to B triggers one child. On the next turn, the same token resolves to B even with reasoning output in the history; the parent session-header alias may still resolve to A, and the existing coordinator prioritizes the guarded recovery identity. Existing protected-alias, rollback, cancellation and second-conflict fences remain applicable. The implementation required coverage rather than another model-transition rewrite.
+
+Local refusal provenance is independent of transport error code and of replay permission. For example, an anchored stale-generation refusal is still HTTP 503 with upstream_request_timeout and its retry hint; it is now delivered to a native client instead of terminating the response body. A committed response receives one terminal failure and DONE. Marking this refusal does not authorize sending an unanchored copy over raw HTTP.
+
+The post-terminal exception containment already existed. New real-settlement tests found an unanchored keyed path could transfer settlement to a task and start health persistence while the reservation remained reserved. The settlement helper now waits whenever account-error health is pending. This adds a commit barrier only where error-health ordering needs it; ordinary successful requests retain their existing behavior. A health failure is logged without another terminal, and cancellation retains the existing finalizer owner.
+
+No new setting, API field, migration or deployment is introduced. ASGI route execution, loopback upstreams, real SQLite settlement and fault-injected producer conditions establish bounded local behavior. Hosted providers, actual Codex clients, PostgreSQL/MySQL runtime, distributed races, current-head cloud gates, public artifacts and production remain separate verification scopes.

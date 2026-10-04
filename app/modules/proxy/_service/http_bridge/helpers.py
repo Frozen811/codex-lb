@@ -2270,7 +2270,7 @@ def _http_bridge_parallel_fork_key(
     ):
         return None
     if incoming_turn_state is not None or previous_response_id is not None:
-        raise ProxyResponseError(502, _http_bridge_continuity_lost_error_envelope())
+        raise ProxyResponseError(502, _http_bridge_continuity_lost_error_envelope(), local_pre_dispatch_refusal=True)
 
     fork_key = _HTTPBridgeSessionKey(
         "internal_request_parallel",
@@ -2667,6 +2667,7 @@ def _raise_http_bridge_incompatible_admission_handoff(
             "upstream_unavailable",
             "HTTP responses session bridge is preserving an incompatible admission handoff",
         ),
+        local_pre_dispatch_refusal=True,
     )
 
 
@@ -3359,6 +3360,7 @@ def _fail_closed_http_bridge_recovery_lease(
     return ProxyResponseError(
         502,
         _http_bridge_owner_lookup_unavailable_error_envelope(),
+        local_pre_dispatch_refusal=True,
     )
 
 

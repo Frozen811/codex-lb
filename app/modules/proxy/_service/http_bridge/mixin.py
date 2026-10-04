@@ -814,6 +814,7 @@ class _HTTPBridgeMixin(
                                 raise ProxyResponseError(
                                     502,
                                     _http_bridge_owner_lookup_unavailable_error_envelope(),
+                                    local_pre_dispatch_refusal=True,
                                 ) from exc
                             if _http_bridge_can_local_recover_without_ring(
                                 key=key,
@@ -844,6 +845,7 @@ class _HTTPBridgeMixin(
                             raise ProxyResponseError(
                                 502,
                                 _http_bridge_owner_lookup_unavailable_error_envelope(),
+                                local_pre_dispatch_refusal=True,
                             ) from exc
                         if ring_lookup_failed or _http_bridge_can_local_recover_without_ring(
                             key=key,

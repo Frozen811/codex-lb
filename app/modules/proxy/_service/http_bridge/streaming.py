@@ -4824,6 +4824,12 @@ class _HTTPBridgeStreamingMixin:
                         error_type="server_error",
                     ),
                     retry_after_seconds=suppressed_retry_after,
+                    local_pre_dispatch_refusal=(
+                        request_state.response_create_attempt_count == 0
+                        and request_state.response_id is None
+                        and request_state.response_event_count == 0
+                        and request_state.replay_count == 0
+                    ),
                 )
             return format_sse_event(
                 cast(

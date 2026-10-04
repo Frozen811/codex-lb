@@ -761,6 +761,7 @@ class _StreamingRetryMixin:
             wait_for_health_write = (
                 settlement_order_required
                 or current_settlement.settlement_order_required
+                or current_settlement.account_health_error
                 or apply_pending_penalty
                 or bool(deferred_account_error_backoffs)
             )
