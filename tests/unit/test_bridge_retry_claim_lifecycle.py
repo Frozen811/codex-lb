@@ -11,6 +11,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.clients.proxy_websocket import UpstreamWebSocketMessage
+from app.core.types import JsonValue
 from app.core.utils.sse import parse_sse_data_json
 from app.modules.proxy import service as proxy_service
 from app.modules.proxy._service.http_bridge import request_submit, retry_circuit
@@ -89,7 +90,7 @@ async def test_durable_release_preserves_replacement_local_probe(monkeypatch, ou
         persisted_updated_at_epoch=20.0,
         persisted_admission_generation=4,
     )
-    service._http_bridge_retry_circuits[session.key] = state
+    cast(Any, service)._http_bridge_retry_circuits[session.key] = state
     lease = state.half_open_until
     release = AsyncMock(side_effect=outcome) if isinstance(outcome, Exception) else AsyncMock(return_value=outcome)
     monkeypatch.setattr(service._durable_bridge, "release_retry_circuit_claim", release)
@@ -125,7 +126,7 @@ async def test_cancelled_submit_recovers_committed_claim_receipt(
             updated_at_epoch=time.time(),
         )
     elif existing_row == "local_only":
-        service._http_bridge_retry_circuits[session.key] = retry_circuit._HTTPBridgeRetryCircuitState(
+        cast(Any, service)._http_bridge_retry_circuits[session.key] = retry_circuit._HTTPBridgeRetryCircuitState(
             consecutive_failures=2,
             last_touched_monotonic=time.monotonic(),
             last_failure_monotonic=time.monotonic(),
@@ -141,7 +142,7 @@ async def test_cancelled_submit_recovers_committed_claim_receipt(
     request.response_create_gate_acquired = False
     request.response_create_gate = None
     request.response_create_sent_at = None
-    session.upstream.send_text = AsyncMock()
+    cast(Any, session.upstream).send_text = AsyncMock()
     request.verified_stale_anchor_replay = True
     request.verified_stale_anchor_retry_circuit_generation_captured = True
     request.verified_stale_anchor_retry_circuit_key = session.key
@@ -207,7 +208,7 @@ async def test_cancelled_submit_recovers_committed_claim_receipt(
     assert request.response_create_attempt_count == 0
     assert request.claimed_durable_circuit_key is None
     assert not session.pending_requests
-    session.upstream.send_text.assert_not_awaited()
+    cast(AsyncMock, session.upstream.send_text).assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -228,7 +229,7 @@ async def test_real_durable_elapsed_cooldown_allows_repeated_admission(coordinat
         )
     for _ in range(3):
         assert await service._http_bridge_precreated_retry_allowed(session)
-    state = service._http_bridge_retry_circuits.get(session.key)
+    state = cast(Any, service)._http_bridge_retry_circuits.get(session.key)
     assert state is None or (state.cooldown_until == 0.0 and state.half_open_until == 0.0)
 
 
@@ -238,7 +239,7 @@ async def test_cancelled_claim_cannot_wait_forever_on_local_key_lock(monkeypatch
     service._durable_bridge = coordinator
     session = _make_bridge_session(key_value="claim-key-lock-timeout")
     service._http_bridge_sessions[session.key] = session
-    session.upstream.send_text = AsyncMock()
+    cast(Any, session.upstream).send_text = AsyncMock()
     request = _make_eventless_http_bridge_owner(request_id="bounded-key-lock-owner")
     request.started_at = time.monotonic()
     request.skip_request_log = True
@@ -286,7 +287,7 @@ async def test_cancelled_claim_cannot_wait_forever_on_local_key_lock(monkeypatch
         is None
     )
     assert request.response_create_attempt_count == 0
-    session.upstream.send_text.assert_not_awaited()
+    cast(AsyncMock, session.upstream.send_text).assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -311,7 +312,7 @@ async def test_real_cooldown_expiry_admits_one_local_probe_and_preserves_it_on_r
     assert len(leases) == 1
     for _ in range(3):
         assert not await service._http_bridge_precreated_retry_allowed(session)
-    state = service._http_bridge_retry_circuits[session.key]
+    state = cast(Any, service)._http_bridge_retry_circuits[session.key]
     assert state.cooldown_until == 0.0
     assert state.half_open_until == leases[0]
 
@@ -365,7 +366,8 @@ async def test_incomplete_accounting_raw_and_interpreted_with_real_persistence(c
             "code": "stream_incomplete" if case == "explicit_transport" else "invalid_request_error",
             "message": "upstream terminal",
         }
-    payload = {"type": "response.incomplete", "response": response}
+    response_payload = cast(dict[str, JsonValue], response)
+    payload: dict[str, JsonValue] = {"type": "response.incomplete", "response": response_payload}
     text = json.dumps(payload)
     session.pending_requests.append(request)
     message = (

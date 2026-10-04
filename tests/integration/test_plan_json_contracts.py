@@ -113,12 +113,14 @@ async def test_business_prolite_refresh_persists_usage_without_identity_drift(
         monkeypatch.setattr("app.modules.usage.updater.fetch_usage", fetch_local)
         async with SessionLocal() as database:
             account = await database.get(Account, owner)
+            assert account is not None
             updater = UsageUpdater(UsageRepository(database), accounts_repo=AccountsRepository(database))
             assert await updater.force_refresh(account) is accepted
 
     assert observed == [("plan-json-owner", "Bearer access-token")]
     async with SessionLocal() as database:
         account = await database.get(Account, owner)
+        assert account is not None
         rows = list((await database.scalars(select(UsageHistory).where(UsageHistory.account_id == owner))).all())
         assert account.plan_type == ("prolite" if accepted else "team")
         assert account.chatgpt_account_id == "plan-json-owner" and account.workspace_id == original_workspace
@@ -127,7 +129,8 @@ async def test_business_prolite_refresh_persists_usage_without_identity_drift(
             account.refresh_token_encrypted,
             account.id_token_encrypted,
         ) == credentials
-        assert [(row.window, row.used_percent) for row in sorted(rows, key=lambda row: row.window)] == (
+        assert all(row.window is not None for row in rows)
+        assert [(row.window, row.used_percent) for row in sorted(rows, key=lambda row: str(row.window))] == (
             [("primary", 10.0), ("secondary", 20.0)] if accepted else []
         )
     if accepted:

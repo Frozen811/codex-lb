@@ -11016,9 +11016,15 @@ def test_backend_responses_websocket_previous_response_usage_limit_returns_upstr
             websocket.send_text(json.dumps(request_payload))
             event = json.loads(websocket.receive_text())
 
-    assert event["type"] == "response.failed"
-    assert event["response"]["error"]["code"] == "upstream_unavailable"
-    assert event["response"]["error"]["message"] == "Previous response owner account is unavailable; retry later."
+    assert event == {
+        "type": "error",
+        "status": 429,
+        "error": {
+            "type": "invalid_request_error",
+            "code": "usage_limit_reached",
+            "message": "The usage limit has been reached",
+        },
+    }
     assert connect_models == ["gpt-5.1"]
     assert captured_preferred_accounts == ["acct_ws_proxy_owner"]
     assert handled_error_codes == ["usage_limit_reached"]
@@ -14725,7 +14731,10 @@ def test_backend_responses_websocket_quota_replay_projects_verified_full_resend(
             assert [event["type"] for event in events] == ["response.created", "response.output_text.delta", "error"]
             assert events[-1]["error"]["code"] == "usage_limit_reached"
         else:
-            assert events[-1]["response"]["error"]["code"] == "upstream_unavailable"
+            assert events[-1] == {
+                "type": "error",
+                "error": {"code": "usage_limit_reached", "message": "Quota exhausted"},
+            }
         assert failover.connect_accounts == [failover.FIRST_ACCOUNT_ID]
         assert recovered_upstream.sent_text == []
         return

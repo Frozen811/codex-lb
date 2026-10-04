@@ -11,20 +11,15 @@ from app.modules.proxy.http_bridge_event_batcher import HttpBridgeOperationEvent
 pytestmark = pytest.mark.unit
 
 
-class _CountingWake:
+class _CountingWake(asyncio.Event):
     def __init__(self):
-        self.event = asyncio.Event()
+        super().__init__()
         self.wait_count = 0
 
     async def wait(self):
         self.wait_count += 1
-        await self.event.wait()
-
-    def set(self):
-        self.event.set()
-
-    def clear(self):
-        self.event.clear()
+        await super().wait()
+        return True
 
 
 @pytest.mark.parametrize("failure", [None, "false", "exception"])

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from typing import cast
 
 import pytest
-from sqlalchemy import insert
+from sqlalchemy import Table, insert
 
 from app.db.models import UsageHistory
 from app.db.session import SessionLocal
@@ -80,7 +81,7 @@ async def test_projection_history_preserves_cap_cutoffs_floor_and_ties(
                 selected = (tail[-cap:] if cap else []) + recent
                 if selected:
                     expected[account_id] = [row[0] for row in selected]
-        await session.execute(insert(UsageHistory.__table__), entries)
+        await session.execute(insert(cast(Table, UsageHistory.__table__)), entries)
         await session.commit()
         actual = await UsageRepository(session).bulk_history_since(
             account_ids,
@@ -102,7 +103,7 @@ async def test_projection_history_dense_accounts_hydrate_only_capped_tail(db_set
         for account_id in account_ids:
             await AccountsRepository(session).upsert(_make_account(account_id))
             await session.execute(
-                insert(UsageHistory.__table__),
+                insert(cast(Table, UsageHistory.__table__)),
                 [
                     {
                         "account_id": account_id,

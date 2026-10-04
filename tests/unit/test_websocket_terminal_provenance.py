@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import AsyncMock
 
 import aiohttp
 import pytest
+from websockets.asyncio.client import ClientConnection
 from websockets.exceptions import ConnectionClosedError
 
-from app.core.clients.native_egress import NativeEgressProtocolError, NativeEgressTransportError
+from app.core.clients.native_egress import NativeEgressProtocolError, NativeEgressTransportError, NativeEgressWebSocket
 from app.core.clients.proxy_websocket import (
     CodexUpstreamWebSocket,
     NativeUpstreamWebSocket,
@@ -20,7 +22,7 @@ pytestmark = pytest.mark.unit
 @pytest.mark.asyncio
 async def test_direct_incomplete_handshake_carries_positive_ending_provenance():
     connection = SimpleNamespace(recv=AsyncMock(side_effect=ConnectionClosedError(None, None)))
-    message = await WebsocketsUpstreamWebSocket(connection).receive()
+    message = await WebsocketsUpstreamWebSocket(cast(ClientConnection, connection)).receive()
     assert message.kind == "error"
     assert message.close_code is None
     assert message.transport_ended
@@ -51,12 +53,12 @@ async def test_routed_terminal_provenance_requires_closed_transport(closed, prot
 @pytest.mark.parametrize("phase,expected", [("transport", True), ("protocol", False)])
 async def test_native_terminal_phase_supplies_provenance(phase, expected):
     socket = SimpleNamespace(receive=AsyncMock(side_effect=NativeEgressTransportError("failed", failure_phase=phase)))
-    message = await NativeUpstreamWebSocket(socket).receive()
+    message = await NativeUpstreamWebSocket(cast(NativeEgressWebSocket, socket)).receive()
     assert message.transport_ended is expected
 
 
 @pytest.mark.asyncio
 async def test_native_protocol_fault_has_no_ending_provenance():
     socket = SimpleNamespace(receive=AsyncMock(side_effect=NativeEgressProtocolError("bad IPC")))
-    message = await NativeUpstreamWebSocket(socket).receive()
+    message = await NativeUpstreamWebSocket(cast(NativeEgressWebSocket, socket)).receive()
     assert not message.transport_ended

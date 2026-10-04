@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from time import perf_counter
+from typing import cast
 from unittest.mock import AsyncMock
 
 import pytest
-from sqlalchemy import insert
+from sqlalchemy import Table, insert
 
 from app.db.models import RequestLog
 from app.db.session import SessionLocal
@@ -22,7 +23,7 @@ async def test_dense_seven_day_reports_api_raw_folded_and_cached(async_client, a
     async with SessionLocal() as session:
         for offset in range(0, ROW_COUNT, 5000):
             await session.execute(
-                insert(RequestLog.__table__),
+                insert(cast(Table, RequestLog.__table__)),
                 [
                     {
                         "request_id": f"dense-report-{i}",

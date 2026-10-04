@@ -9,6 +9,7 @@ from typing import Any, cast
 
 import aiohttp
 import pytest
+import zstandard
 from websockets.asyncio.server import serve as websocket_serve
 
 from app.core.clients.codex import CodexClient
@@ -59,6 +60,7 @@ async def test_direct_sse_and_routed_http_websocket_share_native_helper(
     http_bodies: list[bytes] = []
     direct_hits: list[str] = []
     direct_bodies: list[bytes] = []
+    request_encodings: list[str] = []
 
     async def direct_http_handler(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         head = await reader.readuntil(b"\r\n\r\n")
@@ -68,6 +70,8 @@ async def test_direct_sse_and_routed_http_websocket_share_native_helper(
             name, _, value = line.partition(b":")
             if name.lower() == b"content-length":
                 content_length = int(value.strip())
+            elif name.lower() == b"content-encoding":
+                request_encodings.append(value.strip().decode("ascii"))
         direct_bodies.append(await reader.readexactly(content_length))
         body = b'data: {"type":"response.completed","response":{"id":"resp_direct"}}\n\n'
         writer.write(
@@ -113,6 +117,8 @@ async def test_direct_sse_and_routed_http_websocket_share_native_helper(
                 name, _, value = line.partition(b":")
                 if name.lower() == b"content-length":
                     content_length = int(value.strip())
+                elif name.lower() == b"content-encoding":
+                    request_encodings.append(value.strip().decode("ascii"))
             http_bodies.append(await reader.readexactly(content_length))
             body = b'data: {"type":"response.completed","response":{"id":"resp_wire"}}\n\n'
             writer.write(
@@ -211,11 +217,12 @@ async def test_direct_sse_and_routed_http_websocket_share_native_helper(
             assert helper_process is not None and helper_process.returncode is None
             assert direct_hits == ["POST /codex/responses HTTP/1.1"]
             assert len(direct_bodies) == 1
-            direct_body = json.loads(direct_bodies[0])
+            assert request_encodings == ["zstd", "zstd"]
+            direct_body = json.loads(zstandard.ZstdDecompressor().decompress(direct_bodies[0]))
             assert direct_body["model"] == "gpt-5.4"
             assert direct_body["input"]
             assert len(http_bodies) == 1
-            routed_body = json.loads(http_bodies[0])
+            routed_body = json.loads(zstandard.ZstdDecompressor().decompress(http_bodies[0]))
             assert routed_body["model"] == "gpt-5.4"
             assert routed_body["input"]
             assert proxy_hits[0].startswith("POST http://upstream.invalid/codex/responses ")

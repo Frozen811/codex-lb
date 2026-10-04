@@ -34767,6 +34767,7 @@ async def test_process_upstream_websocket_text_keeps_file_backed_verified_anchor
     assert json.loads(downstream_text) == upstream_payload
     handle_stream_error.assert_not_awaited()
     finalize_request_state.assert_awaited_once()
+    assert finalize_request_state.await_args is not None
     assert finalize_request_state.await_args.kwargs["payload"] == upstream_payload
     assert upstream_control.reconnect_requested is False
     assert upstream_control.suppress_downstream_event is False

@@ -4,6 +4,7 @@ import asyncio
 import json
 import time
 from dataclasses import dataclass, field
+from typing import Any, cast
 
 import pytest
 from aiohttp import web
@@ -116,8 +117,8 @@ async def test_reason_only_incomplete_opens_durable_circuit_before_next_dispatch
         assert response.status_code == 200, response.text
         assert _events(response)[-1] == terminal_origin.terminal
         assert await service.drain_persistence_tasks(timeout_seconds=5)
-        assert len(service._http_bridge_retry_circuits) == 1
-        key = next(iter(service._http_bridge_retry_circuits))
+        assert len(cast(Any, service)._http_bridge_retry_circuits) == 1
+        key = next(iter(cast(Any, service)._http_bridge_retry_circuits))
         persisted = await service._durable_bridge.lookup_retry_circuit(
             session_key_kind=key.affinity_kind, session_key_value=key.affinity_key, api_key_id=key.api_key_id
         )

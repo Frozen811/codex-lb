@@ -35,3 +35,14 @@ The publisher requires an existing GitHub release. A manual invocation requires 
 GitHub and GHCR are separate systems: partially uploaded assets, exact tags, or partially advanced aliases can remain after a registry/network failure. Making the release draft is not an atomic rollback. Inspect digests and release assets before recovery, preserve failure evidence and use a new candidate where required. The final source read also cannot lock main against changes immediately afterwards; serialization and rechecking narrow the race but do not make CI immutable.
 
 Example: a public `v1.25.2-beta.1` tag identifies SHA A, but A's CI is failed while SHA B's CI is green. Publication refuses A, performs no new registry push or package upload, and drafts that release. Passing local tests on A is insufficient to bypass this refusal.
+
+
+## Fork CI repair (2026-10-04)
+
+The required CI contract in [spec.md](spec.md) retains complete integration-core coverage, per-test watchdogs and aggregate gates. The former 20-minute shard budget cancelled a continuously progressing job at roughly 75% on run 37209560169. Its bounded budget is now 40 minutes; no test is removed and a failing/cancelled shard still blocks both aggregates.
+
+The associated repairs align test fixtures with existing product contracts: explicit slash aliases remain capability classified; unsafe-to-migrate authored WebSocket errors retain their status/code/message; direct and routed native Responses bodies are decoded as zstd before semantic assertions. Strict ty includes all tests; concrete table casts, mock typing and positive payload narrowing replace invalid fixture assumptions.
+
+For example, a selected owner's authored usage_limit_reached error remains that same error on the original socket when complete replay cannot be proved. It is not replaced by an admission-stage owner-unavailable envelope. The no-second-account and no-replay assertions remain mandatory.
+
+Historical Windows installed-wheel smoke failed on cleanup of an open log handle at 282ce1470. The same current smoke implementation passed subsequent 8f713d322 and 94c9a8c24 runs; this is historical flake evidence rather than a reason to skip Windows verification. The repair is considered cloud-verified only after all required jobs for its exact published SHA complete successfully. Actual runtime/provider/deployment and unrelated SQLite/native aggregate residuals remain separate.

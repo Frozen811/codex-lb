@@ -185,7 +185,11 @@ async def test_real_bridge_paused_delivery_has_bounded_cleanup(
                 terminals = [event for event in events if event["type"] in {"response.failed", "response.completed"}]
                 assert len(terminals) == 1
                 assert terminals[0]["type"] == "response.failed"
-                assert terminals[0]["response"]["error"]["code"] == "stream_idle_timeout"
+                response = terminals[0]["response"]
+                assert isinstance(response, dict)
+                error = response["error"]
+                assert isinstance(error, dict)
+                assert error["code"] == "stream_idle_timeout"
         assert queue.queued_bytes == 0
         assert not queue._putters
         assert await service.drain_persistence_tasks(timeout_seconds=5)
@@ -200,6 +204,7 @@ async def test_real_bridge_paused_delivery_has_bounded_cleanup(
                 row.status for row in reservations
             ]
             account = await database.get(Account, bridge_origin.owner_id)
+            assert account is not None
             assert account.status == AccountStatus.ACTIVE
     finally:
         resume.set()
@@ -251,6 +256,7 @@ async def test_real_completion_preserves_quarantine_armed_during_settlement(
     key, owner, generation = captured[0]
     entry = quarantine._http_bridge_quarantine_registry(service)[key]
     assert entry.generation == generation
+    assert entry.owner_ref is not None
     assert entry.owner_ref() is owner
     if race == "first_failure":
         assert entry.consecutive_eventless_timeouts == 1

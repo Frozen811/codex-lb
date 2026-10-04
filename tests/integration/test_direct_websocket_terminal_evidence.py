@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from functools import partial
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
@@ -64,7 +65,7 @@ def test_direct_terminal_provenance_controls_health_without_replay(
             transport_ended=ending == "ended-error",
         )
     )
-    upstream = _SequencedUpstreamWebSocket([], deferred_message_batches=[events])
+    upstream = _SequencedUpstreamWebSocket([], deferred_message_batches=cast(Any, [events]))
     connect = AsyncMock(return_value=(SimpleNamespace(id="only-account"), upstream))
     health = AsyncMock()
     logs = AsyncMock()
@@ -77,6 +78,7 @@ def test_direct_terminal_provenance_controls_health_without_replay(
     monkeypatch.setattr(proxy_service.ProxyService, "_handle_stream_error", health)
     monkeypatch.setattr(proxy_service.ProxyService, "_write_request_log", logs)
     with TestClient(app_instance) as client:
+        assert client.portal is not None
         client.portal.call(_seed_connected_account)
 
         async def committed_account():
@@ -95,6 +97,7 @@ def test_direct_terminal_provenance_controls_health_without_replay(
     assert error["code"] == "stream_incomplete"
     assert health.await_count == int(penalized)
     assert logs.await_count == 1
+    assert logs.await_args is not None
     assert logs.await_args.kwargs["error_code"] == "stream_incomplete"
     assert len(upstream.sent_text) == 1
     connect.assert_awaited_once()
@@ -126,7 +129,7 @@ def test_selected_owner_quota_terminal_preserves_sanitized_metadata(app_instance
             )
         )
     events.append(UpstreamWebSocketMessage("text", text=json.dumps(frame)))
-    upstream = _SequencedUpstreamWebSocket([], deferred_message_batches=[events])
+    upstream = _SequencedUpstreamWebSocket([], deferred_message_batches=cast(Any, [events]))
     connect = AsyncMock()
     health, logs = AsyncMock(), AsyncMock()
     monkeypatch.setattr(proxy_api, "_websocket_firewall_denial_response", AsyncMock(return_value=None))
@@ -141,6 +144,7 @@ def test_selected_owner_quota_terminal_preserves_sanitized_metadata(app_instance
     monkeypatch.setattr(proxy_service.ProxyService, "_handle_stream_error", health)
     monkeypatch.setattr(proxy_service.ProxyService, "_write_request_log", logs)
     with TestClient(app_instance) as client:
+        assert client.portal is not None
         client.portal.call(_seed_connected_account)
 
         async def committed_account():
@@ -168,6 +172,7 @@ def test_selected_owner_quota_terminal_preserves_sanitized_metadata(app_instance
     if frame_kind == "error":
         assert terminal["status"] == 429
     assert logs.await_count == 1
+    assert logs.await_args is not None
     assert logs.await_args.kwargs["error_code"] == "usage_limit_reached"
     assert health.await_count == 1
     assert len(upstream.sent_text) == 1

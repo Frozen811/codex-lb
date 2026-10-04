@@ -136,9 +136,16 @@ async def test_delivery_stall_retains_order_then_reports_failure():
         queue, "lost-output", request_state=request, settings=settings
     )
     assert await queue.get() == "old-output"
-    terminal = parse_sse_data_json(await asyncio.wait_for(queue.get(), timeout=0.1))
+    terminal_text = await asyncio.wait_for(queue.get(), timeout=0.1)
+    assert terminal_text is not None
+    terminal = parse_sse_data_json(terminal_text)
+    assert terminal is not None
     assert terminal["type"] == "response.failed"
-    assert terminal["response"]["error"]["code"] == "stream_idle_timeout"
+    response = terminal["response"]
+    assert isinstance(response, dict)
+    error = response["error"]
+    assert isinstance(error, dict)
+    assert error["code"] == "stream_idle_timeout"
     assert await asyncio.wait_for(queue.get(), timeout=0.1) is None
     assert queue.queued_bytes == 0
     assert not queue._putters
@@ -177,7 +184,10 @@ async def test_long_model_idle_allowance_does_not_extend_downstream_stall(monkey
         timeout=0.1,
     )
     assert await queue.get() == "output"
-    assert parse_sse_data_json(await queue.get())["type"] == "response.failed"
+    terminal_text = await queue.get()
+    assert terminal_text is not None
+    terminal = parse_sse_data_json(terminal_text)
+    assert terminal is not None and terminal["type"] == "response.failed"
 
 
 @pytest.mark.asyncio

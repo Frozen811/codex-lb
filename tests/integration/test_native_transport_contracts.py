@@ -9,6 +9,7 @@ import ssl
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
+from typing import Any, cast
 
 import aiohttp
 import h2.config
@@ -141,8 +142,9 @@ async def h2_origin(tmp_path, monkeypatch) -> AsyncIterator[_H2Origin]:
             while data := await reader.read(65536):
                 for event in connection.receive_data(data):
                     if isinstance(event, h2.events.RequestReceived):
-                        accounts[event.stream_id] = dict(event.headers)["chatgpt-account-id"]
-                        request_headers[event.stream_id] = event.headers
+                        headers = cast(list[tuple[str, str]], event.headers)
+                        accounts[event.stream_id] = dict(headers)["chatgpt-account-id"]
+                        request_headers[event.stream_id] = headers
                         bodies[event.stream_id] = bytearray()
                     elif isinstance(event, h2.events.DataReceived):
                         connection.acknowledge_received_data(event.flow_controlled_length, event.stream_id)
@@ -345,7 +347,7 @@ async def test_windows_route_recovery_retires_real_shared_generation(
             attempts.append(session)
             if len(attempts) == 1:
                 error = OSError(errno.EINVAL, "synthetic Windows route loss")
-                error.winerror = winerror
+                cast(Any, error).winerror = winerror
                 if pre_dispatch:
                     error = aiohttp.ClientConnectorError(
                         ConnectionKey("127.0.0.1", server.port, False, False, None, None, None), error
@@ -470,7 +472,10 @@ async def test_native_direct_failures_release_real_admission_and_reservations(
                 await _write_chunk(writer, _created("resp_after_failures"))
                 await _write_chunk(writer, completed.encode())
             else:
-                response = parse_sse_data_json(completed)["response"]
+                terminal = parse_sse_data_json(completed)
+                assert terminal is not None
+                response = terminal["response"]
+                assert isinstance(response, dict)
                 response["status"] = "completed"
                 await _write_chunk(writer, json.dumps(response).encode())
             await _finish_chunks(writer)

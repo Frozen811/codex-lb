@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
+from typing import cast
 
 import aiohttp
 import pytest
@@ -15,7 +16,7 @@ from aiohttp.test_utils import TestServer
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import Table, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.clients import proxy as core_proxy
@@ -246,7 +247,7 @@ async def test_proxy_client_useragent_persists_into_telemetry_preview(
     app = web.Application()
     app.router.add_post("/codex/responses", upstream)
     monkeypatch.setattr(core_proxy, "discover_native_egress_client", lambda: None)
-    async with TestServer(app) as server, aiohttp.ClientSession() as session:
+    async with TestServer(app) as server, aiohttp.ClientSession() as http_session:
 
         async def stream_local(payload, headers, access_token, account_id, **kwargs):
             async for event in core_proxy.stream_responses(
@@ -255,7 +256,7 @@ async def test_proxy_client_useragent_persists_into_telemetry_preview(
                 access_token,
                 account_id,
                 base_url=str(server.make_url("/")),
-                session=session,
+                session=http_session,
                 upstream_stream_transport_override="http",
             ):
                 yield event
@@ -313,7 +314,7 @@ async def test_environment_key_import_and_independent_instance_readback(async_cl
     sentinel_engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     try:
         async with sentinel_engine.begin() as connection:
-            await connection.run_sync(RuntimeSentinel.__table__.create)
+            await connection.run_sync(cast(Table, RuntimeSentinel.__table__).create)
         sentinel_sessions = async_sessionmaker(sentinel_engine)
         await verify_encryption_key_fingerprint(sentinel_sessions, mode="enforce")
         await verify_encryption_key_fingerprint(sentinel_sessions, mode="enforce")
@@ -323,7 +324,9 @@ async def test_environment_key_import_and_independent_instance_readback(async_cl
             await verify_encryption_key_fingerprint(sentinel_sessions, mode="enforce")
         assert "use the same CODEX_LB_ENCRYPTION_KEY value" in str(mismatch.value)
         assert raw_key.decode() not in str(mismatch.value)
-        assert get_settings().encryption_key not in str(mismatch.value)
+        effective_key = get_settings().encryption_key
+        assert effective_key is not None
+        assert effective_key not in str(mismatch.value)
         with pytest.raises(InvalidToken):
             TokenEncryptor().decrypt(ciphertext)
         async with sentinel_sessions() as session:
