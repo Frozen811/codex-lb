@@ -267,6 +267,13 @@ class CodexClient:
                                 url=native_request.url,
                                 headers=native_request.headers,
                                 body=native_request.body,
+                                compress_json=(
+                                    method.upper() == "POST"
+                                    and "json" in kwargs
+                                    and URL(native_request.url)
+                                    .path.rstrip("/")
+                                    .endswith(("/responses", "/responses/compact"))
+                                ),
                                 timeout_seconds=native_request.timeout_seconds,
                                 connect_timeout_seconds=native_request.connect_timeout_seconds,
                                 response_head_timeout_seconds=native_request.response_head_timeout_seconds,

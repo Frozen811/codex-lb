@@ -481,7 +481,10 @@ async def test_codex_control_request_does_not_duplicate_content_type(
         payload=b'{"query": "test"}',
         query_params={},
         headers={
+            "x-codex-client-extra": "before",
             header_name: content_type,
+            # Two casings in the Mapping must collapse to its first spelling.
+            "cOnTeNt-TyPe": "duplicate/type",
             "user-agent": "codex_cli_rs/0.1.0",
         },
         access_token="access",
@@ -497,17 +500,22 @@ async def test_codex_control_request_does_not_duplicate_content_type(
     content_type_headers = [k for k in sent_headers if k.lower() == "content-type"]
     assert len(content_type_headers) == 1
     assert sent_headers[content_type_headers[0]] == content_type
+    assert content_type_headers[0] == header_name
+    assert list(sent_headers).index(header_name) == 1
 
 
 @pytest.mark.asyncio
-async def test_codex_control_request_removes_content_type_when_no_payload(route: ResolvedUpstreamRoute) -> None:
+@pytest.mark.parametrize("payload", [None, b""])
+async def test_codex_control_request_removes_content_type_when_no_payload(
+    route: ResolvedUpstreamRoute, payload: bytes | None
+) -> None:
     client = _CodexClient()
     trace = UpstreamProxyRouteTrace()
 
     response = await codex_control_request(
         "alpha/search",
         method="GET",
-        payload=None,
+        payload=payload,
         query_params={},
         headers={
             "content-type": "application/json",
@@ -524,6 +532,8 @@ async def test_codex_control_request_removes_content_type_when_no_payload(route:
     sent_headers = client.calls[0]["headers"]
     content_type_headers = [k for k in sent_headers if k.lower() == "content-type"]
     assert len(content_type_headers) == 0
+    assert client.calls[0]["data"] is None
+    assert client.calls[0]["skip_auto_headers"] == {"Content-Type"}
 
 
 @pytest.mark.asyncio

@@ -15,6 +15,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Protocol, cast
 
+import zstandard
 from multidict import CIMultiDict
 
 from app.core.clients.stream_errors import StreamEventTooLargeError, StreamIdleTimeoutError
@@ -190,6 +191,7 @@ class NativeEgressRequest:
     proxy_url: str | None = None
     pool_key: str | None = None
     sse: NativeSseOptions | None = None
+    compress_json: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -810,6 +812,18 @@ class SubprocessNativeEgressClient:
             if type(request.sse.max_event_bytes) is not int or request.sse.max_event_bytes <= 0:
                 raise ValueError("native SSE max_event_bytes must be a positive integer")
 
+        body = request.body
+        headers = request.headers
+        if request.compress_json:
+            if request.method.upper() != "POST" or body is None:
+                raise ValueError("native JSON compression requires a POST body")
+            body = zstandard.ZstdCompressor(level=3).compress(body)
+            headers = {
+                name: value
+                for name, value in headers.items()
+                if name.lower() not in {"content-encoding", "content-length"}
+            }
+            headers["content-encoding"] = "zstd"
         process, generation = await self._ensure_process()
         self._request_sequence += 1
         request_id = f"{generation}:{self._request_sequence}"
@@ -820,8 +834,8 @@ class SubprocessNativeEgressClient:
             "request_id": request_id,
             "method": request.method,
             "url": request.url,
-            "headers": list(request.headers.items()),
-            "body": base64.b64encode(request.body).decode("ascii") if request.body is not None else None,
+            "headers": list(headers.items()),
+            "body": base64.b64encode(body).decode("ascii") if body is not None else None,
             "timeout_ms": (
                 max(1, round(request.timeout_seconds * 1000)) if request.timeout_seconds is not None else None
             ),

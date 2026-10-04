@@ -98,7 +98,9 @@ from app.modules.proxy._service.http_bridge.quarantine import (
     _record_http_bridge_quarantine_wedged_pending,
 )
 from app.modules.proxy._service.http_bridge.queues import (
+    _HTTP_BRIDGE_DOWNSTREAM_STALL_TIMEOUT_SECONDS,
     _http_bridge_event_payload_size,
+    _HTTPBridgeEventQueue,
 )
 from app.modules.proxy._service.http_bridge.retry_circuit import (
     _HTTP_BRIDGE_RETRY_CIRCUIT_ANCHOR_ABANDONED_DETAIL,
@@ -392,12 +394,17 @@ async def _enqueue_http_bridge_downstream_event(
     """
     if queue is None:
         return False
+    if item is None and isinstance(queue, _HTTPBridgeEventQueue):
+        queue.finish()
+        return True
     if item is None or _http_bridge_event_payload_size(item) == 0:
         try:
             queue.put_nowait(item)
             return True
         except (asyncio.QueueFull, AttributeError):
             pass
+        except asyncio.QueueShutDown:
+            return False
     if settings is None:
         settings = _service_get_settings()
     stall_timeout: float | None = None
@@ -407,15 +414,16 @@ async def _enqueue_http_bridge_downstream_event(
             stall_timeout = max(0.1, deadline - clock.monotonic())
     idle_timeout = float(getattr(settings, "stream_idle_timeout_seconds", 7200.0) if settings else 7200.0)
     stall_timeout = min(stall_timeout, idle_timeout) if stall_timeout is not None else idle_timeout
+    # A model's long idle allowance must not let one paused downstream
+    # consumer monopolize the shared reader for that same duration.
+    stall_timeout = min(stall_timeout, _HTTP_BRIDGE_DOWNSTREAM_STALL_TIMEOUT_SECONDS)
 
     try:
         effective_scheduler = scheduler or REAL_SCHEDULER
         await effective_scheduler.wait_for(queue.put(item), timeout=stall_timeout)
         return True
-    except asyncio.CancelledError:
-        if request_state is not None and getattr(request_state, "draining_until_terminal", False):
-            return False
-        raise
+    except asyncio.QueueShutDown:
+        return False
     except asyncio.TimeoutError:
         logger.warning(
             "HTTP bridge downstream consumer stalled exceeding queue limit request_id=%s",
@@ -424,7 +432,17 @@ async def _enqueue_http_bridge_downstream_event(
         if request_state is not None:
             request_state.failure_phase_override = "downstream"
             request_state.failure_detail_override = "consumer_backpressure"
-            if hasattr(queue, "close"):
+            if isinstance(queue, _HTTPBridgeEventQueue):
+                queue.fail(
+                    format_sse_event(
+                        response_failed_event(
+                            "stream_idle_timeout",
+                            "Downstream consumer did not drain buffered output within the delivery timeout",
+                            response_id=request_state.response_id or request_state.request_id,
+                        )
+                    )
+                )
+            elif hasattr(queue, "close"):
                 queue.close()
         return False
 

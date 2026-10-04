@@ -230,6 +230,7 @@ async def test_routed_request_prefers_native_single_endpoint_attempt(
     assert request.proxy_url == _route_basic_auth_url("u", "p", "proxy.test:8080")
     assert request.url == "https://upstream.test/responses?existing=1&client=codex"
     assert request.body == b'{"input":"hello"}'
+    assert request.compress_json is True
     assert request.headers["Content-Type"] == "application/json"
     assert request.timeout_seconds == total_timeout
     assert request.connect_timeout_seconds == 7
@@ -256,6 +257,22 @@ async def test_routed_native_request_serializes_multipart_once(route: ResolvedUp
     assert b'name="file"; filename="audio.wav"' in request.body
     assert b"Content-Type: audio/wav\r\n\r\nRIFF-data" in request.body
     assert request.headers["Content-Type"].startswith("multipart/form-data; boundary=codex-lb-")
+    assert request.compress_json is False
+
+
+@pytest.mark.parametrize("suffix,compressed", [("/responses/", True), ("/responses/compact", True), ("/models", False)])
+@pytest.mark.asyncio
+async def test_native_json_compression_opt_in_preserves_python_fallback(route, suffix, compressed):
+    session = _Session()
+    native = _NativeClient(request_results=[NativeEgressUnavailable("missing helper")])
+    client = CodexClient(session, native_egress_client=cast(Any, native))
+    headers = {"Content-Type": "application/json"}
+    payload = {"input": "unchanged"}
+    await client.request("POST", "https://upstream.test" + suffix, route=route, headers=headers, json=payload)
+    assert native.request_calls[0].compress_json is compressed
+    assert session.calls[0]["json"] == payload
+    assert session.calls[0]["headers"] == headers
+    assert "Content-Encoding" not in headers and "content-encoding" not in headers
 
 
 @pytest.mark.asyncio

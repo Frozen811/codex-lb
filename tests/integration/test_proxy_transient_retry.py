@@ -1139,7 +1139,7 @@ async def test_stream_http_500_exhausts_then_failover(async_client, monkeypatch)
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("winerror", [64, 121])
+@pytest.mark.parametrize("winerror", [1231, 1232])
 @pytest.mark.parametrize("pre_dispatch", [False, True])
 async def test_stream_windows_transport_recovery_preserves_replay_safety(
     async_client, monkeypatch, winerror, pre_dispatch

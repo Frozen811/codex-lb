@@ -13,6 +13,7 @@ from app.core.openai.requests import (
     ResponsesRequest,
     ResponsesTextControls,
     ResponsesTextFormat,
+    _requests_json_object_format,
     normalize_reasoning_aliases,
     normalize_tool_type,
     validate_passthrough_depth,
@@ -160,10 +161,10 @@ class ChatCompletionsRequest(BaseModel):
         stream_options = data.pop("stream_options", None)
         raw_tools = self.tools
         raw_tool_choice = data.pop("tool_choice", None)
-        preserve_instruction_roles = _is_json_object_response_format(response_format)
         normalize_reasoning_aliases(data)
         if response_format is not None:
             _apply_response_format(data, response_format)
+        preserve_instruction_roles = _requests_json_object_format(data.get("text"))
         if isinstance(stream_options, Mapping):
             include_obfuscation = stream_options.get("include_obfuscation")
             if include_obfuscation is not None:
@@ -284,14 +285,6 @@ def _normalize_tool_choice(tool_choice: JsonValue | None) -> JsonValue | None:
         if isinstance(name, str) and name:
             return {"type": tool_type or "function", "name": name}
     return tool_choice
-
-
-def _is_json_object_response_format(response_format: JsonValue | None) -> bool:
-    if isinstance(response_format, str):
-        return response_format == "json_object"
-    if not is_json_mapping(response_format):
-        return False
-    return response_format.get("type") == "json_object"
 
 
 def _apply_response_format(data: dict[str, JsonValue], response_format: JsonValue) -> None:

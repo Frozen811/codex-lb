@@ -367,6 +367,16 @@ _TRANSCRIBE_TOTAL_TIMEOUT_OVERRIDE: contextvars.ContextVar[float | None] = conte
 
 
 @dataclass(slots=True)
+class UpstreamResponseFailureTrace:
+    """Attempt-owned native diagnostics kept outside response event bytes."""
+
+    failure_phase: str | None = None
+    failure_detail: str | None = None
+    failure_exception_type: str | None = None
+    upstream_status_code: int | None = None
+
+
+@dataclass(slots=True)
 class UpstreamProxyRouteTrace:
     mode: str | None = None
     pool_id: str | None = None
@@ -3675,6 +3685,7 @@ async def stream_responses(
     native_egress_client: NativeEgressClient | None = None,
     synthesize_routing_hint: bool = False,
     thread_cache_identity: ThreadCacheIdentity | None = None,
+    failure_trace: UpstreamResponseFailureTrace | None = None,
 ) -> AsyncIterator[str]:
     effective_allow_direct_egress = allow_direct_egress or (route is None and session is not None)
     # aclosing() at every hop lets a consumer's aclose() reach the upstream
@@ -3702,6 +3713,7 @@ async def stream_responses(
                 native_egress_client=native_egress_client,
                 synthesize_routing_hint=synthesize_routing_hint,
                 thread_cache_identity=thread_cache_identity,
+                failure_trace=failure_trace,
             )
         ) as upstream_events,
     ):
@@ -3735,6 +3747,7 @@ async def _stream_responses_with_session(
     native_egress_client: NativeEgressClient | None = None,
     synthesize_routing_hint: bool = False,
     thread_cache_identity: ThreadCacheIdentity | None = None,
+    failure_trace: UpstreamResponseFailureTrace | None = None,
 ) -> AsyncGenerator[str, None]:
     settings = with_dashboard_overrides(get_settings())
     headers = apply_codex_installation_headers(
@@ -4080,6 +4093,7 @@ async def _stream_responses_with_session(
                             url=url,
                             headers=current_headers,
                             body=cast(str, payload_json).encode("utf-8"),
+                            compress_json=True,
                             timeout_seconds=current_timeout.total or request_total_timeout,
                             connect_timeout_seconds=current_timeout.sock_connect,
                             response_head_timeout_seconds=current_timeout.sock_read,
@@ -4484,6 +4498,11 @@ async def _stream_responses_with_session(
         failure_phase = exc.failure_phase
         failure_detail = "native_transport_error"
         failure_exception_type = type(exc).__name__
+        if failure_trace is not None:
+            failure_trace.failure_phase = failure_phase
+            failure_trace.failure_detail = failure_detail
+            failure_trace.failure_exception_type = failure_exception_type
+            failure_trace.upstream_status_code = status_code
         if raise_for_status and retryable_same_contract:
             raise ProxyResponseError(
                 502,
@@ -5012,6 +5031,7 @@ class _CompactCommandTransport:
                             url=url,
                             headers=upstream_headers,
                             body=json.dumps(payload_dict, ensure_ascii=True, separators=(",", ":")).encode("utf-8"),
+                            compress_json=True,
                             timeout_seconds=compact_timeout_seconds,
                             connect_timeout_seconds=effective_connect_timeout,
                             response_head_timeout_seconds=compact_timeout_seconds,
@@ -5652,6 +5672,7 @@ async def codex_control_request(
     privacy_policy: CodexControlRequestPrivacyPolicy = CodexControlRequestPrivacyPolicy.STANDARD,
     allow_direct_egress: bool = True,
 ) -> CodexControlResponse:
+    payload = payload or None
     settings = with_dashboard_overrides(get_settings())
     upstream_base = (base_url or settings.upstream_base_url).rstrip("/")
     normalized_path = path.strip("/")
@@ -5749,6 +5770,8 @@ async def codex_control_request(
                     "headers": upstream_headers,
                     "timeout": total_timeout,
                 }
+                if payload is None:
+                    request_kwargs["skip_auto_headers"] = {"Content-Type"}
                 request_with_metadata = getattr(active_codex_client, "request_with_route_metadata", None)
                 if callable(request_with_metadata):
                     result = await request_with_metadata(request_method, url, **request_kwargs)
@@ -5784,6 +5807,7 @@ async def codex_control_request(
                 data=payload,
                 headers=upstream_headers,
                 timeout=timeout,
+                skip_auto_headers={"Content-Type"} if payload is None else (),
             ),
             settings=settings,
             account_id=account_id,

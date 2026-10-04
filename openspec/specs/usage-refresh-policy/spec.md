@@ -2462,6 +2462,23 @@ When a ChatGPT caller consumes a pooled credit belonging to another account, the
 - **WHEN** an authenticated caller requests a pooled credit with a valid refreshed target identity
 - **THEN** consumption uses the target bearer token, target ChatGPT account ID, and original redemption ID
 
+### Requirement: Canonical Business Pro Lite plan compatibility
+
+The service MUST canonicalize the upstream plan identifier `self_serve_business_prolite`, including case and surrounding whitespace variations, to the existing `prolite` tier during account import and usage refresh. Capacity and rate-limit plan metadata MUST use that canonical tier, and model eligibility MUST retain its Pro-equivalent entitlement. A workspace-less recognized account's paid-plan transition MUST accept the alias without changing its account identity or credentials. Unknown plan and conflicting-workspace payloads MUST retain existing admission guards.
+
+#### Scenario: Workspace-less account refresh accepts paid alias
+- **WHEN** a workspace-less team account receives usage for self_serve_business_prolite
+- **THEN** canonical prolite metadata and usage are persisted and observable from a new session
+- **AND** its identity and encrypted credentials are unchanged
+
+#### Scenario: Imported alias has canonical capacity and entitlement
+- **WHEN** an imported account reports the alias with mixed case and whitespace
+- **THEN** its stored and dashboard plan is prolite with the same capacity and model eligibility as canonical prolite
+
+#### Scenario: Alias does not override workspace identity
+- **WHEN** an alias usage payload reports a conflicting workspace
+- **THEN** the stored plan, workspace, and usage remain unchanged
+
 ### Requirement: Capped projection history reads
 
 Projection history reads with a per-account row cap MUST accept only nonnegative integers, excluding booleans, and MUST reject invalid caps before database queries. Capped reads MUST return the newest eligible rows per requested account in ascending timestamp and ID order, respect the global floor and tighter account cutoffs, and preserve all eligible rows at or after an explicit recent floor. SQLite capped reads MUST avoid hydrating the entire older history or populating the uncapped history cache.

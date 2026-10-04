@@ -151,10 +151,7 @@ async def test_sender_aborts_snapshot_when_consent_becomes_inactive_before_post(
         context_provider=context_provider,
     ).send_snapshot(snapshot)
 
-    assert [request[0] for request in session.requests] == [
-        "https://telemetry.example/v1/register",
-        "https://telemetry.example/v1/activate",
-    ]
+    assert session.requests == []
     assert context_provider.await_count == 2
 
 
@@ -193,10 +190,7 @@ async def test_sender_aborts_snapshot_when_identity_changes_before_post(monkeypa
         context_provider=context_provider,
     ).send_snapshot(snapshot)
 
-    assert [request[0] for request in session.requests] == [
-        "https://telemetry.example/v1/register",
-        "https://telemetry.example/v1/activate",
-    ]
+    assert session.requests == []
     assert context_provider.await_count == 2
 
 
@@ -214,10 +208,7 @@ async def test_sender_aborts_snapshot_when_consent_recheck_fails(monkeypatch, ca
             context_provider=context_provider,
         ).send_snapshot(snapshot)
 
-    assert [request[0] for request in session.requests] == [
-        "https://telemetry.example/v1/register",
-        "https://telemetry.example/v1/activate",
-    ]
+    assert session.requests == []
     assert context_provider.await_count == 2
     assert [record.message for record in caplog.records] == ["Anonymous telemetry consent re-check failed"]
 

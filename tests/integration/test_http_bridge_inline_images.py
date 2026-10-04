@@ -254,18 +254,21 @@ async def inline_bridge_transport(async_client, app_instance, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_default_on_text_image_text_reuses_one_bridge_connection_verbatim(async_client, inline_bridge_transport):
+@pytest.mark.parametrize("path", ["/v1/responses", "/backend-api/codex/responses"])
+async def test_default_on_text_image_text_reuses_one_bridge_connection_verbatim(
+    async_client, inline_bridge_transport, path
+):
     assert _VALID_PNG_BYTES[:8] == b"\x89PNG\r\n\x1a\n" and _VALID_PNG_BYTES[-8:-4] == b"IEND"
     state = inline_bridge_transport
     upstream = state.upstreams[0]
 
-    first = await _collect_sse_events(async_client, "/v1/responses", json_body=_body(_text_turn("hello")))
+    first = await _collect_sse_events(async_client, path, json_body=_body(_text_turn("hello")))
     second = await _collect_sse_events(
-        async_client, "/v1/responses", json_body=_body(_text_turn("hello"), _image_turn(_VALID_PNG_DATA_URL))
+        async_client, path, json_body=_body(_text_turn("hello"), _image_turn(_VALID_PNG_DATA_URL))
     )
     third = await _collect_sse_events(
         async_client,
-        "/v1/responses",
+        path,
         json_body=_body(
             _text_turn("hello"),
             _image_turn(_VALID_PNG_DATA_URL),
@@ -292,6 +295,65 @@ async def test_default_on_text_image_text_reuses_one_bridge_connection_verbatim(
         _JPEG_SIZED_SYNTHETIC_DATA_URL,
     ]
     assert upstream.closed is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["/v1/responses", "/backend-api/codex/responses"])
+async def test_inline_image_output_free_overload_recovers_then_retains_bridge(
+    app_instance, async_client, inline_bridge_transport, path
+):
+    class OneOverload(_PromotionUpstreamWebSocket):
+        rejected = False
+
+        async def send_text(self, text):
+            if _collect_input_image_urls(text) and not self.rejected:
+                self.rejected = True
+                self.sent_text.append(text)
+                await self._messages.put(
+                    _FakeUpstreamMessage(
+                        "text",
+                        text=json.dumps(
+                            {
+                                "type": "error",
+                                "status": 503,
+                                "error": {
+                                    "code": "server_is_overloaded",
+                                    "type": "server_error",
+                                    "message": "Try again later",
+                                },
+                            }
+                        ),
+                    )
+                )
+            else:
+                await super().send_text(text)
+
+    state = inline_bridge_transport
+    overloaded = OneOverload(response_id_prefix="resp_overload")
+    recovered = _PromotionUpstreamWebSocket(response_id_prefix="resp_recovered")
+    state.upstreams[:] = [overloaded, recovered]
+    first = await _collect_sse_events(async_client, path, json_body=_body(_text_turn("hello")))
+    _assert_created_text_delta_completed(first)
+    image = await _collect_sse_events(
+        async_client, path, json_body=_body(_text_turn("hello"), _image_turn(_VALID_PNG_DATA_URL))
+    )
+    _assert_created_text_delta_completed(image)
+    connects = state.connects
+    assert overloaded.rejected
+    assert 1 <= connects <= 2
+    await get_proxy_service_for_app(app_instance).drain_persistence_tasks(timeout_seconds=5)
+    followup = await _collect_sse_events(
+        async_client,
+        path,
+        json_body=_body(_text_turn("hello"), _image_turn(_VALID_PNG_DATA_URL), _text_turn("continue")),
+    )
+    _assert_created_text_delta_completed(followup)
+    assert state.connects == connects
+    image_frames = [
+        frame for socket in state.upstreams for frame in socket.sent_text if _collect_input_image_urls(frame)
+    ]
+    assert 2 <= len(image_frames) <= 3
+    assert all(_collect_input_image_urls(frame) == [_VALID_PNG_DATA_URL] for frame in image_frames)
 
 
 @pytest.mark.asyncio

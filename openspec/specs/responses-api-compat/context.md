@@ -419,6 +419,111 @@ aiohttp can report its own reader limit as `ERROR(WebSocketError(1009))` rather 
 
 The loopback wire tests use a bounded client reader and actual aiohttp socket traffic. They establish local transport and route behavior only; public artifacts, deployed services and real upstream/client traffic require separate evidence.
 
+## Direct WebSocket terminal provenance and selected owners
+
+A missing close code is insufficient evidence of a transport ending. The direct
+adapter marks incomplete close handshakes; the routed adapter checks closed socket
+state while excluding typed protocol errors. Native I/O failure and the specific
+ResetWithoutClosingHandshake variant carry transport phase; other native protocol
+failures retain protocol phase. The direct relay uses this positive evidence with
+the existing frame-less classifier. Output and sequence progress still govern
+replay safety independently of health attribution.
+
+For example, an already-dispatched owner's `usage_limit_reached` error with status
+429, `param=input` and reset metadata reaches both direct WebSocket routes intact
+when replay is unsafe. Finalization settles usage, hands off the log and writes
+health once. A file-pinned body that cannot be prepared for account switch follows
+the same terminal path. Pre-dispatch owner refusal keeps its existing contract.
+
+Bounded inline PNG/JPEG images already retain bridge connections under the
+default admission policy. Text/image/text and an output-free overload recovery
+are verified on v1 and backend HTTP routes. Unsupported shapes, explicit rollback,
+per-image and frame budgets retain their documented boundaries; production
+overload percentages and real provider image acceptance remain external evidence.
+
+## Direct native failures and admission cleanup
+
+The [direct-native cleanup contract](spec.md#requirement-direct-native-stream-failures-release-admission-ownership) covers the HTTP path with the session bridge disabled. Nested iterator closure already propagates through the native adapter; independent route tests now verify actual account stream/response-create pressure, helper request state, persisted logs and API-key reservations rather than simulated counters.
+
+At a stream cap of one, two consecutive failed requests must each return pressure to zero before another request is submitted. The third successful request is admitted without restart. The tests use the source-built native helper and controlled origin EOF, aborted bodies and aborted pre-header requests, across v1/backend routes, stream/non-stream modes and native Codex headers. Backend stream=false uses its existing JSON upstream contract; v1 non-stream requests still collect their upstream stream. Native committed-body failures keep their existing missing-terminal behavior.
+
+For example, a body abort releases both account admission kinds and settles/releases the reservation; a following successful terminal finalizes the next reservation. Normal endpoint health/backoff handling remains active. This bounded sequence avoids interpreting an intentional health cooldown after a longer error streak as a leaked concurrency lease. No helper EOF is treated as evidence that replay is safe, and no production or real-client certification is inferred from loopback tests.
+
+## Bridge continuation boundary verification
+
+The [boundary requirement](spec.md#requirement-bridge-continuation-boundaries-preserve-actionable-outcomes) brings together the public outcomes checked for upstream issues 2493, 2465 and 2455. Existing runtime mechanisms already implement these paths; route evidence, historical descriptions and test boundaries need to stay aligned with them.
+
+A refused continuation has two delivery boundaries. A local denied-anchor fence reached before response commitment returns the structured HTTP 502 continuity error. Once a response has begun and keepalives have reached the client, the same failure ends with one SSE terminal. An account-owned item prevents unsafe fresh replay without preventing truthful terminal delivery. Only an eligible full-history request can benefit from retirement of a conclusively denied anchor.
+
+For example, a warmed native backend session receives response.created, then response.in_progress keepalives, and finally a masked stream_incomplete failure when its injected anchor is denied. The persisted log keeps previous_response_not_found as upstream evidence; the external response carries neither the raw anchor nor a private synthetic marker. Canonical and trailing-slash routes have the same result.
+
+A silent lineage follows bounded retry/circuit and quarantine ownership. A later portable full transcript can establish a fresh lineage without the poisoned anchor. Delta-only, account-owned inputs and ambiguous operation checkpoints retain their stricter continuity rules; restarting an arbitrary thread on another account or duplicating an active journal claim is not authorized by silence alone. The real-origin scenario uses two distinct silent logical turns and then retries the last full body after the poison boundary; dedicated journal/fence controls supplement it.
+
+Payload-budget fallback uses API-key-scoped durable count/fingerprint evidence and agreement with the resolved owner before releasing turn-state affinity. A real HTTP 429 from that owner can then settle its attempt and move to another eligible account. Another API key, a wrong prefix, missing output, an explicit anchor, account-owned state or conflicting owner evidence cannot use that grant. Tests use actual SQLite reservations and zero remaining account pressure.
+
+An image/tool request sent through the operator HTTP bypass still passes through the final Responses-Lite payload preparation. Serial tool calls, all_turns reasoning context, image bytes, tool definitions and the derived Lite HTTP header are checked at the local HTTP origin. Normal non-Lite and bridge JSON controls are covered separately.
+
+The unsafe full-resend unit fixture must replace both durable lookup and owner-retirement boundaries: a partial mock otherwise opens a real repository without its schema. The retirement double returns false and checks the expected owner, preserving the original refusal assertions. Real-DB integration tests continue to cover runtime ownership.
+
+This evidence uses local WebSocket/HTTP origins and shortened test-only time budgets. It establishes route, payload, settlement and cleanup contracts; vendor overload percentages, real client behavior, published packages, cloud CI and production remain separate scopes. See the [verified change](../../changes/archive/2026-10-04-repair-bridge-terminal-lineage-failover/verification.md).
+# Inline-image reuse and unary control media types
+
+The image-bypass requirement includes the implemented bounded PNG/JPEG
+exception from `allow-bounded-inline-images-on-bridge`. The previous blanket
+wording could imply a raw fallback for every image even while default admission
+retained the thread's bridge connection. The exception preserves image bytes,
+history and prompt-cache identity; the existing bounded pre-created retry policy
+and original budget still apply to an unacknowledged create. An invalid-image terminal settles admission and
+allows a later text request on the same account. The existing explicit false
+rollback and HTTP/failure fallback policies remain available.
+
+For example, text → a valid inline PNG → text with the PNG in history can use
+one local upstream socket. With the two-second test request budget, a silent
+image create is sent once and leaves no reserved usage row. The existing
+long-budget regression permits the initial attempt plus one pre-created retry,
+then terminates; this batch preserves that policy. Real local sockets prove
+these transport and settlement properties; they do not prove vendor image
+validation, cache hit percentages or the historical #903 provider incident.
+
+Unary control requests retain a single media type for nonempty JSON or SDP.
+An empty POST is normalized to no body before transport dispatch, because
+removing its header alone can let an HTTP library generate a replacement media
+type for empty bytes. For example, a zero-byte standalone-search POST has no
+upstream `Content-Type`, while a nonempty `application/sdp` payload retains that
+value and its bytes. See the owning [spec](spec.md) for normative requirements.
+
+
+# Bridge retry verification and cancellation ownership
+
+This local batch processes exactly UP-ISSUE-2273, UP-ISSUE-2272 and UP-ISSUE-2271. The first two already have source implementations. Their verification now includes loopback upstream frames, public HTTP aliases, real durable SQLite rows, interpreted frames and negative eligibility cases.
+
+For example, a terminal containing only `incomplete_details.reason = stream_incomplete` contributes one eligible strike. A distinct dispatched request contributes a second and opens the durable cooldown. Replaying the stored terminal adds no send or strike. Proof-gated full-history replay remains an existing permitted recovery route; the circuit is not a blanket ban on all traffic. Native stored-operation replay retains its existing downstream lifecycle and is not certified as a universal terminal-payload replay contract by this batch.
+
+A persisted cooldown whose deadline has elapsed does not create a phantom local transition. A local cooldown already observed before expiry keeps its actual transition and permits one local half-open probe. Repeated durable loads leave that active lease owned by its request.
+
+Submission previously awaited a claim directly, so caller cancellation after commit could discard the receipt. It now owns a scheduler task bounded across key-lock acquisition and the DB call, defers cancellation, attaches the receipt and attempts undispatched fenced release. Cleanup itself is cancellation-deferred. A new row's inserted epoch is retained, and the repository reads the receipt inside its write transaction before commit so a successor cannot substitute its own receipt.
+
+Durable release does not clear process-local probes. The existing submission finalizer already returns the exact local lease token it owns. Repeating that operation in the durable helper without the local token erased replacement state even after a failed durable CAS.
+
+The local implementation uses existing settings, schema and timeout. Crash abandonment/reclamation, uncertain DB timeout outcomes, generation rollback ABA and ordinary-success/newer-claim settlement policy remain open parts of UP-ISSUE-2271. No PostgreSQL/MySQL migration/runtime, live provider, cloud checks, release or production evidence is claimed.
+
+
+## Scheduled cleanup and downstream delivery verification (2026-10-04)
+
+See the normative requirements in [spec.md](spec.md) and the [verification report](../../changes/archive/2026-10-04-verify-bridge-cleanup-quarantine-backpressure/verification.md).
+
+This change independently handles exactly UP-ISSUE-2270, UP-ISSUE-2268 and UP-ISSUE-2266 from issues-check.md. Their upstream bodies were refreshed on 2026-10-04; original author claims in ISSUES.md are historical and are not test evidence.
+
+Scheduled cleanup now compares timestamp, generation and count. For example, an old row at epoch 1 with count 2 that receives a lagging-clock strike becomes count 3 at the same epoch; the old DELETE must miss and that candidate must wait for the next scheduled pass. Keyset pagination uses constant cursor storage and does not retry changed candidates within that pass. Tests reach the actual leader cleanup method and the real SQLite/PostgreSQL/MySQL rows; the precise interleaving is injected before DELETE on the cleanup connection.
+
+Quarantine already retains worker-wide monotonic numbering and session ownership. Tests inject an initial strike or replacement session during completion's actual awaited circuit settlement. A pruned entry is recreated with a new generation, and a late completion leaves it intact. This change does not redesign the existing overflow policy: the registry cap can retain active poison entries above its nominal cap, while weaker entries remain evictable. That policy is separate from the verified stale-clear ownership contract.
+
+Live output still uses the existing per-stream 32 MiB/4096-event queue, including its lone oversized event exception. A pending producer holds at most the current event for this shared-reader path. Saturation now has an independent five-second delivery bound; it does not affect model idle gaps while there is room. Resumption before expiry preserves all six test deltas in order. On expiry, already accepted output is drained before one synthetic failure. End-of-stream signalling occupies no additional payload/event slot, so a saturated accepted completion is not turned into a failure by its sentinel.
+
+Cancellation and write errors explicitly close the ASGI body iterator and the nested bridge generator. Python 3.13 Queue.shutdown releases detached payloads and wakes producers with QueueShutDown; cancellation of the producer itself still propagates, and its waiter is removed. Repeated cancellation of response cleanup is deferred through the existing scheduler helper. Reservations settle through their existing owners; delivery failure does not add an account-health penalty.
+
+This is a per-stream HTTP bridge contract, not a fixed process-wide RSS ceiling. Native helper buffers, total replay spool memory, real provider/client traffic, cloud gates and public artifacts are separate scopes. No settings, database columns, release or production changes are introduced.
+
 
 ## Independent transcript backlog verification (2026-10-04)
 

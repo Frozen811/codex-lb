@@ -7,6 +7,7 @@ from typing import Callable
 # Limits for the HTTP bridge stream event queue
 _HTTP_BRIDGE_STREAM_QUEUE_LIMIT = 4096
 _HTTP_BRIDGE_STREAM_QUEUE_BYTES_LIMIT = 32 * 1024 * 1024  # 32 MiB
+_HTTP_BRIDGE_DOWNSTREAM_STALL_TIMEOUT_SECONDS = 5.0
 
 
 def _http_bridge_event_payload_size(item: object) -> int:
@@ -26,7 +27,6 @@ class _HTTPBridgeEventQueue(asyncio.Queue[str | None]):
 
     _putters: collections.deque[asyncio.Future[None]]
     _getters: collections.deque[asyncio.Future[None]]
-    _clean_up_cancelled_putter: Callable[[asyncio.Future[None]], None]
     _wakeup_next: Callable[[collections.deque[asyncio.Future[None]]], None]
 
     def __init__(
@@ -39,10 +39,11 @@ class _HTTPBridgeEventQueue(asyncio.Queue[str | None]):
         self._max_bytes = max_bytes
         self.queued_bytes = 0
         self._closed = False
+        self._failure_event: str | None = None
 
     def put_nowait(self, item: str | None) -> None:
         if self._closed:
-            raise asyncio.CancelledError("HTTP bridge event queue is closed")
+            raise asyncio.QueueShutDown
         size = _http_bridge_event_payload_size(item)
         if size and not self.empty() and self.queued_bytes + size > self._max_bytes:
             raise asyncio.QueueFull
@@ -54,7 +55,7 @@ class _HTTPBridgeEventQueue(asyncio.Queue[str | None]):
             self._max_bytes > 0 and not self.empty() and size and self.queued_bytes + size > self._max_bytes
         ):
             if self._closed:
-                raise asyncio.CancelledError("HTTP bridge event queue is closed")
+                raise asyncio.QueueShutDown
             loop = (
                 getattr(self, "_loop", None) or getattr(self, "_get_loop", lambda: None)() or asyncio.get_running_loop()
             )
@@ -62,9 +63,17 @@ class _HTTPBridgeEventQueue(asyncio.Queue[str | None]):
             self._putters.append(getter)
             try:
                 await getter
-            except Exception:
-                self._clean_up_cancelled_putter(getter)
+            except BaseException:
+                getter.cancel()
+                try:
+                    self._putters.remove(getter)
+                except ValueError:
+                    pass
+                if not self.full() and not getter.cancelled():
+                    self._wakeup_next(self._putters)
                 raise
+            if self._closed:
+                raise asyncio.QueueShutDown
             if self._putters and (
                 (self.maxsize > 0 and self.qsize() >= self.maxsize)
                 or (self._max_bytes > 0 and not self.empty() and size and self.queued_bytes + size > self._max_bytes)
@@ -81,15 +90,32 @@ class _HTTPBridgeEventQueue(asyncio.Queue[str | None]):
         self.queued_bytes -= _http_bridge_event_payload_size(item)
         return item
 
-    def close(self) -> None:
-        """Cancel any waiting putters and getters when the queue is detached/closed."""
+    async def get(self) -> str | None:
+        try:
+            return await super().get()
+        except asyncio.QueueShutDown:
+            failure_event = self._failure_event
+            self._failure_event = None
+            return failure_event
+
+    def fail(self, event: str) -> None:
+        """Retain accepted output, then deliver one bounded failure terminal."""
+        if self._closed:
+            return
         self._closed = True
-        for putter in list(self._putters):
-            if not putter.done():
-                putter.cancel()
-        for getter in list(self._getters):
-            if not getter.done():
-                getter.cancel()
+        self._failure_event = event
+        self.shutdown(immediate=False)
+
+    def finish(self) -> None:
+        """End after accepted output without a producer waiting on a sentinel."""
+        self._closed = True
+        self.shutdown(immediate=False)
+
+    def close(self) -> None:
+        """Release detached output and wake producers without reader cancellation."""
+        self._closed = True
+        self._failure_event = None
+        self.shutdown(immediate=True)
 
 
 def _new_http_bridge_event_queue(

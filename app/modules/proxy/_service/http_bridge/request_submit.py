@@ -123,6 +123,7 @@ from app.modules.proxy._service.http_bridge.quarantine import (
 from app.modules.proxy._service.http_bridge.queues import _new_http_bridge_event_queue
 from app.modules.proxy._service.http_bridge.retry_circuit import (
     _HTTP_BRIDGE_RETRY_CIRCUIT_ANCHOR_ABANDONED_DETAIL,
+    _HTTP_BRIDGE_RETRY_CIRCUIT_CLAIM_TIMEOUT_SECONDS,
     _HTTP_BRIDGE_RETRY_CIRCUIT_FAILURE_THRESHOLD,
     _HTTP_BRIDGE_RETRY_CIRCUIT_HALF_OPEN_LEASE_SECONDS,
     _POISON_ANCHOR_CAPTURE_UNAVAILABLE,
@@ -1021,6 +1022,7 @@ class _HTTPBridgeRequestSubmitMixin:
                 recovery_turn_state=recovery_turn_state,
             )
         finally:
+            release_cancellation: asyncio.CancelledError | None = None
             _release_http_bridge_unanchored_handoff(
                 session,
                 request_scope_id=request_scope_id,
@@ -1057,10 +1059,13 @@ class _HTTPBridgeRequestSubmitMixin:
                 getattr(request_state, "claimed_durable_circuit_key", None) is not None
                 and request_state.response_create_attempt_count == 0
             ):
-                await self._release_http_bridge_retry_circuit_claim(
-                    key=request_state.claimed_durable_circuit_key,
-                    generation=getattr(request_state, "claimed_durable_generation", None),
+                release_task = scheduler_for(self).create_task(
+                    self._release_http_bridge_retry_circuit_claim(
+                        key=request_state.claimed_durable_circuit_key,
+                        generation=getattr(request_state, "claimed_durable_generation", None),
+                    )
                 )
+                _, release_cancellation = await _await_task_deferring_cancellation(release_task)
                 request_state.claimed_durable_circuit_key = None
             # Inner pre-submit cleanup may clear the reservation before control
             # returns here, so ownership must be captured before awaiting it.
@@ -1075,6 +1080,8 @@ class _HTTPBridgeRequestSubmitMixin:
                 and not session.upstream_close_attempted
             ):
                 await self._retire_http_bridge_after_drain_if_ready(session)
+            if release_cancellation is not None:
+                raise release_cancellation
 
     async def _submit_http_bridge_request_with_handoff(
         self: Any,
@@ -2217,18 +2224,29 @@ class _HTTPBridgeRequestSubmitMixin:
                     ):
                         circuit_key = request_state.verified_stale_anchor_retry_circuit_key
                         claim_outcome: bool | None = False
+                        claim_cancellation: asyncio.CancelledError | None = None
+                        claimed_generations: list[tuple[int, float, int, float, int, float, float]] = []
                         if circuit_key is not None:
-                            claim_outcome = await self._claim_http_bridge_retry_circuit_generation(
-                                key=circuit_key,
-                                captured=request_state.verified_stale_anchor_retry_circuit_generation_captured,
-                                generation=request_state.verified_stale_anchor_retry_circuit_generation,
+                            claim_task = scheduler_for(self).create_task(
+                                scheduler_for(self).wait_for(
+                                    self._claim_http_bridge_retry_circuit_generation(
+                                        key=circuit_key,
+                                        captured=request_state.verified_stale_anchor_retry_circuit_generation_captured,
+                                        generation=request_state.verified_stale_anchor_retry_circuit_generation,
+                                        claimed_generation_out=claimed_generations,
+                                    ),
+                                    timeout=_HTTP_BRIDGE_RETRY_CIRCUIT_CLAIM_TIMEOUT_SECONDS,
+                                )
                             )
+                            claim_outcome, claim_cancellation = await _await_task_deferring_cancellation(claim_task)
                         generation_claimed = claim_outcome is True
                         if generation_claimed and circuit_key is not None:
                             request_state.claimed_durable_circuit_key = circuit_key
-                            request_state.claimed_durable_generation = (
-                                request_state.verified_stale_anchor_retry_circuit_generation
-                            )
+                            request_state.claimed_durable_generation = claimed_generations[0]
+                        if claim_cancellation is not None:
+                            # A committed receipt must reach the finalizer
+                            # before cancellation ends this undispatched turn.
+                            raise claim_cancellation
                         if not generation_claimed:
                             remote_probe_holds_lease = False
                             if claim_outcome is False and circuit_key is not None:

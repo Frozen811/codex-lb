@@ -207,3 +207,35 @@ An instance with accounts `alice@corp.com` (workspace W1) + 12 others, a custom 
 - `senpi` traffic appears in `clients` under `other` and inflates `clients_other_ratio`
 - the strings `alice`, `corp.com`, `W1`, `corp-internal-gpt`, `senpi` appear nowhere in the
   serialized payload (schema snapshot test enforces this)
+
+## Complete local opt-out ordering
+
+The snapshot sender and dashboard decision API share one process lock. The sender
+checks consent and identity before registration, then holds ownership through
+activation and snapshot POST. Dashboard decisions wait for that bounded sequence
+before committing. If a snapshot is already in flight, it finishes before the
+disable commits; queued snapshots then observe inactive consent and send nothing.
+The opt-out task uses its own database-independent identity and the same lock.
+Cancellation, network failure, and the existing five-second total send timeout
+release ownership. No request session is shared with a concurrent task.
+
+Example: while `/v1/register` is waiting for a collector response, dashboard disable
+waits. When the snapshot finishes or is cancelled, disable commits, then its signed
+`/v1/optout` follows. No stale registration or activation from that local snapshot
+can reactivate the collector afterward. A later explicit enable permits a fresh
+snapshot again.
+
+This orders one process only. A different replica may already have a network
+request in flight; collector-side rejection or a consent generation contract is
+required for a global fence. Collector changes, retention, and hosted traffic are
+not certified by the local loopback tests. Additional identifier-bearing lifecycle
+diagnostics from the upstream issue remain deferred to preserve the privacy posture.
+
+Opt-out timestamps are typed datetimes. Valid ISO strings remain accepted, naive
+datetime inputs mean UTC, timezone offsets normalize to UTC, and malformed strings
+or numeric epoch inputs fail before signing. This changes no outbound field names.
+
+Client preview evidence covers persisted raw CLI/Desktop aliases, unknown and
+missing groups, and actual HTTP Responses/Chat traffic through request logging.
+The normative mapping table is in [spec.md](spec.md); unknown private user-agent
+names remain local and contribute only to `other`.

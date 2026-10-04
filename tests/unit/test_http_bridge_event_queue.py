@@ -122,7 +122,7 @@ async def test_http_bridge_event_queue_close_cancels_waiters() -> None:
     queue.close()
     await asyncio.sleep(0.01)
     assert put_task.done()
-    with pytest.raises(asyncio.CancelledError):
+    with pytest.raises(asyncio.QueueShutDown):
         await put_task
 
 
@@ -150,6 +150,7 @@ async def test_enqueue_http_bridge_downstream_event_handles_detach_and_timeout()
     stalled_queue.put_nowait("12345")
     stalled_request = Mock()
     stalled_request.request_id = "req-stalled"
+    stalled_request.response_id = None
     stalled_request.draining_until_terminal = False
     stalled_request.bridge_request_deadline = 0.05  # will timeout immediately
 

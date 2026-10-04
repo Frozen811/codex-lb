@@ -1,0 +1,13 @@
+# Bridge cleanup, quarantine and paused delivery
+
+This change independently handles exactly UP-ISSUE-2270, UP-ISSUE-2268 and UP-ISSUE-2266 from issues-check.md. Their upstream bodies were refreshed on 2026-10-04; original author claims in ISSUES.md are historical and are not test evidence.
+
+Scheduled cleanup now compares timestamp, generation and count. For example, an old row at epoch 1 with count 2 that receives a lagging-clock strike becomes count 3 at the same epoch; the old DELETE must miss and that candidate must wait for the next scheduled pass. Keyset pagination uses constant cursor storage and does not retry changed candidates within that pass. Tests reach the actual leader cleanup method and the real SQLite/PostgreSQL/MySQL rows; the precise interleaving is injected before DELETE on the cleanup connection.
+
+Quarantine already retains worker-wide monotonic numbering and session ownership. Tests inject an initial strike or replacement session during completion's actual awaited circuit settlement. A pruned entry is recreated with a new generation, and a late completion leaves it intact. This change does not redesign the existing overflow policy: the registry cap can retain active poison entries above its nominal cap, while weaker entries remain evictable. That policy is separate from the verified stale-clear ownership contract.
+
+Live output still uses the existing per-stream 32 MiB/4096-event queue, including its lone oversized event exception. A pending producer holds at most the current event for this shared-reader path. Saturation now has an independent five-second delivery bound; it does not affect model idle gaps while there is room. Resumption before expiry preserves all six test deltas in order. On expiry, already accepted output is drained before one synthetic failure. End-of-stream signalling occupies no additional payload/event slot, so a saturated accepted completion is not turned into a failure by its sentinel.
+
+Cancellation and write errors explicitly close the ASGI body iterator and the nested bridge generator. Python 3.13 Queue.shutdown releases detached payloads and wakes producers with QueueShutDown; cancellation of the producer itself still propagates, and its waiter is removed. Repeated cancellation of response cleanup is deferred through the existing scheduler helper. Reservations settle through their existing owners; delivery failure does not add an account-health penalty.
+
+This is a per-stream HTTP bridge contract, not a fixed process-wide RSS ceiling. Native helper buffers, total replay spool memory, real provider/client traffic, cloud gates and public artifacts are separate scopes. No settings, database columns, release or production changes are introduced.

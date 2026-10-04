@@ -59,3 +59,9 @@ Responses-shaped chat request with a built-in tool:
 
 - Streaming chunk mapping is validated in unit tests.
 - Integration tests cover include_usage and tool call finish reasons.
+
+## JSON object instruction placement
+
+JSON mode recognizes a JSON mention inside input messages, while top-level instructions do not supply that input context. The supported input role for instruction messages is developer. The mapper defers hoisting until the shared Responses normalizer can retain only messages mentioning JSON, case-insensitively, and hoist unrelated instructions. This applies to object/string response_format and equivalent text.format controls.
+
+For example, `{"role":"system","content":"Return JSON only"}` with `{"text":{"format":{"type":"json_object"}}}` becomes developer input with unchanged text and relative position. `Be brief` still moves to instructions. Appending another user message leaves the earlier prefix stable. Compact/Lite handling remains governed by its existing contracts. See [the wire-format requirement](spec.md#requirement-map-chat-requests-to-responses-wire-format) and the archived 2026-10-03 verify-plan-json-metrics-contracts evidence for local loopback route coverage.

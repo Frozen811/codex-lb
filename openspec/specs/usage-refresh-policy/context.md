@@ -155,6 +155,12 @@ The [cross-account target requirement](spec.md#requirement-cross-account-reset-c
 
 For example, caller A can select a cached credit on B, but B's missing workspace identity cannot be replaced with A's identity or an omitted upstream account header. These consume routes have no API-key usage reservation: refusal preserves the credit snapshot rather than settling a token reservation. The canonical `/api/codex` and backend WHAM/Codex aliases, with and without trailing slashes, use the same refusal. Tests use inert upstream stubs and never redeem real credits.
 
+## Business Pro Lite alias
+
+The upstream identifier self_serve_business_prolite is an alias for the existing prolite tier, including mixed case and surrounding whitespace. Keeping one canonical stored value aligns dashboard capacity, rate-limit metadata, and Pro-equivalent model eligibility without introducing a second plan.
+
+For example, a workspace-less team account may receive that alias on a usage refresh and persist prolite plus its usage rows while retaining identity and encrypted credentials. A conflicting workspace still refuses the payload; an unknown plan still follows the existing identity guard. Local recorded HTTP and fresh-session SQLite evidence is in the archived 2026-10-03 verify-plan-json-metrics-contracts change. See [the canonical compatibility requirement](spec.md#requirement-canonical-business-pro-lite-plan-compatibility); the checks do not establish live provider plan capacities or change the existing operator override contract.
+
 
 ## Independent capped SQLite history verification (2026-10-04)
 

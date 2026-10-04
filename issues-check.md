@@ -4,7 +4,7 @@
 
 Этот файл фиксирует доказательства, замечания, исправляющие коммиты и повторные проверки. Нормативные контракты остаются в [openspec/specs](openspec/specs), работа по изменению поведения — в [openspec/changes](openspec/changes). Заявления автора, зелёная сборка образа и наличие теста сами по себе не означают, что проблема решена.
 
-**Последнее обновление: 2026-10-04.** Последний пакет §46 обработал ровно **UP-ISSUE-2483 / UP-ISSUE-1901 / UP-ISSUE-2291**. Все три **закрыты локально** после исправления cap validation, проверки dense report API и transcript backlog/owner fencing. Отдельное дерево публикации: **81 targeted tests PASS**, no skips/failures; 29 новых cases входят в этот scope; scopes/команды и ограничения — в [verification](openspec/changes/archive/2026-10-04-verify-sqlite-history-reports-transcript/verification.md). Публикуется только этот пакет в `Frozen811/codex-lb:main`; предыдущие dirty пакеты сохранены отдельно. Public artifacts/cloud CI/production и F-045/CI-04 этим пакетом не закрываются.
+**Последнее обновление: 2026-10-04.** Публикация §47 включает **все восемь прежних archived пакетов** и сохраняет результаты §46 (UP-ISSUE-2483 / UP-ISSUE-1901 / UP-ISSUE-2291). Scope: 125 ранее сохранённых файлов, отдельный журнал публикации; fresh checks и ограничения — в [publication evidence](openspec/changes/archive/2026-10-04-verify-sqlite-history-reports-transcript/prior-changes-publication.md). Цель — `Frozen811/codex-lb:main`. Предыдущие partial/public/cloud/production и F-045/CI-04 сохраняют свой статус; commit/push не означают release/deploy или cloud verification.
 
 ## 1. Правила ведения
 
@@ -30,6 +30,7 @@
 | ИСПРАВЛЕНО, ЖДЁТ ПРОВЕРКИ | Есть исправляющий SHA; закрывать пока нельзя |
 | ИСПРАВЛЕНО ЛОКАЛЬНО | Правка в рабочем дереве прошла указанные локальные проверки; исправляющего SHA, нового CI и релизного evidence ещё нет |
 | ПРОВЕРЕНО | Объём проверки завершён; указаны SHA, доказательства и ограничения |
+| ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | Собственный описанный scope задачи завершён по связанным локальным доказательствам; эта отметка не подтверждает новый cloud CI, публикацию или production |
 | ИСПРАВЛЕНО В SOURCE | Исправляющий коммит присутствует в ancestry текущего HEAD; результаты относятся к указанному source snapshot, публикация/production подтверждаются отдельно |
 | ЧАСТИЧНО ПРОВЕРЕНО | Выполненная часть и её evidence отмечены; перечисленный остаток не закрыт |
 | НЕ ПРИМЕНИМО | Есть явное обоснование, почему пункт не относится к форку |
@@ -116,7 +117,7 @@ cloud CI, выпуск или production deployment. `[ ]` может содер
 | F-026 | P2 | ИСПРАВЛЕНО / SOURCE SMOKE PASS | PowerShell терял CLI exit 2, batch также не сохранял errorlevel, run.sh был 100644. Exit status/args исправлены, Bash 100755; actual PS/pwsh/cmd/Linux failure/signal tests PASS; §21 |
 | F-027 | P1 | ИСПРАВЛЕНО / WINDOWS+LINUX PASS | Bun build выбирал host Node 18 через Vite shebang и падал на node:util styleText. Frontend tools теперь --bun runtime, pinned 1.3.14; actual builds PASS; §21 |
 | F-028 | P2 | ИСПРАВЛЕНО / PR CI PASS | Affinity/close-1009 fixtures обходили committed account routing notification. Fixtures приведены к реальному import lifecycle, runtime Pause guard не ослаблялся; 11 routes + 25 Pause local PASS и full PR CI; §21 |
-| F-029 | P1 | ИСПРАВЛЕНО / NIX CLOUD PASS | Explicit Nix sources не включали объявленный Hatch hook/helper; wheel build падал до assets reuse. Узкие source filters исправлены, actual Nix flake check на f61669d6 PASS; §21 |
+| F-029 | P1 | ИСПРАВЛЕНО / NIX CLOUD PASS | Explicit Nix sources не включали объявленный Hatch hook/helper; wheel build падал до assets reuse. Узкие source filters исправлены, actual Nix flake check на f61669d6 PASS; §21; [Nix evidence](openspec/changes/archive/2026-10-01-repair-nix-hook-source-filter/verification.md). |
 | F-030 | P1 | ИСПРАВЛЕНО ЛОКАЛЬНО | Helm defaults/OCI instructions выбирали upstream; теперь fork source/chart, явный image выбор, StatefulSet drain и DB/key rollback boundaries; §22 |
 | F-031 | P1 | ИСПРАВЛЕНО ЛОКАЛЬНО | Fresh external DB + --wait блокировались schema gate/post-install циклом; DB-only Secret также ссылался на отсутствующий encryption Secret. Regular install Job исправила оба пути; §22 |
 | F-032 | P2 | ИСПРАВЛЕНО ЛОКАЛЬНО | Kubernetes без Docker marker выбирал read-only /home/app/.codex-lb для runtime cache. Chart задаёт writable mounted scratch, migrator получает явный key-file; §22 |
@@ -144,6 +145,24 @@ cloud CI, выпуск или production deployment. `[ ]` может содер
 | F-054 | P2 | ИСПРАВЛЕНО ЛОКАЛЬНО | Compatible output-budget projection считала bool целым и принимала zero/negative raw limits: GPT-6 fallback мог стать1/0/-1. **16 failed** до правки; positive non-boolean integer precedence, unknown null, list/retrieval/slash/native data aliases и неизменность input/native metadata PASS. UP-PR-2528, §35. |
 | F-055 | P2 | ИСПРАВЛЕНО ЛОКАЛЬНО | Метрика accounts_available не передавала committed rejection reason в shared eligibility predicate. **9 failed**: revoked/invalidated/rejected access с future/unknown/unreadable expiry считался доступным при routing block. Reason из existing snapshot, repair/expiry/inventory/failure-recovery/multiprocess PASS; UP-PR-2523, §36. |
 | F-056 | P2 | ИСПРАВЛЕНО ЛОКАЛЬНО | Dashboard не показывал Resume для quota_exceeded при поддержке existing reactivate API. **3 frontend failed** до правки; callback-once, busy/read-only, reauth protection, Chromium POST/refreshed actions, реальная DB/CAS/owner и screenshots до/после PASS; UP-PR-2527, §36. |
+| F-057 | P2 | ИСПРАВЛЕНО ЛОКАЛЬНО | Chat JSON mode распознавался только по response_format: эквивалентный text.format терял JSON-инструкцию из input. **16 route failed** до правки; shared Responses predicate после format mapping, developer role/order, 96 actual upstream turns и prefix stability PASS; UP-PR-2515, §37. |
+| F-058 | P2 | ИСПРАВЛЕНО ЛОКАЛЬНО | JSON access formatter читал поля, которые Uvicorn создаёт только на private copy текстового formatter: реальные client/request/status были null. Native argument tuple теперь декодируется без мутации LogRecord; оба listeners, text/JSON stream/file parity и 200/503 PASS; UP-PR-2529, §37. |
+| F-059 | P2 | ИСПРАВЛЕНО ЛОКАЛЬНО | JSON debug без optional OpenTelemetry рекурсивно форматировал diagnostic logs failed trace lookup и мешал CLI startup. Диагностика tracing helper пропускает собственное enrichment; оба listeners reachability, no RecursionError/logging errors и ordinary trace/span enrichment PASS; UP-PR-2529, §37. |
+| F-060 | P2 | ИСПРАВЛЕНО ЛОКАЛЬНО | Telemetry lock не охватывал register/activate и dashboard commit: 9 red-before real collector/API races. Complete protocol и решения сериализованы; 12 complete/cancel/503/timeout cases, signature/disabled silence PASS. Global collector fence отдельно; UP-ISSUE-1844, §38. |
+| F-061 | P2 | ИСПРАВЛЕНО ЛОКАЛЬНО | Opt-out timestamp union оставлял malformed strings и не приводил offset strings к UTC: 4 red-before cases. Typed datetime/ISO parsing, numeric refusal, canonical UTC/Z и actual signing PASS; UP-ISSUE-1844, §38. |
+| F-062 | P1 | ИСПРАВЛЕНО ЛОКАЛЬНО | Windows IOCP route loss 1231/1232 игнорировался при ошибочной process-neutral классификации peer reset/timeout 64/121. 8 red-before; typed provenance и real generation/route tests PASS; UP-ISSUE-2456, §39. |
+| F-063 | P2 | ИСПРАВЛЕНО ЛОКАЛЬНО | Native transport diagnostics терялись между core synthetic event и request-log writer: 6 actual body failures записывали failure_phase=null. Attempt-owned typed trace теперь сохраняет request/body phase, static exception и observed status без новых SSE fields/replay; UP-ISSUE-2471, §39. |
+| F-064 | P1 | ИСПРАВЛЕНО ЛОКАЛЬНО | Direct error-kind frame-less endings штрафовали аккаунт без учёта positive transport evidence: 4 red-before route cases. Typed adapter provenance и specific native ResetWithoutClosingHandshake transport phase; real socket abort Python/native, unproven/protocol/authored-close controls PASS. UP-ISSUE-2081, §40. |
+| F-065 | P1 | ИСПРАВЛЕНО ЛОКАЛЬНО | Selected-owner quota error-kind terminal подменялся owner-unavailable и писал health до finalization; file-bound account-switch refusal делал то же. Original sanitized 429/code/type/message/param/reset metadata сохранены, no replay, settlement/log/health ownership у finalizer. UP-ISSUE-2081, §40. |
+| F-066 | P2 | ИСПРАВЛЕНО ЛОКАЛЬНО | Native Responses JSON POST не имел request zstd, вопреки broad parity claim. TLS HTTP/2 red-before; scoped opt-in level-3 zstd, exact decompressed JSON, stale encoded headers removal, opaque/multipart/Python fallback boundaries PASS. Полная real-client TLS/header-order parity не доказана; UP-ISSUE-1208, §40. |
+| F-067 | P2 | ИСПРАВЛЕНО ЛОКАЛЬНО / TEST SCOPE | Unsafe full-resend unit fixture mock-ала только durable lookup и при owner retirement открывала real SQLite без accounts: 6 reproducible failures. Retirement double возвращает false и проверяет expected owner; original refusal assertions сохранены. Same 107-case selection PASS; UP-ISSUE-2465, §41. |
+| F-068 | P1 | ИСПРАВЛЕНО ЛОКАЛЬНО | Durable claim release сбрасывал replacement local half-open probe даже после CAS miss/error. 3 red-before; exact local lease остаётся у submission finalizer, durable helper не меняет чужой probe. UP-ISSUE-2271, §44. |
+| F-069 | P1 | ИСПРАВЛЕНО ЛОКАЛЬНО | Caller cancellation после DB claim commit теряла receipt до assignment на request. Actual submission + SQLite red-before; bounded scheduler task/deferred cancellation и fenced undispatched cleanup, repeated cancellation PASS. UP-ISSUE-2271, §44. |
+| F-070 | P1 | ИСПРАВЛЕНО ЛОКАЛЬНО | Newly inserted claim не имел captured epoch для release; post-commit query мог вернуть successor receipt. Inserted-row red-before, retained inserted epoch и snapshot внутри winning transaction; successor generation fence PASS. UP-ISSUE-2271, §44. |
+| F-071 | P1 | ИСПРАВЛЕНО ЛОКАЛЬНО | Scheduled retry cleanup не сравнивал count и повторно удалял changed candidate после partial batch. 4 red-before; full snapshot fence + keyset cursor, 12 SQLite/PG/MySQL cases PASS. UP-ISSUE-2270, §45. |
+| F-072 | P2 | ИСПРАВЛЕНО ЛОКАЛЬНО | Queue close сохранял payloads/cancelled putters; closed None отменял shared reader, stall терял terminal. 3 unit red-before; Queue.shutdown, graceful finish и ordered failure с fixed5s bound PASS. UP-ISSUE-2266, §45. |
+| F-073 | P1 | ИСПРАВЛЕНО ЛОКАЛЬНО | ASGI send cancellation не закрывала body iterator; bridge wrapper оставлял nested generator GC и поздний reserved row. Actual v1/slash/backend red-before; explicit nested close, repeated cancellation/writer-error и reservation cleanup PASS. UP-ISSUE-2266, §45. |
+
 
 ### F-001 — ORM-объекты покидают сессию до чтения ID
 
@@ -199,7 +218,7 @@ cloud CI, выпуск или production deployment. `[ ]` может содер
 
 ## 4. Очередь проверки оформления, поставки и сопровождения
 
-Сводные статусы синхронизированы с журналом §§13–36. «Локально» означает проверенный указанный source/runtime scope; public artifacts, cloud gates и пользовательские инциденты учитываются отдельно. Частичная проверка явно перечисляет остаток. Отсутствие нового коммита не означает отсутствие описания или evidence.
+Сводные статусы синхронизированы с журналом §§13–42. «Локально» означает проверенный указанный source/runtime scope; public artifacts, cloud gates и пользовательские инциденты учитываются отдельно. Частичная проверка явно перечисляет остаток. Отсутствие нового коммита не означает отсутствие описания или evidence.
 
 | ID | Приоритет | Область | Что проверяем | Статус | Выполненная часть / остаток |
 |---|---|---|---|---|---|
@@ -221,7 +240,7 @@ cloud CI, выпуск или production deployment. `[ ]` может содер
 | CI-01 | P1 | Current-head checks | Каждый uploaded SHA и attempt: обязательные checks, логи первичных failures, skipped/cancelled jobs, итоговый CI Required | ИСТОРИЧЕСКИ ПРОВЕРЕНО / НОВЫЙ DELTA ОТКРЫТ | Exact Windows run and four PR gates recorded §§20.5/21; current uncommitted tree не имеет GitHub source SHA/check rollup. Old success не перенесён на dirty state. |
 | CI-02 | P2 | Changes detection | Python/frontend/Rust/migrations/packaging changes включают нужные jobs; изменение workflows не создаёт ложный green | ИСПРАВЛЕНО ЛОКАЛЬНО | Rename/count-complete pagination, full-suite fallback и Nix inputs tested F-035 §23; fresh detector tests §28. New cloud run отдельно. |
 | CI-03 | P2 | DB matrix | SQLite/PostgreSQL/MySQL/MariaDB: реальное покрытие, migration head/topology, upgrade/downgrade/backfill/drift; aliases типов не скрывают несовместимость | ЧАСТИЧНО ПРОВЕРЕНО | SQLite/PostgreSQL/MySQL isolated migrations/drift/backup/runtime §§19/24/26; полный MariaDB/каждой migration downgrade/backfill audit не выполнен. |
-| CI-04 | P2 | Flakes / isolation | Quarantine, session lifecycle, background loops, cache/durable state, xdist/shards; повторное прохождение после объяснения причины | ЧАСТИЧНО ПРОВЕРЕНО / F-045 ОТКРЫТ | Quarantine helper/source regressions F-005 §§17/21; lifecycle checks §§25/26. New Windows SQLite aggregate fail / isolated PASS §28; причина и стабильность не закрыты. |
+| CI-04 | P2 | Flakes / isolation | Quarantine, session lifecycle, background loops, cache/durable state, xdist/shards; повторное прохождение после объяснения причины | ЧАСТИЧНО ПРОВЕРЕНО / F-045 ОТКРЫТ | Quarantine helper/source regressions F-005 §§17/21; lifecycle checks §§25/26. New Windows SQLite aggregate fail / isolated PASS §28; причина и стабильность не закрыты.; §39: native terminal probes group timeout / fresh-process PASS, session-lifecycle причина не изолирована. |
 | CI-05 | P2 | Windows | Получить CI/локальные доказательства supported Windows startup и transport, включая F-008 | ЧАСТИЧНО ПРОВЕРЕНО | Published Windows source run 4dce7220 PASS §20.5; PS/cmd source startup §21, recent auth/helper/package Windows checks §§25–28. Dirty delta cloud coverage отдельно. |
 | CI-06 | P2 | Browser / UI | До/после screenshots, viewport, browser smoke и реальные user flows; мок-тесты не заменяют запуск dashboard | ЧАСТИЧНО ПРОВЕРЕНО | Real dashboard HTML/assets and scoped bootstrap/auth/import/runtime flows §§18–27; полный browser/viewport/screenshots flow audit не выполнен. |
 | DOC-01 | P2 | README | Название/назначение форка, поддерживаемые платформы, Quick Start, ссылки, badges, версии, ограничения; проверить README.md и README.zh-CN.md | ИСПРАВЛЕНО ЛОКАЛЬНО | Fork README/Chinese links, historical source/artifact distinction, shell/channel guidance and budget checked §§23/27. Published hosted guides ещё stale. |
@@ -231,7 +250,7 @@ cloud CI, выпуск или production deployment. `[ ]` может содер
 | DOC-05 | P2 | Обновление пользователей | COMMUNITY_RELEASE.md, FIXES-NOT-IN-v1.25.1.md, release assets и инструкции: что входит в каждый tag, совместимость и rollback | ЧАСТИЧНО ПРОВЕРЕНО | Explicit fork/source/digest update, historical wheel boundary и paired rollback §§26/27; original FIXES-NOT artifact claims/public release notes целиком не закрыты. |
 | DOC-06 | P3 | Оформление GitHub | About/description, homepage, topics, package/release descriptions, default branch, badges, docs URL; правки GitHub — отдельное действие | ПОДТВЕРЖДЕНО / ОТКРЫТО | About/homepage/release/OCI descriptions unsupported/stale, Pages redirect+cert mismatch F-037; §§27/28. Public changes не выполнялись. |
 | DOC-07 | P3 | Авторство / лицензии | LICENSE, attribution, contributors, credits за перенесённые PR; различие собственной правки и интеграции community work | НЕ ПРОВЕРЕНО | Полный LICENSE/attribution/community integration audit не завершён. Сохранение существующих contributors markers/links не доказывает все credits. |
-| GOV-01 | P2 | OpenSpec | Behaviour-changing commits имеют change artifacts, нормативные specs и контекст; strict validation, verification перед archive | ЧАСТИЧНО ПРОВЕРЕНО | Шесть dirty OpenSpec batches, 40/40 tasks, verification/spec sync и strict68 PASS §§22–28. Все historical/upstream commits на spec coverage не проаудированы. |
+| GOV-01 | P2 | OpenSpec | Behaviour-changing commits имеют change artifacts, нормативные specs и контекст; strict validation, verification перед archive | ЧАСТИЧНО ПРОВЕРЕНО | Шесть dirty OpenSpec batches, 40/40 tasks, verification/spec sync и strict68 PASS §§22–28. Все historical/upstream commits на spec coverage не проаудированы. Дополнение §42: сверены 29 independent archive reports, 201/201 checked tasks; missing completion marks и ссылки исправлены. |
 | GOV-02 | P2 | Simplicity | README/env/nav/root budgets, конфигурационные tiers, архитектурные ratchets; необходимые исключения оформлены по правилам репозитория | ЛОКАЛЬНО ПРОВЕРЕНО | Simplicity/tiers/architecture checks записаны для scoped batches §§22–27; fresh budgets §28. Ratchets не ослаблены; полный review новых внешних PR не заявлен. |
 | GOV-03 | P2 | Git tracking | Разделение origin/fork, base SHA, upstream integrations/cherry-picks; 19 коммитов апстрима проверены на patch-equivalence, а не только на SHA | ЧАСТИЧНО ПРОВЕРЕНО | Source fixing commit ancestry подтверждена; explicit fork fetch при upstream origin Windows/Bash §§26–28. Все 19 upstream integrations на patch-equivalence не проверены. |
 | GOV-04 | P2 | PR readiness | Точные issue references, current-head CodeRabbit threads, check rollup, merge state, screenshots; отсутствие PR не означает выполненный review | ИСТОРИЧЕСКИ ПРОВЕРЕНО / НОВЫЙ DELTA ОТКРЫТ | Четыре PR source-head CI/review/merge gates записаны §21; dirty batches без нового PR/CodeRabbit/current-head cloud evidence. Старый review не перенесён автоматически. |
@@ -259,7 +278,7 @@ cloud CI, выпуск или production deployment. `[ ]` может содер
 
 ## 6. Очередь всех обращений из ISSUES.md
 
-Очередь ниже сформирована из локального `ISSUES.md` на исходном HEAD. Все строки начинаются с **НЕ ПРОВЕРЕНО**: текущие зелёные тесты отдельных подсистем не закрывают автоматически все связанные issues. Найденные выше регрессии пока записаны как F-карточки; связывать их с конкретным upstream issue следует после установления связи.
+Очередь ниже сформирована из локального `ISSUES.md` на исходном HEAD. На первом срезе все строки имели **НЕ ПРОВЕРЕНО**; актуальные результаты находятся в столбце **Наша проверка**. Связанные issue/PR отмечаются отдельно после сопоставления их собственного scope с доказательствами; зелёная подсистема не закрывает автоматически всё обращение. Найденные выше регрессии пока записаны как F-карточки; связывать их с конкретным upstream issue следует после установления связи.
 
 В заголовках исходного файла найдено **155 отдельных карточек**. Дополнительно найдено **142 уникальных ссылки** на issues, PR и discussions, не являющиеся URL этих карточек: итого **297 уникальных ссылок**. Это число ссылок для проверки объёма, не число уникальных багов и не подтверждение исходного счётчика «164». Вспомогательные ссылки могут оказаться контекстом, дублем сценария или неподходящей задачей; это фиксируется явно.
 
@@ -271,30 +290,30 @@ cloud CI, выпуск или production deployment. `[ ]` может содер
 
 | ID / источник | Заявленная тема | Исходный статус | Наша проверка | Карточка / исправляющий SHA |
 |---|---|---|---|---|
-| [UP-ISSUE-2471](https://github.com/Soju06/codex-lb/issues/2471) | bug(proxy): with upstream_stream_transport=http the native egress multiplexes every account's streams onto ONE shared HTTP/2 connection — one transport fa… | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
-| [UP-ISSUE-2470](https://github.com/Soju06/codex-lb/issues/2470) | bug(proxy): direct-HTTP stream that dies with "Native upstream transport ended before a terminal event" never releases its account stream lease → per-acco… | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
-| [UP-ISSUE-2456](https://github.com/Soju06/codex-lb/issues/2456) | bug(proxy): Windows transport errors bypass shared-client recovery | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
-| [UP-ISSUE-2425](https://github.com/Soju06/codex-lb/issues/2425) | bug: input_image requests still fail ~35% during overload on beta.8 — the HTTP bridge bypass, not the upstream transport, is the cause (follow-up to #2363… | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
-| [UP-ISSUE-2081](https://github.com/Soju06/codex-lb/issues/2081) | bug: direct websocket terminal failures lose transport and owner evidence | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
-| [UP-ISSUE-1208](https://github.com/Soju06/codex-lb/issues/1208) | feat: Improve upstream transport parity and eliminate the easily identifiable codex-lb fingerprint | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
+| [UP-ISSUE-2471](https://github.com/Soju06/codex-lb/issues/2471) | bug(proxy): with upstream_stream_transport=http the native egress multiplexes every account's streams onto ONE shared HTTP/2 connection — one transport fa… | РЕШЕНО | ИСПРАВЛЕНО ЛОКАЛЬНО / ЧАСТИЧНО ПРОВЕРЕНО | F-063, §39: реальный TLS HTTP/2 helper подтверждает account isolation/reuse; shared-pool control воспроизводит collateral failure. Native request/body phase, static exception и observed status теперь доходят до БД; 6 red-before body cases. Ambiguous pre-head POST не replay. Raw error-chain/cf-ray и per-request WSS preference остаются открыты. [Evidence](openspec/changes/archive/2026-10-03-repair-native-transport-recovery/verification.md). |
+| [UP-ISSUE-2470](https://github.com/Soju06/codex-lb/issues/2470) | bug(proxy): direct-HTTP stream that dies with "Native upstream transport ended before a terminal event" never releases its account stream lease → per-acco… | РЕШЕНО | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §39: existing nested cleanup подтверждён actual helper + v1/backend/native Codex routes, stream/non-stream, EOF/body/head failures. 18 сценариев × 3 POST: caps=1, pressure=0, reservation settled/released и helper state empty после каждого запроса; третий успешен без restart. Public/cloud/production отдельно. [Evidence](openspec/changes/archive/2026-10-03-repair-native-transport-recovery/verification.md). |
+| [UP-ISSUE-2456](https://github.com/Soju06/codex-lb/issues/2456) | bug(proxy): Windows transport errors bypass shared-client recovery | РЕШЕНО | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | F-062, §39: fresh upstream scope — route loss 1231/1232, исторический excerpt 64/121 устарел. 8 red-before cases; typed route classification, real shared generation retirement/CAS ownership, active lease retention, connector-only retry и health neutrality PASS. Reset/timeout сохраняют ordinary endpoint handling. Physical route loss/public/cloud отдельно. [Evidence](openspec/changes/archive/2026-10-03-repair-native-transport-recovery/verification.md). |
+| [UP-ISSUE-2425](https://github.com/Soju06/codex-lb/issues/2425) | bug: input_image requests still fail ~35% during overload on beta.8 — the HTTP bridge bypass, not the upstream transport, is the cause (follow-up to #2363… | РЕШЕНО | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §40: existing bounded inline PNG/JPEG admission подтверждена 69 tests; v1/backend text-image-text reuse, output-free overload recovery, exact image bytes, budgets, unsupported-shape/rollback and cancellation. Hosted overload percentages/public artifacts отдельно. [Evidence](openspec/changes/archive/2026-10-03-verify-image-websocket-transport-contracts/verification.md). |
+| [UP-ISSUE-2081](https://github.com/Soju06/codex-lb/issues/2081) | bug: direct websocket terminal failures lose transport and owner evidence | РЕШЕНО | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | F-064/F-065, §40: 20 terminal route controls +4 selected-owner quota cases, 10 adapter provenance cases, real Python/native socket abort; original sanitized terminal/metadata, no unsafe replay, one finalization/health. File-bound refusal и existing settlement/cancellation checks PASS. Public/deployed traffic отдельно. [Evidence](openspec/changes/archive/2026-10-03-verify-image-websocket-transport-contracts/verification.md). |
+| [UP-ISSUE-1208](https://github.com/Soju06/codex-lb/issues/1208) | feat: Improve upstream transport parity and eliminate the easily identifiable codex-lb fingerprint | РЕШЕНО | ИСПРАВЛЕНО ЛОКАЛЬНО / ЧАСТИЧНО ПРОВЕРЕНО | F-066, §40: actual TLS HTTP/2 origin подтверждает zstd request bodies, deterministic exact decoded JSON, lowercase H2 headers, native identity and absent implicit negotiation/request-ID, 2 MiB/5 MiB windows. Native compact/routed, raw-body/multipart/Python fallback controls PASS. Claims полного header-order/TLS fingerprint исправлены; live Codex CLI comparison, hosted acceptance и public packages остаются открыты. [Evidence](openspec/changes/archive/2026-10-03-verify-image-websocket-transport-contracts/verification.md). |
 
 ### Исходный раздел 2: HTTP/WebSocket Bridge, стриминг, ретраи и сессии
 
 | ID / источник | Заявленная тема | Исходный статус | Наша проверка | Карточка / исправляющий SHA |
 |---|---|---|---|---|
-| [UP-ISSUE-2493](https://github.com/Soju06/codex-lb/issues/2493) | bug: Beta.9 HTTP bridge can close native stream without terminal event after proxy-injected anchor rejection | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
-| [UP-ISSUE-2465](https://github.com/Soju06/codex-lb/issues/2465) | bug: beta.9 sticky bridge lineages wedge permanently; image+tools path sends invalid parallel_tool_calls | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
-| [UP-ISSUE-2455](https://github.com/Soju06/codex-lb/issues/2455) | bug(proxy): bridge payload bypass blocks verified quota failover | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
+| [UP-ISSUE-2493](https://github.com/Soju06/codex-lb/issues/2493) | bug: Beta.9 HTTP bridge can close native stream without terminal event after proxy-injected anchor rejection | РЕШЕНО | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §41: existing runtime fix подтверждён actual WebSocket + native backend/slash routes: local precommit 502, post-created/keepalive ровно один masked SSE terminal, upstream code в БД, finalized/released reservations и pressure=0. Definitive denied-anchor retirement подтверждена existing route. Исходное универсальное обещание rate_limit_exceeded исправлено. [Evidence](openspec/changes/archive/2026-10-04-repair-bridge-terminal-lineage-failover/verification.md). |
+| [UP-ISSUE-2465](https://github.com/Soju06/codex-lb/issues/2465) | bug: beta.9 sticky bridge lineages wedge permanently; image+tools path sends invalid parallel_tool_calls | РЕШЕНО | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | F-067, §41: два bounded silent logical turns, затем retry последнего полного body без poisoned anchor; actual HTTP Lite image+tools, serial calls/all_turns/header и payload preservation PASS. Partial unit mock retirement исправлен: 6 red-before, same 107-case selection green. Delta/account-owned/ambiguous-journal fences сохранены. [Evidence](openspec/changes/archive/2026-10-04-repair-bridge-terminal-lineage-failover/verification.md). |
+| [UP-ISSUE-2455](https://github.com/Soju06/codex-lb/issues/2455) | bug(proxy): bridge payload bypass blocks verified quota failover | РЕШЕНО | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §41: actual HTTP owner429→alternate success с API-key-scoped durable proof, exact full body и удалённой stale affinity; другой ключ, wrong prefix, missing output, explicit anchor, owned item и owner mismatch не получают grant. Canonical/slash, reservations и pressure=0 PASS; file/lookup/forwarded guards проверены related suites/source. [Evidence](openspec/changes/archive/2026-10-04-repair-bridge-terminal-lineage-failover/verification.md). |
 | [UP-ISSUE-2447](https://github.com/Soju06/codex-lb/issues/2447) | SQLite database is locked during login/OAuth under concurrent streaming load | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
 | [UP-ISSUE-2409](https://github.com/Soju06/codex-lb/issues/2409) | bug(proxy): intermittent cache misses on Astra/SOL with the same Pro account across HTTP and WebSocket (195k–777k input) | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
 | [UP-ISSUE-2389](https://github.com/Soju06/codex-lb/issues/2389) | bug(http-bridge): a model-transition fork rescues one turn, then re-derives the same owner conflict | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
 | [UP-ISSUE-2388](https://github.com/Soju06/codex-lb/issues/2388) | bug(proxy): other HTTP-bridge local refusals still reach native Codex clients as an empty 200 | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
-| [UP-ISSUE-2273](https://github.com/Soju06/codex-lb/issues/2273) | bug: incomplete responses can bypass bridge retry limits | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
-| [UP-ISSUE-2272](https://github.com/Soju06/codex-lb/issues/2272) | bug: bridge retries can stay blocked after cooldown ends | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
-| [UP-ISSUE-2271](https://github.com/Soju06/codex-lb/issues/2271) | bug: retry claims can stay locked after their owner exits | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
-| [UP-ISSUE-2270](https://github.com/Soju06/codex-lb/issues/2270) | bug: retry cleanup can delete state changed by a newer request | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
-| [UP-ISSUE-2268](https://github.com/Soju06/codex-lb/issues/2268) | bug: old bridge requests can clear a newer session's quarantine | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
-| [UP-ISSUE-2266](https://github.com/Soju06/codex-lb/issues/2266) | bug: paused streams can keep growing worker memory | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
+| [UP-ISSUE-2273](https://github.com/Soju06/codex-lb/issues/2273) | bug: incomplete responses can bypass bridge retry limits | РЕШЕНО | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §44: existing reason-only accounting подтверждён actual HTTP/WebSocket v1/slash/backend и real SQLite; 24 raw/interpreted precedence/exclusion cases. Distinct attempts дают counts 1→2/cooldown, stored terminal не создаёт send/strike; authored terminal сохранён на исходной отправке. Proof-gated replay остаётся предусмотренным исключением. [Evidence](openspec/changes/archive/2026-10-04-verify-bridge-retry-claim-lifecycle/verification.md). |
+| [UP-ISSUE-2272](https://github.com/Soju06/codex-lb/issues/2272) | bug: bridge retries can stay blocked after cooldown ends | РЕШЕНО | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §44: real durable missing/zero/negative/elapsed cooldown допускает повторный admission; настоящая local expiry выдаёт один probe, повторные loads сохраняют его lease. Existing ownership/cleanup/settlement regression PASS. Отдельная crash/abandonment policy не сертифицирована. [Evidence](openspec/changes/archive/2026-10-04-verify-bridge-retry-claim-lifecycle/verification.md). |
+| [UP-ISSUE-2271](https://github.com/Soju06/codex-lb/issues/2271) | bug: retry claims can stay locked after their owner exits | РЕШЕНО | ИСПРАВЛЕНО ЛОКАЛЬНО / ЧАСТИЧНО ПРОВЕРЕНО | F-068/069/070, §44: cancellation after commit, inserted-row epoch, post-commit receipt replacement и unfenced local probe clearing исправлены; real submission/SQLite, repeated cancellation и successor CAS PASS. Открыты process crash/reclamation, uncertain internal timeout, generation rollback ABA, ordinary-success/newer-claim settlement policy и PostgreSQL/MySQL/migration runtime. Полного закрытия нет. [Evidence](openspec/changes/archive/2026-10-04-verify-bridge-retry-claim-lifecycle/verification.md). |
+| [UP-ISSUE-2270](https://github.com/Soju06/codex-lb/issues/2270) | bug: retry cleanup can delete state changed by a newer request | РЕШЕНО | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | F-071, §45: 4 scheduled red-before cases; selected count/timestamp/generation fence и keyset cursor не удаляют изменённую строку повторным выбором. 12 cases на SQLite/PostgreSQL16/MySQL8.4, batches1/128; continuity/tombstone/age controls PASS. [Evidence](openspec/changes/archive/2026-10-04-verify-bridge-cleanup-quarantine-backpressure/verification.md). |
+| [UP-ISSUE-2268](https://github.com/Soju06/codex-lb/issues/2268) | bug: old bridge requests can clear a newer session's quarantine | РЕШЕНО | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §45: existing ownership/failure-cutoff подтверждены 9 actual completion cases: initial strike during settlement, replacement и pruned/recreated key. Старое completion не снимает новый fence; related quarantine controls PASS. Existing overflow policy не переработана. [Evidence](openspec/changes/archive/2026-10-04-verify-bridge-cleanup-quarantine-backpressure/verification.md). |
+| [UP-ISSUE-2266](https://github.com/Soju06/codex-lb/issues/2266) | bug: paused streams can keep growing worker memory | РЕШЕНО | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | F-072/F-073, §45: cancelled waiter/retained buffer/sentinel cancellation и nested iterator/reservation lifetime исправлены. Fixed5s stall cap, ordered resume или one failure; actual ASGI pause/stall/cancel/writer-error canonical/slash/backend, zero bytes/pressure, settled reservations и active account PASS. Per-stream scope; global RSS/native/spool отдельно. [Evidence](openspec/changes/archive/2026-10-04-verify-bridge-cleanup-quarantine-backpressure/verification.md). |
 | [UP-ISSUE-2169](https://github.com/Soju06/codex-lb/issues/2169) | test: make native SSE fallback refusal fixture portable on macOS | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
 | [UP-ISSUE-2108](https://github.com/Soju06/codex-lb/issues/2108) | bug: HTTP Responses logs omit observed upstream phase timings | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
 | [UP-ISSUE-2090](https://github.com/Soju06/codex-lb/issues/2090) | fix(proxy): reconcile reservations after late HTTP-bridge anchor injection | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
@@ -327,13 +346,13 @@ cloud CI, выпуск или production deployment. `[ ]` может содер
 | ID / источник | Заявленная тема | Исходный статус | Наша проверка | Карточка / исправляющий SHA |
 |---|---|---|---|---|
 | [UP-ISSUE-2442](https://github.com/Soju06/codex-lb/issues/2442) | bug(proxy): early token_expired reauth account poisons fresh Codex HTTP routing | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
-| [UP-ISSUE-2426](https://github.com/Soju06/codex-lb/issues/2426) | bug(metrics): populate account counts and expose availability for alerting | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
+| [UP-ISSUE-2426](https://github.com/Soju06/codex-lb/issues/2426) | bug(metrics): populate account counts and expose availability for alerting | РЕШЕНО | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §42: producer/inventory/availability проверены independent §36: real DB/ASGI exposition, zeroes/status/repair/expiry/delete/failure recovery и multiprocess livemax; optional metrics dependency была установлена, final exporter tests не skipped. F-055 исправлен; [evidence](openspec/changes/archive/2026-10-03-verify-account-pool-probe-recovery/verification.md). Production alert deployment отдельно. |
 | [UP-ISSUE-2420](https://github.com/Soju06/codex-lb/issues/2420) | bug(accounts): Hard-coded Pro and Pro Lite credit capacities disagree with observed quota consumption, distorting pooled credit reporting | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
 | [UP-ISSUE-2413](https://github.com/Soju06/codex-lb/issues/2413) | feat: Luna Reserve (gpt-reserve) fallback when chat quota is exhausted | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
 | [UP-ISSUE-2327](https://github.com/Soju06/codex-lb/issues/2327) | fix(accounts): recover stale holds after verified matching operator probes | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
 | [UP-ISSUE-2288](https://github.com/Soju06/codex-lb/issues/2288) | feat: pool reset credits across accounts in Codex Desktop | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
 | [UP-ISSUE-2285](https://github.com/Soju06/codex-lb/issues/2285) | feat: show pooled quota in Codex Desktop while staying signed in | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
-| [UP-ISSUE-2274](https://github.com/Soju06/codex-lb/issues/2274) | bug: continuations can be routed to the wrong account | РЕШЕНО | ЛОКАЛЬНО ПРОВЕРЕНО | Bounded sole-owner/scope и HTTP/compact/WS continuation проверены; F-001/003/004/009, source 7d151b9e → f847fc57, §§13/14/21. Исторический пользовательский quota incident отдельно. |
+| [UP-ISSUE-2274](https://github.com/Soju06/codex-lb/issues/2274) | bug: continuations can be routed to the wrong account | РЕШЕНО | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §42: явное закрытие ранее проверенного bounded sole-owner/scope и HTTP/compact/WS continuation scope; F-001/003/004/009, §§13/14/21. Source 7d151b9e → f847fc57 присутствует в ancestry текущего HEAD. Historical quota incident/public artifact отдельно. [Evidence](openspec/changes/archive/2026-10-01-repair-continuity-owner-snapshots/verification.md). |
 | [UP-ISSUE-2076](https://github.com/Soju06/codex-lb/issues/2076) | bug: default Docker port 1455 mapping can intercept Codex Desktop OAuth callbacks | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
 | [UP-ISSUE-2064](https://github.com/Soju06/codex-lb/issues/2064) | bug(proxy): revoked access tokens repeatedly re-enter reauth routing | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
 | [UP-ISSUE-1976](https://github.com/Soju06/codex-lb/issues/1976) | bug(warmup): staggered idle slots can be unreachable for sliding reset_at | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
@@ -379,16 +398,16 @@ cloud CI, выпуск или production deployment. `[ ]` может содер
 | ID / источник | Заявленная тема | Исходный статус | Наша проверка | Карточка / исправляющий SHA |
 |---|---|---|---|---|
 | [UP-ISSUE-2028](https://github.com/Soju06/codex-lb/issues/2028) | fix(logging): shared log-redaction patterns leave credential tails for auth-param lists, quoted keys, and whitespace-separated tokens | РЕШЕНО | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | F-051, §33: original probes и дополнительные malformed/status/ampersand/placeholder cases; error fields, text/JSON messages/exceptions, actual log files, quoted context и CR/LF idempotency PASS. Unquoted Authorization теперь маскируется до конца строки; public/cloud отдельно. [Evidence](openspec/changes/archive/2026-10-03-repair-auth-log-audit-contracts/verification.md). |
-| [UP-ISSUE-1844](https://github.com/Soju06/codex-lb/issues/1844) | Telemetry opt-out: close the consent/send race and follow-up hardening | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
-| [UP-ISSUE-1843](https://github.com/Soju06/codex-lb/issues/1843) | bug: telemetry client type is wrong | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
-| [UP-ISSUE-1572](https://github.com/Soju06/codex-lb/issues/1572) | feat: support CODEX_LB_ENCRYPTION_KEY for stateless replicas | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
+| [UP-ISSUE-1844](https://github.com/Soju06/codex-lb/issues/1844) | Telemetry opt-out: close the consent/send race and follow-up hardening | РЕШЕНО | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | F-060/F-061, §38: 9 red-before гонок и 4 timestamp cases; full protocol + dashboard commit lock, 12 actual collector races с complete/cancel/503/timeout, Ed25519 и disabled silence PASS. Global cross-process fence/collector authority и deferred observability остаются открыты. [Evidence](openspec/changes/archive/2026-10-03-repair-telemetry-and-stateless-key-contracts/verification.md). |
+| [UP-ISSUE-1843](https://github.com/Soju06/codex-lb/issues/1843) | bug: telemetry client type is wrong | РЕШЕНО | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §38: existing mapping подтверждён через 11 stored-group preview cases и 24 actual Responses/Chat stream/non-stream routes, loopback upstream, new-session log readback и canonical shares. SSOT дополняет CLI/Desktop aliases; private/missing groups → other. Real client applications/public/cloud отдельно. [Evidence](openspec/changes/archive/2026-10-03-repair-telemetry-and-stateless-key-contracts/verification.md). |
+| [UP-ISSUE-1572](https://github.com/Soju06/codex-lb/issues/1572) | feat: support CODEX_LB_ENCRYPTION_KEY for stateless replicas | РЕШЕНО | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | §38: env-key encryption уже работает; topology/key-selection SSOT и mismatch remediation исправлены. Actual import/DB/decryption, explicit precedence/blank fallback, inaccessible default file, same/different sentinel и два fresh processes PASS; key material не раскрывается. Deployed PostgreSQL topology/public/cloud отдельно. [Evidence](openspec/changes/archive/2026-10-03-repair-telemetry-and-stateless-key-contracts/verification.md). |
 
 ### Исходный раздел 8: Dashboard, UI и Prometheus метрики
 
 | ID / источник | Заявленная тема | Исходный статус | Наша проверка | Карточка / исправляющий SHA |
 |---|---|---|---|---|
 | [UP-ISSUE-2492](https://github.com/Soju06/codex-lb/issues/2492) | feat: Reset API key limit usage from dashboard without regenerating keys | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
-| [UP-ISSUE-2443](https://github.com/Soju06/codex-lb/issues/2443) | bug(metrics): dashboard/report TPS uses post-settlement latency and reasoning-inclusive TTFT | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
+| [UP-ISSUE-2443](https://github.com/Soju06/codex-lb/issues/2443) | bug(metrics): dashboard/report TPS uses post-settlement latency and reasoning-inclusive TTFT | РЕШЕНО | ЧАСТИЧНО ПРОВЕРЕНО | §42: API/DB/daily-report часть уже проверена §34: reasoning125, first output500, terminal1000, total3000 мс; qualified 40TPS и sample/median/filter/virtual-time regressions. [Evidence](openspec/changes/archive/2026-10-03-repair-usage-and-generation-evidence/verification.md). Полный recent-requests dashboard UI / very-short-window / queue-consumer scenario аудит этого issue отдельно не записан; полностью не закрыт. |
 | [UP-ISSUE-2418](https://github.com/Soju06/codex-lb/issues/2418) | bug(frontend): Apple Passwords TOTP autofill does not populate Chrome verification dialog | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
 | [UP-ISSUE-2309](https://github.com/Soju06/codex-lb/issues/2309) | docs: align agent instructions with Astra prompt guidance | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
 | [UP-ISSUE-2262](https://github.com/Soju06/codex-lb/issues/2262) | feat(proxy): preserve built-in OpenAI provider when routing ChatGPT-authenticated Codex Desktop through codex-lb | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
@@ -415,7 +434,7 @@ cloud CI, выпуск или production deployment. `[ ]` может содер
 
 | ID / источник | Заявленная тема | Исходный статус | Наша проверка | Карточка / исправляющий SHA |
 |---|---|---|---|---|
-| [UP-ISSUE-2410](https://github.com/Soju06/codex-lb/issues/2410) | bug: Force Probe sends unsupported payload fields and can fail to settle successful probes | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
+| [UP-ISSUE-2410](https://github.com/Soju06/codex-lb/issues/2410) | bug: Force Probe sends unsupported payload fields and can fail to settle successful probes | РЕШЕНО | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §42: existing probe payload/ORM snapshot contract проверен §36: accounts_service_probe/load_balancer suites и real dashboard API + rollback/closed repositories, accepted/rejected/network/partial-row и health/lease controls. Recorded 719-case scope, не повторный новый прогон. [Evidence](openspec/changes/archive/2026-10-03-verify-account-pool-probe-recovery/verification.md). Реальный vendor probe отдельно. |
 | [UP-ISSUE-2314](https://github.com/Soju06/codex-lb/issues/2314) | ci: reconcile issue and PR status-label ownership and lifecycle | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
 | [UP-ISSUE-2311](https://github.com/Soju06/codex-lb/issues/2311) | docs: use GPT-6 Astra in current client examples | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
 | [UP-ISSUE-2291](https://github.com/Soju06/codex-lb/issues/2291) | bug: queued transcript batches wait between flushes | РЕШЕНО | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §46: existing loop подтверждён 320-event ten-write burst, bounded fair passes и false/exception isolation без intervening waits. Real SQLite rows_v1/chunks_v2 сохраняют 320 events + один terminal; stale-owner epoch отклонён. Live production speedup отдельно. [Evidence](openspec/changes/archive/2026-10-04-verify-sqlite-history-reports-transcript/verification.md). |
@@ -437,15 +456,15 @@ cloud CI, выпуск или production deployment. `[ ]` может содер
 | [UP-PR-2504](https://github.com/Soju06/codex-lb/pull/2504) | fix(usage): account for cache-write tokens | RESOLVED / MERGED IN FORK | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §34: 24 actual local HTTP/WebSocket native-protocol cases, missing/negative/mixed/excess writes, disjoint costs, raw DB counts, finalized reservations, repeat CAS, API cost components и next-request429; migration/backfill и 6 background checks PASS. Existing source implementation подтверждена; packaged Rust helper/public/cloud отдельно. [Evidence](openspec/changes/archive/2026-10-03-repair-usage-and-generation-evidence/verification.md). |
 | [UP-ISSUE-2505](https://github.com/Soju06/codex-lb/issues/2505) | bug: shutdown cancels schedulers and the leader-lease keeper mid-DB-work (SQLite pool CancelledError, unreleased lease, unclean run-state) | RESOLVED / MERGED IN FORK | НЕ ПРОВЕРЕНО | — |
 | [UP-PR-2506](https://github.com/Soju06/codex-lb/pull/2506) | fix(shutdown): let DB-owning background tasks finish before cancelling them | RESOLVED / MERGED IN FORK | НЕ ПРОВЕРЕНО | — |
-| [UP-PR-2507](https://github.com/Soju06/codex-lb/pull/2507) | feat(cli): add --log-level and --log-file; stop the metrics server resetting logging | RESOLVED / MERGED IN FORK | ЧАСТИЧНО ПРОВЕРЕНО | CLI flags и launcher log paths с пробелами проверены §§17/21; полный metrics-server logging contract отдельно. |
-| [UP-PR-2508](https://github.com/Soju06/codex-lb/pull/2508) | fix(proxy): reuse bridge sessions for inline images | RESOLVED / MERGED IN FORK | НЕ ПРОВЕРЕНО | — |
+| [UP-PR-2507](https://github.com/Soju06/codex-lb/pull/2507) | feat(cli): add --log-level and --log-file; stop the metrics server resetting logging | RESOLVED / MERGED IN FORK | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §42: ранее CLI flags/launcher log paths проверены §§17/21; оставшийся metrics logging scope закрыт §37: test_cli.py и structured/OTel suites, четыре real CLI processes text/JSON × info/debug, primary+metrics, spaced file path и stream/file access parity. [Evidence](openspec/changes/archive/2026-10-03-verify-plan-json-metrics-contracts/verification.md). Установленные tracing exporters/POSIX/public артефакты отдельно. |
+| [UP-PR-2508](https://github.com/Soju06/codex-lb/pull/2508) | fix(proxy): reuse bridge sessions for inline images | RESOLVED / MERGED IN FORK | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §43: existing bounded-image reuse подтверждён real local WebSocket: text/image/history на одном socket и prompt-cache identity, verbatim PNG, invalid-image recovery и settled reservations; existing long-budget precreated retry policy сохранена. Main blanket-bypass wording синхронизирована. [Evidence](openspec/changes/archive/2026-10-04-repair-image-control-transport-contracts/verification.md). Live vendor/cache/public/cloud отдельно. |
 | [UP-PR-2509](https://github.com/Soju06/codex-lb/pull/2509) | chore(deps): bump the frontend-minor-patch group across 1 directory with 16 updates | RESOLVED / MERGED IN FORK | НЕ ПРОВЕРЕНО | — |
 | [UP-PR-2510](https://github.com/Soju06/codex-lb/pull/2510) | chore(deps): bump the python-minor-patch group across 1 directory with 11 updates | MERGED/CLOSED | НЕ ПРОВЕРЕНО | — |
 | [UP-ISSUE-2511](https://github.com/Soju06/codex-lb/issues/2511) | bug(accounts): self_serve_business_prolite usage plan is rejected as unknown | RESOLVED / MERGED IN FORK | НЕ ПРОВЕРЕНО | — |
-| [UP-PR-2512](https://github.com/Soju06/codex-lb/pull/2512) | fix(accounts): normalize business prolite plan alias | RESOLVED / MERGED IN FORK | НЕ ПРОВЕРЕНО | — |
-| [UP-PR-2513](https://github.com/Soju06/codex-lb/pull/2513) | fix(proxy): send a single Content-Type on codex control requests | MERGED/CLOSED | НЕ ПРОВЕРЕНО | — |
+| [UP-PR-2512](https://github.com/Soju06/codex-lb/pull/2512) | fix(accounts): normalize business prolite plan alias | RESOLVED / MERGED IN FORK | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §37: three import variants и five real HTTP refresh cases; new-session DB/dashboard readback, canonical prolite/default capacity/Pro-equivalent eligibility, unchanged identity/credentials, unknown-plan/workspace refusal PASS. Existing fix подтверждён; hosted plans/public/cloud отдельно. [Evidence](openspec/changes/archive/2026-10-03-verify-plan-json-metrics-contracts/verification.md). |
+| [UP-PR-2513](https://github.com/Soju06/codex-lb/pull/2513) | fix(proxy): send a single Content-Type on codex control requests | MERGED/CLOSED | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | §43: empty-byte body сохранял Content-Type; после normalization aiohttp всё ещё генерировал octet-stream. Empty→None + skip_auto_headers исправлены direct/routed; real native/SDK JSON/SDP/empty routes и Python/native HTTP-proxy wire PASS, first spelling/position и query/body сохранены. [Evidence](openspec/changes/archive/2026-10-04-repair-image-control-transport-contracts/verification.md). Public/cloud отдельно. |
 | [UP-ISSUE-2514](https://github.com/Soju06/codex-lb/issues/2514) | feat(accounts): redeem all eligible reset credits in one action | RESOLVED / MERGED IN FORK | НЕ ПРОВЕРЕНО | — |
-| [UP-PR-2515](https://github.com/Soju06/codex-lb/pull/2515) | fix(chat): keep the JSON instruction in input for json_object requests | RESOLVED / MERGED IN FORK | НЕ ПРОВЕРЕНО | — |
+| [UP-PR-2515](https://github.com/Soju06/codex-lb/pull/2515) | fix(chat): keep the JSON instruction in input for json_object requests | RESOLVED / MERGED IN FORK | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | §37, F-057: 16 red-before text.format cases исправлены shared mode detection после format mapping; 48 route variants × two turns = 96 actual HTTP upstream bodies, roles/content/order/hoisting и prefix stability PASS. Main spec исправляет unsupported system role; slash redirects проверены с follow_redirects. Hosted provider/public/cloud отдельно. [Evidence](openspec/changes/archive/2026-10-03-verify-plan-json-metrics-contracts/verification.md). |
 | [UP-PR-2516](https://github.com/Soju06/codex-lb/pull/2516) | docs: declare native web search support in Codex examples | RESOLVED / MERGED IN FORK | НЕ ПРОВЕРЕНО | — |
 | [UP-PR-2517](https://github.com/Soju06/codex-lb/pull/2517) | fix(telemetry): map codex_cli_rs user agent to codex-cli family | RESOLVED / MERGED IN FORK | НЕ ПРОВЕРЕНО | — |
 | [UP-PR-2518](https://github.com/Soju06/codex-lb/pull/2518) | test(db): cover the SCIM/overflow merge revision's single-head convergence | RESOLVED / MERGED IN FORK | НЕ ПРОВЕРЕНО | — |
@@ -459,7 +478,7 @@ cloud CI, выпуск или production deployment. `[ ]` может содер
 | [UP-PR-2526](https://github.com/Soju06/codex-lb/pull/2526) | fix(model-sources): preserve declared collaboration namespaces | RESOLVED / MERGED IN FORK | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | §35, F-053: 12 red-before dangling namespaced function choices исправлены; 88 recording HTTP cases для обеих Responses routes/slash, v1/v2/future/explicit opt-ins, nested schemas, forced/allowed choices и hosted include pruning PASS. Main contract/context синхронизирован; real provider/client/public/cloud отдельно. [Evidence](openspec/changes/archive/2026-10-03-repair-source-catalog-output-contracts/verification.md). |
 | [UP-PR-2527](https://github.com/Soju06/codex-lb/pull/2527) | fix(routing): recover weekly-only Pro reserve accounts | MERGED/CLOSED | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | §36, F-056: 14 real Responses route cases подтверждают post-block weekly-primary recovery, debounce/freshness/exhaustion/rate-limit guards и unchanged owner/storage. Quota Resume восстановлен после 3 red frontend cases; real reactivate CAS и Chromium single POST/refreshed actions PASS, screenshots до/после. Public/cloud отдельно. [Evidence](openspec/changes/archive/2026-10-03-verify-account-pool-probe-recovery/verification.md). |
 | [UP-PR-2528](https://github.com/Soju06/codex-lb/pull/2528) | fix(proxy): advertise GPT-6 max output tokens | RESOLVED / MERGED IN FORK | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | §35, F-054: 16 red-before malformed precedence cases исправлены; 44 new cases на трёх GPT-6 slugs/unknown и четырёх public surfaces. Valid upstream counts win, invalid known→128000/unknown→null; metadata/capability/aliases согласованы, input/native raw fields unchanged. Main SSOT синхронизирован; hosted limits/public/cloud отдельно. [Evidence](openspec/changes/archive/2026-10-03-repair-source-catalog-output-contracts/verification.md). |
-| [UP-PR-2529](https://github.com/Soju06/codex-lb/pull/2529) | fix(metrics): stop the metrics server from reconfiguring process logging | RESOLVED / MERGED IN FORK | НЕ ПРОВЕРЕНО | — |
+| [UP-PR-2529](https://github.com/Soju06/codex-lb/pull/2529) | fix(metrics): stop the metrics server from reconfiguring process logging | RESOLVED / MERGED IN FORK | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | §37, F-058/F-059: existing neutral Config подтверждён; real JSON null fields и debug recursion исправлены. Four CLI subprocesses text/JSON × info/debug, both listeners, log path with spaces, stream/file parity, userinfo redaction и numeric 200/503 PASS. Optional uvloop/POSIX shutdown, deployed exporters/public/cloud отдельно. [Evidence](openspec/changes/archive/2026-10-03-verify-plan-json-metrics-contracts/verification.md). |
 | [UP-PR-2530](https://github.com/Soju06/codex-lb/pull/2530) | fix(http-bridge): parse multiline websocket JSON messages | RESOLVED / MERGED IN FORK | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | Existing source fix подтверждён: compact/pretty/CRLF errors, native parity, message/tool output items, реальные WebSocket bytes и next-turn recovery. §32, [evidence](openspec/changes/archive/2026-10-02-repair-bridge-json-lite-close-contracts/verification.md); public/cloud отдельно. |
 | [UP-PR-2531](https://github.com/Soju06/codex-lb/pull/2531) | fix(proxy): normalize parallel_tool_calls for Responses-Lite upstream | RESOLVED / MERGED IN FORK | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | Existing finalizer подтверждён: omitted/null/true/false, Lite/non-Lite bridge routes, actual direct HTTP и GET426→POST fallback, input/cache/reasoning и untrusted marker controls. §32, [evidence](openspec/changes/archive/2026-10-02-repair-bridge-json-lite-close-contracts/verification.md); public/cloud отдельно. |
 | [UP-PR-2532](https://github.com/Soju06/codex-lb/pull/2532) | chore(docker): bump rust from 1.96.0-slim-bookworm to 1.98.1-slim-bookworm | RESOLVED / MERGED IN FORK | НЕ ПРОВЕРЕНО | — |
@@ -467,12 +486,12 @@ cloud CI, выпуск или production deployment. `[ ]` может содер
 | [UP-PR-2534](https://github.com/Soju06/codex-lb/pull/2534) | feat(proxy): admit bounded inline images on the HTTP responses bridge | RESOLVED / MERGED IN FORK | НЕ ПРОВЕРЕНО | — |
 | [UP-ISSUE-2535](https://github.com/Soju06/codex-lb/issues/2535) | feat: show pooled quota in Codex /status by serving and forwarding /backend-api calls | MERGED/CLOSED | ЧАСТИЧНО ПРОВЕРЕНО | API/passthrough/usage suites и actual Codex CLI 0.159.3 с synthetic upstream; §§14/25. Real Desktop /status/live quota incident не закрыт. |
 | [UP-PR-2536](https://github.com/Soju06/codex-lb/pull/2536) | feat(proxy): show pooled quota in Codex /status by serving and forwarding /backend-api calls | RESOLVED / MERGED IN FORK | ЧАСТИЧНО ПРОВЕРЕНО | API/passthrough/usage suites и actual Codex CLI 0.159.3 с synthetic upstream; §§14/25. Real Desktop /status/live quota incident не закрыт. |
-| [UP-PR-2537](https://github.com/Soju06/codex-lb/pull/2537) | fix(images): route image requests through compatible host | RESOLVED / MERGED IN FORK | НЕ ПРОВЕРЕНО | — |
-| [UP-ISSUE-2538](https://github.com/Soju06/codex-lb/issues/2538) | bug(http-bridge): upstream error responses silently swallowed as timeouts - pretty JSON parsing + Responses-Lite parallel_tool_calls | РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ | НЕ ПРОВЕРЕНО | — |
+| [UP-PR-2537](https://github.com/Soju06/codex-lb/pull/2537) | fix(images): route image requests through compatible host | RESOLVED / MERGED IN FORK | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | §43: fallback всё ещё выбирал incompatible Luna перед 5.5. Images candidates теперь Sol/Astra/5.5; probes unchanged, unavailable/suppressed controls и 12 real HTTP generation/edit/alias cases PASS. Public tool/log model, reference bytes и slash405 contract сохранены. [Evidence](openspec/changes/archive/2026-10-04-repair-image-control-transport-contracts/verification.md). Live provider/public/cloud отдельно. |
+| [UP-ISSUE-2538](https://github.com/Soju06/codex-lb/issues/2538) | bug(http-bridge): upstream error responses silently swallowed as timeouts - pretty JSON parsing + Responses-Lite parallel_tool_calls | РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §42: обе части issue уже подтверждены §§32/41: full pretty/CRLF WebSocket JSON не теряет terminal error, final Responses-Lite payload использует serial tool calls. Native/slash/error recovery и real HTTP image/tools controls PASS в записанных suites. [JSON/Lite evidence](openspec/changes/archive/2026-10-02-repair-bridge-json-lite-close-contracts/verification.md), [route evidence](openspec/changes/archive/2026-10-04-repair-bridge-terminal-lineage-failover/verification.md). Live Factory/provider/public scope отдельно. |
 | [UP-PR-2539](https://github.com/Soju06/codex-lb/pull/2539) | fix(proxy): treat websocket close 1009 as terminal payload_too_large | РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | F-050: typed aiohttp size error сохраняет1009; HTTP/WS до/после output, реальный oversize socket, no replay/health/exclusion, reservation cleanup и same-account recovery. §32, [evidence](openspec/changes/archive/2026-10-02-repair-bridge-json-lite-close-contracts/verification.md); public/cloud отдельно. |
 | [UP-PR-2540](https://github.com/Soju06/codex-lb/pull/2540) | fix(quota): reject invalid planner clock times | РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | Strict clock writes/atomic refusal подтверждены; F-048 legacy response/correction исправлена. §31, [evidence](openspec/changes/archive/2026-10-02-verify-planner-scim-cache-admission/verification.md); public/cloud отдельно. |
 | [UP-PR-2541](https://github.com/Soju06/codex-lb/pull/2541) | fix(scim): enforce body limits while reading the stream | РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | POST/PUT/PATCH actual stream boundaries/no mutation подтверждены; F-049 declared-length crash исправлен. §31, [evidence](openspec/changes/archive/2026-10-02-verify-planner-scim-cache-admission/verification.md); external IdP/cloud отдельно. |
-| [UP-PR-2542](https://github.com/Soju06/codex-lb/pull/2542) | test(shutdown): override the current account import permission | РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ | НЕ ПРОВЕРЕНО | — |
+| [UP-PR-2542](https://github.com/Soju06/codex-lb/pull/2542) | test(shutdown): override the current account import permission | РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §42, TEST SCOPE: permission-override/lifespan regression относится к test_otel.py; полная module suite входила в independent 146-pass logging/OTel selection §37 после исправлений, не в source-author 49-pass claim. [Evidence](openspec/changes/archive/2026-10-03-verify-plan-json-metrics-contracts/verification.md). Новый cloud run не заявлен. |
 | [UP-PR-2543](https://github.com/Soju06/codex-lb/pull/2543) | docs(codex): enable API-key model discovery in setup examples | РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ | НЕ ПРОВЕРЕНО | — |
 | [UP-PR-2544](https://github.com/Soju06/codex-lb/pull/2544) | chore(metadata): refresh model pricing and Codex version | РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ | НЕ ПРОВЕРЕНО | — |
 | [UP-PR-2545](https://github.com/Soju06/codex-lb/pull/2545) | fix(cache): retain failed immediate invalidations | РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | Existing pending retention подтверждена через Pause API, locked/driver/cancelled write, actual retry/DB/peer routing cache, commit ambiguity/namespace isolation. §31, [evidence](openspec/changes/archive/2026-10-02-verify-planner-scim-cache-admission/verification.md); deployed replicas/cloud отдельно. |
@@ -715,7 +734,7 @@ cloud CI, выпуск или production deployment. `[ ]` может содер
 | [0e6d8f07](https://github.com/Frozen811/codex-lb/commit/0e6d8f07f9457d4abeb448e4109ed191c9bc647e) | test(quarantine): isolate session id per parameterized test and clean up durable state in provenance tests | НЕ ПРОВЕРЕНО | — |
 | [ab1d18b5](https://github.com/Frozen811/codex-lb/commit/ab1d18b5d440cb74bf5e6ba4e4327d4b844e43b4) | fix(db): map mysql type sizing into dialect variants to avoid sqlite collation pollution | НЕ ПРОВЕРЕНО | — |
 | [66412181](https://github.com/Frozen811/codex-lb/commit/66412181118ebad708023380afb0cae4e92724f0) | test(quarantine): add unique uuid to test session ids to guarantee cross-test isolation | НЕ ПРОВЕРЕНО | — |
-| [1f62b4f7](https://github.com/Frozen811/codex-lb/commit/1f62b4f7a902da0b60fa57d32c98d02459eb70e9) | feat(upstream): resolve and integrate upstream issues and PRs #2538-#2545 | В ПРОВЕРКЕ | Просмотрен scope; продуктовая проверка не завершена |
+| [1f62b4f7](https://github.com/Frozen811/codex-lb/commit/1f62b4f7a902da0b60fa57d32c98d02459eb70e9) | feat(upstream): resolve and integrate upstream issues and PRs #2538-#2545 | ЧАСТИЧНО ПРОВЕРЕНО | §42: current source scope #2538, PR #2539/#2540/#2541/#2542/#2545 локально закрыт с evidence §§31/32/37/41. PR #2543/#2544 ещё не проверены независимо; полное содержимое исторического commit/current-head cloud gate не объявлены verified. |
 | [e354c7d3](https://github.com/Frozen811/codex-lb/commit/e354c7d380e865d835e59289f7181044be4f9a77) | docs: add comprehensive update guide for fork users and refresh release links | НЕ ПРОВЕРЕНО | — |
 | [eaf9c16d](https://github.com/Frozen811/codex-lb/commit/eaf9c16dbd0e2fd0259a2702124d1b39148d0a01) | fix(db): handle sqlite integer and biginteger reflection equivalence in schema drift check | НЕ ПРОВЕРЕНО | — |
 | [c7ca9558](https://github.com/Frozen811/codex-lb/commit/c7ca9558578b1c31bc3fa6bb08de65dba799f824) | feat(proxy): show pooled quota and forward codex chatgpt-backend calls (#2535, #2536) | ЧАСТИЧНО ПРОВЕРЕНО | Backend API/auth/usage suites и actual Codex CLI synthetic product path §§14/25; real Desktop /status и исторический quota incident открыты. |
@@ -2773,6 +2792,313 @@ Hosted accounts/инциденты, production replicas, public artifacts/Pages 
 current-head cloud CI/CodeRabbit/release остаются открытым отдельным scope.
 Commit/push/PR/release/deploy не выполнялись.
 
+## 37. UP-PR-2512 / UP-PR-2515 / UP-PR-2529 — plan alias, JSON input и shared logging (2026-10-03)
+
+Закрыты локально ровно три выбранные строки на base HEAD
+`282ce147038ac53b72bca30d69c4ad9a9ac1b7cc`; исходный checkout был чистым.
+Публичный upstream status не изменялся.
+
+### 37.1. UP-PR-2512 — Business Pro Lite подтверждён
+
+Existing source fix корректно canonicalizes `self_serve_business_prolite` в `prolite`.
+Three import variants (alias, whitespace/uppercase, canonical) проходят dashboard
+import API и readback отдельной DB session. Five actual loopback HTTP refresh cases
+подтверждают accepted paid transition, unknown-plan refusal и unconditional conflicting
+workspace refusal. Fresh-session metadata/usage, default `1125/37800` credits,
+Pro-equivalent eligibility, сохранение account identity/workspace/encrypted credentials
+и `/api/usage/summary` подтверждены. Новый account tier или production alias logic
+не добавлялись.
+
+### 37.2. UP-PR-2515 / F-057 — equivalent JSON controls исправлены
+
+**16 failed / 40 passed до правки** в новой integration suite: только `text.format`
+терял JSON instruction из input; object/string `response_format` уже работали.
+JSON mode теперь определяется shared Responses predicate после format mapping.
+**48 route variants × two turns = 96 actual HTTP upstream requests** покрывают
+system/developer, string/content parts, mixed-case JSON mention, Unicode/CRLF,
+stream/non-stream и canonical/trailing slash requests. Slash requests используют
+существующий redirect с `follow_redirects=True`; redirect-free aliases не заявляются.
+Developer role, original content/order, unrelated instruction hoisting и unchanged
+prefix после дополнительного user turn подтверждены. Main spec больше не обещает
+unsupported original system role. Focused mapping/cache/Responses/Chat suites PASS.
+
+### 37.3. UP-PR-2529 / F-058 / F-059 — JSON observability исправлена
+
+Metrics listener уже не применяет global logging config/level. Expanded subprocess
+matrix выявила два смежных дефекта existing formatters: **info/JSON** записывал
+null client/request/status; **debug/JSON** без optional OpenTelemetry рекурсивно
+форматировал failed trace lookup diagnostics и не запускал reachable listener.
+JSON access formatter декодирует actual Uvicorn tuple без мутации LogRecord;
+диагностика tracing helper пропускает собственное enrichment.
+
+После исправления **four real CLI subprocesses PASS**: text/JSON × info/debug,
+primary `/health` и standalone `/metrics`, log path with spaces, URL userinfo
+redaction и identical access records в stream/file. Numeric 200/503, repeat rendering
+без LogRecord mutation и ordinary trace/span enrichment проверены отдельно.
+Established INFO/WARNING keyed-secret policy не менялась.
+
+### 37.4. Проверки и границы
+
+**779 различных целевых Python тестов PASS**: Chat/format/cache/new product suite
+376, plan/usage/metrics/CLI 253, structured logging/OTel 146, CLI subprocesses 4.
+Один optional uvloop module пропущен; повторные проверки не прибавлены к итогу.
+Ruff check/format, scoped `ty check`, strict change validation и **68/68 main specs**
+PASS. Final implementation отдельно сверена с requirements/scenarios и regression
+evidence; критичных незакрытых расхождений не найдено.
+
+OpenSpec:
+[verify-plan-json-metrics-contracts](openspec/changes/archive/2026-10-03-verify-plan-json-metrics-contracts/),
+[verification](openspec/changes/archive/2026-10-03-verify-plan-json-metrics-contracts/verification.md).
+Собственные registry rows, F-057/F-058/F-059 и summary синхронизированы.
+Hosted plans/provider/Codex UI, native-helper artifacts, PostgreSQL replicas,
+installed tracing exporters, POSIX signal shutdown, public packages/images и
+exact-head cloud CI остаются отдельным непроверенным scope.
+Commit/push/PR/release/deploy не выполнялись.
+
+## 38. Telemetry ordering, client families и stateless encryption — три задачи
+
+Дата: **2026-10-03, Europe/Kiev**. Source HEAD `282ce147038ac53b72bca30d69c4ad9a9ac1b7cc`; этот пакет остаётся uncommitted. Ровно три исходные registry rows: **UP-ISSUE-1844 / UP-ISSUE-1843 / UP-ISSUE-1572**. Прежние dirty изменения сохранены.
+
+### 38.1. UP-ISSUE-1844 — F-060 / F-061 исправлены в локальном scope
+
+Исходная blocking-socket matrix воспроизвела **9 failing dashboard-disable races** на register/activate/snapshot. Sender lock охватывал только final snapshot POST; activation мог пройти после opt-out, а dashboard сохранял disabled во время отправки. Теперь fresh consent/identity check, register, activate и final POST сериализованы с dashboard decision commit и opt-out scheduling. **12 actual loopback collector/API races PASS**: три фазы × completion/cancel/HTTP503/timeout. Подписи Ed25519 проверены receiver; после opt-out новые disabled sends молчат. Отменённые задачи awaited, сетевой total timeout сохранён.
+
+Четыре failing timestamp cases показали acceptance malformed strings и сохранение offset без UTC canonicalization. Field теперь typed datetime с ISO parsing; malformed/numeric refusal, naive/offset inputs и UTC `Z` сериализация подтверждены. Preview env suppression и persisted-over-env precedence сохранились в focused suites. Глобальный fence между процессами требует collector-side authority; deferred lifecycle diagnostics и hosted collector не закрыты.
+
+### 38.2. UP-ISSUE-1843 — existing fix независимо подтверждён
+
+**11 stored-group cases** и **24 actual Responses/Chat routes** покрывают CLI/Desktop aliases, private/missing groups, stream/non-stream, real local HTTP upstream и new-session DB log readback. Canonical shares и `clients_other_ratio` корректны, private UA strings не появляются в preview. Main spec раньше не перечислял работающие `codex`/`codex-cli` и Desktop aliases; allowlist синхронизирован. Новая production mapping не понадобилась.
+
+### 38.3. UP-ISSUE-1572 — existing key behavior подтверждён, operator contract исправлен
+
+Dashboard account import при valid env key и deliberately unusable default key path сохраняет decryptable ciphertext; fresh settings/encryptors и два отдельных Python процесса читают общий ciphertext без key-файла. Explicit bytes/file/env precedence, blank-file fallback, invalid settings, same/different fingerprints и unchanged sentinel проверены. Topology/spec/context теперь разрешают existing `CODEX_LB_ENCRYPTION_KEY`; mismatch diagnostic указывает env и file remediation, не раскрывая ключи. Реальный PostgreSQL replica deployment отдельно.
+
+### 38.4. Verification и ограничения
+
+**184 различных целевых Python теста PASS**: combined telemetry/client/key/migration/settings matrix182 и два focused fingerprint-lock tests. Final diagnostic integration rerun PASS и не прибавлен к числу. Ruff check/format, scoped `ty`, cancellation safety, strict change validation и **68/68 main specs strict PASS**. Verification сопоставлена с каждой requirement/scenario; применимый локальный scope закрыт, внешние ограничения сохранены.
+
+OpenSpec: [repair-telemetry-and-stateless-key-contracts](openspec/changes/archive/2026-10-03-repair-telemetry-and-stateless-key-contracts/), [verification](openspec/changes/archive/2026-10-03-repair-telemetry-and-stateless-key-contracts/verification.md).
+
+Cloud CI, public packages/images, deployed PostgreSQL replicas, real client/account traffic, collector authority/retention и глобальная межпроцессная гонка не сертифицированы. Commit/push/PR/release/deploy не выполнялись. Задачи1843/1572 уже содержали working code, поэтому их закрытие опирается на новую проверку и исправление неполного контракта, а не на исходный claim РЕШЕНО.
+
+## 39. UP-ISSUE-2471 / UP-ISSUE-2470 / UP-ISSUE-2456 — native transport и Windows route parity
+
+Пакет содержит ровно три строки исходного реестра. Base SHA `282ce147038ac53b72bca30d69c4ad9a9ac1b7cc`; изменения локальные, без fixing commit, push, релиза или production. OpenSpec: [repair-native-transport-recovery](openspec/changes/archive/2026-10-03-repair-native-transport-recovery/verification.md).
+
+### 39.1. UP-ISSUE-2456 / F-062 — исторический excerpt не отражал актуальную постановку
+
+Свежий upstream report уточняет Windows IOCP route loss **1231/1232**; reset/timeout **64/121** остаются endpoint-attributed. Форк классифицировал именно 64/121 как process-wide и пропускал 1231/1232 с errno EINVAL. **8 red-before failures**: два route-number unit cases, два endpoint refusal cases и четыре product routes.
+
+Классификатор исправлен; сообщение с номером ошибки не создаёт provenance. Шесть новых HTTP route cases используют реальные shared ClientSession generations: typed connector retry остаётся на том же аккаунте, ambiguous error не replay; новая generation обслуживает следующие вызовы, старый активный lease удерживает retired session до release. Для route loss account health и pressure не меняются; 64/121 не вращают общий клиент и сохраняют обычный external upstream_unavailable path. Строка **ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО**; physical adapter loss и public/cloud отдельно.
+
+### 39.2. UP-ISSUE-2471 / F-063 — HTTP/2 isolation подтверждена, потеря diagnostics исправлена
+
+Source-built helper + временный CA + actual TLS HTTP/2 origin наблюдают physical connections. Аккаунт A переиспользует своё соединение для трёх запросов, B использует другое; abort A не мешает B завершиться. Shared-pool control, убирающий IPC pool key, воспроизводит collateral failure обоих аккаунтов.
+
+Второй дефект подтверждён через БД: **6 actual body-failure variants** сохраняли failure_phase=null. Attempt-owned typed trace теперь передаёт request/body_read phase, native_transport_error, static NativeEgressTransportError и observed HTTP status в request_logs. Для body failure сохраняется 200, для pre-head failure статус не выдумывается. Client SSE не получает новых diagnostic fields; ambiguous POST не повторяется. Более сильная cancellation/terminal classification имеет приоритет.
+
+Строка **ИСПРАВЛЕНО ЛОКАЛЬНО / ЧАСТИЧНО ПРОВЕРЕНО**. Raw error-chain/cf-ray и per-request WSS preference из более широкого upstream report остаются открыты; macOS offload не сертифицирован.
+
+### 39.3. UP-ISSUE-2470 — existing cleanup подтверждён на product path
+
+**18 сценариев × 3 actual POST = 54 upstream exchanges**: v1/backend/native Codex headers, stream/non-stream, EOF/body/pre-head failure. При caps=1 после каждого запроса реальное account pressure равно нулю, reservation released/finalized, persistence drained, helper stream state empty. Два отказа не мешают третьему успешному запросу без restart. Backend stream=false получает свой JSON upstream contract; canonical non-stream собирает SSE. Строка **ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО**; необнаруженный дефект не заменяли лишним рефакторингом.
+
+### 39.4. Итоговые проверки и остаток
+
+- **595 Python passed**, 12 terminal-probe cases исключены только из этого процесса и каждый затем прошёл в fresh process с timeout20: **12 × 1 passed**. Дополнительный focused proxy-utils selector: **17 passed**. Итого **624 разных Python cases PASS** на финальном source, включая **26 новых product cases**; skips не выдавались за native evidence.
+- Полный совместный прогон не сертифицирован: unconstrained run завис, bounded rerun завершился timeout30 на существующем native terminal probe; grouped isolated selector также завис на routed case. Fresh-process cases PASS. Причина group/session-lifecycle нестабильности не изолирована; **CI-04 остаётся открыт**.
+- `cargo test --locked -p codex-lb-egress -p codex-lb-egress-worker`: **25 PASS**. Helper SHA-256: `019142892DE956AA904BDA69759B84CAB283912A9BE8919C3C9AA03815E48B81`.
+- Ruff check/format, proxy architecture, simplicity budgets, strict change validation и **68/68 main specs** PASS. Все четыре changed requirement blocks сверены с main SSOT.
+- **19 pre-existing modified files**, кроме обновляемого registry, сохранены byte-identical. Graph refresh не увидел новый trace symbol; его data flow проверен по текущему source и actual routes.
+- Старый complete active change `recover-windows-transport-failures` содержит superseded 64/121 delta; его нельзя механически архивировать поверх исправленного main spec. Исторические artifacts не переписывались.
+- Public artifacts/cloud gates/реальные provider/client приложения/production остаются отдельным scope; no commit/push/release/deploy.
+
+## 40. UP-ISSUE-2425 / UP-ISSUE-2081 / UP-ISSUE-1208 — images и terminal transport evidence
+
+Дата: **2026-10-03, Europe/Kiev**. Ровно три исходные registry rows. Base SHA `282ce147038ac53b72bca30d69c4ad9a9ac1b7cc`; текущий пакет локальный, uncommitted. [OpenSpec/evidence](openspec/changes/archive/2026-10-03-verify-image-websocket-transport-contracts/verification.md).
+
+### 40.1. UP-ISSUE-2425 — existing bounded admission подтверждена
+
+**69 image tests PASS**. Дополнительно проверены backend route, text-image-text retained connection и output-free `server_is_overloaded` recovery. Inline PNG/JPEG bytes сохраняются; successful follow-up использует retained bridge, raw path запрещён guard. Per-image/frame caps, unsupported images, explicit rollback и cancellation сохранились. Blanket bypass уже ограничен existing admission, нового production routing patch не требовалось. Upstream report остаётся открытым; fleet failure percentages не объявлялись воспроизведёнными.
+
+### 40.2. UP-ISSUE-2081 — F-064 / F-065 исправлены
+
+**4 red-before route failures** доказали ошибочную health penalty для positively ended error-kind sockets. Typed `transport_ended` идёт из direct/routed/native adapters. Real source-built native socket abort дополнительно воспроизвёл потерю provenance из-за Rust `ResetWithoutClosingHandshake`; только этот typed protocol variant переклассифицирован в transport. Другие protocol failures не нейтрализованы.
+
+Отдельный selected-owner error-kind quota terminal сохранял `upstream_unavailable` вместо исходного 429 `usage_limit_reached`; existing response.failed test не покрывал эту ветку. Refusal ветки теперь прекращают replay и передают authentic sanitized event обычному finalizer без раннего health write. **24 direct route cases**, adapter controls и owner/file-bound helper regressions PASS; параметры/reset metadata сохраняются, connect/send не повторяются, log и health ровно один раз. Pre-dispatch owner failures отдельно сохраняют старый contract.
+
+### 40.3. UP-ISSUE-1208 — F-066 исправлен, parity ограничена доказательствами
+
+Actual TLS HTTP/2 probe до правки не имел `content-encoding`; source native requests теперь получают scoped opt-in zstd level3 для prepared Responses/compact JSON POSTs. Raw relay остаётся exact bytes; multipart и Python fallback не получают zstd. Stale Content-Encoding/Content-Length заменяются только для opt-in body. H2 origin видит matching encoded length, deterministic repeated body, exact decoded JSON, lowercase H2 headers, selected account/native identity и fixed windows. Нормативное обещание «prevent fingerprint divergence» и source claim полного header order исправлены на измеримые гарантии. Real Codex ClientHello/header-order comparison и hosted acceptance не выполнены; строка остаётся частично проверенной.
+
+### 40.4. Verification и остаток
+
+- **797 разных Python cases PASS**: 274 unit adapter/native/Codex/fingerprint/cancellation; 69 image; 24 direct terminal routes; 69 proxy-utils selected tests; 349 native wire/HTTP cases; 12 native terminal cases каждый в fresh process. Повторные selectors не суммировались. Это разделённые процессы, не aggregate-green claim.
+- **25 Rust tests PASS**; helper SHA-256 `BBD2BB52E5FE9989151E245A5CA7E3A280D292C304B2540EC68417973205466D`.
+- Ruff check/format, scoped `ty`, architecture, cancellation/timing seams, simplicity budgets, strict change и **68/68 main specs PASS**. Verification сопоставлена с каждой requirement/scenario; OpenSpec синхронизирован и архивирован.
+- 12 ранее нестабильных grouped terminal cases прошли на финальном helper в отдельных процессах. CI-04 не закрыт, cause/stability aggregate не заявлены.
+- Три собственные registry rows, F-064/F-065/F-066, summary и claims в ISSUES.md синхронизированы. 66 unique F rows и repository-relative links проверены. Из 57 baseline dirty/untracked paths восемь относятся к этому пакету; остальные **49 byte-identical**. Fast graph refresh всё ещё не видит renamed test; текущий source и runtime tests служат evidence.
+- Live provider/client traffic, TLS fingerprint equivalence, public artifacts/cloud gates и production остаются отдельным scope. Commit/push/release/deploy не выполнялись.
+
+## 41. UP-ISSUE-2493 / UP-ISSUE-2465 / UP-ISSUE-2455 — bridge continuation contracts
+
+Дата: **2026-10-04, Europe/Kiev**. Ровно три исходные source-queue rows. Base SHA `282ce147038ac53b72bca30d69c4ad9a9ac1b7cc`; пакет локальный, без fixing commit, push, публикации или production. [OpenSpec/verification](openspec/changes/archive/2026-10-04-repair-bridge-terminal-lineage-failover/verification.md).
+
+### 41.1. UP-ISSUE-2493 — существующая terminal delivery подтверждена
+
+Actual local WebSocket origin сначала завершает turn, затем отказывает proxy-injected anchor. Native backend canonical/slash routes проверены до commitment и после response.created/response.in_progress keepalives. Local fence до commitment возвращает structured 502 stream_incomplete; после commitment клиент получает ровно один response.failed, без unexpected EOF/private marker/raw anchor. Upstream previous_response_not_found остаётся в request log. API-key reservations finalized/released, pending/queued requests пусты, account pressure=0. Снятие conclusively denied anchor отдельно подтверждено existing HTTP route regression. Исходное описание ISSUES.md обещало иной общий rate_limit_exceeded/retry-delay outcome; приведено к фактическим проверенным веткам.
+
+### 41.2. UP-ISSUE-2465 / F-067 — lineage, Lite и unit-fixture boundary
+
+Два последовательных distinct logical turns получают bounded eventless failures от real local WebSocket; retry последнего portable full body после poison boundary завершается на fresh lineage без старого previous_response_id. Полный body сохранён. Delta-only, account-owned и ambiguous operation-journal ограничения остаются: одна лишь тишина не разрешает дублировать активную recovery claim.
+
+Actual local HTTP origin для image+function tool + Responses-Lite получает parallel_tool_calls=false при true/false/null/omitted ingress, reasoning.context=all_turns, неизменные image/tool payloads и derived Lite header. V1/backend paths, existing multiline/Lite/non-Lite и bounded-image contracts дополняют друг друга.
+
+Расширенная unit selection воспроизвела **6 failed / 101 passed**: unsafe full-resend fixture подменяла lookup, но оставляла real retire_continuity_owner_if_unavailable, который открывал SQLite без таблицы accounts. Изолированный повтор дал те же **6 failed / 4 passed**. Fixture теперь возвращает false на retirement boundary и проверяет expected_account_id=acc-owner; refusal assertions не изменены. Повтор той же selection: **107 passed**. Runtime-code для этой тройки не менялся.
+
+### 41.3. UP-ISSUE-2455 — existing quota failover подтверждён реальным HTTP
+
+API-key-scoped durable alias/count/fingerprint seeded в actual SQLite. Payload budget принудительно мал только в тесте. Full resend получает actual HTTP429 usage_limit_reached на A и response.completed на B; stale turn-state header отсутствует у обоих upstream attempts, полный input сохранён. Canonical и slash routes дают одинаковый результат.
+
+Wrong API-key scope, prefix mismatch, отсутствующий previous output, explicit anchor, account-owned item и conflicting proof/owner не получают account-neutral quota failover. Reservations settled/released, pressure обоих accounts=0. Existing seven-case regression добавляет file owner и failed optional lookup; raw owner conflict и forwarded/replay controls сохранены. Protected guard отказа не заменяет проверку конкретной live-инсталляции.
+
+### 41.4. Проверки и закрытие
+
+- New real-origin/DB suite: **27 passed**.
+- Focused bridge unit selection после F-067: **107 passed**.
+- Existing denied-anchor/stale-owner/quarantine route selection: **28 passed**.
+- Full Lite/multiline/eventless/cancel-drain suites + denied-anchor retirement route: **98 passed**.
+- Existing bypass proof + raw owner-conflict selection: **8 passed**.
+- Ruff check/format, targeted ty, architecture, cancellation, timing, settings tiers, simplicity budgets и strict OpenSpec: PASS; **68/68** main specs.
+
+Counts относятся к отдельным focused commands, не к full-repository/CI aggregate; точные команды и source fingerprints находятся в verification. Все три собственные registry rows и summary согласованы; unit defect F-067 закрыт в TEST SCOPE. Из первоначальных 76 dirty/untracked files вне заявленных metadata/spec правок ничего не изменено. Fixing SHA, public release, cloud checks, real Factory/Codex/macOS provider traffic и production не заявлены. F-045/CI-04 и внешние residuals других пакетов остаются открытыми.
+
+## 42. Сверка всех отметок завершения — 2026-10-04
+
+Это сверка реестра с существующими доказательствами, а не новый runtime/CI прогон. Latest repair batch остаётся §41. Код, тесты, specs и archived artifacts этим этапом не изменены; меняется только issues-check.md.
+
+### 42.1. Последняя тройка была отмечена
+
+UP-ISSUE-2493 / UP-ISSUE-2465 / UP-ISSUE-2455 уже имели **ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО** в собственных строках §6, ссылки на verification и согласованные §§41/summary до этой сверки. Во всех 13 тройках §§29–41 primary rows также существовали: **37 локальных закрытий и 2 явно partial задачи**. UP-ISSUE-2471 сохраняет diagnostics/WSS residual; UP-ISSUE-1208 — real-client fingerprint/header-order residual. Эти две строки не закрыты полностью.
+
+### 42.2. Исправлены старые связанные записи
+
+| Запись | Что было | Теперь / доказательство |
+|---|---|---|
+| UP-ISSUE-2274 | Локально проверено, без явного закрытия и прямой verification link | Явно закрыто локально; bounded owner/scope и HTTP/compact/WS, §§13/14/21; [owner evidence](openspec/changes/archive/2026-10-01-repair-continuity-owner-snapshots/verification.md) |
+| UP-ISSUE-2538 | НЕ ПРОВЕРЕНО при завершённых обеих частях JSON/Lite | Закрыто локально по §§32/41; [JSON/Lite](openspec/changes/archive/2026-10-02-repair-bridge-json-lite-close-contracts/verification.md), [real origins](openspec/changes/archive/2026-10-04-repair-bridge-terminal-lineage-failover/verification.md) |
+| UP-PR-2542 | НЕ ПРОВЕРЕНО при пройденном test_otel.py | Закрыто локально в TEST SCOPE; independent logging/OTel module selection §37, [evidence](openspec/changes/archive/2026-10-03-verify-plan-json-metrics-contracts/verification.md) |
+| UP-PR-2507 | Partial, metrics logging ещё отдельно | Закрыто локально: earlier CLI scope + four real primary/metrics CLI processes и file/stream checks §37; [evidence](openspec/changes/archive/2026-10-03-verify-plan-json-metrics-contracts/verification.md) |
+| UP-ISSUE-2426 | НЕ ПРОВЕРЕНО при проверенных pool exporters | Закрыто локально: DB/ASGI status/availability и multiprocess scope §36; [evidence](openspec/changes/archive/2026-10-03-verify-account-pool-probe-recovery/verification.md) |
+| UP-ISSUE-2410 | НЕ ПРОВЕРЕНО при проверенных Force Probe paths | Закрыто локально: payload/snapshot, real API/repository and negative controls §36; [evidence](openspec/changes/archive/2026-10-03-verify-account-pool-probe-recovery/verification.md) |
+| UP-ISSUE-2443 | НЕ ПРОВЕРЕНО при проверенной API/report части | **ЧАСТИЧНО ПРОВЕРЕНО** по §34; dashboard UI/short-window/consumer-delay scope полностью не подтверждён. [Evidence](openspec/changes/archive/2026-10-03-repair-usage-and-generation-evidence/verification.md) |
+| Commit 1f62b4f7 | В ПРОВЕРКЕ, только просмотр scope | Частично проверен: шесть из восьми named source entries имеют локальное закрытие; PR2543/2544 и full commit/cloud audit открыты |
+| F-029 | Был выполнен Nix source/cloud scope, report не имел прямой ссылки в реестре | Добавлена [историческая verification link](openspec/changes/archive/2026-10-01-repair-nix-hook-source-filter/verification.md); новые platform/runtime claims не добавлены |
+
+### 42.3. Полнота учёта и границы
+
+| Группа | Проверено записей | Результат сверки |
+|---|---:|---|
+| F-находки §3 | 67 | Все IDs F-001…F-067 присутствуют по одному, статусы есть; 60 имеют scoped source/local fixes, 4 partial, F-010/F-037/F-045 открыты |
+| Поставка/сопровождение §4 | 34 | У всех есть статус и выполненная часть/остаток; GOV-01 обновлён до current archive coverage |
+| Source queue §6 | 297 | 40 явно закрыты локально, 6 partial, 251 ещё НЕ ПРОВЕРЕНО; это не 297 закрытых обращений |
+| Commit queue §8 | 49 | Group scope не подменён source-task closure: 45 ещё НЕ ПРОВЕРЕНО, 3 partial и 1 scoped optional-env closure |
+| Incidents §10.2 | 10 | 5 scoped source/local результатов; INC-01/02-OAUTH/08-PAUSE/09-DOC/10-QUOTA-DISPLAY остаются открыты |
+| Install variants §15.1 | 15 | Все имеют own status/evidence или явно описанный остаток |
+| SETUP/DOC-INSTALL §15.2–15.3 | 16 | 9 отмечены [x], 7 [ ] сохраняют явный незавершённый scope; partial work не превращена в полное закрытие |
+
+Сверены все **29 независимых архивных reports за 2026-10-01…04** и их **201/201 completed tasks**; unchecked tasks в них нет. Каждый report теперь имеет ссылку/идентификацию из реестра. Два active upstream verification reports (narrow-input-image-upstream-transport-pin и retain-immediate-invalidation-bumps) не используются для автоматического закрытия новых claims: cache issue уже имеет independent §31, image contracts — independent §§40/41. Их active/archive lifecycle этим этапом не менялся.
+
+После нормализации Markdown angle brackets **missing local links = 0**: проверены repository evidence и исторические attachment paths. Исторические sections/даты/tests counts сохранены; новая дата сверки не делает старые тесты свежими. Source queue type/IDs и внешние ссылки не удалены. Снимок всех 84 исходных dirty/untracked files подтвердил, что вне issues-check.md содержимое не менялось. Git diff whitespace check PASS.
+
+Отдельно не закрыты public artifacts/metadata/Pages, real login/client/provider/platform scopes, exact-head cloud CI и aggregate stability F-045/CI-04. Отметка автора в ISSUES.md или наличие checked OpenSpec tasks сами по себе не превращают НЕ ПРОВЕРЕНО в resolved. Новые commit/push/release/deploy не выполнялись.
+
+## 43. UP-PR-2508 / UP-PR-2513 / UP-PR-2537 — image reuse, control media types и Images hosts
+
+Пакет обработал ровно три ранее НЕ ПРОВЕРЕНО source rows. HEAD остаётся `282ce147038ac53b72bca30d69c4ad9a9ac1b7cc`; результат локальный, без commit/push/release/deploy. Полный [verification report](openspec/changes/archive/2026-10-04-repair-image-control-transport-contracts/verification.md) содержит red-before, команды, границы и fingerprints.
+
+### 43.1. UP-PR-2508 — существующая session reuse подтверждена
+
+Три route формы через actual local WebSocket подтверждают text → PNG → text с image history на одной upstream connection, verbatim bytes и prompt-cache identity. Invalid-image terminal и silent origin оставляют reservations settled и account active; следующий text request работает. Short-budget wire case отправляет image один раз. Полная existing suite также подтверждает допустимые initial + one precreated retry при длинном бюджете; политика не менялась. Старое blanket-bypass требование в main spec теперь включает уже реализованное bounded-inline исключение. Строка закрыта локально; реальные vendor captures/cache hit rates и исторический #903 не сертифицированы.
+
+### 43.2. UP-PR-2513 — два слоя empty-body media type исправлены
+
+Пустые bytes сохраняли Content-Type; after normalization real aiohttp POST автоматически добавлял application/octet-stream. Empty payload нормализован в None, automatic Content-Type подавлен на direct/routed путях. Nonempty JSON/SDP, duplicate case spellings, first native header position, unchanged body/query и real Python/native HTTP-proxy requests проходят. Строка исправлена и закрыта локально.
+
+### 43.3. UP-PR-2537 — incompatible Images fallback исправлен
+
+Dedicated resolver уже выбирал Sol первым, но fallback всё ещё допускал Luna перед 5.5. Три red unit cases воспроизвели этот выбор; Images теперь используют Sol/Astra/5.5 с прежним Sol default. Account probes сохраняют Luna/5.5. Двенадцать real HTTP generation/edit/alias cases подтверждают public image tool/log model, reference-image bytes и native JSON/multipart input. Images trailing-slash refusal остаётся 405. Строка исправлена и закрыта локально; synthetic refusal origin не является доказательством текущих live provider capabilities.
+
+### 43.4. Проверки, сохранность и текущий итог
+
+| Проверка | Результат |
+|---|---|
+| New contract suite + host/control unit suites | 112 passed, без skips; native helper executed с запретом Python fallback |
+| Existing image translation/admission/bridge/Images suites | 169 passed, без skips |
+| Scoped Ruff/check-format и ty | PASS |
+| Proxy architecture, cancellation, timing, settings tiers, simplicity budgets | PASS |
+| Strict OpenSpec main/change, delta/main equality и git whitespace check | 68/68 main specs PASS, change valid, blocks equal, diff clean |
+
+Текущая source queue содержит **43 локальных закрытия, 6 partial и 248 НЕ ПРОВЕРЕНО из 297**; исторические числа §42 сохранены как срез. Из 84 исходных dirty/untracked paths вне четырёх intended overlaps все 80 byte-identical. Предыдущие изменения proxy.py восстанавливаются точно после удаления четырёх добавленных строк; прежний context сохранён как prefix. Из existing source rows изменены только выбранные три. OpenSpec change синхронизирован, проверен и архивирован. Live provider/client, public artifacts, production, cloud gates и F-045/CI-04 остаются отдельными scope.
+
+
+## 44. UP-ISSUE-2273 / UP-ISSUE-2272 / UP-ISSUE-2271 — retry accounting, cooldown и claim lifecycle
+
+Дата: **2026-10-04, Europe/Kiev**. Ровно три исходные source-queue rows; base SHA `282ce147038ac53b72bca30d69c4ad9a9ac1b7cc`. [OpenSpec/verification](openspec/changes/archive/2026-10-04-verify-bridge-retry-claim-lifecycle/verification.md). Изменения локальные, без fixing commit, push, релиза или deployment.
+
+### 44.1. UP-ISSUE-2273 — existing accounting подтверждён
+
+Actual loopback WebSocket + HTTP v1/slash/backend routes дают durable counts 1→2 и cooldown для двух разных incomplete sends; authored reason-only terminal сохранён на исходной отправке. Stored-operation повтор не отправляет frame и не добавляет strike. 24 raw/interpreted cases покрывают explicit error precedence, missing/unknown reason, soft affinity, prewarm, skip-log, observed output, safe replay, disarmed attempt и deferred reasoning. Third proof-gated full resend может оставаться допустимым по existing policy; blanket prohibition не заявлена. Native stored-operation replay сохраняет отдельный existing downstream lifecycle, универсальная terminal delivery для него этим пакетом не сертифицирована. **Строка закрыта локально по accounting scope**.
+
+### 44.2. UP-ISSUE-2272 — existing cooldown contract подтверждён
+
+Real SQLite missing/zero/negative/elapsed deadline не создаёт phantom probe и допускает три повторных admission. Наблюдавшийся local cooldown при настоящей expiry допускает ровно один local half-open probe; repeated same-episode loads сохраняют его lease. Existing ownership/cleanup, ambiguous-send и settlement controls PASS. **Строка закрыта локально по описанному admission scope**; новую crash-expiry policy не утверждаем.
+
+### 44.3. UP-ISSUE-2271 / F-068 / F-069 / F-070 — исправлены cancellation и receipt ownership
+
+3 red-before release cases снимали новый local probe независимо от результата durable CAS. Direct await claim терял committed receipt при caller cancellation; отсутствующая prior row не давала release epoch даже после deferral. Scheduler-owned bounded acquisition сохраняет result до cancellation propagation, request получает exact receipt/inserted epoch, undispatched finalizer выполняет fenced release с cancellation deferral. Repository получает receipt внутри winning transaction, поэтому post-commit successor не подменяет returned generation. Repeated cancellation при release, existing/missing row, successor CAS и local key-lock timeout PASS; attempted/ambiguous send остаётся защищён.
+
+**Строка частично исправлена, полного закрытия нет**. Process death/reclamation, uncertain internal timeout, generation rollback ABA, ordinary-success/newer-claim settlement policy и supported PostgreSQL/MySQL/migration runtime остаются открытыми. Remote Retry-After bound сам по себе не доказывает reclaimability.
+
+### 44.4. Проверки и сохранность
+
+- Финальные новые tests: **43 passed** (40 unit + 3 actual route cases), no skip/failure.
+- Coordinator + новые tests: **111 passed**; existing targeted retry/ownership regressions: **71 passed**. Counts overlapping, не full-repository aggregate. Exact commands и final-source ordering — в verification.
+- Scoped Ruff check/format, ty, architecture, cancellation, timing, settings tiers, simplicity budgets: PASS. Strict OpenSpec 1.11.0 change/main: **68/68 specs PASS**; delta/main equality проверена.
+- Из 97 исходных dirty/untracked paths только issues-check.md и owning responses spec/context являются intended overlaps; остальные **94 byte-identical**. Original spec/context сохранены как byte prefixes. Ровно три existing source rows получили statuses/evidence. [Fingerprints](openspec/changes/archive/2026-10-04-verify-bridge-retry-claim-lifecycle/fingerprints.md).
+
+Текущая source queue: **45 local closures, 7 partial, 245 НЕ ПРОВЕРЕНО из 297**. Исторические sections/counts сохранены; no new cloud/provider/artifact/production claims.
+
+
+## 45. UP-ISSUE-2270 / UP-ISSUE-2268 / UP-ISSUE-2266 — cleanup fencing и paused delivery
+
+Дата: **2026-10-04, Europe/Kiev**. Ровно три source rows, исходно НЕ ПРОВЕРЕНО; base SHA `282ce147038ac53b72bca30d69c4ad9a9ac1b7cc`. [Verification](openspec/changes/archive/2026-10-04-verify-bridge-cleanup-quarantine-backpressure/verification.md) содержит команды, red-before, mapping и границы. Результат локальный, без commit/push/release/deploy.
+
+### 45.1. Scheduled cleanup — исправлено
+
+4 initial scheduled failures подтвердили отсутствие count fence и повторный выбор изменённой строки после успешного удаления соседней. Timestamp/generation/count сравниваются с captured candidate, composite keyset проходит каждый ключ один раз. Batches1/128 покрывают same-timestamp strike, claim и epoch change, mixed и zero-delete batch; unchanged stale row удаляется. **12 cases PASS на каждом из SQLite, PostgreSQL16 и MySQL8.4** через настоящий leader cleanup method и SQL. Interleaving вставлен перед DELETE на cleanup connection, это не независимые writer processes. Existing age/continuity/tombstone controls сохранены. UP-ISSUE-2270 закрыт локально; F-071 исправлен.
+
+### 45.2. Quarantine lifetime — existing fix проверен
+
+**9 actual HTTP/WebSocket completions** на v1/slash/backend сохраняют initial failure во время settlement, quarantine replacement session и pruned/recreated entry. Global monotonic numbering, owner и early local cutoff уже корректны; дополнительная runtime правка quarantine не требовалась. Existing recovery/poison/local-strike controls PASS. UP-ISSUE-2268 закрыт локально по stale-clear ownership scope. Existing overflow tradeoff остаётся прежним: active poison может превышать nominal cap, weaker entries evictable; новая unconditional bound policy не утверждается.
+
+### 45.3. Paused delivery — исправлены buffer и iterator ownership
+
+3 unit red-before показали cancelled putter leak, отсутствие terminal после stall и CancelledError на closed sentinel. Actual ASGI send cancellation на трёх routes оставляла buffered bytes; после outer close canonical/slash ещё оставляли reserved rows до позднего GC, что устранило explicit nested bridge close. Queue.shutdown освобождает detached payloads и будит producers; producer cancellation продолжает распространяться. Resumed consumer получает ordered output или одну downstream failure после accepted prefix. None завершает очередь без ожидания slot и без подмены принятого success. Fixed5s delivery maximum ограничивается также idle/deadline и не сокращает model idle gap при свободной очереди.
+
+Actual pause/resume, stall, cancellation и writer-error cases дают queued_bytes=0, pressure=0, reservations released/finalized и account active. Repeated cancellation ждёт generator cleanup перед propagation. UP-ISSUE-2266 закрыт локально в per-stream HTTP bridge scope; F-072/F-073 исправлены. Existing lone oversized event exception, process-wide RSS, aggregate replay spool и native-helper buffers отдельно.
+
+### 45.4. Проверки и учёт
+
+- Final new/existing queue+delivery selection: **82 passed**, no skips/failures (39 new cases).
+- Existing quarantine/cleanup/detach/terminal selection: **91 passed**, 2538 deselected; команды scoped, не full-repository aggregate.
+- PostgreSQL16 и MySQL8.4: **12 passed** на каждом; первоначальный connection-refused setup после выхода disposable containers не учитывается как зелёный прогон. После restart/readiness final tests PASS; test containers удалены.
+- Scoped Ruff/check-format и ty, architecture/cancellation/timing/settings/simplicity gates PASS. Strict OpenSpec change и **68/68** main specs PASS; normative blocks синхронизированы, context содержит ограничения/examples; verification и tasks завершены перед archive.
+- Из **110** исходных dirty/untracked paths только repository, issues-check.md и owning spec/context являются intended overlaps; остальные **106 byte-identical**. Prior receipt fix сохранён, exploratory detach/API edits удалены; original context — byte prefix. [Fingerprints](openspec/changes/archive/2026-10-04-verify-bridge-cleanup-quarantine-backpressure/fingerprints.md).
+
+Current source queue: **48 local closures, 7 partial, 242 НЕ ПРОВЕРЕНО из 297**. Исторические counts/sections сохранены; изменены ровно три existing source rows. Live providers/clients, public artifacts, production, exact-head cloud CI/review и F-045/CI-04 не закрываются этим пакетом.
+
+
 ## 46. UP-ISSUE-2483 / UP-ISSUE-1901 / UP-ISSUE-2291 — SQLite history, reports и transcript backlog
 
 Дата: **2026-10-04, Europe/Kiev**. Ровно три исходно unchecked source rows; base `282ce147038ac53b72bca30d69c4ad9a9ac1b7cc`. [Verification](openspec/changes/archive/2026-10-04-verify-sqlite-history-reports-transcript/verification.md) содержит red-before, команды, mapping и ограничения.
@@ -2784,3 +3110,12 @@ Commit/push/PR/release/deploy не выполнялись.
 Новые cases: **29 PASS** (27 combined + 2 real persistence). Focused new/existing selection: **39 PASS**; existing batcher/report/rollup selection: **43 PASS**. Counts overlapping, не full-repository aggregate. Ruff/format, scoped types, architecture/cancellation/timing/settings/simplicity и strict OpenSpec подтверждаются verification. Ровно три source rows получили explicit closure; related source rows не закрываются автоматически. Предыдущие dirty изменения не входят в коммит этого пакета. Public/cloud/provider/production/platform limitations сохранены.
 
 Финальная проверка дерева публикации (HEAD + только этот пакет): **81 passed**, no skips/failures, 108.22 с. Повторные dense report timings: **21.372 с raw / 7.855 с folded / 0.013 с cached**. Code/test bytes соответствуют проверенному дереву. OpenSpec archived после проверки и sync.
+
+
+## 47. Публикация всех оставшихся прошлых изменений — 2026-10-04
+
+Прямой запрос пользователя: «закомить прошлые изменения тоже». Parent `8f713d322e7d61102092cc379506d38429b9fc58`; fork main проверен перед действием. Все **125** remaining paths совпадают с прежним preservation manifest. Публикуются восемь пакетов §§37–41/43–45 вместе с их существующими статусами и evidence; уже опубликованные результаты §46 сохраняются.
+
+[Точная свежая проверка и список пакетов](openspec/changes/archive/2026-10-04-verify-sqlite-history-reports-transcript/prior-changes-publication.md). Scoped Ruff/format (46 Python files), ty (21 app files), architecture/cancellation/timing/settings/topology/simplicity, strict OpenSpec 68/68 и Rust 25 tests PASS. Fresh Python: **554 distinct targeted tests PASS** (294 unit + 141 integration A + 119 integration B), no skips/failures. Native wire probes выполнены с freshly built helper; exact commands/timings/hash — в publication evidence. Новых runtime правок при публикации нет.
+
+UP-ISSUE-2471 / 1208 / 2271 остаются частичными, F-045/CI-04 и существующая native aggregate instability не объявляются закрытыми. Исторические counts и записи «commit/push не выполнялись» описывают свои прежние локальные этапы. Этот этап добавляет commit/push в fork main, без release/deploy/cloud claims.

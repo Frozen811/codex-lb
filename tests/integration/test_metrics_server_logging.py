@@ -7,6 +7,7 @@ starts the metrics server.
 
 from __future__ import annotations
 
+import json
 import os
 import socket
 import subprocess
@@ -42,7 +43,9 @@ def _wait_for_ok(url: str, proc: subprocess.Popen[bytes], output_path: Path, dea
         time.sleep(0.25)
 
 
-def test_metrics_server_keeps_access_logs_and_redaction(tmp_path: Path) -> None:
+@pytest.mark.parametrize("log_format", ["text", "json"])
+@pytest.mark.parametrize("log_level", ["info", "debug"])
+def test_metrics_server_keeps_access_logs_and_redaction(tmp_path: Path, log_format: str, log_level: str) -> None:
     pytest.importorskip("prometheus_client")  # optional ``metrics`` extra; CI installs --dev only
     port = _free_port()
     metrics_port = _free_port()
@@ -52,12 +55,27 @@ def test_metrics_server_keeps_access_logs_and_redaction(tmp_path: Path) -> None:
         "CODEX_LB_DATABASE_URL": f"sqlite+aiosqlite:///{tmp_path / 'codex-lb.db'}",
         "CODEX_LB_METRICS_ENABLED": "true",
         "CODEX_LB_METRICS_PORT": str(metrics_port),
+        "CODEX_LB_LOG_FORMAT": log_format,
+        "PYTHONUTF8": "1",
     }
     # A file, not a pipe: nobody drains a pipe while the server runs.
     output_path = tmp_path / "server-output.txt"
-    with output_path.open("w") as output:
+    log_path = tmp_path / "logs with spaces" / "server.log"
+    with output_path.open("w", encoding="utf-8") as output:
         proc = subprocess.Popen(
-            [sys.executable, "-m", "app.cli", "--host", "127.0.0.1", "--port", str(port)],
+            [
+                sys.executable,
+                "-m",
+                "app.cli",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                str(port),
+                "--log-file",
+                str(log_path),
+                "--log-level",
+                log_level,
+            ],
             env=env,
             stdout=output,
             stderr=subprocess.STDOUT,
@@ -69,12 +87,35 @@ def test_metrics_server_keeps_access_logs_and_redaction(tmp_path: Path) -> None:
         # reconfiguration it would do has already happened.
         _wait_for_ok(f"http://127.0.0.1:{metrics_port}/metrics", proc, output_path, deadline)
         httpx.get(f"http://127.0.0.1:{port}/health?next={_SECRET_URL}", timeout=5)
+        httpx.get(f"http://127.0.0.1:{metrics_port}/metrics?next={_SECRET_URL}", timeout=5)
+        deadline = time.monotonic() + 5
+        while "GET /metrics?next=" not in log_path.read_text(encoding="utf-8"):
+            assert time.monotonic() < deadline, "metrics access record did not reach the configured file"
+            time.sleep(0.05)
     finally:
         proc.terminate()
-        proc.wait(timeout=60)
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=10)
 
-    output = output_path.read_text()
-    assert "GET /health?next=" in output
-    assert _SECRET not in output
-    # Scrapes share the process-wide uvicorn.access logger, so they are logged too.
-    assert "GET /metrics" in output
+    output = output_path.read_text(encoding="utf-8")
+    file_output = log_path.read_text(encoding="utf-8")
+    for rendered in (output, file_output):
+        assert _SECRET not in rendered
+        access_lines = [
+            line for line in rendered.splitlines() if "GET /health?next=" in line or "GET /metrics?next=" in line
+        ]
+        assert len(access_lines) == 2
+        if log_format == "json":
+            for line in access_lines:
+                record = json.loads(line)
+                assert record["logger"] == "uvicorn.access"
+                assert record["client"].startswith("127.0.0.1:")
+                assert record["request"].endswith("HTTP/1.1")
+                assert record["status"] == 200
+        assert "RecursionError" not in rendered and "--- Logging error ---" not in rendered
+    stream_access = [line for line in output.splitlines() if "?next=" in line]
+    file_access = [line for line in file_output.splitlines() if "?next=" in line]
+    assert stream_access == file_access

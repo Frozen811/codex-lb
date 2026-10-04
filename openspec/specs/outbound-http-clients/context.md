@@ -188,3 +188,33 @@ The selected payload string is needed for native request bytes or enabled raw pa
 For example, an explicit Python HTTP request with a large tool result and tracing disabled reaches the real upstream with the same body while avoiding two full preparation encodes. The local-origin regression checks the exact body hash and observes the owning encodes. A separate enabled-trace case retains the required string, an auto-mode case retains the size decision, and an auto image-generation case below the byte budget skips the unused estimate. If a WebSocket handshake falls back to HTTP, active tracing regenerates its string from the rewritten HTTP payload so WebSocket-only metadata cannot remain in the trace.
 
 The controlled 1 MB and 8 MB workload confirms preparation CPU savings and exact body identity. Those savings apply to this local preparation work; they do not establish native latency parity or explain historical minute-scale waits. Retained clients with small incremental tool results have much less serialization work to remove.
+
+## Native JSON request representation and transport profile
+
+Prepared native Responses and compact POSTs use deterministic level-3 zstd at
+the Python-to-helper boundary. Compression replaces Content-Encoding and removes
+the old Content-Length; reqwest computes the encoded length. Raw relays and
+multipart uploads keep their original bytes. When the helper is unavailable,
+the Python fallback uses the original JSON kwargs and headers.
+
+For example, the same native JSON turn sent twice to a loopback TLS HTTP/2 origin
+produces identical zstd bytes; decoding them yields the prepared JSON. The origin
+observes lowercase HTTP/2 names, selected account authentication, no synthesized
+compression negotiation or request ID for a native client, and the 2 MiB/5 MiB
+stream/connection windows. Compression does not change routing or replay policy.
+
+These are bounded transport guarantees. Native egress uses reqwest/Rustls;
+Python fallback uses its existing aiohttp stack. Header order, a matching TLS
+ClientHello, production overload rates and indistinguishability from an installed
+Codex CLI were not established. Non-native persona versions still use the existing
+cached-version policy; no new transport mode or Hermes profile is introduced.
+
+## Native account pools, failure diagnostics and Windows route parity
+
+The [pool contract](spec.md#requirement-native-http-transport-pools-isolate-accounts) keeps direct native HTTP/2 connections within one upstream account. Compatible requests for that account still reuse connections; another account gets a separate pool. The controlled TLS test observes actual helper connections, then aborts account A while B is active. A shared-pool control demonstrates the original collateral failure. This establishes local transport isolation, not macOS TCP-offload behavior or public-image certification.
+
+The [Windows classification](spec.md#requirement-typed-windows-transport-failures-recover-without-unsafe-replay) follows the revised upstream #2456: typed IOCP route errors 1231/1232 are process-network failures even with errno EINVAL. Peer reset 64 and timeout 121 keep existing endpoint/account handling, matching POSIX reset/timeout semantics. Error-number text alone proves nothing. A raw route error retires the concrete shared generation without replay; a typed connector failure can retry on the same account. Active leases keep the retired client open until its last user releases.
+
+The [diagnostics contract](spec.md#requirement-native-stream-transport-diagnostics-survive-settlement) fixes another boundary: synthetic native error events formerly lost their failure metadata before persistence. An attempt-owned trace now carries phase, static exception category and observed status to the log writer. It adds no SSE fields, raw URL, credential-bearing error chain, configuration or retry authorization. Stronger cancellation/terminal metadata keeps precedence.
+
+For example, a connection abort after HTTP 200 records body_read/native_transport_error/NativeEgressTransportError and upstream status 200. An abort before headers records request with no invented status and no ambiguous resend. The helper still uses static safe error messages; broader upstream #2471 raw-error/cf-ray diagnostics and per-request WebSocket preference remain separate audit work. A missing response head never proves that a POST was not executed.

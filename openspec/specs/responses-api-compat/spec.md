@@ -3123,29 +3123,15 @@ account-owner requests whose upstream resource is bound to the selected account.
 
 ### Requirement: Responses input images bypass the HTTP bridge
 
-The service MUST bypass the HTTP responses bridge when a `/v1/responses`,
-`/backend-api/codex/responses`, `/responses/compact`, or `/v1/responses/compact`
-request contains any `input_image` part in top-level input items, nested
-message content, or tool output content, and send the request over the raw
-(non-bridge) Responses stream path. This bypass MUST happen after rejecting
-unsupported uploaded-image references and MUST be limited to the current
-request; subsequent text-only requests MAY continue using the HTTP responses
-bridge.
+For `/v1/responses` and `/backend-api/codex/responses`, bounded inline images MUST reuse the HTTP responses bridge when inline-image admission is enabled, no `image_generation` tool is declared, and every input image anywhere in the input has a strict nonempty base64 PNG/JPEG data URL decoding to at most 5,000,000 bytes. Admitted image bytes MUST remain verbatim, including replayed history, and the existing thread connection and prompt-cache identity MUST be retained. A shape-valid image above the decoded limit or an admitted final frame above 64 MiB MUST fail locally with HTTP 400 `payload_too_large`, `param=input`, before dispatch, without slimming or a size-driven raw fallback. Explicit upstream HTTP policy and recent WebSocket failure fallback MUST retain their existing behavior.
 
-The raw (non-bridge) path is the source of truth for image validation and
-upstream image error semantics. The bridge MUST NOT hold image requests waiting
-for `response.created` when upstream rejects an invalid inline image payload.
-
-This bridge bypass MUST NOT by itself pin the upstream stream transport. The
-upstream transport for a bypassed image request MUST be resolved by the ordinary
-upstream-transport precedence.
+Other image-bearing requests, including compact requests, MUST retain their existing raw-path routing or uploaded-reference rejection. Disabling inline-image admission MUST restore the blanket image bypass. A raw image bypass MUST be request-local and MUST NOT by itself pin upstream HTTP. Image creates without acknowledgement MUST retain the existing bounded pre-created retry policy and original request deadline; an exhausted deadline MUST NOT permit another dispatch. Their terminal path MUST release pending admission and settle the reservation. A terminal invalid-image error MUST be surfaced promptly without replay and MUST leave subsequent text turns usable.
 
 #### Scenario: Nested input_image bypasses bridge
 
 - **GIVEN** the HTTP responses bridge is enabled
-- **WHEN** a Responses request contains a nested content part with `type = "input_image"`
-- **THEN** the request is sent through the raw (non-bridge) stream path
-- **AND** the HTTP responses bridge is not used for that request
+- **WHEN** a request contains an input image that fails bounded inline admission
+- **THEN** it uses the existing raw-path routing or uploaded-reference rejection
 
 #### Scenario: Image bypass does not disable future text bridge use
 
@@ -3156,12 +3142,26 @@ upstream-transport precedence.
 
 #### Scenario: Image bypass does not pin the upstream transport
 
-- **GIVEN** the HTTP responses bridge is enabled
-- **AND** `upstream_stream_transport` is `"auto"`
-- **WHEN** a Responses request carrying an inline `data:` image below the
-  WebSocket frame budget bypasses the bridge
-- **THEN** the request MUST NOT be forced onto upstream HTTP
-- **AND** the configured transport policy MUST decide its upstream transport
+- **GIVEN** the HTTP responses bridge is enabled and upstream transport is auto
+- **WHEN** an image request below the WebSocket frame budget bypasses the bridge
+- **THEN** ordinary upstream transport policy decides the transport without an image-driven HTTP pin
+
+#### Scenario: Text image text retains the same connection
+
+- **WHEN** a thread sends text, an admitted inline image, then text with replayed image history
+- **THEN** all turns use the existing bridge socket and preserve image bytes and prompt-cache identity
+
+#### Scenario: Unacknowledged image cannot outlive its request budget
+
+- **WHEN** an admitted image create is dispatched and upstream returns no acknowledgement before the request budget is exhausted
+- **THEN** it terminates without another dispatch beyond the original budget
+- **AND** its reservation and pending admission settle
+
+#### Scenario: Invalid image does not poison the next text turn
+
+- **WHEN** upstream rejects an admitted image before response creation
+- **THEN** the client receives the terminal image error
+- **AND** a subsequent text turn can complete on the same account
 
 ### Requirement: Security-work authorization errors can route to authorized accounts
 
@@ -11102,39 +11102,51 @@ When an HTTP bridge upstream websocket ends with a terminal transport message (a
 ### Requirement: Bounded Memory for Paused HTTP Bridge Streams
 Events emitted by the HTTP Responses bridge for an active downstream stream MUST be buffered in a queue bounded by both a queued-payload byte budget (32 MiB) and an event-count cap (4096). Queued bytes MUST be released dynamically as the downstream consumer drains events.
 
-When a downstream consumer pauses or stops reading, unconsumed live output MUST NOT exceed the configured byte budget or event cap. If the queue is saturated:
+When a downstream consumer pauses or stops reading, unconsumed live output MUST NOT exceed the byte budget or event cap except for one event arriving at an empty queue. If the queue is saturated:
 1. The shared upstream reader MUST pause enqueueing until the downstream consumer drains sufficient bytes or events.
-2. A zero-byte event (such as the terminal sentinel `None`) MUST NOT be rejected by the byte budget as long as the event cap has room.
+2. A zero-byte event MUST NOT be rejected by the byte budget as long as the event cap has room.
 3. An event arriving at an empty queue MUST be accepted regardless of size.
-4. If the downstream consumer stays stalled longer than `stream_idle_timeout_seconds` or the request deadline, the proxy MUST fail the request with `stream_idle_timeout` and MUST NOT penalize the upstream account.
-5. If the downstream consumer disconnects or detaches, waiting upstream putters MUST be unblocked immediately without crashing the shared upstream reader.
+4. A blocked delivery MUST wait no longer than the minimum of five seconds, `stream_idle_timeout_seconds`, and the remaining request deadline (with the existing 0.1-second scheduling floor for an elapsed deadline). On expiry the proxy MUST preserve already accepted output order, then deliver one `response.failed` with `stream_idle_timeout`; it MUST NOT report downstream success or penalize the upstream account for the delivery failure.
+5. Downstream disconnect or detachment MUST release the queued bytes and unblock waiting upstream putters without cancelling the shared reader.
+6. A terminal sentinel MUST finish delivery without waiting for an event-cap slot or replacing an already accepted success terminal with a delivery failure. One pending synthetic failure terminal SHALL have a bounded memory cost independent of the output queue.
 
 #### Scenario: Downstream consumer pauses and resumes
-- **Given** an active HTTP bridge response stream with a bounded event queue
-- **When** the downstream consumer stops reading and queued events reach the 32 MiB byte budget
-- **Then** subsequent upstream events pause enqueueing without growing worker memory
-- **When** the downstream consumer resumes reading and drains queued events
-- **Then** upstream enqueueing resumes and subsequent events are delivered to the consumer.
+- **GIVEN** an active HTTP bridge response stream with a bounded event queue
+- **WHEN** the consumer pauses until the queue is saturated and resumes before the delivery bound
+- **THEN** enqueueing resumes and buffered output is delivered in order
 
 #### Scenario: Downstream consumer stays stalled beyond timeout
-- **Given** an active HTTP bridge response stream whose queue is saturated
-- **When** the downstream consumer does not drain any events before `stream_idle_timeout_seconds` expires
-- **Then** the request is failed with `error.code = "stream_idle_timeout"`
-- **And** the upstream account health is NOT penalized.
+- **GIVEN** a saturated stream queue and a two-hour model idle allowance
+- **WHEN** the consumer remains paused for five seconds
+- **THEN** the producer stops waiting and the shared reader can process other requests
+- **AND** a resumed consumer receives accepted output followed by one `stream_idle_timeout` failure
+- **AND** the account health is not penalized and the reservation settles
 
 #### Scenario: Downstream client disconnects while queue is saturated
-- **Given** an upstream reader waiting for space in a saturated stream queue
-- **When** the downstream client disconnects and the request is detached
-- **Then** the event queue is closed and the waiting upstream reader is unblocked immediately
-- **And** the shared upstream reader continues running without crashing.
+- **GIVEN** an upstream reader waiting for space in a saturated stream queue
+- **WHEN** the downstream client disconnects or is cancelled during the ASGI send
+- **THEN** the response iterator and its nested bridge iterator close explicitly
+- **AND** queued bytes are released, the producer is unblocked and reservation cleanup completes
+
+#### Scenario: Terminal sentinel after a saturated success
+- **GIVEN** a queue whose last available event slot holds an accepted success terminal
+- **WHEN** the producer finishes delivery
+- **THEN** completion does not wait for another event slot
+- **AND** the consumer receives that success terminal followed by end of stream
 
 ### Requirement: Retry Circuit Scheduled Purge Fencing
-The durable bridge repository scheduled purge for stale retry circuits (`purge_retry_circuits_before`) SHALL fence each deletion against concurrent row modifications.
+The durable bridge repository scheduled purge for stale retry circuits (`purge_retry_circuits_before`) SHALL fence each deletion against the selected observation timestamp, admission generation and consecutive failure count. A candidate changed between selection and deletion SHALL NOT be selected again in the same cleanup pass. Unchanged old rows SHALL remain eligible under the existing age and continuity rules.
 
 #### Scenario: Stale retry circuit candidate updated before deletion
-- **Given** a retry circuit row that matched the stale predicate at candidate selection time with `updated_at_epoch = T0` and `admission_generation = G0`
-- **When** a concurrent operation advances `admission_generation` to `G1` or updates `updated_at_epoch` to `T1`
-- **Then** the deletion statement SHALL match 0 rows and SHALL NOT delete the updated retry circuit row.
+- **GIVEN** a stale candidate observed at timestamp T0, generation G0 and failure count F0
+- **WHEN** a concurrent operation changes any of those values before deletion
+- **THEN** that cleanup deletion matches zero rows
+- **AND** the candidate survives the entire cleanup pass, including when other candidates are deleted successfully
+
+#### Scenario: Lagging-clock failure preserves the timestamp
+- **GIVEN** a stale candidate observed at timestamp T0 and failure count F0
+- **WHEN** a newer failure increments the count without advancing T0
+- **THEN** scheduled cleanup preserves that row
 
 ### Requirement: Monotonic Quarantine Generations Across Removals
 The in-memory bridge quarantine registry SHALL maintain strictly monotonic generation numbering per session key across entry removals and prunings.
@@ -11321,6 +11333,160 @@ Every final upstream Responses payload advertised as Lite by the trusted canonic
 
 - **WHEN** a non-Lite client supplies a Lite header or marker without trusted continuity
 - **THEN** it does not acquire Lite classification or Lite-specific normalization
+
+### Requirement: Direct native stream failures release admission ownership
+
+When a direct HTTP Responses request terminates without an upstream terminal event, the proxy MUST close its iterator chain and release account stream and response-create admission ownership before teardown completes. Its API-key reservation MUST settle or release through the existing terminal cleanup. Subsequent requests MUST be admitted under the configured account cap without requiring process restart. Stream and non-stream request modes MUST preserve their existing external error contracts.
+
+#### Scenario: Repeated missing-terminal failures do not wedge the account cap
+
+- **WHEN** direct native HTTP requests repeatedly end without a terminal event at account stream limit one
+- **THEN** each failed request releases its admission ownership and API-key reservation
+- **AND** a later successful request is admitted without restart
+
+#### Scenario: Native body transport failure releases admission ownership
+
+- **WHEN** a native direct HTTP stream fails during body consumption
+- **THEN** the nested transport stream closes during request cleanup
+- **AND** no stream or response-create admission ownership remains for that request
+
+### Requirement: Direct WebSocket terminal evidence preservation
+
+A direct WebSocket frame-less ending (`None` or synthetic 1006) MUST remain account-neutral only for close-kind messages or error-kind messages with positive transport-ending provenance. Protocol-invalid messages and authored non-clean closes MUST retain account penalties. An unsafe-to-migrate selected-owner terminal MUST preserve its sanitized upstream error and supported metadata, settle once and MUST NOT become a pre-dispatch owner-unavailable error.
+
+#### Scenario: Direct or routed frame-less receive failure
+
+- **WHEN** a dispatched direct WebSocket request ends with positive transport-ending evidence and no authored close frame
+- **THEN** the request fails without a per-drop account penalty or replay
+- **AND** visible or sequenced progress does not change health attribution
+
+#### Scenario: Protocol failure has no ending provenance
+
+- **WHEN** an error-kind protocol-invalid message carries no authored close frame and no transport-ending evidence
+- **THEN** it retains the account penalty
+- **AND** a missing close code alone does not establish transport-ending provenance
+
+#### Scenario: Selected owner returns an authentic quota terminal
+
+- **WHEN** an already-dispatched anchored request receives a quota terminal and migration is unsafe
+- **THEN** its sanitized status, type, code, message, parameter and supported retry metadata survive
+- **AND** no cross-account dispatch occurs and settlement and health bookkeeping run once
+
+### Requirement: Bridge continuation boundaries preserve actionable outcomes
+
+HTTP Responses ingress MUST preserve exactly one actionable outcome for a rejected proxy-injected continuation anchor: a structured HTTP refusal before commitment or a terminal SSE failure after commitment, including after a keepalive. A subsequent eligible full-history retry MUST NOT re-inject an anchor whose denial has been conclusively retired. Full-history payload-budget fallback MUST permit pre-output quota failover only when API-key-scoped durable metadata verifies the retained transcript prefix and the resolved owner agrees. Incomplete transcripts, explicit anchors, files, account-owned state, forwarded requests and owner conflicts MUST NOT gain cross-account replay permission from the size bypass.
+
+#### Scenario: Local refusal precedes commitment
+- **WHEN** a native HTTP Responses request reaches a local denied-anchor fence before the SSE body is committed
+- **THEN** the client receives the structured HTTP 502 continuity refusal and owned request resources are finalized
+
+#### Scenario: Upstream rejects a proxy anchor after commitment
+- **WHEN** a native HTTP Responses stream receives a keepalive and upstream subsequently rejects a proxy-injected anchor without a safe fresh replay
+- **THEN** the client receives exactly one actionable terminal SSE failure and owned request resources are finalized
+- **AND** a following eligible full-history request does not receive a conclusively retired denied anchor again
+
+#### Scenario: Verified payload fallback recovers from quota
+- **WHEN** an over-budget unanchored full transcript matches API-key-scoped durable evidence and its owner returns a pre-output quota rejection
+- **THEN** another eligible account can serve the request with no stale turn-state affinity
+- **AND** an incomplete transcript, conflicting owner, explicit anchor, file or forwarded request cannot use this permission
+
+#### Scenario: Durable proof stays inside its key and owner scope
+- **WHEN** a payload-budget fallback presents a turn-state alias from another API key or durable proof whose owner disagrees with the resolved continuity owner
+- **THEN** the fallback does not grant account-neutral quota failover
+
+#### Scenario: Silent sticky lineage admits a fresh safe retry
+- **WHEN** consecutive eventless attempts exhaust the bounded retry policy and a subsequent eligible logical turn supplies verified portable full history
+- **THEN** recovery can send a fresh upstream lineage without the poisoned anchor
+- **AND** delta-only retries retain their continuity protection
+- **AND** an identical request whose operation journal remains ambiguous does not gain duplicate-dispatch permission
+
+#### Scenario: Image tools use a compatible Lite payload
+- **WHEN** an image and tool request reaches the Responses-Lite upstream through bridge bypass
+- **THEN** the final upstream payload uses serial tool calls while preserving the image and permitted tool definitions
+
+### Requirement: Unary Codex control requests preserve a single media type
+
+Unary Codex control requests MUST forward at most one case-insensitive `Content-Type` field. Nonempty bodies MUST retain the inbound media type, including JSON and SDP. For native callers the first retained field spelling and position MUST be preserved. Requests with an absent or zero-byte body MUST omit `Content-Type` and MUST NOT cause the upstream transport to generate one. These rules MUST apply to direct and routed transports without changing payload bytes, query parameters or account identity.
+
+#### Scenario: Nonempty control body preserves its media type
+
+- **WHEN** a control request carries nonempty JSON or SDP with any casing of the media-type header
+- **THEN** exactly one upstream media-type field retains its value and the body remains byte-identical
+- **AND** a native caller retains the first field's spelling and position
+
+#### Scenario: Empty POST and GET omit media type
+
+- **WHEN** a control request carries no payload or a zero-byte POST payload
+- **THEN** no upstream `Content-Type` field is sent, including a transport-generated field
+
+
+### Requirement: HTTP bridge incomplete reasons preserve retry accounting eligibility
+
+An HTTP bridge `response.incomplete` terminal with `incomplete_details.reason = stream_incomplete` SHALL count through the existing attempt-scoped retry circuit when no explicit response error is present. An explicit response error SHALL take precedence. Raw and interpreted terminals SHALL retain the same accounting, payload, request-log and account-health behavior. Soft affinity, observed nonterminal output, prewarm, skipped logs, safe replay and non-transport reasons SHALL retain their existing exclusions. Duplicate handling of one send attempt SHALL NOT add another strike.
+
+#### Scenario: Reason-only incomplete terminal
+
+- **WHEN** an eligible raw or interpreted incomplete terminal identifies stream_incomplete only in incomplete_details
+- **THEN** its send attempt contributes one durable circuit strike and its terminal payload is preserved
+
+#### Scenario: Explicit error and eligibility exclusions
+
+- **WHEN** an incomplete terminal has an explicit unrelated error or its request is excluded by the existing circuit policy
+- **THEN** the incomplete reason does not bypass that error or exclusion
+
+### Requirement: HTTP bridge persisted cooldown absence does not manufacture probes
+
+A missing, zero, negative or already elapsed persisted cooldown SHALL NOT manufacture a local cooldown transition or a half-open probe when no positive local cooldown transition exists. Repeated loads of the same durable episode SHALL preserve a probe already owned by local active work. A positive local cooldown that expires SHALL admit at most one half-open probe under the existing lease policy.
+
+#### Scenario: Repeated elapsed cooldown loads
+
+- **WHEN** the bridge repeatedly loads a row whose cooldown is absent or already elapsed
+- **THEN** normal admission remains available without a manufactured local probe
+
+#### Scenario: Local probe remains active
+
+- **WHEN** a real local cooldown expires and its admitted probe reloads the same durable episode
+- **THEN** a sibling remains suppressed while that local lease is active
+
+### Requirement: HTTP bridge undispatched claim receipts survive caller cancellation
+
+When a verified stale-anchor replay claims a durable circuit generation, the proxy SHALL own and await the claim through the existing bounded acquisition timeout, including time spent waiting for its local key lock. Caller cancellation SHALL be deferred until the claim returns or that bound is reached. A successful claim SHALL be attached to the request before cancellation is propagated, and submission cleanup SHALL attempt fenced release if no upstream send was attempted. The claim receipt SHALL reflect the winning write transaction, including the inserted epoch when no prior circuit row existed; a post-commit successor SHALL NOT replace that receipt. Durable release SHALL NOT clear another request's local half-open lease. An attempted or ambiguous send SHALL retain its claim protection.
+
+#### Scenario: Cancellation after claim commit before receipt delivery
+
+- **GIVEN** the coordinator committed a claim but has not returned its receipt
+- **WHEN** the requesting task is cancelled and the bounded claim completes
+- **THEN** the receipt is retained, no upstream send occurs and submission attempts fenced release before cancellation completes
+
+#### Scenario: Late release with replacement local lease
+
+- **GIVEN** a newer request owns a local half-open probe
+- **WHEN** an older durable claim release succeeds, is fenced out or fails
+- **THEN** the newer local probe and cooldown remain unchanged
+
+#### Scenario: Ambiguous dispatch keeps claim protection
+
+- **WHEN** an upstream send may have started before the request exits
+- **THEN** cleanup does not release that request's durable claim as undispatched
+
+#### Scenario: Claim inserts a new row or a successor claims after commit
+
+- **WHEN** a claim inserts a previously absent row or another claim advances its generation immediately after commit
+- **THEN** the returned receipt identifies only the winning claim and cleanup remains fenced against the successor
+
+### Requirement: Detached bridge queues release output and waiters
+A detached HTTP bridge stream SHALL release queued payload references and byte accounting immediately. Cancelled producers SHALL release their queue waiters. Queue shutdown caused by downstream detachment SHALL NOT cancel the shared upstream reader; cancellation of the reader itself SHALL still propagate.
+
+#### Scenario: Detachment during a blocked enqueue
+- **GIVEN** a saturated downstream event queue and an upstream producer waiting for room
+- **WHEN** the downstream request detaches
+- **THEN** the queue discards queued output and unblocks its producer
+- **AND** unrelated requests continue through the shared reader
+
+#### Scenario: Producer cancellation leaves no waiter
+- **WHEN** a producer is cancelled while waiting for queue capacity
+- **THEN** its waiter and retained payload are released
+- **AND** the next producer can proceed after capacity becomes available
 
 ### Requirement: Fair continuous transcript backlog flushing
 

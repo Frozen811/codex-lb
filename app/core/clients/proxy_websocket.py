@@ -201,6 +201,7 @@ class UpstreamWebSocketMessage:
     event_type: str | None = None
     payload: dict[str, JsonValue] | None = None
     routing: NativeWebSocketRoutingMetadata | None = None
+    transport_ended: bool = False
 
 
 class UpstreamWebSocketTransportError(RuntimeError):
@@ -397,6 +398,7 @@ class WebsocketsUpstreamWebSocket:
             return UpstreamWebSocketMessage(
                 kind="error",
                 close_code=_close_code_from_exception(exc),
+                transport_ended=True,
                 error=(
                     "Upstream websocket closed without a complete handshake"
                     if self._preserve_close_semantics
@@ -464,6 +466,7 @@ class NativeUpstreamWebSocket:
                 kind="error",
                 error=str(error),
                 error_code=_relay_receive_error_code(error.error_code),
+                transport_ended=isinstance(exc, NativeEgressTransportError) and exc.failure_phase == "transport",
             )
         return UpstreamWebSocketMessage(
             kind=message.kind,
@@ -547,6 +550,11 @@ class CodexUpstreamWebSocket:
             await _rotate_after_websocket_network_failure(error_code)
             return UpstreamWebSocketMessage(
                 kind="error",
+                close_code=_aiohttp_ws_close_code(self._websocket, None),
+                transport_ended=(
+                    getattr(self._websocket, "closed", False) is True
+                    and not isinstance(classification_exc, aiohttp.WebSocketError)
+                ),
                 error=codex_transport_error_message("websocket receive", self._endpoint_id, classification_exc),
                 error_code=_relay_receive_error_code(error_code),
             )
@@ -585,6 +593,11 @@ class CodexUpstreamWebSocket:
             await _rotate_after_websocket_network_failure(error_code)
             return UpstreamWebSocketMessage(
                 kind="error",
+                close_code=_aiohttp_ws_close_code(self._websocket, msg),
+                transport_ended=(
+                    getattr(self._websocket, "closed", False) is True
+                    and not isinstance(exception, aiohttp.WebSocketError)
+                ),
                 error=(
                     codex_transport_error_message("websocket receive", self._endpoint_id, exception)
                     if exception is not None
@@ -889,8 +902,8 @@ def _pop_header_case_insensitive(headers: dict[str, str], name: str) -> str | No
     return None
 
 
-def _aiohttp_ws_close_code(websocket: Any, message: aiohttp.WSMessage) -> int | None:
-    if isinstance(message.data, int):
+def _aiohttp_ws_close_code(websocket: Any, message: aiohttp.WSMessage | None) -> int | None:
+    if message is not None and isinstance(message.data, int):
         return message.data
     close_code = getattr(websocket, "close_code", None)
     return close_code if isinstance(close_code, int) else None

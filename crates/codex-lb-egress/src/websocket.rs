@@ -14,6 +14,7 @@ use tokio_tungstenite::Connector;
 use tokio_tungstenite::client_async_tls_with_config;
 use tokio_tungstenite::proxy::connect_via_proxy;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+use tokio_tungstenite::tungstenite::error::ProtocolError;
 use tokio_tungstenite::tungstenite::error::TlsError;
 use tokio_tungstenite::tungstenite::handshake::client::Response as WebSocketResponse;
 use tokio_tungstenite::tungstenite::http::HeaderName as WebSocketHeaderName;
@@ -642,7 +643,10 @@ pub(crate) async fn emit_websocket_error(
                 None,
             )
         }
-        NativeWebSocketFailure::WebSocket(WebSocketError::Io(_)) => (
+        NativeWebSocketFailure::WebSocket(
+            WebSocketError::Io(_)
+            | WebSocketError::Protocol(ProtocolError::ResetWithoutClosingHandshake),
+        ) => (
             "native websocket transport failed",
             "transport",
             false,

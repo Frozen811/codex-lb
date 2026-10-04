@@ -9273,7 +9273,7 @@ async def test_stream_responses_maps_typed_dns_failure_with_failed_session_prove
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("winerror", [None, 64, 121])
+@pytest.mark.parametrize("winerror", [None, 1231, 1232])
 async def test_stream_responses_raw_route_oserror_is_neutral_but_not_replayed(monkeypatch, winerror):
     class Settings:
         upstream_base_url = "https://chatgpt.com/backend-api"
@@ -33939,7 +33939,7 @@ async def test_process_upstream_websocket_text_does_not_fresh_retry_injected_too
 
 
 @pytest.mark.asyncio
-async def test_process_upstream_websocket_text_maps_previous_response_usage_limit_to_upstream_unavailable(
+async def test_process_upstream_websocket_text_preserves_previous_response_usage_limit(
     monkeypatch,
 ):
     """Keep a client anchor owner-bound while recording the owner's real reset."""
@@ -33996,26 +33996,17 @@ async def test_process_upstream_websocket_text_maps_previous_response_usage_limi
         response_create_gate=asyncio.Semaphore(1),
     )
 
-    assert '"code":"upstream_unavailable"' in downstream_text
-    handle_stream_error.assert_awaited_once()
-    handle_call = handle_stream_error.await_args
-    assert handle_call is not None
-    assert handle_call.args[0] == account
-    assert handle_call.args[1] == {
-        "message": "The usage limit has been reached",
-        "resets_at": 1_778_790_595,
-    }
-    assert handle_call.args[2] == "usage_limit_reached"
+    assert json.loads(downstream_text) == upstream_payload
+    # The mocked finalizer owns settlement and the one health write. The
+    # classifier must not write health before handing it the authentic error.
+    handle_stream_error.assert_not_awaited()
     finalize_request_state.assert_awaited_once()
     finalize_call = finalize_request_state.await_args
     assert finalize_call is not None
-    assert finalize_call.kwargs["event_type"] == "response.failed"
+    assert finalize_call.kwargs["event_type"] == "error"
     payload = finalize_call.kwargs["payload"]
     assert isinstance(payload, dict)
-    response_payload = cast(dict[str, JsonValue], payload["response"])
-    error_payload = cast(dict[str, JsonValue], response_payload["error"])
-    assert error_payload["code"] == "upstream_unavailable"
-    assert error_payload["message"] == "Previous response owner account is unavailable; retry later."
+    assert payload == upstream_payload
     assert upstream_control.reconnect_requested is False
     assert upstream_control.suppress_downstream_event is False
     assert upstream_control.replay_request_state is None
@@ -34773,14 +34764,10 @@ async def test_process_upstream_websocket_text_keeps_file_backed_verified_anchor
         response_create_gate=asyncio.Semaphore(1),
     )
 
-    assert '"code":"upstream_unavailable"' in downstream_text
-    assert "usage_limit_reached" not in downstream_text
-    handle_stream_error.assert_awaited_once_with(
-        account,
-        {"message": "The usage limit has been reached", "resets_in_seconds": 14_555},
-        "usage_limit_reached",
-    )
+    assert json.loads(downstream_text) == upstream_payload
+    handle_stream_error.assert_not_awaited()
     finalize_request_state.assert_awaited_once()
+    assert finalize_request_state.await_args.kwargs["payload"] == upstream_payload
     assert upstream_control.reconnect_requested is False
     assert upstream_control.suppress_downstream_event is False
     assert upstream_control.replay_request_state is None

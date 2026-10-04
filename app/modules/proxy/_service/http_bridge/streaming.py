@@ -1227,7 +1227,7 @@ class _HTTPBridgeStreamingMixin:
         bridge_attempt_started_at = clock_for(self).monotonic()
         try:
             try:
-                async for line in self._stream_via_http_bridge(
+                bridge_stream = self._stream_via_http_bridge(
                     payload,
                     headers,
                     codex_session_affinity=codex_session_affinity,
@@ -1256,9 +1256,13 @@ class _HTTPBridgeStreamingMixin:
                     deferred_account_backoff_tracker=deferred_account_backoff_tracker,
                     bridge_payload=bridge_payload,
                     inline_image_request=inline_image_request_admitted,
-                ):
-                    bridge_yielded_any = True
-                    yield line
+                )
+                try:
+                    async for line in bridge_stream:
+                        bridge_yielded_any = True
+                        yield line
+                finally:
+                    await bridge_stream.aclose()
             except ProxyResponseError as exc:
                 # A transient failure to establish the bridge's upstream
                 # websocket session must not fail the turn while the plain

@@ -60,7 +60,7 @@
 
 ### [✅ РЕШЕНО] [#2425: bug: input_image requests still fail ~35% during overload on beta.8 — the HTTP bridge bypass, not the upstream transport, is the cause (follow-up to #2363/#2386)](https://github.com/Soju06/codex-lb/issues/2425)
 - **Статус:** ✅ **РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ**
-  - **Решение:** Байпас HTTP-моста для `input_image` ограничен случаями, когда действительно необходим HTTP upstream.
+  - **Решение:** Bounded inline PNG/JPEG admission сохраняет bridge для каждого допустимого изображения до 5,000,000 decoded bytes; complete frame ограничен 64 MiB. Unsupported shapes и explicit rollback сохраняют bypass. Независимая local route/overload/reuse проверка: issues-check.md §40.
   - **Компоненты:** `app/modules/proxy/_service/http_bridge/streaming.py`
   - **Тесты:** `tests/unit/test_proxy_http_bridge.py`
 - **Автор:** @yeongjun-cigro | **Дата:** 2026-09-14 | **Метки:** `untriaged`
@@ -69,16 +69,16 @@
 
 ### [✅ РЕШЕНО] [#2081: bug: direct websocket terminal failures lose transport and owner evidence](https://github.com/Soju06/codex-lb/issues/2081)
 - **Статус:** ✅ **РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ**
-  - **Решение:** Сохранение свидетельств транспорта и владельца при терминальных ошибках прямого WebSocket.
+  - **Решение:** Дополнительно исправлены error-kind transport-ending provenance, native ResetWithoutClosingHandshake и подмена selected-owner quota terminal. Sanitized error/metadata сохраняются без unsafe replay; settlement/log/health принадлежат normal finalizer. Независимая local verification: issues-check.md §40, F-064/F-065.
   - **Компоненты:** `app/modules/proxy/_service/websocket/mixin.py`
   - **Тесты:** `tests/integration/test_proxy_websocket_responses.py`
 - **Автор:** @e1ektr0 | **Дата:** 2026-09-04 | **Метки:** `bug`
 - **Суть проблемы / предложения:**
   > ## Summary Direct `/v1/responses` and `/backend-api/codex/responses` WebSocket traffic has two related terminal-evidence classification gaps: 1. A terminal upstream WebSocket ending with no upstream-authored close frame is charged to the serving account on the direct path, even though the HTTP bridge now treats the same structured transport evidence as account-neutral. 2. When an already-selected continuity owner returns a retryable terminal event and account migration is unsafe, the direct path replaces that real event with `Previous response owner account is unavailable`, even though owner s...
 
-### [✅ РЕШЕНО] [#1208: feat: Improve upstream transport parity and eliminate the easily identifiable codex-lb fingerprint](https://github.com/Soju06/codex-lb/issues/1208)
-- **Статус:** ✅ **РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ**
-  - **Решение:** Реализован нативный egress helper на Rust (`codex-lb-native-egress`) на базе `reqwest` с TLS-стеком `Rustls`, HTTP/2 параметрами (окна потока 2 MiB / соединения 5 MiB, максимальный размер фрейма 16 KiB), полным соответствием порядка и регистра заголовков официального Codex CLI и нормализацией не-нативных SDK-клиентов (`_normalize_non_native_upstream_fingerprint`, очистка `x-stainless-*` и `x-openai-client-*`, канонический `User-Agent` формата `codex_cli_rs`).
+### [⚠️ ЧАСТИЧНО ПРОВЕРЕНО] [#1208: feat: Improve upstream transport parity and eliminate the easily identifiable codex-lb fingerprint](https://github.com/Soju06/codex-lb/issues/1208)
+- **Статус:** ⚠️ **ИСПРАВЛЕНО ЛОКАЛЬНО / ЧАСТИЧНО ПРОВЕРЕНО**
+  - **Решение:** Native egress на `reqwest`/`Rustls`, HTTP/2 windows 2 MiB/5 MiB и normalized SDK persona подтверждены локально. Добавлена controlled zstd encoding prepared native Responses/compact JSON POSTs; real TLS H2 body/header/window probe и opaque/multipart/Python fallback controls PASS. Полное соответствие header order, TLS ClientHello и indistinguishability от real Codex CLI не доказано; прежний broad claim уточнён. Evidence: issues-check.md §40, F-066.
   - **Компоненты:** `crates/codex-lb-egress/src/http.rs`, `app/core/clients/proxy.py`, `app/core/clients/native_egress.py`, `openspec/specs/outbound-http-clients/spec.md`
   - **Тесты:** `tests/unit/test_proxy_upstream_fingerprint.py`, `tests/unit/test_native_egress.py`
 - **Автор:** @nisaev | **Дата:** 2026-07-11 | **Метки:** `enhancement`
@@ -92,10 +92,10 @@
 *Проблемы моста HTTP-to-WebSocket, зависания стримов, пропуск лимитов ретраев, потеря истории при форвардинге, ошибки стриминга изображений и инструментов.*
 
 ### [✅ РЕШЕНО] [#2493: bug: Beta.9 HTTP bridge can close native stream without terminal event after proxy-injected anchor rejection](https://github.com/Soju06/codex-lb/issues/2493)
-- **Статус:** ✅ **РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ**
-  - **Решение:** В `app/modules/proxy/_service/http_bridge/streaming.py` при отправке `keepalive_event` теперь выставляется `yielded_any = True`, что исключает возбуждение исключений поверх закоммиченного HTTP 200 стрима при получении `response.failed`. Код `"bridge_previous_response_not_found"` добавлен в `SYNTHETIC_TRANSPORT_FAILURE_CODES` в `app/core/errors.py`, в проверку `native_transport_startup_failure` и генераторы ошибочных событий стрима в `app/modules/proxy/api.py`, а также в `_is_previous_response_not_found_public_error`. Нативные клиенты Codex получают терминальный SSE `response.failed` event (`rate_limit_exceeded` с задержкой ретрая) вместо аварийного обрыва соединения или сырого JSON 502.
-  - **Компоненты:** `app/core/errors.py, app/modules/proxy/api.py, app/modules/proxy/_service/http_bridge/streaming.py, openspec/specs/responses-api-compat/spec.md`
-  - **Тесты:** `tests/unit/test_proxy_http_bridge.py`
+- **Статус:** **ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО**, 2026-10-04. Existing runtime fix подтверждён; fixing commit/public/cloud отдельно.
+  - **Решение:** В текущем checkout нативный backend возвращает structured 502 `stream_incomplete` при локальном отказе до SSE commitment и один terminal SSE `response.failed` после `response.created`/keepalive. Upstream `previous_response_not_found` сохраняется в request log; private marker и raw anchor наружу не выходят. Предыдущее общее обещание `rate_limit_exceeded`/retry-delay не отражало проверенный local-fence путь.
+  - **Компоненты:** `app/modules/proxy/_service/http_bridge/streaming.py, app/modules/proxy/_service/http_bridge/upstream_events.py, app/modules/proxy/api.py`
+  - **Тесты:** `tests/integration/test_bridge_continuation_contracts.py` и related focused suites; [независимые результаты](issues-check.md#41-up-issue-2493--up-issue-2465--up-issue-2455--bridge-continuation-contracts).
 - **Автор:** @Muh-Zen | **Дата:** 2026-09-24 | **Метки:** `bug` `triage`
 - **Суть проблемы / предложения:**
   > ### What happened?
@@ -124,23 +124,26 @@
   > failure_detail="previous_response_not_found previous_response_source=proxy_injected fresh_replay_available=false owner_lookup_source=unknown owner_lookup_outcome=unknown previous_response_age_seconds=unknown same_session=unknown"
   > ```
 
+
 ### [✅ РЕШЕНО] [#2465: bug: beta.9 sticky bridge lineages wedge permanently; image+tools path sends invalid parallel_tool_calls](https://github.com/Soju06/codex-lb/issues/2465)
-- **Статус:** ✅ **РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ**
-  - **Решение:** Восстановление sticky bridge lineage при `missing_response_created_timeout` + удаление невалидной сериализации `parallel_tool_calls: true`.
-  - **Компоненты:** `app/core/openai/requests.py, app/modules/proxy/_service/http_bridge/upstream_events.py`
-  - **Тесты:** `tests/unit/test_openai_requests.py, tests/unit/test_proxy_http_bridge.py`
+- **Статус:** **ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО**, 2026-10-04. Existing runtime fix подтверждён; fixing commit/public/cloud отдельно.
+  - **Решение:** Существующие bounded recovery, retry circuit и quarantine подтверждены на реальном local WebSocket: после eventless failure portable full history создаёт fresh lineage без poisoned anchor. Final Responses-Lite HTTP preparation сериализует `parallel_tool_calls=false`, сохраняет image/tools и задаёт `reasoning.context=all_turns`. Исправлена partial mock boundary unsafe full-resend unit fixture (F-067): retirement больше не обращается к SQLite без schema; runtime guards сохранены.
+  - **Компоненты:** `app/modules/proxy/_service/http_bridge/streaming.py, app/modules/proxy/_service/http_bridge/retry_circuit.py, app/modules/proxy/_service/http_bridge/upstream_events.py, app/core/clients/proxy.py, tests/unit/test_proxy_http_bridge.py`
+  - **Тесты:** `tests/integration/test_bridge_continuation_contracts.py` и related focused suites; [независимые результаты](issues-check.md#41-up-issue-2493--up-issue-2465--up-issue-2455--bridge-continuation-contracts).
 - **Автор:** @SantaDiegoKairos | **Дата:** 2026-09-19 | **Метки:** `bug` `triage`
 - **Суть проблемы / предложения:**
   > ## Summary `codex-lb 1.25.0-beta.9` is not production-usable for our long-running Factory/Droid sessions because we hit two independent blockers: 1. a sticky HTTP-to-WebSocket bridge lineage can become permanently eventless and every retry fails after the built-in 60s + replay + 60s cycle; 2. requests containing an input image plus tools bypass the bridge, reach the Responses-Lite HTTP path with `parallel_tool_calls=true`, and are rejected immediately. We have moved production work back to another proxy while this is investigated. ## Environment - codex-lb: `1.25.0-beta.9` - downstream: HTTP `...
 
+
 ### [✅ РЕШЕНО] [#2455: bug(proxy): bridge payload bypass blocks verified quota failover](https://github.com/Soju06/codex-lb/issues/2455)
-- **Статус:** ✅ **РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ**
-  - **Решение:** Разблокирован verified quota failover при превышении bridge payload budget и падении на direct HTTP.
-  - **Компоненты:** `app/modules/proxy/_service/streaming/retry.py`
-  - **Тесты:** `tests/unit/test_proxy_http_bridge.py`
+- **Статус:** **ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО**, 2026-10-04. Existing runtime fix подтверждён; fixing commit/public/cloud отдельно.
+  - **Решение:** Существующий payload-budget HTTP bypass подтверждён с реальной SQLite и local HTTP upstream: scoped durable prefix/owner proof снимает stale turn-state affinity, pre-output 429 владельца допускает второй eligible account. Другой API key, wrong prefix, missing output, explicit anchor, account-owned item и conflicting owner evidence не получают этого grant; reservations settled/released, account pressure=0.
+  - **Компоненты:** `app/modules/proxy/_service/http_bridge/streaming.py, app/modules/proxy/_service/streaming/retry.py`
+  - **Тесты:** `tests/integration/test_bridge_continuation_contracts.py` и related focused suites; [независимые результаты](issues-check.md#41-up-issue-2493--up-issue-2465--up-issue-2455--bridge-continuation-contracts).
 - **Автор:** @aacarcrash | **Дата:** 2026-09-18 | **Метки:** `bug` `triage`
 - **Суть проблемы / предложения:**
   > ## Bug A verified full-history Responses request can exceed the HTTP bridge WebSocket payload budget and fall back to raw HTTP while retaining its durable turn-state owner. If that owner returns a pre-visible 429, deterministic failover excludes it, but account selection still requires the same excluded owner. The request stops even when another account is healthy. This is related to #2068 / #2069, but distinct: that work covers unanchored replay and intentionally keeps turn-state requests pinned. This case has API-key-scoped durable metadata that can prove the full resend is account-neutral b...
+
 
 ### [✅ РЕШЕНО] [PR #2449: fix(proxy): read the usage-limit rejection off the frame upstream actually sends](https://github.com/Soju06/codex-lb/pull/2449)
 - **Статус:** ✅ **РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ**

@@ -35,7 +35,8 @@ A supported multi-replica deployment looks like:
   without a membership reader and a configuration hint for multi-replica validation. Empty live
   discovery uses only the current instance, and lookup failures fail closed rather than falling
   back to the static list.
-- **Shared encryption key** — the same `encryption.key` file mounted on every replica. Verified
+- **Shared encryption key** — the same valid Fernet key in `CODEX_LB_ENCRYPTION_KEY`
+  on every replica, or the same `encryption.key` file mounted on every replica. Verified
   at startup against the `runtime_sentinels` fingerprint (below).
 
 SQLite remains fully supported for exactly one application process. The leader lease is
@@ -65,6 +66,27 @@ concurrent first boot, and SQLite's single-writer lock makes insert-or-noop atom
 Escape hatches: `CODEX_LB_ENCRYPTION_KEY_FINGERPRINT_MODE=warn` (log ERROR, continue) or `off`.
 Leave it at `enforce` in production — a warn-mode mismatch means some fraction of logins and
 bridge forwards are already failing.
+
+## Stateless key selection
+
+`CODEX_LB_ENCRYPTION_KEY` is an existing secret setting for deployments that cannot
+mount a key file. A valid non-empty value wins over the configured default key-file
+path; surrounding whitespace is stripped during settings validation. A blank value
+retains the file fallback. Invalid values fail settings validation. Explicit
+programmatic key bytes override an explicit key file, and an explicit file argument
+overrides the environment. Encryption and fingerprint calculation use the same
+selection, so a configured but inaccessible default file need not be touched.
+
+For example, two independently started processes given the same synthetic key can
+write and decrypt ciphertext without a key file. An account imported through the
+dashboard is readable by a separately constructed encryptor using that same key.
+Changing the key does not rotate existing ciphertext: decryption fails and enforce
+mode refuses the mismatching fingerprint while preserving the original sentinel.
+Key rotation still requires coordinated re-encryption and all-replica procedures.
+
+Local tests use isolated storage to verify key selection, account persistence,
+cross-process decryption, and sentinel behavior. They do not certify a deployed
+PostgreSQL topology or real credentials.
 
 ## Settings optimistic locking
 

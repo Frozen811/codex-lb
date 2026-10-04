@@ -22,6 +22,44 @@ from tests.unit._proxy_test_helpers import runtime_basic_auth_url
 pytestmark = pytest.mark.unit
 
 
+@pytest.mark.parametrize("status", [200, 503])
+def test_json_access_formatter_decodes_uvicorn_arguments_without_record_mutation(status):
+    record = logging.LogRecord(
+        "uvicorn.access",
+        logging.INFO,
+        __file__,
+        1,
+        '%s - "%s %s HTTP/%s" %d',
+        ("127.0.0.1:1234", "GET", "/metrics?next=" + runtime_basic_auth_url("u", "SYNTHETIC", "h"), "1.1", status),
+        None,
+    )
+    original = record.__dict__.copy()
+    formatter = JsonAccessFormatter()
+    first = json.loads(formatter.format(record))
+    second = json.loads(formatter.format(record))
+    assert first == second
+    assert first["client"] == "127.0.0.1:1234"
+    assert first["request"] == "GET /metrics?next=http://[REDACTED]@h HTTP/1.1"
+    assert first["status"] == status
+    assert record.__dict__ == original
+
+
+def test_json_formatter_does_not_enrich_tracing_lookup_diagnostics(monkeypatch):
+    calls = []
+
+    def unexpected_lookup():
+        calls.append("lookup")
+        raise AssertionError("tracing diagnostics must not trigger another trace lookup")
+
+    monkeypatch.setattr("app.core.tracing.otel.get_current_trace_id", unexpected_lookup)
+    monkeypatch.setattr("app.core.tracing.otel.get_current_span_id", unexpected_lookup)
+    record = logging.LogRecord("app.core.tracing.otel", logging.DEBUG, __file__, 1, "lookup failed", (), None)
+    rendered = json.loads(JsonFormatter().format(record))
+    assert rendered["message"] == "lookup failed"
+    assert "trace_id" not in rendered and "span_id" not in rendered
+    assert calls == []
+
+
 def test_redact_log_value_masks_keyed_secrets_and_bearer_tokens():
     value = "password=secret-token Authorization: Bearer abc.def api_key=abc123"
 

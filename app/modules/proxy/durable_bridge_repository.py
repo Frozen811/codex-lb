@@ -994,12 +994,16 @@ class DurableBridgeRepository:
             if not claimed:
                 await self._session.rollback()
                 return None
+            # Read under the winning write transaction. A post-commit read
+            # can return a successor's generation instead of this claim's
+            # receipt, making cancellation cleanup target the wrong owner.
+            receipt = await self.get_retry_circuit(
+                session_key_kind=session_key_kind,
+                session_key_value=session_key_value,
+                api_key_scope=api_key_scope,
+            )
             await self._session.commit()
-        return await self.get_retry_circuit(
-            session_key_kind=session_key_kind,
-            session_key_value=session_key_value,
-            api_key_scope=api_key_scope,
-        )
+        return receipt
 
     async def release_retry_circuit_claim(
         self,
@@ -4072,7 +4076,23 @@ class DurableBridgeRepository:
                 & ~live_continuity_exists
             )
         deleted_count = 0
+        last_key: tuple[str, str, str] | None = None
         while True:
+            candidate_predicate = stale_predicate
+            if last_key is not None:
+                key_kind, key_hash, key_scope = last_key
+                candidate_predicate = candidate_predicate & or_(
+                    HttpBridgeRetryCircuit.session_key_kind > key_kind,
+                    and_(
+                        HttpBridgeRetryCircuit.session_key_kind == key_kind,
+                        HttpBridgeRetryCircuit.session_key_hash > key_hash,
+                    ),
+                    and_(
+                        HttpBridgeRetryCircuit.session_key_kind == key_kind,
+                        HttpBridgeRetryCircuit.session_key_hash == key_hash,
+                        HttpBridgeRetryCircuit.api_key_scope > key_scope,
+                    ),
+                )
             result = await self._session.execute(
                 select(
                     HttpBridgeRetryCircuit.session_key_kind,
@@ -4080,8 +4100,14 @@ class DurableBridgeRepository:
                     HttpBridgeRetryCircuit.api_key_scope,
                     HttpBridgeRetryCircuit.updated_at_epoch,
                     HttpBridgeRetryCircuit.admission_generation,
+                    HttpBridgeRetryCircuit.consecutive_failures,
                 )
-                .where(stale_predicate)
+                .where(candidate_predicate)
+                .order_by(
+                    HttpBridgeRetryCircuit.session_key_kind,
+                    HttpBridgeRetryCircuit.session_key_hash,
+                    HttpBridgeRetryCircuit.api_key_scope,
+                )
                 .limit(batch_size)
             )
             keys = [tuple(row) for row in result.fetchall()]
@@ -4095,6 +4121,7 @@ class DurableBridgeRepository:
                     api_key_scope,
                     updated_at_epoch,
                     admission_generation,
+                    consecutive_failures,
                 ) in keys:
                     deleted = await self._session.execute(
                         delete(HttpBridgeRetryCircuit)
@@ -4103,12 +4130,14 @@ class DurableBridgeRepository:
                         .where(HttpBridgeRetryCircuit.api_key_scope == api_key_scope)
                         .where(HttpBridgeRetryCircuit.updated_at_epoch == updated_at_epoch)
                         .where(HttpBridgeRetryCircuit.admission_generation == admission_generation)
+                        .where(HttpBridgeRetryCircuit.consecutive_failures == consecutive_failures)
                         .where(stale_predicate)
                     )
                     batch_deleted_count += int(getattr(deleted, "rowcount", 0) or 0)
                 await self._session.commit()
-            if batch_deleted_count == 0:
-                return deleted_count
+            # Advance even on a CAS miss: reselecting a changed stale row in
+            # this pass would delete the protection the fence just preserved.
+            last_key = (keys[-1][0], keys[-1][1], keys[-1][2])
             deleted_count += batch_deleted_count
 
     async def upsert_alias(

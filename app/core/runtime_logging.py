@@ -380,12 +380,16 @@ class JsonFormatter(logging.Formatter):
         try:
             from app.core.tracing.otel import get_current_span_id, get_current_trace_id
 
-            trace_id = get_current_trace_id()
-            span_id = get_current_span_id()
-            if trace_id:
-                log_entry["trace_id"] = trace_id
-            if span_id:
-                log_entry["span_id"] = span_id
+            # These helpers log failed lookups themselves. Enriching their
+            # diagnostics would call them recursively at DEBUG, including
+            # when the optional tracing package is absent.
+            if record.name != "app.core.tracing.otel":
+                trace_id = get_current_trace_id()
+                span_id = get_current_span_id()
+                if trace_id:
+                    log_entry["trace_id"] = trace_id
+                if span_id:
+                    log_entry["span_id"] = span_id
         except Exception:
             pass
 
@@ -446,14 +450,25 @@ class JsonFormatter(logging.Formatter):
 
 class JsonAccessFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
+        client_addr = getattr(record, "client_addr", None)
+        request_line = getattr(record, "request_line", None)
+        status_code = getattr(record, "status_code", None)
+        # Uvicorn emits a tuple, and its text AccessFormatter only populates
+        # the named fields on a private copy. A JSON formatter must decode
+        # the original tuple itself, without modifying the shared record.
+        if isinstance(record.args, tuple) and len(record.args) == 5:
+            client_addr, method, full_path, http_version, status_code = cast(
+                tuple[str, str, str, str, int], record.args
+            )
+            request_line = f"{method} {full_path} HTTP/{http_version}"
         log_entry: dict[str, JsonValue] = {
             "timestamp": datetime.fromtimestamp(record.created, tz=UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
             "level": record.levelname,
             "logger": record.name,
             "type": "access",
-            "client": getattr(record, "client_addr", None),
-            "request": cast(JsonValue, _redact_json_log_value(record, getattr(record, "request_line", None))),
-            "status": getattr(record, "status_code", None),
+            "client": client_addr,
+            "request": cast(JsonValue, _redact_json_log_value(record, request_line)),
+            "status": status_code,
         }
         return json.dumps(log_entry, default=str)
 

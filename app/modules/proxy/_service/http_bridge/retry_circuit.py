@@ -296,6 +296,7 @@ class _HTTPBridgeRetryCircuitMixin:
         key: _HTTPBridgeSessionKey,
         captured: bool,
         generation: tuple[int, float, int, float, int, float, float] | None,
+        claimed_generation_out: list[tuple[int, float, int, float, int, float, float]] | None = None,
     ) -> bool | None:
         """Atomically linearize replay admission against the captured circuit.
 
@@ -362,6 +363,12 @@ class _HTTPBridgeRetryCircuitMixin:
             async with self._http_bridge_retry_circuit_lock:
                 self._http_bridge_retry_circuit_loaded_keys.add(key)
                 self._http_bridge_retry_circuit_persisted_keys.add(key)
+            if claimed_generation_out is not None:
+                claimed_generation_out.append(
+                    generation
+                    if generation is not None and expected_persisted_updated_at > 0
+                    else (0, claimed.updated_at_epoch, 0, 0.0, 0, 0.0, 0.0)
+                )
             return True
         finally:
             key_lock.release()
@@ -399,11 +406,9 @@ class _HTTPBridgeRetryCircuitMixin:
                         _hash_identifier(key.affinity_key),
                         exc_info=True,
                     )
-        async with self._http_bridge_retry_circuit_lock:
-            state = self._http_bridge_retry_circuits.get(key)
-            if state is not None and state.half_open_until > 0.0:
-                state.half_open_until = 0.0
-                state.cooldown_until = clock_for(self).monotonic() - 1.0
+        # Submission returns its local probe under the exact lease fence.
+        # The durable generation is not a local lease token: mutating local
+        # state here would release a replacement probe after a late CAS miss.
         return released
 
     async def _ensure_http_bridge_retry_circuit_loaded_for_key(

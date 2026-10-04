@@ -14,6 +14,7 @@ from urllib.parse import urlsplit
 import aiohttp
 import anyio
 import pytest
+import zstandard
 
 import app.core.clients.native_egress as native_module
 import app.core.clients.proxy as proxy_module
@@ -101,6 +102,10 @@ async def _serve_http(handler: _HttpHandler) -> AsyncIterator[str]:
         connections.add(writer)
         try:
             head, body = await _read_request(reader)
+            # Model a JSON-capable origin: handlers receive the decoded entity,
+            # while wire headers retain the actual encoded representation.
+            if b"\r\ncontent-encoding: zstd\r\n" in head.lower():
+                body = zstandard.ZstdDecompressor().decompress(body)
             await handler(reader, writer, head, body)
         except (ConnectionError, asyncio.IncompleteReadError):
             pass
@@ -605,6 +610,7 @@ async def test_native_non_streaming_response_body_stays_raw(
 
     assert len(requests) == 1
     assert b"accept: application/json\r\n" in requests[0][0].lower()
+    assert b"content-encoding: zstd\r\n" in requests[0][0].lower()
     assert json.loads(requests[0][1])["stream"] is False
     assert _payload(events[0]) == {"type": "response.completed", "response": response}
 
@@ -982,6 +988,7 @@ async def test_native_compact_frames_and_returns_before_body_eof(
     monkeypatch.setattr(proxy_module, "_compact_response_payload_from_sse", forbidden_python_scan)
 
     async def handler(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, _head: bytes, body: bytes) -> None:
+        assert b"content-encoding: zstd\r\n" in _head.lower()
         requests.append(json.loads(body))
         await _start_chunked_response(writer, content_type=content_type)
         for offset in range(0, len(_COMPACT_EVENTS), 17):

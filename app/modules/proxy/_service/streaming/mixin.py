@@ -16,6 +16,7 @@ from app.core.clients.proxy import (  # noqa: F401  # noqa: F401
     ImageFetchSession,
     ProxyResponseError,
     UpstreamProxyRouteTrace,
+    UpstreamResponseFailureTrace,
     _as_image_fetch_session,
     _inline_content_images,
     _inline_input_image_urls,
@@ -489,6 +490,7 @@ class _StreamingMixin(_StreamingRetryMixin):
         usage = None
         route: ResolvedUpstreamRoute | None = None
         route_trace = UpstreamProxyRouteTrace()
+        upstream_failure_trace = UpstreamResponseFailureTrace()
         route_fail_closed_reason: str | None = None
         saw_text_delta = terminal_event_seen = suppressed_duplicate_tool_call = False
         output_timing = _StreamResponseTiming(started_at=attempt_started_at)
@@ -545,6 +547,7 @@ class _StreamingMixin(_StreamingRetryMixin):
                 "route": route,
                 "allow_direct_egress": route is None,
                 "route_trace": route_trace,
+                "failure_trace": upstream_failure_trace,
                 "codex_installation_id": account.codex_installation_id,
                 "enforce_openai_sdk_contract": enforce_openai_sdk_contract,
                 "codex_lb_account_id": account.id,
@@ -1022,6 +1025,15 @@ class _StreamingMixin(_StreamingRetryMixin):
             if settlement.error_code is None:
                 settlement.error_code = error_code
             settlement.error_message = error_message
+            if failure_metadata.failure_phase is None and upstream_failure_trace.failure_phase is not None:
+                failure_metadata = _RequestLogFailureMetadata(
+                    failure_phase=upstream_failure_trace.failure_phase,
+                    failure_detail=upstream_failure_trace.failure_detail,
+                    failure_exception_type=upstream_failure_trace.failure_exception_type,
+                    upstream_status_code=upstream_failure_trace.upstream_status_code,
+                    upstream_error_code=failure_metadata.upstream_error_code,
+                    bridge_stage=failure_metadata.bridge_stage,
+                )
             await proxy._write_request_log(
                 affinity_observation=affinity_observation,
                 account_id=account_id_value,

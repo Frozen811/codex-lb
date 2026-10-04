@@ -31,7 +31,7 @@ SenderContextProvider = Callable[[], Awaitable[tuple[bool, TelemetryIdentity | N
 _TRANSMISSION_LOCK: asyncio.Lock | None = None
 
 
-def _get_transmission_lock() -> asyncio.Lock:
+def get_transmission_lock() -> asyncio.Lock:
     global _TRANSMISSION_LOCK
     if _TRANSMISSION_LOCK is None:
         _TRANSMISSION_LOCK = asyncio.Lock()
@@ -116,16 +116,8 @@ class TelemetrySender:
         snapshot: TelemetrySnapshot,
         identity: TelemetryIdentity,
     ) -> None:
-        await self._ensure_activated(
-            session,
-            identity,
-            app_version=snapshot.version,
-            deployment_mode=snapshot.deploy.method,
-            os_arch=f"{snapshot.os}/{snapshot.arch}",
-        )
-
         envelope = build_snapshot_envelope(snapshot)
-        async with _get_transmission_lock():
+        async with get_transmission_lock():
             try:
                 active, current_identity = await self._context_provider()
                 identity_matches = (
@@ -139,6 +131,13 @@ class TelemetrySender:
             if not active or not identity_matches:
                 return
 
+            await self._ensure_activated(
+                session,
+                identity,
+                app_version=snapshot.version,
+                deployment_mode=snapshot.deploy.method,
+                os_arch=f"{snapshot.os}/{snapshot.arch}",
+            )
             await self._post_signed(session, "/v1/snapshot", _json_bytes(envelope), identity, accepted={200, 202})
 
     async def _transmit_opt_out_once(
@@ -150,7 +149,7 @@ class TelemetrySender:
         deployment_mode: DeploymentMethod,
         os_arch: str,
     ) -> None:
-        async with _get_transmission_lock():
+        async with get_transmission_lock():
             await self._ensure_activated(
                 session,
                 identity,

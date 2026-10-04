@@ -31,9 +31,10 @@ _ROUTE_ERROR_NUMBERS = frozenset(
     for name in ("ENETDOWN", "ENETUNREACH", "EHOSTDOWN", "EHOSTUNREACH", "ENONET")
     if isinstance((value := getattr(errno, name, None)), int)
 )
-# ERROR_NETNAME_DELETED / ERROR_SEM_TIMEOUT. These establish a local
-# transport failure, not that the host is offline or dispatch never began.
-_WINDOWS_TRANSPORT_ERROR_NUMBERS = frozenset({64, 121})
+# IOCP route loss maps ERROR_NETWORK_UNREACHABLE / ERROR_HOST_UNREACHABLE
+# to EINVAL, so errno alone loses the equivalent POSIX route provenance.
+# Peer reset (64) and timeout (121) retain endpoint/account attribution.
+_WINDOWS_ROUTE_ERROR_NUMBERS = frozenset({1231, 1232})
 _MAX_RETRY_DELAY_SECONDS = 5.0
 # Retiring a known-bad generation protects later callers rather than retrying
 # the failed request, so it cannot inherit an already-expired request deadline.
@@ -72,7 +73,7 @@ def is_process_network_failure(exc: BaseException, *, include_permanent_dns: boo
                 return True
         if isinstance(current, OSError) and current.errno in _ROUTE_ERROR_NUMBERS:
             return True
-        if isinstance(current, OSError) and getattr(current, "winerror", None) in _WINDOWS_TRANSPORT_ERROR_NUMBERS:
+        if isinstance(current, OSError) and getattr(current, "winerror", None) in _WINDOWS_ROUTE_ERROR_NUMBERS:
             return True
     return False
 

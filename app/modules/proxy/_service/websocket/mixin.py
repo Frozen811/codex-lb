@@ -430,7 +430,6 @@ from app.modules.proxy._service.websocket.helpers import (
     _release_websocket_response_create_gate,
     _rewrite_websocket_continuity_corruption_event,
     _rewrite_websocket_downstream_response_id,
-    _rewrite_websocket_previous_response_owner_unavailable_event,
     _rewrite_websocket_suppressed_duplicate_tool_call_completion_event,
     _sanitize_public_websocket_event_payload,
     _sanitize_websocket_connect_failure,
@@ -1334,7 +1333,10 @@ async def _process_upstream_websocket_transport_end(
     # already-sent response.create was accepted. Keep it account-neutral and
     # terminal: replay here could duplicate work, billing, or tool side effects.
     account_neutral_error = is_account_neutral_websocket_error_code(message_error_code)
-    account_neutral_drop = message.kind == "close" and _is_account_neutral_transport_drop(message.close_code)
+    terminal_transport = message.kind == "close" or (
+        message.kind == "error" and getattr(message, "transport_ended", False) is True
+    )
+    account_neutral_drop = terminal_transport and _is_account_neutral_transport_drop(message.close_code)
     account_neutral = account_neutral_error or account_neutral_drop
     if account_neutral:
         if any(state.last_downstream_sequence_number is not None for state in reader_owned):
@@ -6104,28 +6106,13 @@ class _WebSocketMixin:
             and not retry_safe_previous_response_not_found
             and not retry_safe_owner_replay
         ):
-            await proxy._handle_stream_error(
-                account,
-                _websocket_event_upstream_error(event_type, payload),
-                retry_error_code,
-            )
-            event, payload, event_type, downstream_text = _rewrite_websocket_previous_response_owner_unavailable_event(
-                request_state=request_state,
-            )
+            # Selection and dispatch succeeded. Replay refusal does not turn
+            # this authentic terminal into a pre-dispatch owner failure.
+            # Normal finalization settles the reservation before health writes.
             retry_error_code = None
         if retry_safe_owner_replay and not retry_safe_previous_response_not_found:
             safe_request_text = _prepare_websocket_request_state_for_account_switch(request_state)
             if safe_request_text is None:
-                await proxy._handle_stream_error(
-                    account,
-                    _websocket_event_upstream_error(event_type, payload),
-                    retry_error_code,
-                )
-                event, payload, event_type, downstream_text = (
-                    _rewrite_websocket_previous_response_owner_unavailable_event(
-                        request_state=request_state,
-                    )
-                )
                 retry_error_code = None
             else:
                 # Keep the global response-create gate/admission while dropping

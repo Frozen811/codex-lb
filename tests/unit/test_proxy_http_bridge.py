@@ -28651,6 +28651,8 @@ async def test_stream_via_http_bridge_projects_plaintext_durable_full_resend_whe
     account_neutral_classifier = Mock(
         wraps=http_bridge_streaming_module._http_bridge_payload_is_account_neutral_fresh_replay
     )
+    retire_owner = AsyncMock(return_value=False)
+    monkeypatch.setattr(service._durable_bridge, "retire_continuity_owner_if_unavailable", retire_owner)
     monkeypatch.setattr(
         http_bridge_streaming_module,
         "_http_bridge_payload_is_account_neutral_fresh_replay",
@@ -28927,6 +28929,12 @@ async def test_stream_via_http_bridge_projects_plaintext_durable_full_resend_whe
         else:
             assert exc_info.value is owner_unavailable
         assert get_or_create.await_count == (0 if unsafe_replay_input == "missing_owner" else 1)
+        if unsafe_replay_input == "missing_owner":
+            retire_owner.assert_not_awaited()
+        else:
+            retire_owner.assert_awaited_once()
+            assert retire_owner.await_args is not None
+            assert retire_owner.await_args.kwargs["expected_account_id"] == "acc-owner"
         if unsafe_replay_input == "conversation":
             last_call = get_or_create.await_args
             assert last_call is not None
