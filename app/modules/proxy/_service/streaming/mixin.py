@@ -46,7 +46,7 @@ from app.core.openai.parsing import _LIFECYCLE_EVENT_TYPES, classify_event_type,
 from app.core.openai.requests import ResponsesRequest
 from app.core.upstream_proxy import ResolvedUpstreamRoute, UpstreamProxyRouteError
 from app.core.utils.sse import CODEX_KEEPALIVE_FRAME as CODEX_KEEPALIVE_FRAME  # noqa: F401
-from app.core.utils.sse import format_sse_event, parse_sse_data_json
+from app.core.utils.sse import ParsedSseBlock, format_sse_event, parse_sse_data_json
 from app.core.utils.time import utcnow as utcnow
 from app.db.models import (
     Account,
@@ -573,7 +573,10 @@ class _StreamingMixin(_StreamingRetryMixin):
                 first_payload = parse_sse_data_json(first)
                 event_type = classify_event_type(first_payload)
                 _stamp_terminal(settlement, event_type, clock, observed_at=first_observed_at)
-                _observe_response_output_timing(output_timing, event_type, first_payload, now=first_observed_at)
+                if event_type not in {None, "codex.keepalive"} and not (
+                    isinstance(first, ParsedSseBlock) and first.is_local
+                ):
+                    _observe_response_output_timing(output_timing, event_type, first_payload, now=first_observed_at)
             except StopAsyncIteration:
                 response_create_lease.release()
                 await proxy._load_balancer.release_account_lease(account_response_create_lease)
@@ -760,7 +763,9 @@ class _StreamingMixin(_StreamingRetryMixin):
                 if verbatim_type := _verbatim_relay_event_type(
                     line, output_timing.latency_first_token_ms, output_timing.ttft_reasoning_deltas
                 ):
-                    if output_timing.latency_first_upstream_event_ms is None:
+                    if output_timing.latency_first_upstream_event_ms is None and not (
+                        isinstance(line, ParsedSseBlock) and line.is_local
+                    ):
                         output_timing.latency_first_upstream_event_ms = max(
                             0, int((observed_at - output_timing.started_at) * 1000)
                         )
@@ -774,7 +779,10 @@ class _StreamingMixin(_StreamingRetryMixin):
                 event_payload = parse_sse_data_json(line)
                 event_type = classify_event_type(event_payload)
                 terminal_event_seen |= _stamp_terminal(settlement, event_type, clock, observed_at=observed_at)
-                _observe_response_output_timing(output_timing, event_type, event_payload, now=observed_at)
+                if event_type not in {None, "codex.keepalive"} and not (
+                    isinstance(line, ParsedSseBlock) and line.is_local
+                ):
+                    _observe_response_output_timing(output_timing, event_type, event_payload, now=observed_at)
                 event = parse_sse_event_payload(event_payload) if event_type in _LIFECYCLE_EVENT_TYPES else None
                 _publish_http_response_owner(proxy, event, event_payload, line, account_id_value, api_key, session_id)
                 preserve_raw_sse_line = not enforce_openai_sdk_contract and event_type == "error"

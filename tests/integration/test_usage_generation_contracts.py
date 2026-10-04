@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
 from datetime import timezone
 
 import aiohttp
@@ -11,13 +12,14 @@ from sqlalchemy import select
 
 from app.core.clients import proxy as core_proxy
 from app.core.types import JsonValue
-from app.core.utils.sse import parse_sse_data_json
+from app.core.utils.sse import CODEX_KEEPALIVE_FRAME, ParsedSseBlock, format_local_sse_event, parse_sse_data_json
 from app.db.models import ApiKeyUsageReservation, RequestLog
 from app.db.session import SessionLocal
 from app.dependencies import get_proxy_service_for_app
 from app.modules.api_keys.repository import ApiKeysRepository
 from app.modules.api_keys.service import ApiKeysService
 from app.modules.proxy import service as proxy_service
+from app.modules.proxy._service import request_log as request_log_module
 from tests.integration.model_source_helpers import _create_model_source, _enable_api_key_auth, stub_source_upstreams
 from tests.integration.test_proxy_api_extended import _import_account
 from tests.simulation.virtual_time import VirtualClock
@@ -164,6 +166,8 @@ async def test_native_wire_usage_and_generation_survive_serialization_and_cleanu
             assert log.cost_usd == pytest.approx(cost)
             assert log.output_tokens == 24 and log.reasoning_tokens == 4
             assert log.latency_first_token_ms == 125
+            assert log.latency_first_upstream_event_ms == 0
+            assert log.latency_response_created_ms == 0
             assert log.latency_first_output_ms == 500
             assert log.output_delta_count == 2
             assert log.latency_upstream_terminal_ms == 1000
@@ -390,3 +394,121 @@ async def test_source_invalid_total_cannot_finalize_a_limited_key(async_client, 
             assert reservation.status == "released"
             limits = await ApiKeysRepository(database).get_limits_by_key(key["id"])
             assert limits[0].current_value == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["/v1/responses", "/v1/responses/", "/backend-api/codex/responses"])
+@pytest.mark.parametrize("case", ["keepalive", "local_failure", "upstream_error_local_id", "zero", "local_created"])
+@pytest.mark.parametrize("disable_metrics", [False, True])
+async def test_http_phase_provenance_persists_and_exports(
+    async_client, app_instance, monkeypatch, path, case, disable_metrics
+) -> None:
+    await _import_account(async_client, "http-phase-owner", "http-phase@example.invalid")
+    service = get_proxy_service_for_app(app_instance)
+    clock = VirtualClock(monotonic_value=100.0)
+    monkeypatch.setattr(service, "_clock", clock)
+    admission = service._get_work_admission()
+    original_acquire = admission.acquire_response_create
+
+    async def delayed_admission():
+        lease = await original_acquire()
+        clock.advance(0.5)
+        return lease
+
+    monkeypatch.setattr(admission, "acquire_response_create", delayed_admission)
+
+    def event(payload: dict[str, JsonValue], *, local_id: bool = False) -> ParsedSseBlock:
+        return ParsedSseBlock(f"data: {json.dumps(payload)}\n\n", payload, response_id_is_local=local_id)
+
+    async def controlled_stream(*_args: object, **_kwargs: object) -> AsyncIterator[str]:
+        if case == "local_failure":
+            clock.advance(0.25)
+            yield format_local_sse_event(
+                {
+                    "type": "response.failed",
+                    "response": {"id": "resp_local", "error": {"code": "invalid_request_error", "message": "local"}},
+                }
+            )
+            return
+        if case == "upstream_error_local_id":
+            yield event(
+                {
+                    "type": "response.failed",
+                    "response": {
+                        "id": "resp_normalized",
+                        "error": {"code": "invalid_request_error", "message": "origin"},
+                    },
+                },
+                local_id=True,
+            )
+            return
+        if case in {"keepalive", "local_created"}:
+            if case == "keepalive":
+                clock.advance(0.125)
+                yield ": keepalive\n\n"
+                yield CODEX_KEEPALIVE_FRAME
+                clock.advance(0.125)
+            else:
+                clock.advance(0.25)
+            yield event({"type": "response.in_progress", "response": {"id": "resp_phases"}})
+            clock.advance(0.25)
+        created: dict[str, JsonValue] = {"type": "response.created", "response": {"id": "resp_phases"}}
+        yield format_local_sse_event(created) if case == "local_created" else event(created)
+        clock.advance(0.5)
+        yield event({"type": "response.output_text.delta", "delta": "hello"})
+        clock.advance(0.5)
+        yield event({"type": "response.completed", "response": {"id": "resp_phases"}})
+
+    if disable_metrics:
+        monkeypatch.setattr(request_log_module, "PROMETHEUS_AVAILABLE", False)
+        monkeypatch.setattr(request_log_module, "proxy_phase_latency_seconds", None)
+    histogram = request_log_module.proxy_phase_latency_seconds
+    metrics_available = request_log_module.PROMETHEUS_AVAILABLE
+    assert (histogram is not None) == metrics_available
+
+    def phase_samples() -> dict[tuple[str, str], float]:
+        totals: dict[tuple[str, str], float] = {}
+        if histogram is None:
+            return totals
+        # The public protocol exposes observation; collection is optional and
+        # belongs to the actual installed Prometheus exporter, not a fake.
+        for metric in getattr(histogram, "collect")():
+            for sample in metric.samples:
+                if sample.labels.get("transport") != "http" or not sample.name.endswith(("_count", "_sum")):
+                    continue
+                assert set(sample.labels) == {"phase", "transport", "upstream_transport", "model_class"}
+                key = (sample.labels["phase"], "count" if sample.name.endswith("_count") else "sum")
+                totals[key] = totals.get(key, 0.0) + sample.value
+        return totals
+
+    before = phase_samples()
+    monkeypatch.setattr(proxy_service, "core_stream_responses", controlled_stream)
+    response = await async_client.post(path, json={"model": "gpt-6-astra", "input": "hi", "stream": True})
+    assert response.status_code == 200
+    assert await service.drain_persistence_tasks(timeout_seconds=5)
+    expected_first = {
+        "keepalive": 250,
+        "local_failure": None,
+        "upstream_error_local_id": 0,
+        "zero": 0,
+        "local_created": 250,
+    }[case]
+    expected_created = {
+        "keepalive": 500,
+        "local_failure": None,
+        "upstream_error_local_id": None,
+        "zero": 0,
+        "local_created": None,
+    }[case]
+    async with SessionLocal() as database:
+        log = (await database.scalars(select(RequestLog))).one()
+        assert log.latency_queue_ms == 500
+        assert log.latency_first_upstream_event_ms == expected_first
+        assert log.latency_response_created_ms == expected_created
+        assert log.latency_first_token_ms == ({"keepalive": 1000, "zero": 500, "local_created": 1000}.get(case))
+    after = phase_samples()
+    for phase, expected in [("first_upstream_event", expected_first), ("response_created", expected_created)]:
+        count = after.get((phase, "count"), 0) - before.get((phase, "count"), 0)
+        total = after.get((phase, "sum"), 0) - before.get((phase, "sum"), 0)
+        assert count == (0 if expected is None or not metrics_available else 1)
+        assert total == pytest.approx(0 if expected is None or not metrics_available else expected / 1000)

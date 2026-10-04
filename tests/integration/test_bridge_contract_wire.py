@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from copy import deepcopy
 from unittest.mock import AsyncMock
@@ -16,6 +17,7 @@ from app.core.types import JsonValue
 from app.core.utils.sse import format_sse_event, parse_sse_data_json
 from app.dependencies import get_proxy_service_for_app
 from app.modules.proxy import service as proxy_service
+from app.modules.proxy._service.http_bridge import upstream_events as bridge_upstream_events
 from tests.integration.test_http_responses_bridge import (
     _cleanup_http_bridge_sessions,  # noqa: F401
 )
@@ -177,3 +179,90 @@ async def test_actual_aiohttp_socket_delivers_json_and_size_evidence(
         for bridge in list(service._http_bridge_sessions.values()):
             await service._close_http_bridge_session(bridge)
         await service.drain_persistence_tasks(timeout_seconds=5)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["/v1/responses", "/v1/responses/", "/backend-api/codex/responses"])
+@pytest.mark.parametrize("progress", ["text", "buffered_reasoning"])
+@pytest.mark.parametrize("ending", ["abrupt", "authored_close", "invalid_binary"])
+async def test_post_output_bridge_drop_preserves_failure_health_and_no_replay(
+    async_client, app_instance, promotion_transport, monkeypatch, path, progress, ending
+) -> None:
+    sent = []
+    progress_seen = asyncio.Event()
+
+    async def upstream(request: web.Request) -> web.WebSocketResponse:
+        socket = web.WebSocketResponse()
+        await socket.prepare(request)
+        async for message in socket:
+            sent.append(json.loads(message.data))
+            if progress == "text":
+                await socket.send_json({"type": "response.created", "response": {"id": "resp_drop"}})
+                await socket.send_json(
+                    {"type": "response.output_text.delta", "response_id": "resp_drop", "delta": "hello"}
+                )
+            else:
+                await socket.send_json({"type": "response.reasoning_summary_text.delta", "delta": "plan"})
+            await asyncio.wait_for(progress_seen.wait(), timeout=5)
+            if ending == "abrupt":
+                assert request.transport is not None
+                request.transport.abort()
+            elif ending == "authored_close":
+                await socket.close(code=1011)
+            else:
+                await socket.send_bytes(b"invalid response frame")
+            break
+        return socket
+
+    application = web.Application()
+    application.router.add_get("/responses", upstream)
+    service = get_proxy_service_for_app(app_instance)
+    original_process = service._process_http_bridge_upstream_text
+
+    async def observe_progress(bridge, text, **kwargs):
+        await original_process(bridge, text, **kwargs)
+        payload = json.loads(text)
+        if payload["type"] in {"response.output_text.delta", "response.reasoning_summary_text.delta"}:
+            assert any(state.upstream_model_output_seen for state in bridge.pending_requests)
+            progress_seen.set()
+
+    monkeypatch.setattr(service, "_process_http_bridge_upstream_text", observe_progress)
+    record_error = AsyncMock(wraps=service._load_balancer.record_error)
+    monkeypatch.setattr(service._load_balancer, "record_error", record_error)
+    eventless_signal = AsyncMock(wraps=bridge_upstream_events._record_http_bridge_account_timeout_signal)
+    monkeypatch.setattr(bridge_upstream_events, "_record_http_bridge_account_timeout_signal", eventless_signal)
+    async with TestServer(application) as server, aiohttp.ClientSession() as session:
+
+        async def connect(*args, **kwargs):
+            return CodexUpstreamWebSocket(await session.ws_connect(server.make_url("/responses")))
+
+        connection = AsyncMock(side_effect=connect)
+        monkeypatch.setattr(proxy_service, "connect_responses_websocket", connection)
+        response = await async_client.post(
+            path,
+            json={"model": "gpt-5.4", "input": "hello", "instructions": "", "stream": True},
+            headers={"session_id": "post-output-drop"},
+        )
+        assert response.status_code == 200
+        events = [
+            event
+            for block in response.text.split("\n\n")
+            if (event := parse_sse_data_json(block)) is not None and event["type"] != "codex.keepalive"
+        ]
+        terminals = [event for event in events if event["type"] in {"response.failed", "response.completed", "error"}]
+        assert len(terminals) == 1 and terminals[0]["type"] == "response.failed"
+        envelope = terminals[0]["response"]
+        assert isinstance(envelope, dict)
+        error = envelope["error"]
+        assert isinstance(error, dict) and error["code"] == "stream_incomplete"
+        if progress == "text":
+            assert [event["delta"] for event in events if event["type"] == "response.output_text.delta"] == ["hello"]
+        assert len(sent) == 1 and connection.await_count == 1
+        for bridge in list(service._http_bridge_sessions.values()):
+            await service._close_http_bridge_session(bridge)
+        assert await service.drain_persistence_tasks(timeout_seconds=5)
+    if ending == "abrupt":
+        record_error.assert_not_awaited()
+    else:
+        record_error.assert_awaited_once()
+    eventless_signal.assert_not_awaited()
