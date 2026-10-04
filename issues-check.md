@@ -4,7 +4,7 @@
 
 Этот файл фиксирует доказательства, замечания, исправляющие коммиты и повторные проверки. Нормативные контракты остаются в [openspec/specs](openspec/specs), работа по изменению поведения — в [openspec/changes](openspec/changes). Заявления автора, зелёная сборка образа и наличие теста сами по себе не означают, что проблема решена.
 
-**Последнее обновление: 2026-10-03.** Сверка 136 dirty/untracked файлов и шести прежних OpenSpec batches сохранена как срез §28; последующие пакеты — §§29–35. Последний пакет §36 закрывает локально ровно **UP-PR-2523 / UP-PR-2524 / UP-PR-2527**: ложная доступность rejected access credentials в метриках и отсутствие quota Resume исправлены (F-055/F-056); Force Probe snapshots и weekly-primary recovery подтверждены реальными БД/API. **719 Python + 24 frontend + 1 browser = 744 различных целевых теста PASS**, screenshots до/после сохранены, 68/68 main specs strict valid. Историческое evidence предыдущих пакетов сохранено. Public artifacts/Pages, новые cloud gates и реальные пользовательские инциденты не закрыты автоматически.
+**Последнее обновление: 2026-10-04.** Последний пакет §46 обработал ровно **UP-ISSUE-2483 / UP-ISSUE-1901 / UP-ISSUE-2291**. Все три **закрыты локально** после исправления cap validation, проверки dense report API и transcript backlog/owner fencing. Отдельное дерево публикации: **81 targeted tests PASS**, no skips/failures; 29 новых cases входят в этот scope; scopes/команды и ограничения — в [verification](openspec/changes/archive/2026-10-04-verify-sqlite-history-reports-transcript/verification.md). Публикуется только этот пакет в `Frozen811/codex-lb:main`; предыдущие dirty пакеты сохранены отдельно. Public artifacts/cloud CI/production и F-045/CI-04 этим пакетом не закрываются.
 
 ## 1. Правила ведения
 
@@ -355,7 +355,7 @@ cloud CI, выпуск или production deployment. `[ ]` может содер
 
 | ID / источник | Заявленная тема | Исходный статус | Наша проверка | Карточка / исправляющий SHA |
 |---|---|---|---|---|
-| [UP-ISSUE-2483](https://github.com/Soju06/codex-lb/issues/2483) | perf(usage): high memory usage and query latency in bulk history reads on SQLite | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
+| [UP-ISSUE-2483](https://github.com/Soju06/codex-lb/issues/2483) | perf(usage): high memory usage and query latency in bulk history reads on SQLite | РЕШЕНО | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | §46: 4 red-before malformed-cap cases; fail-fast validation до dialect dispatch. 100 000 rows → 1 280 snapshots, cutoffs/floor/ties/zero и dashboard parity PASS; capped read не использует uncapped cache. PostgreSQL/production RSS отдельно. [Evidence](openspec/changes/archive/2026-10-04-verify-sqlite-history-reports-transcript/verification.md). |
 | [UP-ISSUE-2474](https://github.com/Soju06/codex-lb/issues/2474) | Migration graph forks into two heads on main (MultipleHeads): 20260914_000000 collision (#2431 vs #2422) | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
 | [UP-ISSUE-2292](https://github.com/Soju06/codex-lb/issues/2292) | feat(db): gate PostgreSQL-only support on a verified SQLite migration path | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
 | [UP-ISSUE-2034](https://github.com/Soju06/codex-lb/issues/2034) | bug: single-loop SQLite deployment turns Codex Desktop HTTP fallback into a 20 s first token (5 s over ws) plus ~2 s fixed overhead per turn | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
@@ -393,7 +393,7 @@ cloud CI, выпуск или production deployment. `[ ]` может содер
 | [UP-ISSUE-2309](https://github.com/Soju06/codex-lb/issues/2309) | docs: align agent instructions with Astra prompt guidance | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
 | [UP-ISSUE-2262](https://github.com/Soju06/codex-lb/issues/2262) | feat(proxy): preserve built-in OpenAI provider when routing ChatGPT-authenticated Codex Desktop through codex-lb | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
 | [UP-ISSUE-2038](https://github.com/Soju06/codex-lb/issues/2038) | Visual Studio Copilot requires GET /v1/models/{model_id} | РЕШЕНО | ИСПРАВЛЕНО ЛОКАЛЬНО / ЗАКРЫТО | F-047, §29: visible/nested model slash 404 reproduced/fixed; list parity, unknown/hidden models, independent allowlist/source scope, auth и reservation release PASS. Actual Visual Studio UI registration и public packages остаются внешним scope. [Evidence](openspec/changes/archive/2026-10-02-repair-native-client-compatibility/verification.md). |
-| [UP-ISSUE-1901](https://github.com/Soju06/codex-lb/issues/1901) | bug(reports): /api/reports takes ~120 s for a 7-day window (~543k rows) while equivalent raw SQL finishes in ~2.5 s | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
+| [UP-ISSUE-1901](https://github.com/Soju06/codex-lb/issues/1901) | bug(reports): /api/reports takes ~120 s for a 7-day window (~543k rows) while equivalent raw SQL finishes in ~2.5 s | РЕШЕНО | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §46: existing rollup/cache/runtime проверен actual /api/reports на 543 000 SQLite rows; raw/folded totals и exact daily medians равны. 21.416 с raw / 7.811 с folded / 0.015 с cache. Неподтверждённое millis promise исправлено; ARM/production benchmark отдельно. [Evidence](openspec/changes/archive/2026-10-04-verify-sqlite-history-reports-transcript/verification.md). |
 
 ### Исходный раздел 9: Предложения пользователей и фичи (Feature Requests / RFC)
 
@@ -418,7 +418,7 @@ cloud CI, выпуск или production deployment. `[ ]` может содер
 | [UP-ISSUE-2410](https://github.com/Soju06/codex-lb/issues/2410) | bug: Force Probe sends unsupported payload fields and can fail to settle successful probes | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
 | [UP-ISSUE-2314](https://github.com/Soju06/codex-lb/issues/2314) | ci: reconcile issue and PR status-label ownership and lifecycle | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
 | [UP-ISSUE-2311](https://github.com/Soju06/codex-lb/issues/2311) | docs: use GPT-6 Astra in current client examples | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
-| [UP-ISSUE-2291](https://github.com/Soju06/codex-lb/issues/2291) | bug: queued transcript batches wait between flushes | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
+| [UP-ISSUE-2291](https://github.com/Soju06/codex-lb/issues/2291) | bug: queued transcript batches wait between flushes | РЕШЕНО | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §46: existing loop подтверждён 320-event ten-write burst, bounded fair passes и false/exception isolation без intervening waits. Real SQLite rows_v1/chunks_v2 сохраняют 320 events + один terminal; stale-owner epoch отклонён. Live production speedup отдельно. [Evidence](openspec/changes/archive/2026-10-04-verify-sqlite-history-reports-transcript/verification.md). |
 | [UP-ISSUE-2029](https://github.com/Soju06/codex-lb/issues/2029) | bug: historical minute-long Codex LB stalls and event-loop starvation remain unresolved | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
 | [UP-ISSUE-1924](https://github.com/Soju06/codex-lb/issues/1924) | bug(proxy): inline-image 429 can prevent prompt-cache failover | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
 | [UP-ISSUE-1707](https://github.com/Soju06/codex-lb/issues/1707) | bug: existing Codex thread can remain unusable on dead hard-affinity owner while fresh/side chat works | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
@@ -2772,3 +2772,15 @@ Verified OpenSpec:
 Hosted accounts/инциденты, production replicas, public artifacts/Pages и
 current-head cloud CI/CodeRabbit/release остаются открытым отдельным scope.
 Commit/push/PR/release/deploy не выполнялись.
+
+## 46. UP-ISSUE-2483 / UP-ISSUE-1901 / UP-ISSUE-2291 — SQLite history, reports и transcript backlog
+
+Дата: **2026-10-04, Europe/Kiev**. Ровно три исходно unchecked source rows; base `282ce147038ac53b72bca30d69c4ad9a9ac1b7cc`. [Verification](openspec/changes/archive/2026-10-04-verify-sqlite-history-reports-transcript/verification.md) содержит red-before, команды, mapping и ограничения.
+
+- **2483 — исправлено и закрыто локально.** Negative LIMIT делал SQLite read неограниченным; bool/string принимались, float давал database error. Все четыре malformed caps теперь отклоняются до backend selection. 100 000 history rows дают 1 280 snapshots на 20 accounts; primary/secondary, tighter cutoffs, timestamp/ID ties, zero cap и recent-floor exemptions проверены. Реальный dashboard capped/uncapped parity PASS.
+- **1901 — existing fix проверен и закрыт локально.** Actual public reports route на 543 000 valid speed samples: raw 21.416 с, folded 7.811 с, cache 0.015 с. Summary/daily/filter outputs и medians совпадают. Исходное millis promise исправлено: exact short-window medians продолжают читать retained raw evidence. ARM/live production timing отдельно.
+- **2291 — existing fix проверен и закрыт локально.** Ten bounded writes для 320-event burst, fair opportunities competing operations, refusal/exception isolation и один initial wait. Real SQLite rows_v1/chunks_v2 сохраняют ordered 320 events + один completed terminal; stale owner epoch не пишет. Shutdown/overflow/terminal regressions PASS.
+
+Новые cases: **29 PASS** (27 combined + 2 real persistence). Focused new/existing selection: **39 PASS**; existing batcher/report/rollup selection: **43 PASS**. Counts overlapping, не full-repository aggregate. Ruff/format, scoped types, architecture/cancellation/timing/settings/simplicity и strict OpenSpec подтверждаются verification. Ровно три source rows получили explicit closure; related source rows не закрываются автоматически. Предыдущие dirty изменения не входят в коммит этого пакета. Public/cloud/provider/production/platform limitations сохранены.
+
+Финальная проверка дерева публикации (HEAD + только этот пакет): **81 passed**, no skips/failures, 108.22 с. Повторные dense report timings: **21.372 с raw / 7.855 с folded / 0.013 с cached**. Code/test bytes соответствуют проверенному дереву. OpenSpec archived после проверки и sync.

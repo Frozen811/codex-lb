@@ -1,0 +1,5 @@
+This package audits exactly [2483](https://github.com/Soju06/codex-lb/issues/2483), [1901](https://github.com/Soju06/codex-lb/issues/1901), and [2291](https://github.com/Soju06/codex-lb/issues/2291). The first issue concerns SQLite hydration, the second public report orchestration, and the third isolated background backlog scheduling. Existing fixes are verified rather than replaced without evidence.
+
+For example, cap 64 with 18 eligible recent samples can return 82 rows; this is intentional because the equal-weight pace calculation needs the full recent window. LIMIT -1 is unsafe as a malformed cap because SQLite returns every older row. A seven-day report can use folded totals while still reading retained raw speed samples. Transcript backlog passes remain bounded per operation even when the total burst spans many batches.
+
+Measured timings describe this Windows host and isolated SQLite only. They do not certify the issue reporter's ARM deployment, live provider traffic or PostgreSQL. The commit excludes pre-existing dirty packages; their evidence remains local.

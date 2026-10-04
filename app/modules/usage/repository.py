@@ -1121,6 +1121,8 @@ class UsageRepository:
         tail-weighted consumers (EWMA) stay covered by the cap alone.
         Honored whenever ``per_account_row_cap`` is set on PostgreSQL or SQLite.
         """
+        if per_account_row_cap is not None and (type(per_account_row_cap) is not int or per_account_row_cap < 0):
+            raise ValueError("per_account_row_cap must be a nonnegative integer")
         if not account_ids:
             return {}
         bind = self._session.get_bind()

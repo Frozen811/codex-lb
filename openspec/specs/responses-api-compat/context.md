@@ -418,3 +418,8 @@ For example, a pretty error whose parameter is `parallel_tool_calls` reaches the
 aiohttp can report its own reader limit as `ERROR(WebSocketError(1009))` rather than a received close frame. Preserve this typed size evidence before generic transport recovery so an oversized message produces `payload_too_large` and releases the turn instead of penalizing the account or replaying the request. Other protocol codes retain their existing behavior. This classification does not change the configured message-size limit and makes no claim that switching accounts could repair the oversized message.
 
 The loopback wire tests use a bounded client reader and actual aiohttp socket traffic. They establish local transport and route behavior only; public artifacts, deployed services and real upstream/client traffic require separate evidence.
+
+
+## Independent transcript backlog verification (2026-10-04)
+
+Eligible nonterminal events drain in bounded fair passes; the loop yields before each next pass. For example, 320 events with batch size 32 require ten writes without nine interval waits. Other operations each get a batch opportunity; a failed optional spool does not stall their backlog. Closing operations, queue limits and shutdown retain their existing behavior. Deterministic tests count wait cycles and verify order and failure isolation. Real SQLite checks verify 320 events followed by one completed terminal in rows_v1 and chunks_v2 and reject a stale owner epoch. Fake-writer timings isolate scheduling and do not establish production speedup. See [verification](../../changes/archive/2026-10-04-verify-sqlite-history-reports-transcript/verification.md).

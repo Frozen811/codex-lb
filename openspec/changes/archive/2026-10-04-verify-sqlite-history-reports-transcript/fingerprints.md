@@ -1,0 +1,131 @@
+# Pre-existing dirty-file fingerprints
+
+125 files captured before this package; 119 unchanged and six intended document overlaps. These hashes describe the original working tree, not the publication index.
+
+| Path | Original SHA256 | Policy |
+|---|---|---|
+| ISSUES.md | `74e1630b13168243ae6130bfa2de4e8deffbe75437bb7ef763e097983b79160d` | intended text overlap |
+| app/core/clients/codex.py | `9c6f15df722b2a5d90a979147bc57d63a7e642073656b82ba628999cbe840570` | byte-identical |
+| app/core/clients/native_egress.py | `0e799723f71db4532b07b1256f0a0287e555f87e1c3197e2777814b2d69608b8` | byte-identical |
+| app/core/clients/proxy.py | `d6679d2077ec8f7e44c0c3ce52c1469b5ff71919ed2a4948ae1844f44cff6858` | byte-identical |
+| app/core/clients/proxy_websocket.py | `f14ec9b9b212b70ad0a426930c7379c498f21e6ba258997cbedaa0ff4569d4c9` | byte-identical |
+| app/core/config/key_fingerprint.py | `856c492822057440643dc7fcbddd5b5fdf3c118dcf6b47ab2d4b85ddf4962351` | byte-identical |
+| app/core/openai/chat_requests.py | `3d84787b14e4cb9669af29cd3dda8e8c28359ee73d5c9594ec196412a1ce2bb7` | byte-identical |
+| app/core/openai/host_models.py | `6371aafe5e2626a0bba9a7ecd5715dbe036155bcd51238c0975ff3671971ed1d` | byte-identical |
+| app/core/resilience/network_recovery.py | `d75724b551bb280e937d937e4f609ebb2a7edb8e511a743ecfc1b33625e3c812` | byte-identical |
+| app/core/runtime_logging.py | `b70dd3d2e08d7d21306ee1816fb58cadd60c71a173e3ec6268bc00a43c6bc75d` | byte-identical |
+| app/modules/proxy/_service/http_bridge/queues.py | `9c37363c510210b293fd02a27543e152e947e2fbfc1fc3af45a8e7220efcdcaa` | byte-identical |
+| app/modules/proxy/_service/http_bridge/request_submit.py | `e20af004f7262187225c2af12cda2ed467a074ad1e03a5480884ece79d08ee9e` | byte-identical |
+| app/modules/proxy/_service/http_bridge/retry_circuit.py | `d0771cf3f64142ed5a96721dfb545c970f19a403c46ec9a8512e2ea8ee459c2c` | byte-identical |
+| app/modules/proxy/_service/http_bridge/streaming.py | `efbd02f85c5d5197a4378a4079e6ea4fd435a716e4df9afa2b6fa4878cdd4bae` | byte-identical |
+| app/modules/proxy/_service/http_bridge/upstream_events.py | `79ef853bb6b08d6333b05b56855fd7ce1b68ddfd6436583fdc2e3377d2d409da` | byte-identical |
+| app/modules/proxy/_service/streaming/mixin.py | `3b6933086c26799f45bf72598e922cc61dae6a822c71daf572fa3bcf93ba33a9` | byte-identical |
+| app/modules/proxy/_service/websocket/mixin.py | `4b5f39585e0583731bf8dc78630c6643c5814e861d0e15e082e0d03abaf62514` | byte-identical |
+| app/modules/proxy/downstream_delivery.py | `2164593a1648975076033133e763090213536ae39ac14264ce4cd61873528535` | byte-identical |
+| app/modules/proxy/durable_bridge_repository.py | `e94a3ba77b257e382fdc74848578d71e6e43dc30f2ec86aea43776fb6d321590` | byte-identical |
+| app/modules/telemetry/api.py | `88807d7ec15a8efc6558cfc5c1eec2b7c2bf2915d86545ccb479a2f2e96624a6` | byte-identical |
+| app/modules/telemetry/schemas.py | `2bf943d4a3fef53abfd810e5753307c9a666340fddb04cbd545b6dd1cb680b54` | byte-identical |
+| app/modules/telemetry/sender.py | `ff5b743bcca7108a0e493692166ff68f9a4af8a9cbbf75c92e20f9ac20e5d587` | byte-identical |
+| crates/codex-lb-egress/src/websocket.rs | `5ccf7a7f9313b6c720340a79a4572384620c481532d04f11ddeed061c9246cd6` | byte-identical |
+| issues-check.md | `523eece55fdc1014eabbb0091b62544ffa6d6352bef6df4f311597ec4f67f751` | intended text overlap |
+| openspec/changes/archive/2026-10-03-repair-native-transport-recovery/.openspec.yaml | `df4fb22c89b17a0d45d8ca25e98028a2244dceafe5a64ecbbc3bae35db97ccbc` | byte-identical |
+| openspec/changes/archive/2026-10-03-repair-native-transport-recovery/context.md | `e1f690973e262aff6f55eb012a09bc187860abc717fd8606122b2f29c9ed4a5c` | byte-identical |
+| openspec/changes/archive/2026-10-03-repair-native-transport-recovery/design.md | `204a2dcf68e03164b3a07c7149a0b8b787c0da2fb6f7d42fdff447e6b26e55ec` | byte-identical |
+| openspec/changes/archive/2026-10-03-repair-native-transport-recovery/proposal.md | `378d0db8e9b1d27669734bb394311fc0b326717fdaf9d51ad50c0e8cb5663e85` | byte-identical |
+| openspec/changes/archive/2026-10-03-repair-native-transport-recovery/specs/outbound-http-clients/spec.md | `6516406a6dfc681573072d62590d2bb79e2b146452b6fc17a974cf14b5652df4` | byte-identical |
+| openspec/changes/archive/2026-10-03-repair-native-transport-recovery/specs/responses-api-compat/spec.md | `95022ac8d3b9fa8c2d3a91fcd458117caa8018dad65142d98d46d26cfb937f3c` | byte-identical |
+| openspec/changes/archive/2026-10-03-repair-native-transport-recovery/tasks.md | `a533c36b3344168410ecc182ff40eaa225b16447b24b2f4e6a56ad99b4d6d829` | byte-identical |
+| openspec/changes/archive/2026-10-03-repair-native-transport-recovery/verification.md | `e918eb60f72e8f5c1acb959f4ea2f59b6be9e26bd6ccd9d2cd97a981165ca4c2` | byte-identical |
+| openspec/changes/archive/2026-10-03-repair-telemetry-and-stateless-key-contracts/.openspec.yaml | `df4fb22c89b17a0d45d8ca25e98028a2244dceafe5a64ecbbc3bae35db97ccbc` | byte-identical |
+| openspec/changes/archive/2026-10-03-repair-telemetry-and-stateless-key-contracts/design.md | `ad3a0affe40c4bff2c0ada3328527721f70a8c7b9afbfd08ca85a4a24d213e92` | byte-identical |
+| openspec/changes/archive/2026-10-03-repair-telemetry-and-stateless-key-contracts/proposal.md | `8ba1727179c511c99a59b140ec215bdda940c1980a00a4b741e02bb2cbdbb947` | byte-identical |
+| openspec/changes/archive/2026-10-03-repair-telemetry-and-stateless-key-contracts/specs/replica-operations/spec.md | `1e6278d9af0bf8bf58f461e30e50e0f401bf0ac38387db468a2cd0c922e93596` | byte-identical |
+| openspec/changes/archive/2026-10-03-repair-telemetry-and-stateless-key-contracts/specs/telemetry/spec.md | `32f93d7a287ec2d51d3d9378e7911252f46e3b88c915fbbed1941db2fa45c7c2` | byte-identical |
+| openspec/changes/archive/2026-10-03-repair-telemetry-and-stateless-key-contracts/tasks.md | `9d76d24a569f309109883eb0c7cdb104c459d9a82b955c8336ea51451e5790a7` | byte-identical |
+| openspec/changes/archive/2026-10-03-repair-telemetry-and-stateless-key-contracts/verification.md | `770a2852c297647d7a23c8bdabe1f0091c70cec927745300f668c495f1117216` | byte-identical |
+| openspec/changes/archive/2026-10-03-verify-image-websocket-transport-contracts/.openspec.yaml | `df4fb22c89b17a0d45d8ca25e98028a2244dceafe5a64ecbbc3bae35db97ccbc` | byte-identical |
+| openspec/changes/archive/2026-10-03-verify-image-websocket-transport-contracts/design.md | `b9d336a83faceaf26837e6e9541f0b84dd220b2018b73de99347e07fb88bbb9b` | byte-identical |
+| openspec/changes/archive/2026-10-03-verify-image-websocket-transport-contracts/proposal.md | `2f4e8e890c911b02a139187c6bb1e4c583f9b4b9dfda9684b185033f5d6f40a1` | byte-identical |
+| openspec/changes/archive/2026-10-03-verify-image-websocket-transport-contracts/specs/outbound-http-clients/spec.md | `105167e1f84e0e4c42f3f769aa2902927ef23663e9a5799f7404811dfb6d1f95` | byte-identical |
+| openspec/changes/archive/2026-10-03-verify-image-websocket-transport-contracts/specs/responses-api-compat/spec.md | `0413a7010cb0675d2d8f81d4a971e998e445558087c041a450a03679fb6037d6` | byte-identical |
+| openspec/changes/archive/2026-10-03-verify-image-websocket-transport-contracts/tasks.md | `e640a5354d82eef40c001d3bc4e75ddfdbd21d1fe9232e2e9aa114bae3b19654` | byte-identical |
+| openspec/changes/archive/2026-10-03-verify-image-websocket-transport-contracts/verification.md | `9aa50ec7d090dc7cb6b015e8343448720dda2fd3c60f08ef65931193c1e79de9` | byte-identical |
+| openspec/changes/archive/2026-10-03-verify-plan-json-metrics-contracts/.openspec.yaml | `df4fb22c89b17a0d45d8ca25e98028a2244dceafe5a64ecbbc3bae35db97ccbc` | byte-identical |
+| openspec/changes/archive/2026-10-03-verify-plan-json-metrics-contracts/context.md | `c952994a7e0395addb60f5bf6919f34c3eb0ee512578ab60f1727f0c0d369ea5` | byte-identical |
+| openspec/changes/archive/2026-10-03-verify-plan-json-metrics-contracts/design.md | `dde6fc804ef14a3e42576a3ec5abe954948458004f68417bb74bd7200b3746b3` | byte-identical |
+| openspec/changes/archive/2026-10-03-verify-plan-json-metrics-contracts/proposal.md | `fb97fb7928099d04e2f7ccdb203d210c40bfb1889783260699f26ca1c50886f4` | byte-identical |
+| openspec/changes/archive/2026-10-03-verify-plan-json-metrics-contracts/specs/chat-completions-compat/spec.md | `0af569dd1f2b2fa7a1a234fa60c292f85e9da8ef9ffe7d1b01aaec1780bdf55a` | byte-identical |
+| openspec/changes/archive/2026-10-03-verify-plan-json-metrics-contracts/specs/proxy-runtime-observability/spec.md | `9a8f7f8317935ba5f0de9014289049d910eb951b343529c317a259172cb6f300` | byte-identical |
+| openspec/changes/archive/2026-10-03-verify-plan-json-metrics-contracts/specs/usage-refresh-policy/spec.md | `2a3bb9c08c0deb56817de8a319fcadc2d38cec6dbf582e87744c4189fb85b75f` | byte-identical |
+| openspec/changes/archive/2026-10-03-verify-plan-json-metrics-contracts/tasks.md | `932249dba22c2038f0950cdbf54003486fa74a60382e22cdd5be76b97697de68` | byte-identical |
+| openspec/changes/archive/2026-10-03-verify-plan-json-metrics-contracts/verification.md | `ee3735a2f2cad1a14009d868601083141738a89bbef3fdec890ead6dc212ce7b` | byte-identical |
+| openspec/changes/archive/2026-10-04-repair-bridge-terminal-lineage-failover/.openspec.yaml | `df4fb22c89b17a0d45d8ca25e98028a2244dceafe5a64ecbbc3bae35db97ccbc` | byte-identical |
+| openspec/changes/archive/2026-10-04-repair-bridge-terminal-lineage-failover/design.md | `3415272cfcb03c4e89766f8ec5136058e4ad780b6323674444b567fc4169b9a9` | byte-identical |
+| openspec/changes/archive/2026-10-04-repair-bridge-terminal-lineage-failover/proposal.md | `18e07991e2eccc9246d125d77baf67112ce9efcce517259c3913773870ea0fb8` | byte-identical |
+| openspec/changes/archive/2026-10-04-repair-bridge-terminal-lineage-failover/specs/responses-api-compat/spec.md | `dd32886f4c6ba1a75526764c2605578d22dd759a3c4bdc28ace466b9a9eaca05` | byte-identical |
+| openspec/changes/archive/2026-10-04-repair-bridge-terminal-lineage-failover/tasks.md | `c9498a1ae4cd1590558bbc39730c76986d9151538984ba2e4b72383ae72c1bcf` | byte-identical |
+| openspec/changes/archive/2026-10-04-repair-bridge-terminal-lineage-failover/verification.md | `636d7d8f1ee2970fa968847a9e376e324eca46c54f7604d9fe5a1188222d3502` | byte-identical |
+| openspec/changes/archive/2026-10-04-repair-image-control-transport-contracts/.openspec.yaml | `ad734da2ba5f4c5a6979a8bbb6bad4db20fb21ec275ceca5f24842fbdfaf5bef` | byte-identical |
+| openspec/changes/archive/2026-10-04-repair-image-control-transport-contracts/design.md | `06f1f5942d17bce269d7d3cecb396eb2737fdc78533af9cb05921be73ca71318` | byte-identical |
+| openspec/changes/archive/2026-10-04-repair-image-control-transport-contracts/proposal.md | `b1c08e9b782e92868139724e3030cee9d7d93d0caa97352d2af6a802597e24b5` | byte-identical |
+| openspec/changes/archive/2026-10-04-repair-image-control-transport-contracts/specs/images-api-compat/spec.md | `2ffce3663bffb88040d6eb16ac4511966d0581396752f459be48b74acad02b13` | byte-identical |
+| openspec/changes/archive/2026-10-04-repair-image-control-transport-contracts/specs/responses-api-compat/spec.md | `2335b0635ce06651afb93a9632fe70480092d8bb3b6abe6e6f702b62bffdb19c` | byte-identical |
+| openspec/changes/archive/2026-10-04-repair-image-control-transport-contracts/tasks.md | `16ba9b53feb2db7720e1b16877d5f6fc81906b229038c1e18a3f7363edffcf1d` | byte-identical |
+| openspec/changes/archive/2026-10-04-repair-image-control-transport-contracts/verification.md | `25e62ebaab59510ff8f3e2dd70fe622fba5c0fc203e302eb582caa3432a8779e` | byte-identical |
+| openspec/changes/archive/2026-10-04-verify-bridge-cleanup-quarantine-backpressure/.openspec.yaml | `ad734da2ba5f4c5a6979a8bbb6bad4db20fb21ec275ceca5f24842fbdfaf5bef` | byte-identical |
+| openspec/changes/archive/2026-10-04-verify-bridge-cleanup-quarantine-backpressure/context.md | `ce466e525d4a587ffdb9dbc46dfa3885664ae6b0114c110ff2c7f8e2eb076fe9` | byte-identical |
+| openspec/changes/archive/2026-10-04-verify-bridge-cleanup-quarantine-backpressure/design.md | `c51f501d5a8416e514a230ba96dae61b1840cfca1aac803579f6e801e8077c1a` | byte-identical |
+| openspec/changes/archive/2026-10-04-verify-bridge-cleanup-quarantine-backpressure/fingerprints.md | `8d8105d3638e7137c38f25b98054898ec1231b7f7ec0cc16192b12fd4c2cf541` | byte-identical |
+| openspec/changes/archive/2026-10-04-verify-bridge-cleanup-quarantine-backpressure/proposal.md | `63e21d1b084378bb1581a9b2f6c8bfd930c22388c1ff4d7c2ed87b7ce3646354` | byte-identical |
+| openspec/changes/archive/2026-10-04-verify-bridge-cleanup-quarantine-backpressure/specs/responses-api-compat/spec.md | `0d7f853f9afe840a4466bbf4725522ededc8637c49c8830bfc7552758fc5431c` | byte-identical |
+| openspec/changes/archive/2026-10-04-verify-bridge-cleanup-quarantine-backpressure/tasks.md | `0afecea16529c89758133d243c6a7a1a1314183ee938e6ddff8328db1035602a` | byte-identical |
+| openspec/changes/archive/2026-10-04-verify-bridge-cleanup-quarantine-backpressure/verification.md | `3e335ec831105eac44cb63fae6692650a6333403b06572d69eb37197b890652b` | byte-identical |
+| openspec/changes/archive/2026-10-04-verify-bridge-retry-claim-lifecycle/.openspec.yaml | `ad734da2ba5f4c5a6979a8bbb6bad4db20fb21ec275ceca5f24842fbdfaf5bef` | byte-identical |
+| openspec/changes/archive/2026-10-04-verify-bridge-retry-claim-lifecycle/context.md | `e114d68dcbdc8fbfb84bd06f8137ce25f0b7dd8b2fd511810f77aa84ad932293` | byte-identical |
+| openspec/changes/archive/2026-10-04-verify-bridge-retry-claim-lifecycle/design.md | `8ec5e77012125bfbbaaf11f0b1d8a4e5f26442d00eb28e07974623f3cdc88b97` | byte-identical |
+| openspec/changes/archive/2026-10-04-verify-bridge-retry-claim-lifecycle/fingerprints.md | `2687757882656704dc691223aaaf7fed2497424f577653e82cf58cf4607b11aa` | byte-identical |
+| openspec/changes/archive/2026-10-04-verify-bridge-retry-claim-lifecycle/proposal.md | `5e08021d5c6182660bccd2faf2059808008fcc3794003e6093a896ec41a46b73` | byte-identical |
+| openspec/changes/archive/2026-10-04-verify-bridge-retry-claim-lifecycle/specs/responses-api-compat/spec.md | `9f4e6da846d53708235697763b9e4030433301526feded2ef7e027807223d652` | byte-identical |
+| openspec/changes/archive/2026-10-04-verify-bridge-retry-claim-lifecycle/tasks.md | `a2db6882c42c2c59337be9b1267dcf14cc1b198fe085ccfa562c1d555838407b` | byte-identical |
+| openspec/changes/archive/2026-10-04-verify-bridge-retry-claim-lifecycle/verification.md | `791a05f5e7f078aa491bc8f0897fcedc9860cb342e355fb8193696f4f1131c4b` | byte-identical |
+| openspec/specs/chat-completions-compat/context.md | `415b36894eee852c0f3c32d8d32a12a600283930863ae6bcbb08c4ec35ae6dff` | byte-identical |
+| openspec/specs/chat-completions-compat/spec.md | `1849280c680b3b6981f4cacf7e56d2867458bc58720b33e7e228f858921be4f7` | byte-identical |
+| openspec/specs/images-api-compat/context.md | `7485b91a485789202d6065a51a805b569cccaa5d1fbad295f7c6f92963436292` | byte-identical |
+| openspec/specs/images-api-compat/spec.md | `dd2d42032122321be7706b71a7d68058bf9e515b1883b477d665991f2b5b0f59` | byte-identical |
+| openspec/specs/outbound-http-clients/context.md | `e41e96c99eebd69efc8aba8ae68234af8c020034188646615c79b03ed175b139` | byte-identical |
+| openspec/specs/outbound-http-clients/spec.md | `e81cb135bd386a3994b850c61da10e75d6a361ec9efd93b435796c96e1de359b` | byte-identical |
+| openspec/specs/proxy-runtime-observability/context.md | `055f898b0c172d77a9da2ac3a6556c52f1116c6c0a0586de23be4e3be00516d5` | byte-identical |
+| openspec/specs/proxy-runtime-observability/spec.md | `a4069b6d6a304a2ab6de3c9d68c45d2bbaccbf3f83c707accf5d012fc9f63544` | byte-identical |
+| openspec/specs/replica-operations/context.md | `4ac620c82b12c8b14dac878f4014d44f8f91f00527490b80562d146b7c20768c` | byte-identical |
+| openspec/specs/replica-operations/spec.md | `fd2175619f79d8eb0924265db783e18337c776362ac8f4950998171478084c8d` | byte-identical |
+| openspec/specs/responses-api-compat/context.md | `12f815294bf458e47663382303600c99c4bee53e720d4751995434c7748a1e44` | intended text overlap |
+| openspec/specs/responses-api-compat/spec.md | `05ac802b301964d653d260e4f49294836a62bf8fcca7d34bb5931a5bdb7696d5` | intended text overlap |
+| openspec/specs/telemetry/context.md | `8ace64ac62631ca3db4d0549191b12bc074dcc49e1dffe12792c01677311d6bc` | byte-identical |
+| openspec/specs/telemetry/spec.md | `b2cd3fedc48e7444938e083a801417102bf2bcc36e11fba1801d0670a1dd8e7e` | byte-identical |
+| openspec/specs/usage-refresh-policy/context.md | `89202f0cfc14f755ddfb39882df67e4a7af0b743c1e2e6bc479201388a19e48c` | intended text overlap |
+| openspec/specs/usage-refresh-policy/spec.md | `2427c9ec31eda7757e6ff46593bcc89ae80799a1f2e5a9ce73027a5109030e5e` | intended text overlap |
+| tests/integration/test_bridge_cleanup_delivery_contracts.py | `9f1d4ac698180c3ec4dcf0ed457b45bd076ebe07f13d638d887204cdf50cef7d` | byte-identical |
+| tests/integration/test_bridge_continuation_contracts.py | `64a6b2edca4d1117a10c7dccb331bb8d73098f646580600802ba422b020b96e3` | byte-identical |
+| tests/integration/test_bridge_retry_terminal_contracts.py | `54e801a45ffe634288b4dab8401b47ce62fa6e84c88a697bcd5b8b645bf2a366` | byte-identical |
+| tests/integration/test_direct_websocket_terminal_evidence.py | `3ea7ee23a46ba57a4561d26b08509f0f33d1cea990b127ef4d30932194dcb2ca` | byte-identical |
+| tests/integration/test_http_bridge_inline_images.py | `76288872e117b617dc11dfb0095f1d9621dfce9d5c8ac77d71a63621a7b82e08` | byte-identical |
+| tests/integration/test_image_control_transport_contracts.py | `fecf0ad6b32a68342e216f8f4f2ac06fd97d31184e983733e9dfb472d168d0ab` | byte-identical |
+| tests/integration/test_metrics_server_logging.py | `f2c470ef603f2f175b5d39d64efe6063d03d34b260e8492afcb318ab25f91831` | byte-identical |
+| tests/integration/test_native_sse_egress.py | `6f32725675952388d4e73062efa3276f46def2e7c97c8efe46cea322cee49ead` | byte-identical |
+| tests/integration/test_native_transport_contracts.py | `43bfe4fd3b4ecee26684b4dc9c1d6204d1109d9bd909e87e7a04e523ac0d8383` | byte-identical |
+| tests/integration/test_plan_json_contracts.py | `3fa4c2c946485ccaebbd5154aafb98868829b79a01206852ecac628017afc7ec` | byte-identical |
+| tests/integration/test_proxy_transient_retry.py | `b997cd05374c0b28e8f6cdcb8eef7891fc2758d4125cb5c144a969c536250e91` | byte-identical |
+| tests/integration/test_telemetry_key_contracts.py | `1ef30ac03dca5197dd0c722e71d0d730c6ff116aa0ecd3eea12afca01050c934` | byte-identical |
+| tests/integration/test_websocket_terminal_wire.py | `f5f88815acdfec43b5ecd56cc4e8f24b4c140679f4ed0b9c4b53a20b22c3b2ca` | byte-identical |
+| tests/unit/test_bridge_cleanup_delivery_contracts.py | `7e7f03a56669e0aa7b1de983033a375c24b4e668cd9019c88f345c25e3720671` | byte-identical |
+| tests/unit/test_bridge_retry_claim_lifecycle.py | `d1c33bb6f1342daf7a6e7f00f4b27052eef0b7b2623245af10cadd8745f49b86` | byte-identical |
+| tests/unit/test_codex_client.py | `eca09df2bbb63fc02c411b664e7e9c62397369543a58c6fe17f11be67938f018` | byte-identical |
+| tests/unit/test_codex_upstream_paths.py | `d7443f49d2989c5d38c34d48f86ee363e883baf1e40f1bd6280977d625101a05` | byte-identical |
+| tests/unit/test_host_models.py | `7337fd9bd0e79902f1acea118240b81a2734c0d33b4af1c97944d247417d84e3` | byte-identical |
+| tests/unit/test_http_bridge_event_queue.py | `64d8d2f36a111cf11ea0fbd7b6340670d5a69be88161648f96d24bbe48463dc4` | byte-identical |
+| tests/unit/test_network_recovery.py | `8aa66bfec470a22d5b30597183031f5589d264f8105ffaf853410f35456956b6` | byte-identical |
+| tests/unit/test_proxy_http_bridge.py | `4d909927ffe51e96057056133c4a7ff5dee634edc52644a7177828f5c4b5d518` | byte-identical |
+| tests/unit/test_proxy_utils.py | `d47818068c7e90ea06a68e916dafc2b8adff9793c4c533ec1456285878e4361d` | byte-identical |
+| tests/unit/test_structured_logging.py | `3b7b33d07720c44e6882e8a295792f0cda84f24c874fffc17c38501fc65602a4` | byte-identical |
+| tests/unit/test_telemetry_sender.py | `930b0ea5ce7572ab1287087b504a6c47e4728874aa62baf15547790c63333f74` | byte-identical |
+| tests/unit/test_websocket_terminal_provenance.py | `949b71d1e96db91f035bf79ad470127989f9ebb5d4fbf5378fe2ab6e05e18332` | byte-identical |

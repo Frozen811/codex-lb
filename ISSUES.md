@@ -747,7 +747,7 @@
 
 ### [✅ РЕШЕНО] [#2483: perf(usage): high memory usage and query latency in bulk history reads on SQLite](https://github.com/Soju06/codex-lb/issues/2483)
 - **Статус:** ✅ **РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ**
-  - **Решение:** Ограничение выборки истории использования (`per_account_row_cap`) для SQLite с использованием индексов `idx_usage_window_*` и составных UNION ALL запросов для floor lookback.
+  - **Решение:** Ограничение выборки истории использования (`per_account_row_cap`) для SQLite с использованием индексов `idx_usage_window_*` и составных UNION ALL запросов для floor lookback. Независимо проверены cutoffs/floor/ties и 100 000 rows → 1 280 snapshots; исправлена валидация negative/bool/non-integer caps, снимавших или нарушавших LIMIT. [Evidence](openspec/changes/archive/2026-10-04-verify-sqlite-history-reports-transcript/verification.md).
   - **Компоненты:** `app/modules/usage/repository.py`
   - **Тесты:** `tests/integration/test_usage_repository.py, tests/integration/test_dashboard_overview.py`
 - **Автор:** @lkraider | **Дата:** 2026-09-21 | **Метки:** `perf` `sqlite`
@@ -1001,7 +1001,7 @@
     1. Добавлена перманентная таблица почасовых роллапов отчетов (`report_rollups`, миграция `20260909_060000_add_report_rollup.py`).
     2. Исторические агрегаты читаются напрямую из предрассчитанных роллапов (`app/modules/reports/rollup_read.py`), исключая полный перебор сотен тысяч строк `request_logs`.
     3. Серверное кэширование отчетов (`app/modules/reports/cache.py`) и устранение батчинга по 500 элементов в `app/modules/reports/repository.py`.
-    4. Время генерации недельных и 90-дневных отчетов сокращено со 120с до миллисекундных значений.
+    4. Независимая локальная проверка 2026-10-04: недельный `/api/reports` на 543 000 SQLite rows — 21.416 с raw / 7.811 с folded / 0.015 с cached, с совпадающими totals и exact speed medians. Миллисекундная cold-report и production гарантия не подтверждены. [Evidence](openspec/changes/archive/2026-10-04-verify-sqlite-history-reports-transcript/verification.md).
   - **Компоненты:** `app/modules/reports/repository.py, app/modules/reports/rollup.py, app/modules/reports/rollup_read.py, app/modules/reports/cache.py`
   - **Тесты:** `tests/integration/test_reports_performance_api.py, tests/integration/test_report_rollup.py, tests/unit/test_reports_cache.py`
 - **Автор:** @bogorad | **Дата:** 2026-08-24 | **Метки:** `bug`
@@ -1149,7 +1149,7 @@
 
 ### [✅ РЕШЕНО] [#2291: bug: queued transcript batches wait between flushes](https://github.com/Soju06/codex-lb/issues/2291)
 - **Статус:** ✅ **РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ**
-  - **Решение:** Фоновый цикл сброса событий транскрипта (`HttpBridgeOperationEventBatcher._run`) теперь непрерывно сбрасывает все накопившиеся батчи операций во внутреннем цикле со `sleep(0)` до полного опустошения очереди, устраняя задержку `flush_interval_seconds` между пачками событий одного берста.
+  - **Решение:** Фоновый цикл сброса событий транскрипта (`HttpBridgeOperationEventBatcher._run`) непрерывно сбрасывает eligible nonterminal backlog ограниченными fair passes со `sleep(0)`, сохраняя terminal/shutdown fencing. Existing runtime независимо подтверждён fair-pass/failure tests и real SQLite rows_v1/chunks_v2; production ускорение не заявлено. [Evidence](openspec/changes/archive/2026-10-04-verify-sqlite-history-reports-transcript/verification.md).
   - **Компоненты:** `app/modules/proxy/http_bridge_event_batcher.py`
   - **Тесты:** `tests/unit/test_http_bridge_event_batcher.py`
 - **Автор:** @JustYannicc | **Дата:** 2026-09-09 | **Метки:** `bug` `triage`

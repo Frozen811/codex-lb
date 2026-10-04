@@ -31,6 +31,12 @@ Exact speed medians SHALL only run for date windows of at most seven days. Longe
 - **THEN** the report SHALL return aggregate totals without running raw median calculations
 - **AND** the page SHALL state that speed metrics require a window of seven days or less
 
+#### Scenario: Dense seven-day report
+- **GIVEN** a seven-day request history with valid speed evidence
+- **WHEN** the report is loaded through the dashboard API before or after historical totals are folded
+- **THEN** totals and exact daily speed medians SHALL agree
+- **AND** folding totals SHALL NOT suppress short-window speed samples still present in raw history
+
 ### Requirement: Bounded report caching
 Successful reports and options SHALL be cached for at most 60 seconds per normalized filter key within an application process, with bounded entry count and coalesced concurrent requests. Failures and cancelled loads SHALL NOT be cached. Browser report queries SHALL have a five-minute freshness interval, no periodic polling and no automatic retry. An explicit refresh control SHALL remain available. Reports SHALL expose their server generation time and the page SHALL show that time so an open, unpolled report does not imply live data.
 
