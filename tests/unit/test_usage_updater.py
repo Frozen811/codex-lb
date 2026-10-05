@@ -5504,3 +5504,53 @@ async def test_requested_refresh_registers_owned_lane_before_first_suspension(
     await requested
     assert lookups == [stored_account.id]
     assert usage_updater_module._USAGE_REFRESH_SINGLEFLIGHT._inflight == {}
+
+
+@pytest.mark.asyncio
+async def test_usage_updater_deactivated_workspace_excludes_only_its_record(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def stub_fetch_usage(**_: Any) -> UsagePayload:
+        return usage_client_module._usage_payload_or_raise(
+            {"error": {"code": "deactivated_workspace", "message": "Workspace has been deactivated"}},
+            402,
+        )
+
+    monkeypatch.setattr("app.modules.usage.updater.fetch_usage", stub_fetch_usage)
+    routing_unavailable_calls: list[str] = []
+    monkeypatch.setattr(usage_updater_module, "mark_account_routing_unavailable", routing_unavailable_calls.append)
+    unavailable = _make_account("workspace_a", "workspace_a", email="shared@example.test")
+    healthy = _make_account("workspace_b", "workspace_b", email="shared@example.test")
+    unavailable.chatgpt_user_id = healthy.chatgpt_user_id = "shared_user"
+    accounts_repo = StubAccountsRepository()
+    accounts_repo.accounts_by_id.update({unavailable.id: unavailable, healthy.id: healthy})
+    usage_repo = StubUsageRepository(return_rows=True)
+    updater = UsageUpdater(usage_repo, accounts_repo=accounts_repo)
+
+    assert await updater.refresh_accounts([unavailable], latest_usage={}) is False
+    assert unavailable.status == AccountStatus.DEACTIVATED
+    assert unavailable.deactivation_reason == "Usage API error: HTTP 402 - Workspace has been deactivated"
+    assert healthy.status == AccountStatus.ACTIVE
+    assert healthy.deactivation_reason is None
+    assert routing_unavailable_calls == [unavailable.id]
+    assert [update["account_id"] for update in accounts_repo.status_updates] == [unavailable.id]
+    monkeypatch.setattr(
+        "app.modules.usage.updater.fetch_usage",
+        AsyncMock(
+            return_value=UsagePayload.model_validate(
+                {
+                    "plan_type": "plus",
+                    "rate_limit": {
+                        "primary_window": {
+                            "used_percent": 10,
+                            "reset_at": int(time.time()) + 3600,
+                            "limit_window_seconds": 18000,
+                        }
+                    },
+                }
+            )
+        ),
+    )
+    assert await updater.refresh_accounts([healthy], latest_usage={}) is True
+    assert {entry.account_id for entry in usage_repo.entries} == {healthy.id}
+    assert healthy.status == AccountStatus.ACTIVE
+    assert unavailable.status == AccountStatus.DEACTIVATED
+    assert routing_unavailable_calls == [unavailable.id]

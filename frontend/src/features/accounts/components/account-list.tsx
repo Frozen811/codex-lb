@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronUp, Plus, RotateCcw, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,22 @@ import { formatSlug } from "@/utils/formatters";
 
 const STATUS_FILTER_OPTIONS = ["all", "active", "paused", "rate_limited", "quota_exceeded", "reauth_required", "deactivated"];
 
+function createExpiryClock() {
+  let now = Date.now();
+  return {
+    getSnapshot: () => now,
+    subscribe: (notify: () => void, enabled: boolean) => {
+      now = Date.now();
+      if (!enabled) return () => {};
+      const timer = window.setInterval(() => {
+        now = Date.now();
+        notify();
+      }, 60_000);
+      return () => window.clearInterval(timer);
+    },
+  };
+}
+
 export type AccountListProps = {
   accounts: AccountSummary[];
   selectedAccountId: string | null;
@@ -37,6 +53,7 @@ export type AccountListProps = {
   sortMode?: AccountSortMode;
   onSortModeChange?: (sortMode: AccountSortMode) => void;
   showResetCreditBadges?: boolean;
+  showResetCreditExpiryBadge?: boolean;
   readOnly?: boolean;
 };
 
@@ -50,6 +67,7 @@ export function AccountList({
   sortMode,
   onSortModeChange,
   showResetCreditBadges = true,
+  showResetCreditExpiryBadge = true,
   readOnly = false,
 }: AccountListProps) {
   const { t } = useTranslation();
@@ -59,6 +77,12 @@ export function AccountList({
   const [chooserOpen, setChooserOpen] = useState(false);
   const quotaDisplay = useAccountQuotaDisplayStore((s) => s.quotaDisplay);
   const activeSortMode = sortMode ?? DEFAULT_ACCOUNT_SORT_MODE;
+  const [expiryClock] = useState(createExpiryClock);
+  const subscribeExpiry = useCallback(
+    (notify: () => void) => expiryClock.subscribe(notify, showResetCreditBadges && showResetCreditExpiryBadge),
+    [expiryClock, showResetCreditBadges, showResetCreditExpiryBadge],
+  );
+  const now = useSyncExternalStore(subscribeExpiry, expiryClock.getSnapshot);
 
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -204,6 +228,11 @@ export function AccountList({
               selected={account.accountId === selectedAccountId}
               showAccountId={account.isEmailDuplicate === true}
               showResetCreditBadge={showResetCreditBadges}
+              resetCreditExpiresSoon={
+                showResetCreditExpiryBadge &&
+                Date.parse(account.resetCreditNearestExpiresAt ?? "") > now &&
+                Date.parse(account.resetCreditNearestExpiresAt ?? "") - now <= 3 * 86_400_000
+              }
               onSelect={onSelect}
             />
           ))

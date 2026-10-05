@@ -61,10 +61,11 @@ _TRANSIENT_CODES = frozenset(
 _MODEL_CAPACITY_MESSAGE_MARKERS = ("selected model is at capacity",)
 _SAFETY_BLOCK_MESSAGE_PREFIX = "This request was blocked by our safety systems."
 # The classes whose account-health write benches the account outright: a
-# persisted rate-limited or quota status with a reset deadline. Selection
+# persisted rate-limited or quota status with a reset deadline, or permanent
+# workspace deactivation. Selection
 # cannot use a benched account again in this request whatever its rejection
 # said, so for these the health write -- not the message -- settles exclusion.
-_BENCHING_FAILURE_CLASSES = frozenset({"rate_limit", "quota"})
+_BENCHING_FAILURE_CLASSES = frozenset({"rate_limit", "quota", "account_unavailable"})
 _MODEL_UNSUPPORTED_MESSAGE_RE = re.compile(
     r"^The '.+' model is not supported when using Codex with a ChatGPT account\.$"
 )
@@ -178,7 +179,9 @@ def classify_upstream_failure(
     phase: FailurePhase,
 ) -> ClassifiedFailure:
     failure_class: FailureClass
-    if error_code in _RATE_LIMIT_CODES:
+    if error_code == "deactivated_workspace":
+        failure_class = "account_unavailable"
+    elif error_code in _RATE_LIMIT_CODES:
         failure_class = "rate_limit"
     elif error_code in _QUOTA_CODES:
         failure_class = "quota"

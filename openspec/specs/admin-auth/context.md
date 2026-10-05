@@ -91,3 +91,7 @@ This does not grant an identity new role permissions or change password fallback
 TLS scheme projection has its own allowlist; see deployment-networking context.
 Production login and physical remote-host evidence remain separate from the
 isolated tests and runtime rehearsal recorded in issues-check section 25.
+
+## Configured admin lifetime
+
+The password session setting uses one lifetime policy for every role. For example, a remote admin setting 1224000 seconds receives exactly that cookie age and embedded expiry; there is no extra twelve-hour admin ceiling through thirty days. Values above thirty days retain the established locality/proxy restrictions. Existing sessions are not extended by a settings change; reauthentication is needed to obtain a new lifetime. Provider maximums, generation revocation and TOTP step-up remain independent. See [the lifetime requirement](spec.md#requirement-dashboard-password-sessions-use-a-configurable-absolute-lifetime).

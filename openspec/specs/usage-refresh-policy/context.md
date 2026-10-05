@@ -173,3 +173,9 @@ See [the stable-cycle requirement](spec.md#requirement-sliding-idle-warmup-claim
 For a 300-minute epoch cycle starting at E, account index 1 of a three-account pool has a slot at E+6000. Sliding samples at E+6000 and E+6121 both consume the claim ending at E+18000; the next cycle consumes E+36000. Fixed deadlines retain their own phase. Slot zero only adopts the epoch phase when consecutive observations show deadline movement matching elapsed observation time; treating every newly opened fixed window as sliding would suppress its first slot.
 
 No settings, schema revisions, or opt-in defaults change. Existing idle thresholds, freshness, cooldowns, safety-state filters, and selected-account scope remain applicable. Old moving-deadline claims may differ from a first stable claim after upgrade; existing cooldown bounds that transition. SQLite service/repository controls cover all three slot indices and 180/300-minute windows. Live reset recovery is independently verified through ingestion, scheduler restarts, duplicate workers, failed/skipped/pending claims, and fresh-poll skips. See [local evidence](../../changes/archive/2026-10-05-repair-warmup-fallback-and-reset-evidence/verification.md); provider and distributed database execution remain outside this run.
+
+## Workspace-specific refresh failures
+
+The [refresh exclusion contract](spec.md#requirement-workspace-exclusion-preserves-other-records-during-refresh) uses the same exact permanent-failure code policy as request routing. The identity does not substitute for the selected routing record's ID.
+
+For example, two records sharing a user identity can have different workspace availability. A refresh rejection of A leaves B active; refreshing B does not revive A. Bare payment-status responses do not justify permanent status updates. This repair does not add a workspace-discovery mechanism or change credential storage.

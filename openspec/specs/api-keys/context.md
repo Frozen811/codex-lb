@@ -43,3 +43,15 @@ yield the 8192 cap like any other large payload.
 `usage_share_percent` is an optional API-key policy, not an `ApiKeyLimit` counter. `ApiKeysService` builds the current rough estimate while producing `ApiKeyData`, so HTTP authentication reuses the normal API-key cache and direct WebSocket policy refresh uses the same projection code. The estimate has no independent ledger, reservation, scheduler, or cache.
 
 The estimator combines current long-window account usage with the key's proportional request demand over those account windows. Assigned keys use their assigned account pool; unscoped keys use the eligible global pool. For monthly-capacity plans, a later weekly-duration quota explicitly reported in the primary slot supersedes older monthly residue; an ordinary secondary row never does. Missing evidence is surfaced as account ids on the policy snapshot rather than guessed as zero.
+
+## Effective tier and microdollar settlement
+
+The [monetary settlement contract](spec.md#requirement-effective-ultrafast-tier-settles-exact-monetary-limits) uses the response's effective tier and the same cached-read/write partition as request logs. Decimal rate products avoid subtracting one microdollar at integral boundaries through a float USD roundtrip. Genuine fractions are still truncated.
+
+For example, 32 input and 7 output Astra Ultrafast tokens settle 4020 microdollars. A response confirming default is priced at default even when the request asked for Ultrafast. Finalization remains idempotent and exhausting a cost limit prevents the next dispatch; no subscription credits or historical non-NULL request costs are rewritten.
+
+## Images in dashboard model selection
+
+The [image model selection contract](spec.md#requirement-supported-image-models-in-key-model-selection) shares the request validator's supported identifiers with the dashboard picker. Typed entries carry image-only metadata, no reasoning options and native ownership. Adapter entries remain available with an empty native registry, and built-in image identifiers take precedence over colliding catalog/source identifiers.
+
+For example, an administrator can create a key allowing `gpt-image-2` and later replace its allowlist with `gpt-image-1-mini`. Both selections persist through the existing key APIs. The dashboard is a configuration catalog, so it additionally exposes these adapters; the public Responses catalog retains its native filtering. Automations filter out image-only entries because they use text generation. Dashboard-read authorization is unchanged, and no provider probe is needed to populate the picker.

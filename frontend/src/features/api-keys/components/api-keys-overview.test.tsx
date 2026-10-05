@@ -7,6 +7,24 @@ import { renderWithProviders } from "@/test/utils";
 import { ApiKeysOverview } from "./api-keys-overview";
 
 describe("ApiKeysOverview", () => {
+  it("counts recorded tokens and cost without request timestamps", () => {
+    const zero = { requestCount: 0, totalTokens: 0, cachedInputTokens: 0, totalCostUsd: 0 };
+    renderWithProviders(<ApiKeysOverview apiKeys={[
+      createApiKey({ id: "tokens", lastUsedAt: null, usageSummary: { ...zero, totalTokens: 1 } }),
+      createApiKey({ id: "cost", lastUsedAt: null, usageSummary: { ...zero, totalCostUsd: 0.01 } }),
+      createApiKey({ id: "empty", lastUsedAt: null, usageSummary: null }),
+    ]} />);
+    expect(screen.getByTestId("api-keys-overview-stat-used-keys")).toHaveTextContent("2");
+    expect(screen.getByTestId("api-keys-overview-stat-used-keys")).toHaveTextContent("1 idle");
+  });
+  it("counts historical last-use evidence as Used even without request history", () => {
+    renderWithProviders(<ApiKeysOverview apiKeys={[
+      createApiKey({ id: "old", lastUsedAt: "2026-01-01T00:00:00Z", usageSummary: null }),
+      createApiKey({ id: "new", lastUsedAt: null, usageSummary: null }),
+    ]} />);
+    expect(screen.getByTestId("api-keys-overview-stat-used-keys")).toHaveTextContent("1");
+    expect(screen.getByTestId("api-keys-overview-stat-used-keys")).toHaveTextContent("1 idle");
+  });
   it("summarizes the full key set and breaks usage down by metric", () => {
     renderWithProviders(
       <ApiKeysOverview

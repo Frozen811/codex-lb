@@ -22,7 +22,7 @@ from app.core.clients.thread_cache_identity import (
 from app.core.crypto import TokenEncryptor
 from app.core.usage.pricing import (
     UsageTokens,
-    calculate_cost_from_usage,
+    calculate_cost_microdollars_from_usage,
     get_pricing_for_model,
 )
 from app.core.usage.types import UsageWindowRow
@@ -2381,10 +2381,10 @@ def _calculate_cost_microdollars(
         cached_input_tokens=float(cached_input_tokens),
         cache_write_input_tokens=float(cache_write_input_tokens),
     )
-    cost_usd = calculate_cost_from_usage(usage, price, service_tier=service_tier)
-    if cost_usd is None:
+    cost_microdollars = calculate_cost_microdollars_from_usage(usage, price, service_tier=service_tier)
+    if cost_microdollars is None:
         return 0
-    return int(cost_usd * 1_000_000)
+    return cost_microdollars
 
 
 def _build_api_key_trends(

@@ -3019,7 +3019,16 @@ class _StreamingRetryMixin:
                                         outcome="owner_previsible_failure",
                                     )
                                     break
-                                if await _drain_pending_post_refresh_penalty_on_terminal(settlement):
+                                if classified["failure_class"] == "account_unavailable":
+                                    await _handle_or_defer_keyed_stream_health(
+                                        account,
+                                        _upstream_error_from_openai(error),
+                                        code,
+                                        http_status=tex.status_code,
+                                        retry_after_seconds=tex.retry_after_seconds,
+                                    )
+                                    setattr(tex, _STREAM_HEALTH_RECORDED_ATTR, True)
+                                elif await _drain_pending_post_refresh_penalty_on_terminal(settlement):
                                     await proxy._handle_stream_error(
                                         account,
                                         _upstream_error_from_openai(error),

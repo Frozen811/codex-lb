@@ -849,8 +849,11 @@ def test_responses_input_system_message_moves_to_instructions():
     }
     request = ResponsesRequest.model_validate(payload)
 
-    assert request.instructions == "primary\nsys\ndev"
-    assert request.input == [{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hi"}]}]
+    assert request.instructions == "primary\nsys"
+    assert request.input == [
+        {"type": "message", "role": "developer", "content": "dev"},
+        {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hi"}]},
+    ]
 
 
 _JSON_OBJECT_TEXT: JsonValue = {"format": {"type": "json_object"}}
@@ -869,9 +872,10 @@ def test_responses_json_object_keeps_json_instruction_in_input_as_developer():
     }
     request = ResponsesRequest.model_validate(payload)
 
-    assert request.instructions == "primary\nBe brief."
+    assert request.instructions == "primary"
     assert request.input == [
         {"type": "message", "role": "developer", "content": [{"type": "input_text", "text": "Answer in JSON."}]},
+        {"type": "message", "role": "developer", "content": "Be brief."},
         {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hi"}]},
     ]
 
@@ -1045,9 +1049,10 @@ def test_responses_input_non_message_system_and_developer_items_are_preserved(re
 
     request = request_type.model_validate(payload)
 
-    assert request.instructions == "dev"
+    assert request.instructions == ""
     assert request.input == [
         developer_directive,
+        {"type": "message", "role": "developer", "content": "dev"},
         system_directive,
         {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hi"}]},
     ]
@@ -1196,7 +1201,7 @@ def test_responses_input_developer_message_preserves_single_non_text_part():
     assert request.input == [
         {
             "type": "message",
-            "role": "user",
+            "role": "developer",
             "content": {"type": "input_file", "file_id": "file_123"},
         }
     ]

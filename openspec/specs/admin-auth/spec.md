@@ -51,7 +51,7 @@ The system SHALL enforce both a minimum and a maximum length on dashboard passwo
 
 ### Requirement: Dashboard password sessions use a configurable absolute lifetime
 
-The system SHALL issue dashboard password-authenticated sessions with an absolute lifetime controlled by persisted dashboard settings. The default persisted lifetime SHALL be 1 year. Configured lifetimes at or below 30 days SHALL apply to newly issued dashboard password sessions by setting both the encrypted session expiry payload and the cookie `Max-Age` to the same value. Configured lifetimes above 30 days SHALL apply only in standard dashboard auth mode when the request is socket-level local, or when an explicit loopback-host-header override is enabled, the request uses a loopback dashboard URL, and every field value of every forwarded client-IP header is empty. Non-loopback, proxy-aware, trusted-header, or bridge-without-override requests MUST receive a 12-hour effective lifetime without rewriting the persisted setting.
+The system SHALL issue dashboard password-authenticated sessions with an absolute lifetime controlled by persisted dashboard settings. The default persisted lifetime SHALL be 1 year. Configured lifetimes at or below 30 days SHALL apply equally to newly issued admin and guest dashboard password sessions by setting both the encrypted session expiry payload and the cookie `Max-Age` to the same value. Configured lifetimes above 30 days SHALL apply only in standard dashboard auth mode when the request is socket-level local, or when an explicit loopback-host-header override is enabled, the request uses a loopback dashboard URL, and every field value of every forwarded client-IP header is empty. Non-loopback, proxy-aware, trusted-header, or bridge-without-override requests MUST receive a 12-hour effective lifetime without rewriting the persisted setting.
 
 #### Scenario: Newly issued dashboard password session honors configured lifetime
 
@@ -90,6 +90,12 @@ The system SHALL issue dashboard password-authenticated sessions with an absolut
 - **WHEN** an admin changes the configured dashboard session lifetime after a session cookie has already been issued
 - **THEN** previously issued cookies continue to expire according to the expiry embedded in their encrypted payload
 - **AND** only newly issued dashboard password sessions use the updated lifetime
+
+#### Scenario: Remote admin honors the configured lifetime through thirty days
+
+- **WHEN** a remote admin completes password login with a configured lifetime of 1224000 or 2592000 seconds
+- **THEN** the cookie Max-Age and absolute session lifetime equal the configured value
+- **AND** reuse after twelve hours succeeds until absolute expiry without rolling the cookie
 
 ### Requirement: Dashboard OAuth callback errors hide internal exception details
 
@@ -390,4 +396,3 @@ ASCII codes, time-window verification, and replay protection MUST remain intact.
 
 - **WHEN** a current, unused ASCII TOTP code contains spaces or hyphens
 - **THEN** verification succeeds after existing formatting normalization
-

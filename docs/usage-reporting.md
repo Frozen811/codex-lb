@@ -35,6 +35,14 @@ The Codex client-version fallback is also retained across restarts. Bundled pric
 
 *Spec: [frontend-architecture](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/frontend-architecture)*
 
+## Accounts inventory controls
+
+**Accounts by plan** and **Accounts by status** show counts and percentages for all loaded accounts, including paused and deactivated accounts. List search and filters do not change these totals. The existing sort selector also offers status order and lowest/highest remaining 5h, weekly and monthly quota. Known zero quota participates in sorting; missing quota stays last in both directions.
+
+A warning dot in the reset-credit count badge marks the nearest expiry within the next 72 hours. It updates at most once a minute without a data refresh, honors the existing count and expiry badge settings, and disappears when the cached credit expiry has elapsed. It does not change redemption policy or refresh a paused account's cached snapshot.
+
+*Spec: [frontend-architecture](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/frontend-architecture)*
+
 ## Paused Account Reset Credits
 
 Open a paused account in **Accounts** to read its current reset-credit count without resuming request routing. The read uses the account's existing credential refresh and proxy route. Reset actions remain disabled while the account is paused, including automatic redemption.

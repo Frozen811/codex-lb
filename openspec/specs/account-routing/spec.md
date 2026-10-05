@@ -1843,3 +1843,33 @@ A refused unsent turn MUST receive a terminal server error and release its API-k
 - **WHEN** A is paused and a second turn is refused
 - **THEN** the already-dispatched response can still complete on its existing socket
 - **AND** only the new unsent turn is refused
+
+### Requirement: Relative availability fallback retains persisted usage ordering
+
+When eligible relative-availability candidates all have zero scores or zero draw weights, selection MUST compare persisted secondary usage, then persisted primary usage, before existing recency and account-ID tie breakers. A supplied selection seed MUST break only ties in persisted usage. Pressure-adjusted scoring MUST NOT erase the ordering of differently used accounts. Candidates without separately recorded persisted usage MUST retain their existing usage fallback behavior.
+
+#### Scenario: Zero score fallback prefers the less used account
+
+- **WHEN** two eligible accounts have persisted secondary usage of 95 and 38 percent but equal pressure-adjusted usage and zero availability scores
+- **THEN** the 38-percent account is selected with and without a selection seed
+
+#### Scenario: Zero draw weights retain persisted ordering
+
+- **WHEN** eligible accounts have nonzero availability scores but all final draw weights are zero
+- **THEN** selection prefers lower persisted secondary and primary usage
+
+### Requirement: Deactivated workspaces leave eligible failover selection
+The exact upstream code deactivated_workspace MUST deactivate only the selected workspace routing record with a workspace-specific reason. An account-neutral request MUST be eligible to fail over before downstream-visible output. Hard-owned requests MUST NOT cross accounts or retry the unavailable owner. Keyed reservations MUST settle before terminal health writes. Unknown or code-less HTTP 402 responses MUST NOT be treated as permanent workspace evidence.
+
+#### Scenario: Neutral request has a healthy alternative
+- **WHEN** the selected workspace reports deactivated_workspace before output
+- **THEN** a healthy eligible alternative can complete the request
+- **AND** later selection excludes the deactivated record
+
+#### Scenario: Owned or visible request
+- **WHEN** a workspace rejection occurs on a hard-owned request or after output is visible
+- **THEN** the original error is surfaced without replay on another account
+
+#### Scenario: Payment-status rejection lacks workspace evidence
+- **WHEN** upstream returns HTTP 402 with an unknown or absent code
+- **THEN** the routing record remains active

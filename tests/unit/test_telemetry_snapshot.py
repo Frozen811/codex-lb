@@ -212,6 +212,25 @@ def test_client_mapping_table_and_unknown_family_are_allowlisted() -> None:
     assert "senpi" not in str(shares)
 
 
+@pytest.mark.asyncio
+async def test_interactive_cli_family_survives_persisted_log_aggregation(async_session: AsyncSession) -> None:
+    async_session.add_all(
+        [
+            _request_log("interactive-a", model="gpt-5.4", useragent_group="codex_cli_rs"),
+            _request_log("interactive-b", model="gpt-5.4", useragent_group="codex_cli_rs"),
+            _request_log("exec", model="gpt-5.4", useragent_group="codex_exec"),
+            _request_log("unknown", model="gpt-5.4", useragent_group="private-client"),
+        ]
+    )
+    await async_session.commit()
+    snapshot = await TelemetrySnapshotBuilder(async_session).build(
+        "00000000-0000-4000-8000-000000000099", consent="undecided"
+    )
+    assert snapshot.usage_7d.clients == {"codex-cli": 0.75, "other": 0.25}
+    assert snapshot.usage_7d.clients_other_ratio == 0.25
+    assert "private-client" not in snapshot.model_dump_json()
+
+
 def test_client_share_emission_rejects_noncanonical_mapping(monkeypatch) -> None:
     monkeypatch.setitem(CLIENT_FAMILY_BY_RAW_GROUP, "unexpected", "private-client")
     assert "private-client" not in CANONICAL_CLIENT_FAMILIES

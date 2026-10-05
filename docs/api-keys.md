@@ -27,6 +27,14 @@ Keys can also be scoped to specific accounts, so a key draws quota only from the
 
 ![API keys with assigned accounts](screenshots/apis-assigned-accounts.jpg)
 
+## Inspecting keys and choosing image models
+
+The **APIs** page starts in Detail view. Switch to **List view** for a compact, sortable inventory; the view choice is remembered in your browser. Search, status and usage filters work together. **Key not used** means no recorded last use and no positive request, token or cost usage. Missing usage remains unknown. Open a list row to inspect its details; read-only access does not expose management actions.
+
+The allowed-model picker includes all supported Images adapter identifiers, including `gpt-image-2` and its supported variants. Select an image identifier when creating or editing a key to restrict its image requests. These entries are marked as image-only and do not appear in Automations or get added to the public Responses model catalog.
+
+*Specs: [frontend-architecture](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/frontend-architecture), [api-keys](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/api-keys)*
+
 ## Estimated usage-share limits
 
 An API key can optionally cap its estimated share of its subscription-account pool. A 20% cap gives it an estimated budget equal to 20% of the normalized long-window capacity of its assigned accounts, or of the eligible global pool when the key is unscoped. The cap can be combined with fixed token and dollar limits.

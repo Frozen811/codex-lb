@@ -326,7 +326,6 @@ class HttpBridgeOperationEventBatcher:
                 timeout=max(self._terminal_append_timeout_seconds, 0.0),
             )
         except asyncio.CancelledError:
-            append_task.cancel()
             await self._clear_operation(operation_id, attempt=attempt)
             raise
         if append_task in done:
@@ -347,7 +346,9 @@ class HttpBridgeOperationEventBatcher:
                 )
             return append_result
 
-        append_task.cancel()
+        # The task set owns this write until it finishes or shutdown drains it.
+        # Cancellation inside an SQLite statement can strand the writer slot.
+        # Fallback settlement fences a late commit through terminal_append_phase.
         await self._clear_operation(operation_id, attempt=attempt)
         logger.info(
             "Timed out persisting HTTP bridge terminal transcript operation_id=%s timeout_seconds=%.1f",

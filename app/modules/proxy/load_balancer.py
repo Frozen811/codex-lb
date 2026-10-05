@@ -145,7 +145,9 @@ from app.modules.proxy._load_balancer.sticky_selection import (
 from app.modules.proxy._load_balancer.tunables import (
     RoutingTunables,
     account_lease_stale_ttl_seconds,
+    apply_runtime_pressure,
     resolve_routing_tunables,
+    runtime_pressure_percent,
 )
 from app.modules.proxy._load_balancer.types import (
     AccountConcurrencyCaps,
@@ -2556,19 +2558,13 @@ def _state_from_account(
         soft_drain_enabled=soft_drain_enabled,
     )
 
-    inflight_pressure_pct = (
-        runtime.inflight_response_creates + runtime.inflight_streams
-    ) * tunables.inflight_penalty_pct
-    leased_token_pressure_pct = 0.0
     long_window_key = "secondary"
     if effective_secondary_entry is not None and effective_secondary_entry.window == "monthly":
         long_window_key = "monthly"
     capacity_credits = usage_core.capacity_for_plan(account.plan_type, long_window_key) or 0.0
-    if capacity_credits > 0.0 and runtime.leased_tokens > 0:
-        leased_token_pressure_pct = runtime.leased_tokens * tunables.lease_token_weight / capacity_credits * 100.0
-    pressure_pct = inflight_pressure_pct + leased_token_pressure_pct
-    effective_used_percent = None if used_percent is None else min(100.0, used_percent + pressure_pct)
-    effective_secondary_used_percent = None if secondary_used is None else min(100.0, secondary_used + pressure_pct)
+    pressure_pct = runtime_pressure_percent(runtime, tunables)
+    effective_used_percent = apply_runtime_pressure(used_percent, pressure_pct)
+    effective_secondary_used_percent = apply_runtime_pressure(secondary_used, pressure_pct)
     usage_exhaustion_evidence_status = status in (AccountStatus.QUOTA_EXCEEDED, AccountStatus.RATE_LIMITED)
 
     return AccountState(
@@ -2581,6 +2577,8 @@ def _state_from_account(
         blocked_at=next_blocked_at,
         cooldown_until=runtime.cooldown_until,
         secondary_used_percent=effective_secondary_used_percent,
+        persisted_used_percent=used_percent,
+        persisted_secondary_used_percent=secondary_used,
         secondary_reset_at=secondary_reset,
         last_error_at=runtime.last_error_at,
         last_selected_at=runtime.last_selected_at,

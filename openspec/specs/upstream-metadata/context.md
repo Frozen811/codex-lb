@@ -52,3 +52,9 @@ For example, an unpriced Astra request with 1,000 input tokens (500 cached), 100
 Run `uv run python scripts/update_upstream_metadata.py` to refresh the pricing snapshot and generated stable Codex version. Generation requires both pricing sources and a valid live version; runtime may degrade to one source. Unchanged pricing preserves its timestamp to avoid empty daily updates.
 
 The `Update upstream metadata` workflow runs daily at 06:23 UTC or manually. It uses the repository's existing `RELEASE_PLEASE_TOKEN`, updates one maintenance branch without force-pushing, runs catalog/version tests, and opens a normal reviewable PR. It does not merge automatically. A merge conflict stops the workflow for resolution rather than overwriting review changes. No new `CODEX_LB_*` setting is required.
+
+## Ultrafast catalog accounting
+
+[Validated Ultrafast pricing](spec.md#requirement-validated-ultrafast-price-groups-survive-offline-startup) includes the same disjoint cache-write categories as the other tiers. Astra's bundled short-context rates are 60/6/75/300 USD per million ordinary input, cached reads, writes and output; long-context rates are 120/12/150/450. These were checked against [OpenAI pricing](https://developers.openai.com/api/docs/pricing) on 2026-10-05.
+
+Catalog adapters preserve complete groups and their shared threshold. Compatible base-only refreshes can inherit missing tier metadata; incompatible prices or mismatched context thresholds cannot. A bundled snapshot remains usable offline without network activity during accounting. For example, 100000 uncached input and 10000 output tokens cost 9 USD when the response confirms Ultrafast. This does not calibrate subscription credit capacities.

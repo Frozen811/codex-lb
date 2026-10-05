@@ -220,6 +220,23 @@ Environment-oriented overlays kept for convenience:
 
 The mode overlays define the installation contract. The environment overlays tune scale, observability, and routing posture.
 
+## Startup Probe Timing
+
+Startup timing is governed by the [deployment-installation spec](../../../openspec/specs/deployment-installation/spec.md).
+The defaults remain a 5-second initial delay, a 2-second period, a 1-second
+timeout and 30 consecutive failures. To allow a longer legitimate cold start:
+
+```yaml
+startupProbe:
+  failureThreshold: 90
+```
+
+`initialDelaySeconds` accepts nonnegative integers; `periodSeconds`,
+`timeoutSeconds` and `failureThreshold` accept positive integers.
+`successThreshold` stays at 1. The chart keeps `/health/startup` on port `http`;
+these values do not change readiness or liveness timing. Invalid or null values
+fail chart validation.
+
 ## Schema and Migration Behavior
 
 This chart intentionally keeps migration behavior explicit by install mode.

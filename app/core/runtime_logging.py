@@ -30,7 +30,7 @@ _SENSITIVE_LOG_VALUE_PATTERNS = (
         r"(?:\s*,\s*(?!(?:status|request_id|code|latency|method|path)\s*=)[a-zA-Z0-9_-]+\s*=\s*(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^,\s&]+))*"
     ),
     re.compile(
-        r"(?i)((?<![\w-])(?:[\"']?authorization[\"']?\s*[:=]\s*|\bauthorization\s+))"
+        r"(?i)((?<![\w-])(?:[\"']?(?:proxy-)?authorization[\"']?\s*[:=]\s*|\b(?:proxy-)?authorization\s+))"
         r"(b?\"(?:\\.|[^\"\\])*\"|b?'(?:\\.|[^'\\])*'|[^\r\n]*)"
     ),
 )
@@ -269,6 +269,10 @@ def _redact_authorization_value(match: re.Match[str]) -> str:
     if value.startswith(("b'", 'b"')):
         return f"{match.group(1)}b{value[1]}{_LOG_REDACTION}{value[1]}"
     quote = value[0] if value.startswith(("'", '"')) and value.endswith(value[0]) else ""
+    if quote and "'proxy-authorization'" in match.group(1).casefold():
+        scheme = re.match(r"(?i)(basic\s+)", value[1:-1])
+        if scheme is not None:
+            return f"{match.group(1)}{quote}{scheme.group(1)}{_LOG_REDACTION}{quote}"
     return f"{match.group(1)}{quote}{_LOG_REDACTION}{quote}"
 
 

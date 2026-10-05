@@ -35,6 +35,7 @@ PERMANENT_FAILURE_CODES = {
     # instead of remaining active while every request retries the dead token.
     "invalid_refresh_token": "Refresh token invalid - re-login required",
     "account_deactivated": "Account has been deactivated",
+    "deactivated_workspace": "Workspace has been deactivated",
     "account_suspended": "Account has been suspended",
     "account_deleted": "Account has been deleted",
 }
@@ -166,6 +167,9 @@ class AccountState:
     inflight_response_creates: int = 0
     inflight_streams: int = 0
     leased_tokens: float = 0.0
+    # Pressure-free evidence for relative availability's zero-score fallback.
+    persisted_used_percent: float | None = None
+    persisted_secondary_used_percent: float | None = None
     routing_policy: str = ROUTING_POLICY_NORMAL
     ignore_standard_quota: bool = False
     # Multiplier applied to this candidate's draw weight by the weighted
@@ -1131,11 +1135,7 @@ def _select_relative_availability(
         membership_seed=selection_seed,
     )
     if not weighted_candidates:
-        winner = (
-            _seeded_least_used(available, selection_seed)
-            if selection_seed is not None
-            else min(available, key=_usage_sort_key)
-        )
+        winner = _persisted_least_used(available, selection_seed)
         _log_relative_availability_winner(
             winner,
             current=current,
@@ -1153,11 +1153,7 @@ def _select_relative_availability(
     weights = [weight * _selection_weight_multiplier(state) for state, weight, _ in weighted_candidates]
     total = sum(weights)
     if total <= 0.0:
-        winner = (
-            _seeded_least_used(available, selection_seed)
-            if selection_seed is not None
-            else min(available, key=_usage_sort_key)
-        )
+        winner = _persisted_least_used(available, selection_seed)
         _log_relative_availability_winner(
             winner,
             current=current,
@@ -1193,6 +1189,24 @@ def _select_relative_availability(
 def _seeded_account(pool: list[AccountState], seed: str) -> AccountState:
     """The seed's choice among candidates the strategy was about to draw from."""
     return min(pool, key=lambda state: _decorrelated_tie_breaker(state.account_id, seed))
+
+
+def _persisted_usage_rank(state: AccountState) -> tuple[float, float]:
+    primary = state.persisted_used_percent
+    if primary is None:
+        primary = _priority_primary_used(state)
+    secondary = state.persisted_secondary_used_percent
+    if secondary is None:
+        secondary = _priority_secondary_used(state, primary)
+    return secondary, primary
+
+
+def _persisted_least_used(available: list[AccountState], seed: str | None) -> AccountState:
+    least_used = min(_persisted_usage_rank(state) for state in available)
+    tied = [state for state in available if _persisted_usage_rank(state) == least_used]
+    if seed is not None:
+        return _seeded_account(tied, seed)
+    return min(tied, key=lambda state: (state.last_selected_at or 0.0, state.account_id))
 
 
 def _seeded_least_used(available: list[AccountState], seed: str) -> AccountState:
@@ -1611,10 +1625,10 @@ def failover_outcome(
     if downstream_visible:
         return FailoverOutcome(action="surface", ended_by=None)
     if owner_bound:
-        if same_account_retry_available:
+        if same_account_retry_available and failure_class != "account_unavailable":
             return FailoverOutcome(action="retry_same_account", ended_by=None)
         return FailoverOutcome(action="surface", ended_by=None)
-    if failure_class not in ("rate_limit", "quota", "retryable_transient"):
+    if failure_class not in ("rate_limit", "quota", "retryable_transient", "account_unavailable"):
         return FailoverOutcome(action="surface", ended_by="non_retryable")
     if not more_candidates_possible:
         return FailoverOutcome(action="surface", ended_by="pool_exhausted")

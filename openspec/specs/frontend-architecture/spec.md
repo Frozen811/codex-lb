@@ -225,10 +225,10 @@ The Accounts page account list SHALL honor a locally stored appearance preferenc
 - **THEN** the account list shows the weekly row and hides the 5h row for accounts that have both quota windows
 
 ### Requirement: Accounts list orders by next reset
-The Accounts page account list SHALL order accounts by the earliest upcoming quota reset timestamp among the rendered quota windows. Accounts without any reset timestamp SHALL sort after accounts with a reset timestamp. When reset timestamps are equal or unavailable, the list MAY fall back to a stable text-based order.
+When reset time soonest-first is selected, the Accounts page account list SHALL order accounts by the earliest upcoming quota reset timestamp among the rendered quota windows. Accounts without any reset timestamp SHALL sort after accounts with a reset timestamp. When reset timestamps are equal or unavailable, the list MAY fall back to a stable text-based order.
 
 #### Scenario: Earlier reset sorts first
-- **WHEN** two accounts are shown in the account list and one account has an earlier quota reset time than the other
+- **WHEN** reset time soonest-first is selected and two accounts have different upcoming visible quota reset times
 - **THEN** the earlier-reset account appears before the later-reset account
 
 ### Requirement: Dashboard request-log filtering supports API keys
@@ -1087,14 +1087,15 @@ The accounts dashboard MUST allow operators to bind an account to a proxy pool a
 
 The Accounts page account list SHALL expose sort modes for reset time
 soonest-first, reset time latest-first, account name ascending, and account name
-descending. The default sort mode SHALL remain reset time soonest-first. The
+descending, most reset credits, status in both directions, and remaining 5h, weekly and monthly quota in both directions. The default sort mode SHALL remain most reset credits. The
 same selected sort mode SHALL apply to both the rendered account list and the
 page-level selected-account fallback.
 
-#### Scenario: Reset soonest remains the default
+#### Scenario: Most reset credits remains the default
 
 - **WHEN** the account list renders without an explicit sort mode
-- **THEN** accounts with the earliest upcoming visible quota reset sort first
+- **THEN** accounts with more available reset credits sort first
+- **AND** equal counts use soonest valid credit expiry, then the existing deterministic reset, label and identifier ties
 
 #### Scenario: Reset latest sorts finite resets descending
 
@@ -4318,3 +4319,81 @@ The Accounts detail actions MUST expose Resume for `quota_exceeded` accounts thr
 - **GIVEN** a selected reauthentication-required account
 - **WHEN** account actions are displayed
 - **THEN** reauthentication remains available and Resume is absent
+
+### Requirement: Accounts inventory distributions
+The Accounts page MUST display plan and status distributions for all loaded accounts, including paused, deactivated and reauthentication-required accounts. Counts and percentages MUST remain independent of list search, filtering and pagination. Legends MUST be keyboard accessible, and empty data MUST have a distinct no-data state.
+
+#### Scenario: Filtered inventory
+- **WHEN** an operator filters the account list
+- **THEN** distribution totals and category counts continue to reflect every loaded account
+
+#### Scenario: Empty or unavailable inventory
+- **WHEN** the account read succeeds with no accounts
+- **THEN** distributions show zero and no data
+- **AND** a failed initial read shows its error instead of a successful empty distribution
+
+### Requirement: Optional compact API-key inventory
+The APIs page MUST retain its default detail view and provide a persisted optional compact list. The compact list MUST support name, status, request count, expiry and last-used sorting, pagination, selected-key details and combined search/status/unused filters. Unknown numeric/date values MUST sort last in either direction. Read-only sessions MUST retain inspection without mutation controls. Unavailable browser storage MUST NOT prevent switching views.
+
+#### Scenario: Recorded usage determines unused keys
+- **WHEN** unused filtering is enabled
+- **THEN** keys with a recorded last use or positive request/token/cost usage are excluded
+- **AND** the overview and filter agree on whether a key has recorded usage
+
+#### Scenario: Read-only paginated compact list
+- **WHEN** a read-only operator opens a key on the second page of the compact list
+- **THEN** its details are inspectable and mutation actions remain unavailable
+
+### Requirement: Reset-credit expiry warning
+An account with positive available reset credits MUST display an accessible warning in its count badge when its nearest valid expiry is later than now and at most 72 hours away. The warning MUST honor the existing count and expiry visibility settings, update without a data refetch and release its timer when hidden or unmounted. Zero credits and missing, invalid or elapsed expiry MUST NOT display the warning.
+
+#### Scenario: Live warning boundary
+- **WHEN** the nearest expiry enters the next 72 hours while the list remains open
+- **THEN** the warning appears without a refetch and disappears after expiry
+
+#### Scenario: Warning visibility
+- **WHEN** either badge setting is disabled or the available count is zero
+- **THEN** the warning is absent
+
+### Requirement: Status and remaining-quota account sorting
+The Accounts sort selector MUST offer both directions for status and remaining 5-hour, weekly and monthly quota while preserving existing defaults and sort modes. Active-first status order MUST be active, paused, rate-limited, quota-exceeded, reauthentication-required and deactivated. Missing or non-finite quota MUST remain last in either direction; zero MUST remain a known exhausted value. Equal values MUST resolve deterministically using existing reset, label and account-identifier ties. Sorting MUST preserve input data, filters and explicit selection.
+
+#### Scenario: Known zero and unknown quota
+- **WHEN** accounts with zero, positive and unknown remaining quota are sorted in either direction
+- **THEN** unknown values are last and zero participates as a known value
+
+#### Scenario: Explicit selection survives sorting
+- **WHEN** the operator changes a sort mode while an account is selected
+- **THEN** the selected account identifier is preserved and the rendered list follows the chosen order
+
+### Requirement: Account auth imports support ordered retryable batches
+
+The Accounts import dialog SHALL allow one or more auth JSON files and SHALL send each file sequentially through the existing single-file import API in selection order. Successful files MUST leave the pending selection. A failure MUST stop dispatch and retain exactly the failed and unattempted files for retry. While any batch is running, file selection, repeated submission, Escape, outside dismissal and the close control MUST NOT interrupt or duplicate the batch. The dialog SHALL clear and close after all selected files succeed. Existing account authorization and per-file refresh behavior MUST remain in effect. Filenames SHALL be displayed as text without rendering file contents.
+
+#### Scenario: Ordered successful import
+
+- **WHEN** an operator selects three auth files and submits
+- **THEN** each file is sent once in order, with at most one active import
+- **AND** the dialog closes with an empty pending selection after the third success
+
+#### Scenario: Partial failure retains only pending files
+
+- **WHEN** the second file fails after the first file succeeds
+- **THEN** the third file has not been sent and only the second and third files remain selected
+- **AND** retry starts with the second file and never reimports the first file
+
+#### Scenario: Busy batch cannot be dismissed or repeated
+
+- **WHEN** an import is pending and the operator attempts Escape, outside click, close or resubmission
+- **THEN** the batch stays open and continues without overlapping imports
+- **AND** changing the file selection is disabled
+
+### Requirement: Model Source capability controls expose their translated names
+
+Every capability checkbox in Model Source create and edit forms MUST expose a programmatic name matching its translated visible label. Clicking the label and pressing Space on a focused checkbox SHALL toggle the same capability. Each rendered form SHALL associate its labels with its own controls.
+
+#### Scenario: Named controls in both forms
+
+- **WHEN** either create or edit is opened
+- **THEN** every capability checkbox can be found by its role and translated name
+- **AND** label click and keyboard Space change that control's checked state

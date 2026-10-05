@@ -1184,7 +1184,7 @@ text. A match MUST NOT consume CR or LF or any text from a following line.
 Unterminated JSON secret values MUST be redacted through the end of the
 current line. A Bearer credential MUST treat a glued `:` tail on the same
 line as credential material. Same-line comma and ampersand separators MUST
-keep their existing truncation behavior except within an explicit authorization
+keep their existing truncation behavior except within an explicit Authorization or Proxy-Authorization
 field, whose value MUST follow the authorization-field redaction requirement. Records below WARNING MUST still
 skip these keyed patterns.
 
@@ -1226,6 +1226,13 @@ skip these keyed patterns.
 - **WHEN** secret-pattern redaction is applied once and then again
 - **THEN** the terminator bytes and line count are unchanged
 - **AND** the second pass equals the first
+
+#### Scenario: Malformed proxy authorization scheme fails closed
+
+- **WHEN** a WARNING or higher log contains an explicit Proxy-Authorization field with a malformed Bearer-like scheme and a credential parameter list
+- **THEN** the entire unquoted field value is redacted through the current line
+- **AND** no credential parameters survive in text or JSON output
+- **AND** the following diagnostic line is preserved
 
 ### Requirement: Upstream reasoning-replay rejections are counted
 
@@ -1590,7 +1597,7 @@ The server command MUST accept `--log-file PATH`. When given, every log record t
 
 ### Requirement: Explicit authorization fields are masked without credential-boundary guesses
 
-At WARNING or higher, an explicit case-insensitive `authorization` field in rendered text or an error-log field MUST have its complete value masked. A complete single- or double-quoted value MUST retain its field delimiters and adjacent context. An unquoted or unterminated value MUST be masked through the current line end, including comma or ampersand separated parameters, diagnostic-looking keys, malformed parameters, whitespace-separated tails and tails following a redaction placeholder. A placeholder MUST NOT establish that a field is safe. In multiline rendered logs, CR and LF delimiters and subsequent lines MUST remain intact; repeated redaction MUST produce identical output. Existing standalone Basic/Bearer token redaction and structured secret-key masking MUST remain intact.
+At WARNING or higher, an explicit case-insensitive `authorization` or `proxy-authorization` field in rendered text or an error-log field MUST have its complete value masked. A complete single- or double-quoted value MUST retain its field delimiters and adjacent context. An unquoted or unterminated value MUST be masked through the current line end, including comma or ampersand separated parameters, diagnostic-looking keys, malformed parameters, whitespace-separated tails and tails following a redaction placeholder. A placeholder MUST NOT establish that a field is safe. In multiline rendered logs, CR and LF delimiters and subsequent lines MUST remain intact; repeated redaction MUST produce identical output. Existing standalone Basic/Bearer token redaction and structured secret-key masking MUST remain intact.
 
 #### Scenario: Quoted comma and malformed auth parameters cannot leave tails
 
@@ -1612,6 +1619,12 @@ At WARNING or higher, an explicit case-insensitive `authorization` field in rend
 - **WHEN** an authorization field is followed by LF, CRLF or CR and a diagnostic line
 - **THEN** those terminators and the next line survive unchanged
 - **AND** applying the redactor again gives the same result
+
+#### Scenario: Proxy header repr preserves the Basic scheme while masking tails
+
+- **WHEN** a quoted Proxy-Authorization mapping field contains a Basic value, including a preexisting placeholder followed by credential material
+- **THEN** the rendered value keeps its Basic scheme spelling with only the redaction placeholder
+- **AND** credential tails do not survive repeated redaction
 
 ### Requirement: Metrics startup preserves shared operator logging
 

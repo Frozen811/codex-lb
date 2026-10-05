@@ -6,6 +6,7 @@ import { renderWithProviders } from "@/test/utils";
 import type { ModelSource } from "@/features/model-sources/schemas";
 
 import { ModelSourceEditDialog } from "./model-source-edit-dialog";
+import { ModelSourceCreateDialog } from "./model-source-create-dialog";
 
 function createModelSource(overrides: Partial<ModelSource> = {}): ModelSource {
   return {
@@ -49,6 +50,23 @@ function createModelSource(overrides: Partial<ModelSource> = {}): ModelSource {
 }
 
 describe("ModelSourceEditDialog", () => {
+  it.each(["create", "edit"])("supports named keyboard and label capability toggles in %s", async (mode) => {
+    const user = userEvent.setup({ delay: null });
+    const props = { open: true, busy: false, onOpenChange: vi.fn(), onSubmit: vi.fn().mockResolvedValue(undefined) };
+    renderWithProviders(mode === "create"
+      ? <ModelSourceCreateDialog {...props} />
+      : <ModelSourceEditDialog {...props} source={createModelSource()} />);
+    for (const name of ["Chat completions", "Responses", "Audio transcriptions", "Embeddings", "Streaming", "Tools", "Vision", "Reasoning"]) {
+      const checkbox = screen.getByRole("checkbox", { name });
+      const checked = checkbox.getAttribute("aria-checked");
+      checkbox.focus();
+      await user.keyboard(" ");
+      expect(checkbox).toHaveAttribute("aria-checked", checked === "true" ? "false" : "true");
+      await user.click(screen.getByText(name, { selector: "label", exact: true }));
+      expect(checkbox).toHaveAttribute("aria-checked", checked);
+    }
+  });
+
   it("prefills existing fields including pricing and models", () => {
     renderWithProviders(
       <ModelSourceEditDialog

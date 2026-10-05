@@ -2403,7 +2403,7 @@ def test_state_from_account_keeps_raw_usage_evidence_separate_from_pressure(monk
         runtime=RuntimeState(inflight_streams=1),
     )
 
-    assert state.used_percent == 100.0
+    assert state.used_percent == 99.0
     assert state.priority_used_percent == 98.0
 
 

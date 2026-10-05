@@ -1,11 +1,42 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
+import { http, HttpResponse } from "msw";
 
 import App from "@/App";
 import { renderWithProviders } from "@/test/utils";
+import { server } from "@/test/mocks/server";
 
 describe("accounts flow integration", () => {
+  it("imports through the per-file API and retries only the rejected suffix", async () => {
+    const user = userEvent.setup({ delay: null });
+    const observed: string[] = [];
+    let fail = true;
+    server.use(http.post("/api/accounts/import", ({ request }) => {
+      expect(request.headers.get("content-type")).toContain("multipart/form-data");
+      const name = ["first.json", "second.json", "second.json", "third.json"][observed.length];
+      observed.push(name);
+      if (name === "second.json" && fail) {
+        fail = false;
+        return HttpResponse.json({ error: { code: "invalid_auth", message: "Invalid auth file" } }, { status: 400 });
+      }
+      return HttpResponse.json({ accountId: name, email: "synthetic@example.invalid", planType: "plus", status: "active" });
+    }));
+    window.history.pushState({}, "", "/accounts");
+    renderWithProviders(<App />);
+    await user.click(await screen.findByRole("button", { name: "Add account" }));
+    await user.click(screen.getByRole("button", { name: /Import.*auth/i }));
+    await user.upload(await screen.findByLabelText(/auth\.json file/i), ["first.json", "second.json", "third.json"].map(name => new File(["{}"], name, { type: "application/json" })));
+    await user.click(screen.getByRole("button", { name: "Import" }));
+    await waitFor(() => expect(observed).toEqual(["first.json", "second.json"]));
+    expect((await screen.findAllByText("Invalid auth file")).length).toBeGreaterThan(0);
+    expect(observed).toEqual(["first.json", "second.json"]);
+    expect(screen.queryByText("first.json")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Import" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(observed).toEqual(["first.json", "second.json", "second.json", "third.json"]);
+  });
+
   it("supports account selection and pause/resume actions", async () => {
     const user = userEvent.setup({ delay: null });
 

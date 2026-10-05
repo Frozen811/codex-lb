@@ -279,6 +279,8 @@ _UPSTREAM_TRACE_HEADER_ALLOWLIST = frozenset(
 )
 _NATIVE_CODEX_ORIGINATORS = frozenset(
     {
+        "ccodex-internal",
+        "ccodex-handoff-worker",
         "Codex Desktop",
         "codex_atlas",
         "codex_chatgpt_desktop",
@@ -828,6 +830,8 @@ def apply_codex_installation_headers(
 
 
 _NATIVE_CODEX_USER_AGENT_PREFIXES: tuple[str, ...] = (
+    "ccodex-internal/",
+    "ccodex-handoff-worker/",
     "codex_cli_rs",
     "codex-tui",
     "codex_exec",

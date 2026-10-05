@@ -608,3 +608,9 @@ venv/interpreter, optional native transport and DB/upstream stages. The runtime
 missing-assets503 hint uses pinned/frozen Bun with forced Bun execution rather
 than a host Node shebang, and advises complete-artifact reinstall for packages.
 See docs/deployment/docker.md, docs/deployment/python.md and issues-check§26.
+
+## Optional startup-probe timing
+
+The [startup timing contract](spec.md#requirement-helm-startup-probe-timing-is-configurable) allows legitimate slow cold starts without changing the application's handler or other probes. The default budget remains 5 seconds of initial delay plus 30 failures at a 2-second period, with Kubernetes' effective 1-second timeout and success threshold one.
+
+For example, Helm values `startupProbe: {failureThreshold: 90}` increase that failure budget while readiness and liveness remain unchanged. Null, fractional, boolean, nonpositive timing values and invalid success thresholds fail schema validation. External-DB and staging rendering require their documented database source separately; startup tuning does not supply credentials. See the [chart guide](../../../deploy/helm/codex-lb/README.md#startup-probe-timing).

@@ -169,10 +169,11 @@ async def test_chat_json_mode_keeps_instruction_on_actual_upstream_wire(
     async def upstream(request):
         wire = await request.json()
         observed.append(wire)
-        assert wire["instructions"] == "Be brief.\nUse exact keys."
+        assert wire["instructions"] == "Be brief."
         assert wire["text"]["format"] == {"type": "json_object"}
         assert wire["input"][1] == {"role": "developer", "content": [{"type": "input_text", "text": json_instruction}]}
-        assert [item["role"] for item in wire["input"]] == ["user", "developer", "user"] + (
+        assert wire["input"][2] == {"role": "developer", "content": [{"type": "input_text", "text": "Use exact keys."}]}
+        assert [item["role"] for item in wire["input"]] == ["user", "developer", "developer", "user"] + (
             ["user"] if len(observed) == 2 else []
         )
         output = '{"ok":true}'
@@ -227,4 +228,4 @@ async def test_chat_json_mode_keeps_instruction_on_actual_upstream_wire(
                 assert json.loads(response.json()["choices"][0]["message"]["content"]) == {"ok": True}
             messages = [*messages, {"role": "user", "content": "Follow-up without the format word"}]
     assert len(observed) == 2
-    assert observed[1]["input"][:3] == observed[0]["input"]
+    assert observed[1]["input"][:4] == observed[0]["input"]

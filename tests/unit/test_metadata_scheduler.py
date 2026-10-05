@@ -10,7 +10,7 @@ import pytest
 from app.core.clients.codex_version import CodexVersionCache
 from app.core.usage import metadata_scheduler as module
 from app.core.usage import pricing_catalog as catalog
-from app.core.usage.pricing import ModelPrice, get_pricing_for_model
+from app.core.usage.pricing import ModelPrice, UsageTokens, calculate_cost_from_usage, get_pricing_for_model
 
 
 @pytest.fixture
@@ -139,3 +139,22 @@ async def test_unexpected_failure_backs_off_only_the_failed_operation(setup, mon
     await scheduler._run_loop()
     assert fetch.await_count == (2 if failed_operation == "refresh" else 1)
     assert backfill.await_count == (2 if failed_operation == "backfill" else 3)
+
+
+async def test_standard_only_disk_cache_keeps_ultrafast_prices_offline(setup, monkeypatch):
+    (setup / "pricing-cache.json").write_text(
+        catalog.encode_snapshot({"gpt-6-astra": ModelPrice(10, 50, 1, long_context_threshold_tokens=272000)})
+    )
+    monkeypatch.setattr(module, "fetch_catalogs", AsyncMock(side_effect=ValueError("offline")))
+    scheduler = module.MetadataRefreshScheduler()
+    monkeypatch.setattr(scheduler, "_run_loop", AsyncMock())
+    await scheduler.start()
+    await scheduler._refresh()
+    astra = get_pricing_for_model("gpt-6-astra")
+    assert astra is not None
+    assert calculate_cost_from_usage(UsageTokens(100000, 10000), astra[1], service_tier="ultrafast") == 9.0
+    assert calculate_cost_from_usage(UsageTokens(272001, 10000, 20000), astra[1], service_tier="ultrafast") == (
+        pytest.approx(34.98012)
+    )
+    await scheduler.stop()
+    assert scheduler._task is None

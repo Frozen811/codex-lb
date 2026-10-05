@@ -231,6 +231,80 @@ class _FakeUpstreamWebSocket:
         self.closed_event.set()
 
 
+@pytest.mark.parametrize("path", ["/v1/responses", "/backend-api/codex/responses"])
+def test_websocket_previous_response_chain_keeps_developer_input(app_instance, monkeypatch, path):
+    developer = {"role": "developer", "content": [{"type": "input_text", "text": "key-17=34620"}]}
+    history = {}
+
+    class ChainedUpstream(_FakeUpstreamWebSocket):
+        async def send_text(self, text):
+            await super().send_text(text)
+            wire = json.loads(text)
+            response_id = f"resp_developer_{len(self.sent_text)}"
+            history[response_id] = [*history.get(wire.get("previous_response_id"), []), *wire["input"]]
+            answer = "34620" if developer in history[response_id] else "missing reference"
+            for event in [
+                {"type": "response.created", "response": {"id": response_id, "status": "in_progress"}},
+                {
+                    "type": "response.completed",
+                    "response": {
+                        "id": response_id,
+                        "status": "completed",
+                        "model": "gpt-5.6-sol",
+                        "output": [
+                            {
+                                "type": "message",
+                                "role": "assistant",
+                                "content": [{"type": "output_text", "text": answer}],
+                            }
+                        ],
+                        "usage": {"input_tokens": 20, "output_tokens": 2},
+                    },
+                },
+            ]:
+                self._messages.put_nowait(_FakeUpstreamMessage("text", text=json.dumps(event)))
+
+    upstream = ChainedUpstream([])
+
+    async def allow(*args, **kwargs):
+        return None
+
+    async def connect(self, headers, **kwargs):
+        return SimpleNamespace(id="developer-chain-owner"), upstream
+
+    class SettingsCache:
+        async def get(self):
+            return _websocket_settings()
+
+    monkeypatch.setattr(proxy_api_module, "_websocket_firewall_denial_response", allow)
+    monkeypatch.setattr(proxy_api_module, "validate_proxy_api_key_authorization", allow)
+    monkeypatch.setattr(proxy_module, "get_settings_cache", lambda: SettingsCache())
+    monkeypatch.setattr(proxy_module.ProxyService, "_connect_proxy_websocket", connect)
+    with TestClient(app_instance) as client, client.websocket_connect(path) as websocket:
+        for turn in range(2):
+            websocket.send_json(
+                {
+                    "type": "response.create",
+                    "model": "gpt-5.6-sol",
+                    "stream": True,
+                    "input": [developer] if turn == 0 else [{"role": "user", "content": "Read key-17"}],
+                    **({"previous_response_id": "resp_developer_1", "instructions": ""} if turn else {}),
+                }
+            )
+            for _ in range(5):
+                event = websocket.receive_json()
+                if event["type"] == "response.completed":
+                    assert event["response"]["output"][0]["content"][0]["text"] == "34620"
+                    break
+            else:
+                pytest.fail("No completion for developer chain")
+    wires = [json.loads(message) for message in upstream.sent_text]
+    assert len(wires) == 2 and wires[0]["input"] == [developer]
+    assert wires[0]["instructions"] == ""
+    assert wires[1]["previous_response_id"] == "resp_developer_1"
+    assert upstream.closed
+
+
 class _SequencedUpstreamWebSocket(_FakeUpstreamWebSocket):
     def __init__(
         self,

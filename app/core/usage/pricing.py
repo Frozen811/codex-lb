@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from dataclasses import dataclass
+from decimal import Decimal
 from fnmatch import fnmatchcase
 from typing import Iterable, Mapping
 
@@ -38,6 +39,14 @@ class ModelPrice:
     long_context_cache_write_input_per_1m: float | None = None
     priority_long_context_cache_write_input_per_1m: float | None = None
     flex_long_context_cache_write_input_per_1m: float | None = None
+    ultrafast_input_per_1m: float | None = None
+    ultrafast_output_per_1m: float | None = None
+    ultrafast_cached_input_per_1m: float | None = None
+    ultrafast_cache_write_input_per_1m: float | None = None
+    ultrafast_long_context_input_per_1m: float | None = None
+    ultrafast_long_context_output_per_1m: float | None = None
+    ultrafast_long_context_cached_input_per_1m: float | None = None
+    ultrafast_long_context_cache_write_input_per_1m: float | None = None
 
 
 @dataclass(frozen=True)
@@ -452,6 +461,7 @@ def _effective_rates(
     *,
     service_tier: str | None,
 ) -> tuple[float, float, float, float]:
+    is_ultrafast = _normalize_service_tier(service_tier) == "ultrafast"
     is_long_context = (
         price.long_context_threshold_tokens is not None
         and price.long_context_threshold_tokens > 0
@@ -466,7 +476,15 @@ def _effective_rates(
     write_rate = price.cache_write_input_per_1m if price.cache_write_input_per_1m is not None else input_rate
 
     if is_long_context:
-        tier = "priority" if _uses_priority_tier(service_tier) else "flex" if _uses_flex_tier(service_tier) else None
+        tier = (
+            "ultrafast"
+            if is_ultrafast
+            else "priority"
+            if _uses_priority_tier(service_tier)
+            else "flex"
+            if _uses_flex_tier(service_tier)
+            else None
+        )
         if tier is not None:
             long_input = getattr(price, f"{tier}_long_context_input_per_1m")
             long_output = getattr(price, f"{tier}_long_context_output_per_1m")
@@ -479,6 +497,18 @@ def _effective_rates(
                     long_output,
                     long_write if long_write is not None else long_input,
                 )
+
+    if is_ultrafast and price.ultrafast_input_per_1m is not None and price.ultrafast_output_per_1m is not None:
+        return (
+            price.ultrafast_input_per_1m,
+            price.ultrafast_cached_input_per_1m
+            if price.ultrafast_cached_input_per_1m is not None
+            else price.ultrafast_input_per_1m,
+            price.ultrafast_output_per_1m,
+            price.ultrafast_cache_write_input_per_1m
+            if price.ultrafast_cache_write_input_per_1m is not None
+            else price.ultrafast_input_per_1m,
+        )
 
     if _uses_priority_tier(service_tier):
         if price.priority_input_per_1m is not None and price.priority_output_per_1m is not None:
@@ -541,6 +571,27 @@ def calculate_cost_from_usage(
     if breakdown is None:
         return None
     return breakdown.total_usd
+
+
+def calculate_cost_microdollars_from_usage(
+    usage: UsageTokens | ResponseUsage | None,
+    price: ModelPrice,
+    *,
+    service_tier: str | None = None,
+) -> int | None:
+    normalized = _normalize_usage(usage)
+    if normalized is None:
+        return None
+    rates = _effective_rates(normalized, price, service_tier=service_tier)
+    tokens = (
+        max(0.0, normalized.input_tokens - normalized.cached_input_tokens - normalized.cache_write_input_tokens),
+        normalized.cached_input_tokens,
+        normalized.output_tokens,
+        normalized.cache_write_input_tokens,
+    )
+    # USD per million tokens equals microdollars per token. Keep decimal products
+    # until the final truncation, including separately priced cache writes.
+    return int(sum(Decimal(str(count)) * Decimal(str(rate)) for count, rate in zip(tokens, rates)))
 
 
 def calculate_cost_breakdown_from_usage(

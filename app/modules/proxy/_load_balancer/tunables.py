@@ -22,7 +22,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.core.config.inheritable import resolve_inheritable
-from app.modules.proxy._load_balancer.types import AccountLeaseKind
+from app.modules.api_keys.service import (
+    API_KEY_USAGE_RESERVATION_DEFAULT_INPUT_TOKENS,
+    API_KEY_USAGE_RESERVATION_DEFAULT_OUTPUT_TOKENS,
+)
+from app.modules.proxy._load_balancer.types import AccountLeaseKind, RuntimeState
 
 # Code defaults, kept in step with the ``Settings`` fields of the same name so
 # a caller without any settings object still gets the shipped behaviour.
@@ -31,6 +35,14 @@ DEFAULT_ERROR_RATE_WEIGHTING_ENABLED = True
 DEFAULT_INFLIGHT_PENALTY_PCT = 2.5
 DEFAULT_LEASE_TOKEN_WEIGHT = 1.0
 DEFAULT_LEASE_TTL_SECONDS = 900.0
+RUNTIME_PRESSURE_USED_PERCENT_CEILING = 99.0
+
+
+def apply_runtime_pressure(used_percent: float | None, pressure_pct: float) -> float | None:
+    """Transient load cannot manufacture quota exhaustion or unknown usage."""
+    if used_percent is None or used_percent >= RUNTIME_PRESSURE_USED_PERCENT_CEILING:
+        return used_percent
+    return min(RUNTIME_PRESSURE_USED_PERCENT_CEILING, used_percent + max(0.0, pressure_pct))
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +54,13 @@ class RoutingTunables:
     inflight_penalty_pct: float = DEFAULT_INFLIGHT_PENALTY_PCT
     lease_token_weight: float = DEFAULT_LEASE_TOKEN_WEIGHT
     lease_ttl_seconds: float = DEFAULT_LEASE_TTL_SECONDS
+
+
+def runtime_pressure_percent(runtime: RuntimeState, tunables: RoutingTunables) -> float:
+    default_tokens = API_KEY_USAGE_RESERVATION_DEFAULT_INPUT_TOKENS + API_KEY_USAGE_RESERVATION_DEFAULT_OUTPUT_TOKENS
+    inflight = (runtime.inflight_response_creates + runtime.inflight_streams) * tunables.inflight_penalty_pct
+    leased = max(0.0, runtime.leased_tokens) * tunables.lease_token_weight / default_tokens
+    return inflight + leased
 
 
 def resolve_routing_tunables(

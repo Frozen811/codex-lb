@@ -215,6 +215,14 @@ async def test_account_window_projections_require_accounts_read(
 
 
 @pytest.mark.asyncio
+async def test_image_picker_catalog_requires_dashboard_read(
+    app_instance: FastAPI, async_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _use_principal(app_instance, monkeypatch, _principal_without(Permission.DASHBOARD_READ))
+    _assert_permission_required(await async_client.get("/api/models"), Permission.DASHBOARD_READ)
+
+
+@pytest.mark.asyncio
 async def test_admin_preset_is_unaffected(
     app_instance: FastAPI, async_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

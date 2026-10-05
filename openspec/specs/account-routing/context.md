@@ -283,3 +283,15 @@ emits a warning with `account_ref=<16-char-sha256>`, `code=refresh_token_revoked
 `permanent=True`, `transport=False`. Unknown or malformed provider error codes
 are normalized to `"other"`, and exceptions are logged without traceback or raw
 response payloads.
+
+## Lease pressure units and fallback evidence
+
+Leases estimate token demand; plan capacities estimate credits. Dividing those quantities could add about 135 percentage points to a Plus account for one 10240-token lease. The existing lease-weight setting now measures percentage points per default-size estimate: 8192 input plus 2048 output tokens. An explicit larger bounded estimate, such as 16384 tokens, adds 1.6 points at weight 1. The reference is not a claimed maximum. This change does not calibrate absolute plan credit estimates.
+
+For example, equal default-size leases leave weekly usage 95 and 38 ranked around 98.5 and 41.5 when the stream penalty is 2.5. Temporary pressure cannot manufacture exhaustion: below 99, adjusted usage stops at 99; at or above 99, reported usage stays authoritative. Unknown usage remains unknown. Account caps, health, pins and admission safety remain independent. Zero-score/zero-weight relative-availability fallback compares persisted secondary then primary usage; seeds break only persisted ties. No runtime reads or database writes are added under the selection lock. See [the fallback requirement](spec.md#requirement-relative-availability-fallback-retains-persisted-usage-ordering) and [Responses pressure](../responses-api-compat/spec.md#requirement-responses-account-selection-accounts-for-in-flight-pressure).
+
+## Deactivated workspace failover
+
+The [workspace exclusion contract](spec.md#requirement-deactivated-workspaces-leave-eligible-failover-selection) recognizes only the exact upstream code `deactivated_workspace`. It deactivates the selected routing record with a workspace-specific reason, leaving sibling records alone. The classifier benches the account in the current walk while retaining existing walk-ending semantics.
+
+For example, an account-neutral pre-visible request rejected by workspace A can succeed on B; the next request selects B directly. Encrypted reasoning, file ownership and visible output prevent cross-account replay. An unavailable owner cannot be usefully retried. Keyed health is deferred until reservation settlement. A code-less HTTP 402 remains a surfaced request error and is not permanent workspace evidence.

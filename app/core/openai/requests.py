@@ -366,7 +366,14 @@ def _normalize_responses_input_instructions(data: JsonValue, *, keep_json_mode_i
             changed = True
             continue
         role = item_mapping.get("role")
-        if role not in ("system", "developer"):
+        if role == "developer":
+            # Input is inherited through previous_response_id; instructions are
+            # not. Keep developer messages durable, including directive-only
+            # requests that still need an empty top-level instructions value.
+            input_items.append(item)
+            changed = True
+            continue
+        if role != "system":
             input_items.append(item)
             continue
         instruction_text, preserved_content = _split_responses_instruction_item_content(item_mapping)

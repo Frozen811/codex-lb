@@ -1,3 +1,4 @@
+import { useId } from "react";
 import type { Control } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 
@@ -40,6 +41,7 @@ export function ModelSourceFormFields({
   apiKeyPlaceholder,
 }: ModelSourceFormFieldsProps) {
   const { t } = useTranslation();
+  const formId = useId();
   return (
     <>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -177,7 +179,7 @@ export function ModelSourceFormFields({
 
       <div className="grid gap-2 sm:grid-cols-2">
         {CAPABILITY_TOGGLES.map(([key, labelKey]) => {
-          const id = `model-source-capability-${key}`;
+          const id = `${formId}-model-source-capability-${key}`;
           const label = t(labelKey);
           return (
             <label

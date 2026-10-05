@@ -241,11 +241,14 @@ async def test_stalled_terminal_append_settles_without_replay(
     release_append = asyncio.Event()
     append_started = asyncio.Event()
     real_append = coordinator.append_terminal_operation_event
+    late_results: list[bool] = []
 
     async def stalled_append(**kwargs: Any) -> bool:
         append_started.set()
         await release_append.wait()
-        return await real_append(**kwargs)
+        result = await real_append(**kwargs)
+        late_results.append(result)
+        return result
 
     monkeypatch.setattr(coordinator, "append_terminal_operation_event", stalled_append)
 
@@ -264,6 +267,7 @@ async def test_stalled_terminal_append_settles_without_replay(
     # the row fenced rather than rewrite the settled outcome.
     release_append.set()
     await _settle_detached_terminal_tasks(service._http_bridge_operation_event_batcher)  # noqa: SLF001
+    assert late_results == [False]
 
     operation = await coordinator.get_operation(operation_id=operation_id)
     assert operation is not None

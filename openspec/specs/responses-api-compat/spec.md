@@ -2312,6 +2312,19 @@ For Responses API requests, usage-based routing MUST include immediate in-proces
 - **THEN** the implementation performs only in-memory scoring and lease mutation
 - **AND** database, network, sleep, or bridge queue waits happen outside that lock
 
+Leased token pressure MUST use percentage points per default-size estimated in-flight lease, independent of plan credit capacity. Runtime pressure MUST NOT manufacture exhausted usage: persisted usage below 99 percent MUST be capped at 99 percent after pressure; persisted usage at or above 99 percent MUST retain its value. Unknown usage MUST remain unknown. Persisted quota exhaustion and account-local admission caps MUST remain authoritative.
+
+#### Scenario: A default-size lease uses consistent units across plans
+
+- **WHEN** an eligible Plus, Pro, or unknown-capacity account holds one default-size estimated lease with weight 1
+- **THEN** the lease contributes one percentage point of usage pressure
+- **AND** persisted usage and account status remain unchanged
+
+#### Scenario: Runtime pressure cannot exhaust a persisted usable window
+
+- **WHEN** pressure is added to persisted usage of 98.9, 99, 99.5, or 100 percent
+- **THEN** the adjusted values are respectively at most 99, exactly 99, exactly 99.5, and exactly 100
+
 ### Requirement: Account leases release on all terminal paths
 
 Every account-local lease acquired for a Responses request MUST be idempotently released or settled on success, upstream error, local startup error, bridge submit failure, startup probe conversion, non-streaming collect completion, failover, downstream disconnect, cancellation, timeout, and retry. A bounded stale-lease watchdog MUST reclaim leases that survive unexpected task cancellation or exceptions, and stale reclamation MUST emit warning/metric evidence. Leases MUST NOT be persisted to the database.
@@ -4126,7 +4139,7 @@ The service MUST classify an upstream `invalid_request_error` with `param=input`
 ### Requirement: Non-message system and developer input items are preserved
 
 When normalizing Responses or compact request `input`, the service MUST only
-hoist items that are instruction messages — `system`/`developer`-role items
+hoist items that are system instruction messages — `system`-role items
 whose `type` is omitted or `"message"` — into the top-level `instructions`
 field. Any `system`/`developer`-role input item carrying any other `type`
 value, including item types the service does not model, MUST be forwarded
@@ -4138,7 +4151,7 @@ MUST NOT be stripped from a preserved item. When compact requests exceed the
 upstream input budget and
 the service trims the input middle, preserved non-message `system`/`developer`
 items MUST be treated as trim anchors and retained in the trimmed payload
-rather than replaced by the trim marker. When a non-message
+rather than replaced by the trim marker. When a developer message or a non-message
 `system`/`developer` item is preserved and the request carries no top-level
 `instructions` and no hoistable instruction messages, the service MUST default
 `instructions` to the empty string so the request still validates and
@@ -4151,7 +4164,7 @@ top-level `instructions` unchanged.
 - **WHEN** a Responses or compact request `input` contains a typed, non-message
   item such as `{"type": "future_directive", "role": "developer", ...}`
   alongside developer instruction messages and user messages
-- **THEN** the developer instruction messages are hoisted into `instructions`
+- **THEN** the developer instruction messages remain in `input` in their original positions
 - **AND** the `future_directive` item remains in `input` unchanged, in its
   original position
 - **AND** the upstream-serialized payload retains the item unchanged
@@ -4189,6 +4202,19 @@ top-level `instructions` unchanged.
 - **WHEN** an OpenAI-compatible client sends `input` containing
   `{"role": "system", "content": "sys"}` without a `type` field
 - **THEN** that item is hoisted into `instructions` as before
+
+Developer messages MUST remain in input in their original relative order, with their content intact, during validation and upstream serialization. Their text MUST NOT be folded into top-level instructions. When developer input is present and instructions are absent, normalization MUST supply empty instructions without removing the developer input. System message normalization and the existing JSON-object instruction preservation MUST remain supported.
+
+#### Scenario: Chained response retains developer history
+
+- **WHEN** a Responses HTTP or WebSocket turn includes developer input and a later turn refers to its previous_response_id
+- **THEN** upstream receives the first developer message in input and can carry it through the chain
+- **AND** developer content is not stored solely in non-inherited instructions
+
+#### Scenario: Compact preserves mixed developer content
+
+- **WHEN** compact input includes a developer message with text and non-text content alongside user input
+- **THEN** validation and serialization preserve its role, content and relative position
 
 ### Requirement: Responses Lite follow-up transformations fail closed
 
@@ -11532,3 +11558,27 @@ After publishing a terminal Responses event, the proxy MUST log ordinary failure
 - **WHEN** an unanchored request with an API-key reservation publishes a terminal upstream failure
 - **THEN** its reservation settlement finishes before the account-error health write starts
 - **AND** an ordinary health-write failure is logged while the single original terminal remains intact
+
+### Requirement: Terminal append remains owned after bounded delivery wait
+The HTTP bridge MUST bound its wait for terminal persistence without cancelling an in-flight append when the wait expires or its caller is cancelled. The batcher MUST retain task ownership until completion or shutdown. Timeout MUST require fallback settlement, MUST NOT authorize transcript replay and MUST NOT allow a late append to overwrite a settled operation or clear a newer attempt's state.
+
+#### Scenario: SQLite writer at the delivery bound
+- **WHEN** terminal persistence is blocked inside an SQLite write statement beyond the wait bound
+- **THEN** downstream delivery proceeds with settlement required
+- **AND** releasing the statement permits the append to finish and a second connection to acquire a writer transaction
+
+#### Scenario: Caller cancellation and late settlement
+- **WHEN** the caller is cancelled during the bounded wait
+- **THEN** cancellation reaches the caller while persistence remains owned
+- **AND** a late append after fallback settlement cannot make the spool replayable
+
+### Requirement: CCodex gateway identities preserve native fingerprints
+The shared native Codex classifier MUST recognize exactly ccodex-internal and ccodex-handoff-worker originators and their slash-delimited User-Agent prefixes. HTTP and WebSocket upstream requests MUST preserve their inbound identity and version. Arbitrary lookalike prefixes and continuity headers alone MUST NOT grant native classification.
+
+#### Scenario: Gateway relays stock Codex traffic
+- **WHEN** either gateway identity is supplied through originator or User-Agent
+- **THEN** HTTP and WebSocket header construction preserves that native fingerprint
+
+#### Scenario: Unknown gateway lookalike
+- **WHEN** an SDK request supplies an unknown gateway-like identity or only continuity headers
+- **THEN** normal non-native fingerprint normalization applies
