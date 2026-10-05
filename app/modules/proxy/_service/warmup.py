@@ -5,6 +5,7 @@ import logging
 import sys
 import time
 from collections.abc import Awaitable, Callable, Mapping
+from contextlib import aclosing
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol, cast
@@ -31,6 +32,7 @@ from app.core.config.dashboard_overrides import dashboard_overrides_bound, with_
 from app.core.config.settings import get_settings
 from app.core.config.settings_cache import get_settings_cache
 from app.core.errors import OpenAIErrorEnvelope as CoreOpenAIErrorEnvelope
+from app.core.errors import openai_error
 from app.core.exceptions import ProxyAuthError, ProxyRateLimitError
 from app.core.openai.models import (
     CompactResponsePayload,
@@ -566,53 +568,62 @@ class _WarmupMixin:
                 "parallel_tool_calls": False,
                 "stream": True,
                 "store": False,
-                "max_output_tokens": 16,
             }
         )
         usage: ResponseUsage | None = None
         response_id: str | None = None
+        completed = False
         with override_stream_timeouts(
             connect_timeout_seconds=5.0,
             idle_timeout_seconds=10.0,
             total_timeout_seconds=30.0,
         ):
-            async for event_block in _service_core_stream_responses()(
-                plain_payload,
-                upstream_headers,
-                access_token,
-                account_header_id,
-                upstream_stream_transport_override="http",
-                route=route,
-                route_trace=route_trace,
-                allow_direct_egress=route is None,
-                codex_lb_account_id=live_account.id,
-            ):
-                event = parse_sse_event(event_block)
-                if event is None:
-                    continue
-                if event.response is not None:
-                    if event.response.id:
-                        response_id = event.response.id
-                    if event.response.usage is not None:
-                        usage = event.response.usage
-                if event.type == "response.completed":
-                    break
-                if event.type in {"response.failed", "response.incomplete", "error"}:
-                    error_payload = event.error or (event.response.error if event.response is not None else None)
-                    fallback_err_msg = f"Warmup fallback plain stream failed: {event.type}"
-                    msg = fallback_err_msg
-                    if hasattr(error_payload, "message") and getattr(error_payload, "message"):
-                        msg = str(getattr(error_payload, "message"))
-                    err_envelope: CoreOpenAIErrorEnvelope = {"error": {"message": msg}}
-                    raise ProxyResponseError(
-                        status_code=502,
-                        payload=err_envelope,
-                    )
+            async with aclosing(
+                _service_core_stream_responses()(
+                    plain_payload,
+                    upstream_headers,
+                    access_token,
+                    account_header_id,
+                    upstream_stream_transport_override="http",
+                    route=route,
+                    route_trace=route_trace,
+                    allow_direct_egress=route is None,
+                    codex_lb_account_id=live_account.id,
+                )
+            ) as events:
+                async for event_block in events:
+                    event = parse_sse_event(event_block)
+                    if event is None:
+                        continue
+                    if event.response is not None:
+                        if event.response.id:
+                            response_id = event.response.id
+                        if event.response.usage is not None:
+                            usage = event.response.usage
+                    if event.type == "response.completed":
+                        completed = True
+                        break
+                    if event.type in {"response.failed", "response.incomplete", "error"}:
+                        error_payload = event.error or (event.response.error if event.response is not None else None)
+                        fallback_err_msg = f"Warmup fallback plain stream failed: {event.type}"
+                        msg = fallback_err_msg
+                        if hasattr(error_payload, "message") and getattr(error_payload, "message"):
+                            msg = str(getattr(error_payload, "message"))
+                        err_envelope: CoreOpenAIErrorEnvelope = {"error": {"message": msg}}
+                        raise ProxyResponseError(
+                            status_code=502,
+                            payload=err_envelope,
+                        )
+        if not completed:
+            raise ProxyResponseError(
+                status_code=502,
+                payload=openai_error("stream_incomplete", "Warmup fallback ended without completion"),
+            )
         return CompactResponsePayload.model_validate(
             {
                 "object": "response.compact",
                 "id": response_id or f"resp-fallback-{uuid4().hex[:12]}",
                 "status": "completed",
-                "usage": usage.model_dump() if usage is not None else {"input_tokens": 1, "output_tokens": 1},
+                "usage": usage.model_dump() if usage is not None else None,
             }
         )
