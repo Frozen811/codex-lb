@@ -431,6 +431,7 @@ class LimitWarmupService:
                         account=account,
                         accounts=staggered_accounts,
                         now=now,
+                        before_primary=before_primary,
                         after_primary=after_primary,
                         refresh_started_at=refresh_started_at,
                         usage_refresh_interval_seconds=usage_refresh_interval_seconds,
@@ -867,6 +868,7 @@ def _build_staggered_idle_candidate(
     account: Account,
     accounts: list[Account],
     now: datetime,
+    before_primary: dict[str, UsageHistory],
     after_primary: dict[str, UsageHistory],
     refresh_started_at: datetime | None,
     usage_refresh_interval_seconds: int,
@@ -885,6 +887,14 @@ def _build_staggered_idle_candidate(
         return None
 
     window_seconds = _rolling_window_seconds(after)
+    before = before_primary.get(account.id)
+    observed_sliding_reset = (
+        before is not None
+        and before.reset_at is not None
+        and after.reset_at - before.reset_at > 1
+        and before.recorded_at < after.recorded_at
+        and abs((after.reset_at - before.reset_at) - (after.recorded_at - before.recorded_at).total_seconds()) <= 1
+    )
     due = _staggered_idle_due(
         account.id,
         [candidate.id for candidate in accounts],
@@ -893,6 +903,7 @@ def _build_staggered_idle_candidate(
         interval_started_at=refresh_started_at,
         usage_refresh_interval_seconds=usage_refresh_interval_seconds,
         window_seconds=window_seconds,
+        observed_sliding_reset=observed_sliding_reset,
     )
     if due is None:
         return None
@@ -903,7 +914,7 @@ def _build_staggered_idle_candidate(
         window_seconds=window_seconds,
     ):
         return None
-    return _WarmupCandidate(reset_at=after.reset_at, window=_IDLE_PRIMARY_WINDOW)
+    return _WarmupCandidate(reset_at=due.cycle_end, window=_IDLE_PRIMARY_WINDOW)
 
 
 @dataclass(frozen=True, slots=True)
@@ -930,6 +941,7 @@ def _staggered_idle_due(
     interval_started_at: datetime | None = None,
     usage_refresh_interval_seconds: int = _STAGGER_SLOT_GRACE_SECONDS,
     window_seconds: int = _ROLLING_WINDOW_SECONDS,
+    observed_sliding_reset: bool = False,
 ) -> _StaggeredIdleDue | None:
     if not account_ids:
         return None
@@ -942,7 +954,7 @@ def _staggered_idle_due(
     now_epoch = naive_utc_to_epoch(now)
     grace_seconds = max(_STAGGER_SLOT_GRACE_SECONDS, usage_refresh_interval_seconds)
     cycle_start = reset_at - window_seconds
-    is_sliding = account_index > 0 and abs(cycle_start - now_epoch) <= grace_seconds
+    is_sliding = (account_index > 0 or observed_sliding_reset) and abs(cycle_start - now_epoch) <= grace_seconds
 
     if is_sliding:
         cycle_start = now_epoch - (now_epoch % window_seconds)
