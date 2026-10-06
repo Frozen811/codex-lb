@@ -4,6 +4,29 @@ Requirements are in [spec.md](spec.md). The owned CLI commits one drain
 deadline before closing connections and finalizes admitted work/settlement
 within that process deadline plus its cleanup reserve.
 
+## Ring registration and heartbeat DB cleanup
+
+The ring task owns SQLAlchemy sessions while registering the instance and
+refreshing its heartbeat. Immediate Task.cancel at shutdown can interrupt
+SQLite NullPool's asynchronous connection reset/close. A constrained Linux
+startup/SIGTERM reproduction identified `_register_and_heartbeat` as the
+connection owner; a held-registration regression reproduces the failure
+deterministically.
+
+The lifespan now signals a local stop event. Idle heartbeat intervals and
+registration retry waits wake on that event, while the current DB operation
+finishes within the existing bounded background-task grace. Membership is
+marked stale after stopping this owned task, so a late normal registration
+cannot immediately overwrite the stale marker. No new timeout setting is
+introduced. Wedged work still uses the existing cancellation fallback and
+undrained-task clean-marker guard; the process deadline remains authoritative.
+
+Example: SIGTERM during a ring insert held for another 0.5s lets that insert and
+connection close complete, stops subsequent heartbeat work and then ages the
+membership row. An idle task does not wait through its full heartbeat interval
+or five-second registration backoff. Tests retain pool-error, stale-row,
+leader-release and bounded-exit assertions.
+
 ## Direct-local lifecycle controls (SETUP-09, 2026-10-02)
 
 Purpose: keep preStop/operator control independent of forwarded user identity.

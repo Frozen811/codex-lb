@@ -71,6 +71,7 @@ from app.core.resilience.memory_monitor import configure as configure_memory_mon
 from app.core.retention.scheduler import build_data_retention_scheduler
 from app.core.runtime_logging import install_redacting_loop_exception_handler
 from app.core.scheduling.leader_election import get_leader_election
+from app.core.scheduling.task_shutdown import stop_task_after_grace
 from app.core.scheduling.task_shutdown import undrained_tasks as undrained_background_tasks
 from app.core.shutdown import close_control_plane_task_admission
 from app.core.timeout_invariants import validate_runtime_timeout_invariants, validate_timeout_invariants
@@ -770,10 +771,20 @@ async def lifespan(app: FastAPI):
     elif settings.metrics_enabled:
         logger.warning("Metrics endpoint enabled but prometheus-client is not installed")
 
+    heartbeat_stop = asyncio.Event()
+
+    async def _wait_for_ring_stop(timeout: float) -> bool:
+        try:
+            await asyncio.wait_for(heartbeat_stop.wait(), timeout=timeout)
+        except TimeoutError:
+            return False
+        return True
+
     async def _complete_bridge_registration(svc: RingMembershipService, iid: str) -> None:
         if bridge_endpoint_base_url is None:
             await _activate_bridge_membership(svc, iid)
-            startup_module.mark_bridge_registration_complete()
+            if not heartbeat_stop.is_set():
+                startup_module.mark_bridge_registration_complete()
             return
         await _validate_bridge_advertise_endpoint_for_multi_replica(
             svc=svc,
@@ -781,39 +792,56 @@ async def lifespan(app: FastAPI):
             instance_id=iid,
             endpoint_base_url=bridge_endpoint_base_url,
         )
+        if heartbeat_stop.is_set():
+            return
         await svc.register(iid, endpoint_base_url=None)
+        if heartbeat_stop.is_set():
+            return
         await _wait_for_bridge_advertise_endpoint(
             bridge_endpoint_base_url,
             connect_timeout_seconds=effective_settings(
                 await get_settings_cache().get(), settings
             ).upstream_connect_timeout_seconds,
         )
+        if heartbeat_stop.is_set():
+            return
         await svc.heartbeat(iid, endpoint_base_url=bridge_endpoint_base_url)
-        startup_module.mark_bridge_registration_complete()
+        if not heartbeat_stop.is_set():
+            startup_module.mark_bridge_registration_complete()
 
     async def _heartbeat_only(svc: RingMembershipService, iid: str) -> None:
-        while True:
-            await asyncio.sleep(RING_HEARTBEAT_INTERVAL_SECONDS)
+        while not await _wait_for_ring_stop(RING_HEARTBEAT_INTERVAL_SECONDS):
             try:
                 await svc.heartbeat(iid, endpoint_base_url=bridge_endpoint_base_url)
             except Exception:
                 logger.warning("Ring heartbeat failed", exc_info=True)
+            if heartbeat_stop.is_set():
+                return
             await run_http_bridge_heartbeat_maintenance(getattr(app.state, "proxy_service", None))
+            if heartbeat_stop.is_set():
+                return
             await refresh_cap_partition(svc.list_active, iid)
 
     async def _register_and_heartbeat(svc: RingMembershipService, iid: str) -> None:
         attempt = 0
-        while True:
+        while not heartbeat_stop.is_set():
             attempt += 1
             try:
                 await _complete_bridge_registration(svc, iid)
                 logger.info("Registered in bridge ring", extra={"instance_id": iid, "attempt": attempt})
                 break
             except Exception:
+                if heartbeat_stop.is_set():
+                    return
                 delay = min(5.0 * (2 ** min(attempt - 1, 5)), 60.0)
                 logger.warning("Ring registration attempt %d failed, retrying in %.0fs", attempt, delay, exc_info=True)
-                await asyncio.sleep(delay)
+                if await _wait_for_ring_stop(delay):
+                    return
+        if heartbeat_stop.is_set():
+            return
         await refresh_cap_partition(svc.list_active, iid)
+        if heartbeat_stop.is_set():
+            return
         await _heartbeat_only(svc, iid)
 
     async def _activate_bridge_membership(svc: RingMembershipService, iid: str) -> None:
@@ -880,13 +908,15 @@ async def lifespan(app: FastAPI):
         )
         database_tasks_drained = database_tasks_drained and final_proxy_persistence_drained
 
-        # Cancel heartbeat and age the shared ring row near expiry.
+        # Finish the current ring DB operation before aging membership. Raw
+        # cancellation can interrupt NullPool's asynchronous SQLite close.
         if heartbeat_task is not None:
-            heartbeat_task.cancel()
+            heartbeat_stop.set()
             try:
-                await asyncio.wait_for(heartbeat_task, timeout=2)
-            except (asyncio.CancelledError, TimeoutError):
-                pass
+                await stop_task_after_grace(heartbeat_task)
+            except Exception:
+                database_tasks_drained = False
+                logger.warning("Ring heartbeat failed during shutdown", exc_info=True)
 
         if loop_lag_task is not None:
             loop_lag_task.cancel()

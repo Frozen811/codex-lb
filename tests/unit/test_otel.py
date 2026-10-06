@@ -1145,8 +1145,10 @@ async def test_lifespan_shutdown_fails_bridge_capacity_waiter_and_cancels_usage_
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("registration_fails", [False, True])
 async def test_lifespan_marks_bridge_membership_stale_for_hostname_shared_ids(
     monkeypatch: pytest.MonkeyPatch,
+    registration_fails: bool,
 ):
     import app.core.startup as startup_module
     import app.main as main
@@ -1173,10 +1175,16 @@ async def test_lifespan_marks_bridge_membership_stale_for_hostname_shared_ids(
     close_http_client = AsyncMock()
     close_db = AsyncMock()
     register = AsyncMock()
+    registration_tasks: list[asyncio.Task[object]] = []
 
     async def _register(instance_id: str, *, endpoint_base_url: str | None = None) -> None:
         assert startup_module._startup_complete is True
+        task = asyncio.current_task()
+        assert task is not None
+        registration_tasks.append(task)
         await register(instance_id, endpoint_base_url=endpoint_base_url)
+        if registration_fails:
+            raise RuntimeError("synthetic registration failure")
 
     ring_service = SimpleNamespace(
         register=AsyncMock(side_effect=_register),
@@ -1237,6 +1245,9 @@ async def test_lifespan_marks_bridge_membership_stale_for_hostname_shared_ids(
     async with main.lifespan(main.app):
         await asyncio.sleep(0)
 
+    assert registration_tasks
+    assert all(task.done() and not task.cancelled() for task in registration_tasks)
+    register.assert_awaited_once()
     ring_service.mark_stale.assert_awaited_once_with(
         "pod-a",
         stale_threshold_seconds=main.RING_STALE_THRESHOLD_SECONDS,

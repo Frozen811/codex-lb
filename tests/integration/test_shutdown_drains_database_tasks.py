@@ -198,3 +198,89 @@ def test_in_flight_poller_read_completes_during_shutdown(tmp_path: Path) -> None
     assert not [marker for marker in _POOL_ERRORS if marker in output]
     assert "still busy" not in output
     assert exit_seconds < _MAX_EXIT_SECONDS
+
+
+_RING_BARRIER_SITECUSTOMIZE = textwrap.dedent(
+    """
+    import asyncio
+    import os
+    import time
+    from pathlib import Path
+    from sqlalchemy import event
+    from sqlalchemy.engine import Engine
+    from sqlalchemy.util import await_only
+
+    _DIR = Path(os.environ["CODEX_LB_TEST_BARRIER_DIR"])
+    _engaged = []
+
+    @event.listens_for(Engine, "before_cursor_execute")
+    def _hold_ring_registration(conn, cursor, statement, parameters, context, executemany):
+        if _engaged or "INSERT INTO bridge_ring_members" not in statement:
+            return
+        task = asyncio.current_task()
+        if task is None or getattr(task.get_coro(), "__qualname__", "") != "lifespan.<locals>._register_and_heartbeat":
+            return
+        from app.core import shutdown
+        _engaged.append(True)
+        (_DIR / "held").touch()
+        try:
+            deadline = time.monotonic() + 60
+            while not shutdown.is_shutdown_committed() and time.monotonic() < deadline:
+                await_only(asyncio.sleep(0.02))
+            await_only(asyncio.sleep(0.5))
+        except BaseException as exc:
+            (_DIR / "cancelled").write_text(type(exc).__name__)
+            raise
+        (_DIR / "completed").touch()
+    """
+)
+
+
+def test_in_flight_ring_registration_completes_before_stale_and_disposal(tmp_path: Path) -> None:
+    hook_dir = tmp_path / "hook"
+    hook_dir.mkdir()
+    (hook_dir / "sitecustomize.py").write_text(_RING_BARRIER_SITECUSTOMIZE)
+    barrier_dir = tmp_path / "barrier"
+    barrier_dir.mkdir()
+    db_path = tmp_path / "db.sqlite"
+    env = dict(os.environ)
+    env.update(
+        {
+            "CODEX_LB_DATA_DIR": str(tmp_path / "data"),
+            "CODEX_LB_DATABASE_URL": f"sqlite+aiosqlite:///{db_path}",
+            "CODEX_LB_METRICS_ENABLED": "false",
+            "CODEX_LB_TEST_BARRIER_DIR": str(barrier_dir),
+            "PYTHONPATH": os.pathsep.join(filter(None, [str(hook_dir), env.get("PYTHONPATH")])),
+        }
+    )
+    output_path = tmp_path / "server-output.txt"
+    with output_path.open("w") as output:
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "app.cli", "--host", "127.0.0.1", "--port", str(_free_port())],
+            env=env,
+            stdout=output,
+            stderr=subprocess.STDOUT,
+        )
+    try:
+        deadline = time.monotonic() + 90
+        while not (barrier_dir / "held").exists():
+            assert proc.poll() is None, "server exited before ring registration barrier"
+            assert time.monotonic() < deadline, "ring registration did not reach its barrier"
+            time.sleep(0.05)
+        signalled_at = time.monotonic()
+        proc.send_signal(signal.SIGTERM)
+        proc.wait(timeout=60)
+        exit_seconds = time.monotonic() - signalled_at
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait(timeout=10)
+
+    assert not (barrier_dir / "cancelled").exists(), "ring DB operation was interrupted by cancellation"
+    assert (barrier_dir / "completed").exists(), "ring DB operation did not finish within shutdown grace"
+    output = output_path.read_text()
+    assert not [marker for marker in _POOL_ERRORS if marker in output]
+    assert exit_seconds < _MAX_EXIT_SECONDS
+    with sqlite3.connect(db_path) as database:
+        rows = database.execute("SELECT registered_at, last_heartbeat_at FROM bridge_ring_members").fetchall()
+        assert rows and all(heartbeat < registered for registered, heartbeat in rows), "membership was not marked stale"
