@@ -95,6 +95,17 @@ An imported auth file is another separate path and must come from the intended
 account. Verify the account identity/status after login/import; don't treat
 readiness as proof of successful authentication.
 
+For an existing Business/Enterprise personal access token, select **Add account →
+Import → Access token**. Paste the token into the masked field, enter its email
+and upstream account ID, choose the plan and optionally specify the workspace
+ID. The dashboard shows the imported account as non-refreshable: import a new
+token after expiry or rejection. Auth-file imports remain available for other
+credential exports. Replacing an existing slot requires **Import without
+overwrite** to be disabled; otherwise a separate credential slot can be created.
+The [account-import spec](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/account-import)
+owns this contract; the operator supplies metadata and local import does not
+verify upstream entitlement.
+
 These paths are governed by [OAuth callback privacy](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/oauth-callback-privacy)
 and [dashboard authentication](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/admin-auth).
 

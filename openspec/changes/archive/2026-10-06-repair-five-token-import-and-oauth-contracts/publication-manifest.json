@@ -1,0 +1,409 @@
+{
+  "target": "Frozen811/codex-lb:main",
+  "parent": "6ad699833b4b1c45c402eab5babbd8bf749a3754",
+  "date": "2026-10-06",
+  "files": [
+    {
+      "path": "app/core/auth/__init__.py",
+      "sha256": "60cec5766d1381f56a562772c0225302e03fedbdb3024d532b20a4ca9c650fbb",
+      "git_blob": "59fca51e9370c0791b96401d4af336e157fba227",
+      "bytes": 9827
+    },
+    {
+      "path": "app/modules/accounts/auth_manager.py",
+      "sha256": "bee815b69d61c2778d092f7283b16d52588390ff4438a8d63971588e2dba568e",
+      "git_blob": "a83e8a8b902e343bab01f267459ac0bd4841b2df",
+      "bytes": 83667
+    },
+    {
+      "path": "app/modules/proxy/_service/http_bridge/helpers.py",
+      "sha256": "b4f7a2e06b1fa277286129cc99855150b4133baf73beed3a9a2fbd30571d7e65",
+      "git_blob": "c9bfdd9deca739d1d9e7e64fc0050e099819536b",
+      "bytes": 182224
+    },
+    {
+      "path": "app/modules/proxy/_service/http_bridge/streaming.py",
+      "sha256": "dd482d473e04a79fa1d1a934a67bb4e90e97316748d4ecdf8b68d89ab9c4e930",
+      "git_blob": "151b4231e0cb2c25e1027ad5e55e232a33fb666d",
+      "bytes": 310406
+    },
+    {
+      "path": "app/modules/proxy/_service/support.py",
+      "sha256": "2e95bf2663f59757d8ab752594940c9651ba9615028329ca9651a7a2403b0522",
+      "git_blob": "d3d24d12ce2e991c47ee05ccb50e3d57b9564bf2",
+      "bytes": 102463
+    },
+    {
+      "path": "app/modules/proxy/_service/websocket/helpers.py",
+      "sha256": "3582563d951c63acc29a580318e2a4b55b564a3d3e124064970d549f19e7724d",
+      "git_blob": "dfb33fe1dad59f0377ae2b68d3d640063a8988e2",
+      "bytes": 110600
+    },
+    {
+      "path": "app/modules/proxy/_service/websocket/mixin.py",
+      "sha256": "0ce78123174d073a7b7ccaa589febcde97759726e31848d1b5f86a00b26e783c",
+      "git_blob": "2b815dea7e26716d605baccbb9fbc31ad77fd911",
+      "bytes": 389747
+    },
+    {
+      "path": "app/modules/proxy/replay_safety.py",
+      "sha256": "da436095fbdff1c50104b34516d8774c0e853c05f109ea2bb191e7a80301d8e8",
+      "git_blob": "5daba916ec421a2751f8bbcb900fc4f4c144f4b6",
+      "bytes": 79056
+    },
+    {
+      "path": "deploy/docker/docker-compose.oauth.yml",
+      "sha256": "f100e109ede8d11b708e76ea4a98d31f76c919fad3153c08017010812b352617",
+      "git_blob": "92e2f4a06a2ad664b5be726bb11ec6fdeb9e0b01",
+      "bytes": 294
+    },
+    {
+      "path": "docker-compose.prod.yml",
+      "sha256": "c509481db8214728f44c367d48232efa2c089a8b24729fbe7c246a7816c759f2",
+      "git_blob": "d2d54418e686fe4af8931f1b6ec0d6d06bc1b7d4",
+      "bytes": 1629
+    },
+    {
+      "path": "docker-compose.yml",
+      "sha256": "69547e61659b49c01d269260747147e6f16c93203bc3e5c389060dc1a2001c5d",
+      "git_blob": "0ee7c07cc52fed2e087f7d34a2377cf32d1917f5",
+      "bytes": 5471
+    },
+    {
+      "path": "docs/deployment/docker.md",
+      "sha256": "855a69cd20993c168f7893f8212dba1945562e46e947c49b18c74e687ec72c4e",
+      "git_blob": "b828020a83de69cfdbebcbe1119477e6a7c4b1b9",
+      "bytes": 19263
+    },
+    {
+      "path": "docs/getting-started.md",
+      "sha256": "567e71a076d34edd09a2f5360ef315ed32208895340fab626dcc40b1ed21a1b0",
+      "git_blob": "25699ba024d3bd12dff043cbfce3088b91b02d3a",
+      "bytes": 6077
+    },
+    {
+      "path": "docs/live-voice.md",
+      "sha256": "141e6fa43bc16ed8140fae0964b62c096e9bc9ecbdd16a33bff3355599d35b50",
+      "git_blob": "f53bcd77289a8b1e2d21f8253516f4815a0212b2",
+      "bytes": 4807
+    },
+    {
+      "path": "frontend/browser-smoke/token-import-contracts.config.ts",
+      "sha256": "f0af3423022e22d327792e44c0a6dcac7472087a4623f9cb738185f36c25f670",
+      "git_blob": "6c74690f6dcbe5ded84f184c46a3c9e499cd49f1",
+      "bytes": 261
+    },
+    {
+      "path": "frontend/browser-smoke/token-import-contracts.spec.ts",
+      "sha256": "cca55a0790a649aec85ad1946dc572ce4cb45d45641c7188f1bf3305504ba11f",
+      "git_blob": "ed8b35df95c06c004a8686800736edc88adcfc92",
+      "bytes": 5495
+    },
+    {
+      "path": "frontend/src/features/accounts/components/import-dialog.test.tsx",
+      "sha256": "e03de3f7bf844bcc9513bb817bde8bfab9d8f50550b6dfe0e5833ef7abdf5546",
+      "git_blob": "aeff43298427489353b88d62624e460443d71ba6",
+      "bytes": 10506
+    },
+    {
+      "path": "frontend/src/features/accounts/components/import-dialog.tsx",
+      "sha256": "88ee78518ceb8aa02e8f28d64f0560ffa29431676a558207915fd3c8c8f6ff48",
+      "git_blob": "5a95a3e24369500b8243cd2039a5ed745c1ad86e",
+      "bytes": 8508
+    },
+    {
+      "path": "frontend/src/i18n/locales/en.json",
+      "sha256": "45037b1b4194e89fc8a19fed55226deb8801f1522af235a3960c4ede158ef86d",
+      "git_blob": "824929621b928ffc53e249a344f9676f84e55945",
+      "bytes": 157239
+    },
+    {
+      "path": "frontend/src/i18n/locales/ko.json",
+      "sha256": "b94f3337d0fa0f5d4ed05d24e4f72085f8ebe6f440a2750faa8e410dba45b467",
+      "git_blob": "2bd0e3415adf55f4fb4bada2939196c451092966",
+      "bytes": 168542
+    },
+    {
+      "path": "frontend/src/i18n/locales/zh-CN.json",
+      "sha256": "e21568916939c315f67d82d368532d1faceb938b769262a5e02a10e4e10a7fff",
+      "git_blob": "9c5a029ae0de8ece351902dde1c013ad311fbb28",
+      "bytes": 153314
+    },
+    {
+      "path": "issues-check.md",
+      "sha256": "c645b258fee9e4b7125db286c4967901984f6024753562fea2297abce4c73096",
+      "git_blob": "94fc234e494c8bf872833119b755096af064e88b",
+      "bytes": 588883
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-06-repair-five-token-import-and-oauth-contracts/.openspec.yaml",
+      "sha256": "d71302f07db183bc30ff75198cd90cb17632c1d016043d0f43248f117bdc2e26",
+      "git_blob": "aa32566bf6469cff086237ea6a93e1aa9ba5bcc1",
+      "bytes": 40
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-06-repair-five-token-import-and-oauth-contracts/context.md",
+      "sha256": "923bc7fe53d272b57cb7c2491f14144f6c99d19c7d3fc4bc0167f0ba61710dd7",
+      "git_blob": "3772aeba295e340d74f20e3550c7310e44d3da99",
+      "bytes": 1054
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-06-repair-five-token-import-and-oauth-contracts/design.md",
+      "sha256": "e42617106f2aedc0f452df722fa0955d66409effb90c11d3aa93ad1914fa15e3",
+      "git_blob": "aadc03c8a65859ad458fbe82acb5c186cfbcce21",
+      "bytes": 2403
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-06-repair-five-token-import-and-oauth-contracts/main-publication.md",
+      "sha256": "61e9481d70d308077d228f95334fc652683bee0ac9f233521429d41f34041993",
+      "git_blob": "eaa7330ec5c5c57f2af7a11b2dd23ba910daeaca",
+      "bytes": 2128
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-06-repair-five-token-import-and-oauth-contracts/prior-dirty-sha256.json",
+      "sha256": "4cadfcc42b000d7d8b83ff955bde12cacf0ffded04f277be2149fb02f3f079d3",
+      "git_blob": "e7fb0c0360f51fb1927fa72a6bc2d5181fb4fa0c",
+      "bytes": 4991
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-06-repair-five-token-import-and-oauth-contracts/proposal.md",
+      "sha256": "57b5d1811bb1b8862120a6f66906596084d26ea2c4963108d6b53090d21bc759",
+      "git_blob": "528cc844f1281f4bc2843215c88d782acd5e89e8",
+      "bytes": 1825
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-06-repair-five-token-import-and-oauth-contracts/screenshots/after-import-1440.png",
+      "sha256": "c3d333472c0292ebeba7caf29b21fe1429e74aa0db9aae585b94f038d240594f",
+      "git_blob": "fbb00a4e94a8030e90d1d3f385c9b520113a42a2",
+      "bytes": 152054
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-06-repair-five-token-import-and-oauth-contracts/screenshots/after-import-390.png",
+      "sha256": "7a3ed4270d23978fbb64e1bd1a3bcc0e164cad03c941751c2d79aacc371dee30",
+      "git_blob": "631e0447855be1c932087b637e43caa29c1cb0bb",
+      "bytes": 70558
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-06-repair-five-token-import-and-oauth-contracts/screenshots/after-token-import-1440.png",
+      "sha256": "37be9570f0e564dafb7f6f7ec213083ce8acd45aa546c0b9bb0db27802b7c37e",
+      "git_blob": "1dd8c1c7d59a507026f56994f9d23309f11c7fce",
+      "bytes": 160204
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-06-repair-five-token-import-and-oauth-contracts/screenshots/after-token-import-390.png",
+      "sha256": "0223cd49438057a7fb65549c7be6e8af909b08abf359b48f5b6e5e12172f4fbe",
+      "git_blob": "da1d7e29a4b0705c408a2136210447ebfdecae07",
+      "bytes": 72036
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-06-repair-five-token-import-and-oauth-contracts/screenshots/before-token-import-1440.png",
+      "sha256": "134dd938e25cd2524ad1c688ac64f98c58e08efb146580d015197bf6906bb454",
+      "git_blob": "9aab877aa8e76f3b664be4b654b2751d92b71f69",
+      "bytes": 137158
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-06-repair-five-token-import-and-oauth-contracts/screenshots/before-token-import-390.png",
+      "sha256": "327fd0f08c79ea642ada08bff8fddab095c4a3ddf0540316b5a7124286e38b50",
+      "git_blob": "ad8e415fdddc4bf2a5529d317d2091229acf0103",
+      "bytes": 67140
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-06-repair-five-token-import-and-oauth-contracts/source-snapshot.json",
+      "sha256": "d728c5336fdd4997c2c2b7845a3626be633c62fc343e83f888e26657be5694a9",
+      "git_blob": "9dfa2cea391fb927711024c5376ec9b3280699cc",
+      "bytes": 1580
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-06-repair-five-token-import-and-oauth-contracts/specs/account-import/spec.md",
+      "sha256": "28f3cc1b395b65c0efa44e5f80d96f9bf4762b10f460b422f28d1ba80b564548",
+      "git_blob": "aedbdc26f816c518f5130a98a139f468c92151fa",
+      "bytes": 3725
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-06-repair-five-token-import-and-oauth-contracts/specs/deployment-installation/spec.md",
+      "sha256": "3c20e96fa69bedce23101cd691d56f7f946039f99122e3e5bc2b7679c2bc5a37",
+      "git_blob": "d6d65ba7bfd0ae608159aa553a3075af86d39d7c",
+      "bytes": 1118
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-06-repair-five-token-import-and-oauth-contracts/tasks.md",
+      "sha256": "397a027ce16237c4e7812420501bda6a7e5fab31000e0cd5873e98b13198f3b7",
+      "git_blob": "1feb17aa878c637c694307872134b8c75c88ac7d",
+      "bytes": 1920
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-06-repair-five-token-import-and-oauth-contracts/verification.md",
+      "sha256": "7f9e1de8e8d7506ed009e728ec4ee1a3ebcd67e90a8d5c141f60fe071433fde6",
+      "git_blob": "1613bb236e861fed8e447ba4cf5459813bbfc368",
+      "bytes": 9875
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-06-repair-five-voice-and-continuity-contracts/.openspec.yaml",
+      "sha256": "d71302f07db183bc30ff75198cd90cb17632c1d016043d0f43248f117bdc2e26",
+      "git_blob": "aa32566bf6469cff086237ea6a93e1aa9ba5bcc1",
+      "bytes": 40
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-06-repair-five-voice-and-continuity-contracts/design.md",
+      "sha256": "d00a637388ee342ce4ccd71fe7f75a5fa42770fe91b089ebbd2eb8a9e1f5de26",
+      "git_blob": "536306045a04b7340869cb45d0e4bbff1f6521b2",
+      "bytes": 2102
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-06-repair-five-voice-and-continuity-contracts/final-files.json",
+      "sha256": "494dcaa9bf96fe92afadd4060d8adaabb672da3de19aea284fb152c716930105",
+      "git_blob": "601a7d9daf9c20b85b134f728094ca66d2dcb235",
+      "bytes": 2625
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-06-repair-five-voice-and-continuity-contracts/proposal.md",
+      "sha256": "a35c83226814d5b6f20d8a29868cb7f53c56c3541e76a11cf79c1b385fd9e71f",
+      "git_blob": "bc987017f07ea35a44dfde28e5330df997996a4e",
+      "bytes": 1420
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-06-repair-five-voice-and-continuity-contracts/source-snapshot.json",
+      "sha256": "3739d2aeda314a53ce46aaf01f31a0f950ca8b1e6ff67fe7534a123f155de34e",
+      "git_blob": "101e978ab988501574bd323fcda573786305a5ee",
+      "bytes": 4168
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-06-repair-five-voice-and-continuity-contracts/specs/realtime-api-compat/spec.md",
+      "sha256": "7808c0f1ab141a5be0a986c0c3a67a2519602578c8d6015d400899a892908269",
+      "git_blob": "3784fca7809aa51fb06ae0810bab128766fea9de",
+      "bytes": 1229
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-06-repair-five-voice-and-continuity-contracts/specs/responses-api-compat/spec.md",
+      "sha256": "6f4000a424fd75afe33baacbd5ddf5f7f1cc4f33372b0b04db47a8c60f76d37b",
+      "git_blob": "f59d1d98ec00e003721312c0fa991255196f648d",
+      "bytes": 3072
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-06-repair-five-voice-and-continuity-contracts/specs/sticky-session-operations/spec.md",
+      "sha256": "754e11f66a1a1d86e7bf229348841f3073ae012c20cd3348267b85d04910118e",
+      "git_blob": "e9343a992bcf7630cd9c2239a94eed54224f9c5b",
+      "bytes": 1398
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-06-repair-five-voice-and-continuity-contracts/tasks.md",
+      "sha256": "fe938fe3ed6af2121c8a3a1297ee11394bd601b44b549f692c1b7f3f826e8b1d",
+      "git_blob": "f61f4a31dd1e20b0ccd4a5a7abd4471b8de4ce61",
+      "bytes": 1535
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-06-repair-five-voice-and-continuity-contracts/verification.md",
+      "sha256": "05e649991e29acd8e26245a0913517a7274bc3d9c8f2d6516de920d3ff0a05ae",
+      "git_blob": "6f8e5187940d656cb2e652d8a61de4e3b68b842e",
+      "bytes": 8418
+    },
+    {
+      "path": "openspec/specs/account-import/context.md",
+      "sha256": "f26608da2f88a2807baac012a26ed5f6debd721c969c3437cd687875416b6fa8",
+      "git_blob": "6cb65c435e78e10f675e14d1d352c73d97ec1a84",
+      "bytes": 2383
+    },
+    {
+      "path": "openspec/specs/account-import/spec.md",
+      "sha256": "cedd9d17e14c1242bad598a12cd3b9b9c81132f9eb177c550b2b9a3408e56e1a",
+      "git_blob": "5023b0495cb4e5aec91f5e528912775d9a8c3634",
+      "bytes": 10398
+    },
+    {
+      "path": "openspec/specs/deployment-installation/context.md",
+      "sha256": "6bcc7f00caa07449d9309d94eeeb4fe8b87035dc4463056570552191535c61e7",
+      "git_blob": "0611bb4d0989c3de9850529244d9a6c245daf57c",
+      "bytes": 46651
+    },
+    {
+      "path": "openspec/specs/deployment-installation/spec.md",
+      "sha256": "55c020f5e7b62893b4e1d1c0cdd3b2aab0c98a22702134c5c3e82132de989ed0",
+      "git_blob": "b487df24ab9fe242b4418c48fb2c197b5ee7dbc3",
+      "bytes": 82006
+    },
+    {
+      "path": "openspec/specs/realtime-api-compat/context.md",
+      "sha256": "79991f02993fefbfe884fd5b6b77ddd98c080ed7db87e835492185c5693a23fc",
+      "git_blob": "ec70c02a97181664102d6144e8b96b8aee211266",
+      "bytes": 6816
+    },
+    {
+      "path": "openspec/specs/realtime-api-compat/spec.md",
+      "sha256": "f87f6fb8a7e55471c4434f2f18e72c4d3b506e54645ea770f075a809907575f0",
+      "git_blob": "360e96427701993a3189400539c7a60784db6faf",
+      "bytes": 16775
+    },
+    {
+      "path": "openspec/specs/responses-api-compat/context.md",
+      "sha256": "7bf554aff4158809fd52fd77424ce0d924a24ea3d93c43699f78290dae37c062",
+      "git_blob": "946f52a1692dcaa4fc58955e66cd09c72d566988",
+      "bytes": 53819
+    },
+    {
+      "path": "openspec/specs/responses-api-compat/spec.md",
+      "sha256": "df38b49ffb999c0828a5a8ce24f2d756d3f12ac0aa52d5a54f604c0fefc58f8a",
+      "git_blob": "3b6f4c14b9cb5d2afcd2c0fa0d17e566b34a8940",
+      "bytes": 786753
+    },
+    {
+      "path": "openspec/specs/sticky-session-operations/context.md",
+      "sha256": "cfab7c5f42c8b00131c5052ca2c89bcea67f893d71562fdb3095ebb950add79a",
+      "git_blob": "f22dab77ee1e5a43031eb566d88d9908eb01d538",
+      "bytes": 11989
+    },
+    {
+      "path": "openspec/specs/sticky-session-operations/spec.md",
+      "sha256": "1a1ec6352a21542727464b21d11a94beba63cb48b798a7872e4482084723e8d8",
+      "git_blob": "b5a47fd472fd8b967e6ec860ff23b97ecc466533",
+      "bytes": 115294
+    },
+    {
+      "path": "tests/integration/test_access_token_import_contracts.py",
+      "sha256": "6b151b2ff4a3892fa311363b8968c53a998e9fff7568d89e1dd3bdc18ff79a99",
+      "git_blob": "82725f9f36aa0b1c7823a25a77487883229fee1d",
+      "bytes": 7316
+    },
+    {
+      "path": "tests/integration/test_http_responses_bridge.py",
+      "sha256": "dabc10103a7f3dab0b8acd1b8e9ab7a459709e8ebff152ee8f8a5c947c1b93d4",
+      "git_blob": "70065d3a7215b18fd7e54848893e1704d6f73453",
+      "bytes": 746878
+    },
+    {
+      "path": "tests/integration/test_idle_rate_limit_recovery_contracts.py",
+      "sha256": "6dc8bfa903e59f37de881873a2e67d089249b1d8ad6744e900bcb7991008bc2d",
+      "git_blob": "e898f77f6ec148b89ef936be5cb0f12fb551b700",
+      "bytes": 3773
+    },
+    {
+      "path": "tests/integration/test_proxy_rejected_token_contracts.py",
+      "sha256": "7873019fa3ca5b83a3973722134b337da2f542b770bd1b12eb895fa4fe70f3df",
+      "git_blob": "19d4b353d0117ded6f78449b400ad33a889d31e7",
+      "bytes": 9253
+    },
+    {
+      "path": "tests/integration/test_proxy_websocket_responses.py",
+      "sha256": "7654fa6282584fb3aa441bef7e76d597abb2cabb048350fd385fd91d0c1b2c68",
+      "git_blob": "8cb9f216d0cdc305236c99752c82cc15703bda90",
+      "bytes": 620485
+    },
+    {
+      "path": "tests/unit/test_docker_oauth_ports.py",
+      "sha256": "76fcfd3f229fe3a591f523785ed2d99a1fce3597d774f022584b744ef6ff0afc",
+      "git_blob": "82f948edbb6f1bc7a886cc9a9b8e74b02ca432b2",
+      "bytes": 1001
+    },
+    {
+      "path": "tests/unit/test_proxy_utils.py",
+      "sha256": "0826e934fbd85d09cd178f3cfa72ed77d82a1062f9903e369b24d2077115eb6b",
+      "git_blob": "567bae254840d7dc2111e53bcb81248bf21f366d",
+      "bytes": 2394381
+    },
+    {
+      "path": "tests/unit/test_replay_safety.py",
+      "sha256": "34e9d2e8b054e9318e51fcc3f242be160f4801e3686702851e67b0734780226a",
+      "git_blob": "edce2b860165c0b213e1d3fa783c1ca425a58026",
+      "bytes": 230333
+    }
+  ]
+}

@@ -327,7 +327,16 @@ class AuthManager:
         self._refresh_claims = refresh_claims
 
     async def ensure_fresh(self, account: Account, *, force: bool = False) -> Account:
-        if not self._encryptor.decrypt(account.refresh_token_encrypted):
+        if not self._encryptor.decrypt(account.refresh_token_encrypted).strip():
+            expires_at = account_access_token_expires_at(account, self._encryptor)
+            if expires_at is not None and expires_at <= time.time():
+                raise RefreshError("token_expired", "Access token expired - re-login required", True)
+            if force:
+                raise RefreshError(
+                    "non_refreshable_account",
+                    "Account does not have a refresh token and cannot be refreshed",
+                    True,
+                )
             return await self._ensure_chatgpt_account_id(account)
         if force or (account.status != AccountStatus.REAUTH_REQUIRED and should_refresh(account.last_refresh)):
             ordinary_active_preflight = not force and account.status == AccountStatus.ACTIVE

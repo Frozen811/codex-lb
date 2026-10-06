@@ -24,7 +24,6 @@ services:
         required: false
     ports:
       - "2455:2455"
-      - "1455:1455"
     volumes:
       - codex-lb-data:/var/lib/codex-lb
     healthcheck:

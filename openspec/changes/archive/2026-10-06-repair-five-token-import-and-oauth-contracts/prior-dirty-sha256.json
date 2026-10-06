@@ -1,0 +1,118 @@
+[
+  {
+    "path": "app/modules/proxy/_service/http_bridge/helpers.py",
+    "sha256": "B4F7A2E06B1FA277286129CC99855150B4133BAF73BEED3A9A2FBD30571D7E65"
+  },
+  {
+    "path": "app/modules/proxy/_service/http_bridge/streaming.py",
+    "sha256": "DD482D473E04A79FA1D1A934A67BB4E90E97316748D4ECDF8B68D89AB9C4E930"
+  },
+  {
+    "path": "app/modules/proxy/_service/support.py",
+    "sha256": "2E95BF2663F59757D8AB752594940C9651BA9615028329CA9651A7A2403B0522"
+  },
+  {
+    "path": "app/modules/proxy/_service/websocket/helpers.py",
+    "sha256": "3582563D951C63ACC29A580318E2A4B55B564A3D3E124064970D549F19E7724D"
+  },
+  {
+    "path": "app/modules/proxy/_service/websocket/mixin.py",
+    "sha256": "0CE78123174D073A7B7CCAA589FEBCDE97759726E31848D1B5F86A00B26E783C"
+  },
+  {
+    "path": "app/modules/proxy/replay_safety.py",
+    "sha256": "DA436095FBDFF1C50104B34516D8774C0E853C05F109EA2BB191E7A80301D8E8"
+  },
+  {
+    "path": "docs/live-voice.md",
+    "sha256": "141E6FA43BC16ED8140FAE0964B62C096E9BC9ECBDD16A33BFF3355599D35B50"
+  },
+  {
+    "path": "issues-check.md",
+    "sha256": "7A6EBAB1F8C352D11D35EEBE3895861B7F5526954E1D2632D5618971193745EB"
+  },
+  {
+    "path": "openspec/specs/realtime-api-compat/context.md",
+    "sha256": "79991F02993FEFBFE884FD5B6B77DDD98C080ED7DB87E835492185C5693A23FC"
+  },
+  {
+    "path": "openspec/specs/realtime-api-compat/spec.md",
+    "sha256": "F87F6FB8A7E55471C4434F2F18E72C4D3B506E54645EA770F075A809907575F0"
+  },
+  {
+    "path": "openspec/specs/responses-api-compat/context.md",
+    "sha256": "7BF554AFF4158809FD52FD77424CE0D924A24EA3D93C43699F78290DAE37C062"
+  },
+  {
+    "path": "openspec/specs/responses-api-compat/spec.md",
+    "sha256": "DF38B49FFB999C0828A5A8CE24F2D756D3F12AC0AA52D5A54F604C0FEFC58F8A"
+  },
+  {
+    "path": "openspec/specs/sticky-session-operations/context.md",
+    "sha256": "CFAB7C5F42C8B00131C5052CA2C89BCEA67F893D71562FDB3095EBB950ADD79A"
+  },
+  {
+    "path": "openspec/specs/sticky-session-operations/spec.md",
+    "sha256": "1A1EC6352A21542727464B21D11A94BEBA63CB48B798A7872E4482084723E8D8"
+  },
+  {
+    "path": "tests/integration/test_http_responses_bridge.py",
+    "sha256": "DABC10103A7F3DAB0B8ACD1B8E9AB7A459709E8EBFF152EE8F8A5C947C1B93D4"
+  },
+  {
+    "path": "tests/integration/test_proxy_websocket_responses.py",
+    "sha256": "7654FA6282584FB3AA441BEF7E76D597ABB2CABB048350FD385FD91D0C1B2C68"
+  },
+  {
+    "path": "tests/unit/test_proxy_utils.py",
+    "sha256": "0826E934FBD85D09CD178F3CFA72ED77D82A1062F9903E369B24D2077115EB6B"
+  },
+  {
+    "path": "tests/unit/test_replay_safety.py",
+    "sha256": "34E9D2E8B054E9318E51FCC3F242BE160F4801E3686702851E67B0734780226A"
+  },
+  {
+    "path": "openspec/changes/archive/2026-10-06-repair-five-voice-and-continuity-contracts\\verification.md",
+    "sha256": "05E649991E29ACD8E26245A0913517A7274BC3D9C8F2D6516DE920D3FF0A05AE"
+  },
+  {
+    "path": "openspec/changes/archive/2026-10-06-repair-five-voice-and-continuity-contracts\\tasks.md",
+    "sha256": "FE938FE3ED6AF2121C8A3A1297EE11394BD601B44B549F692C1B7F3F826E8B1D"
+  },
+  {
+    "path": "openspec/changes/archive/2026-10-06-repair-five-voice-and-continuity-contracts\\specs\\sticky-session-operations\\spec.md",
+    "sha256": "754E11F66A1A1D86E7BF229348841F3073AE012C20CD3348267B85D04910118E"
+  },
+  {
+    "path": "openspec/changes/archive/2026-10-06-repair-five-voice-and-continuity-contracts\\specs\\responses-api-compat\\spec.md",
+    "sha256": "6F4000A424FD75AFE33BAACBD5DDF5F7F1CC4F33372B0B04DB47A8C60F76D37B"
+  },
+  {
+    "path": "openspec/changes/archive/2026-10-06-repair-five-voice-and-continuity-contracts\\specs\\realtime-api-compat\\spec.md",
+    "sha256": "7808C0F1AB141A5BE0A986C0C3A67A2519602578C8D6015D400899A892908269"
+  },
+  {
+    "path": "openspec/changes/archive/2026-10-06-repair-five-voice-and-continuity-contracts\\source-snapshot.json",
+    "sha256": "3739D2AEDA314A53CE46AAF01F31A0F950CA8B1E6FF67FE7534A123F155DE34E"
+  },
+  {
+    "path": "openspec/changes/archive/2026-10-06-repair-five-voice-and-continuity-contracts\\proposal.md",
+    "sha256": "A35C83226814D5B6F20D8A29868CB7F53C56C3541E76A11CF79C1B385FD9E71F"
+  },
+  {
+    "path": "openspec/changes/archive/2026-10-06-repair-five-voice-and-continuity-contracts\\final-files.json",
+    "sha256": "494DCAA9BF96FE92AFADD4060D8ADAABB672DA3DE19AEA284FB152C716930105"
+  },
+  {
+    "path": "openspec/changes/archive/2026-10-06-repair-five-voice-and-continuity-contracts\\design.md",
+    "sha256": "D00A637388EE342CE4CCD71FE7F75A5FA42770FE91B089EBBD2EB8A9E1F5DE26"
+  },
+  {
+    "path": "openspec/changes/archive/2026-10-06-repair-five-voice-and-continuity-contracts\\.openspec.yaml",
+    "sha256": "D71302F07DB183BC30FF75198CD90CB17632C1D016043D0F43248F117BDC2E26"
+  },
+  {
+    "path": "tests/integration/test_idle_rate_limit_recovery_contracts.py",
+    "sha256": "6DC8BFA903E59F37DE881873A2E67D089249B1D8AD6744E900BCB7991008BC2D"
+  }
+]

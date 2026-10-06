@@ -1,0 +1,30 @@
+{
+  "date": "2026-10-06",
+  "timezone": "Europe/Kiev",
+  "branch": "main",
+  "head": "6ad699833b4b1c45c402eab5babbd8bf749a3754",
+  "requested_count": 5,
+  "records": [
+    {
+      "id": "UP-ISSUE-1413",
+      "row": "| [UP-ISSUE-1413](https://github.com/Soju06/codex-lb/issues/1413) | feat(accounts): support explicit access-token-only credential imports | РЕШЕНО | НЕ ПРОВЕРЕНО | — |"
+    },
+    {
+      "id": "UP-ISSUE-1130",
+      "row": "| [UP-ISSUE-1130](https://github.com/Soju06/codex-lb/issues/1130) | feat: support for (personal) access token accounts (for business/enterprise) | РЕШЕНО | НЕ ПРОВЕРЕНО | — |"
+    },
+    {
+      "id": "UP-ISSUE-2442",
+      "row": "| [UP-ISSUE-2442](https://github.com/Soju06/codex-lb/issues/2442) | bug(proxy): early token_expired reauth account poisons fresh Codex HTTP routing | РЕШЕНО | НЕ ПРОВЕРЕНО | — |"
+    },
+    {
+      "id": "UP-ISSUE-2064",
+      "row": "| [UP-ISSUE-2064](https://github.com/Soju06/codex-lb/issues/2064) | bug(proxy): revoked access tokens repeatedly re-enter reauth routing | РЕШЕНО | НЕ ПРОВЕРЕНО | — |"
+    },
+    {
+      "id": "UP-ISSUE-2076",
+      "row": "| [UP-ISSUE-2076](https://github.com/Soju06/codex-lb/issues/2076) | bug: default Docker port 1455 mapping can intercept Codex Desktop OAuth callbacks | РЕШЕНО | НЕ ПРОВЕРЕНО | — |"
+    }
+  ],
+  "upstream_evidence": "Public issue descriptions read on GitHub; upstream closure or live-provider acceptance is not claimed."
+}

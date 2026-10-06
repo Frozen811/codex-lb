@@ -552,6 +552,14 @@ Responses history inherited through previous_response_id contains input; top-lev
 
 The local regression server models input inheritance and forgets instructions; it exercises actual HTTP forwarding and the downstream WebSocket route with a controlled upstream adapter. It does not establish hosted-provider persistence or reconnect replay guarantees, which have separate ownership contracts. See [the input requirement](spec.md#requirement-non-message-system-and-developer-input-items-are-preserved). Pressure units and the zero-score fallback are described in [account-routing context](../account-routing/context.md#lease-pressure-units-and-fallback-evidence).
 
+## Empty prewarm and same-owner agent reconnect evidence
+
+The [prewarm requirement](spec.md#requirement-empty-websocket-prewarm-context-survives-replay-classification) keeps empty `generate=false` context separate from generated-turn progress. For example, a prewarm can contain tools and developer rules, while its first user turn contains only two new messages. Those two messages cannot justify deleting the prewarm anchor. A fingerprint-matching full prefix can pass classification; changed rules cannot. Replayed prewarms retain the response identifier already shown to the client.
+
+The [agent follow-up requirement](spec.md#requirement-durable-same-owner-replay-preserves-agent-follow-ups) validates opaque subagent input only within a durable same-owner proof. A retained assistant answer, or the exact persisted tool-call/output manifest, proves the boundary before the new agent message. Only trailing valid messages are omitted from the proof view; dispatch preserves all original identifiers, reasoning, ciphertext and order. Unknown shapes, omitted parallel calls and missing outputs do not prove context. Fresh and quarantined requests remain pinned even when the anchor is removed; account-neutral recovery still rejects agent messages.
+
+Public HTTP and WebSocket regressions use controlled upstream adapters and real local persistence where applicable. They cover pre-visible recovery, refusal after visible output, operation fences and unavailable owners. They do not establish hosted-provider persistence or live Desktop behavior.
+
 ## Terminal append ownership and CCodex identities
 
 [Bounded terminal delivery](spec.md#requirement-terminal-append-remains-owned-after-bounded-delivery-wait) stops waiting at its bound while the batcher continues to own the database append. Cancelling a SQLite statement can leave a deferred-close handle holding the writer slot. Fallback settlement preserves the terminal outcome; the settlement-phase and attempt fences prevent late persistence from authorizing replay or clearing a replacement attempt. For example, a blocked terminal write can finish after delivery while a second connection subsequently acquires BEGIN IMMEDIATE. Shutdown retains its existing task cleanup policy.

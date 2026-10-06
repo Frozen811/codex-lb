@@ -46,3 +46,11 @@ See `openspec/specs/realtime-api-compat/spec.md` for normative requirements and 
 ## Operational Notes
 
 The capability ships as one zero-config unit and uses existing request-log retention and sticky-session storage. There is no new rollout or monitoring setting. If a binding is no longer valid, create a new call rather than attempting account substitution. The dashboard parser correction is user-visible and remains subject to the repository's media evidence gate.
+
+## Desktop endpoint configuration evidence
+
+The [Desktop setup requirement](spec.md#requirement-desktop-voice-setup-documents-both-private-endpoint-overrides) is rendered in [Live Voice setup](../../../docs/live-voice.md). A custom `/v1` Responses provider does not configure the separate backend JSON call and authenticated control sideband. For example, root TOML settings can target `https://proxy.example/backend-api/codex` for call creation and `https://proxy.example/v1` for the sideband.
+
+The experimental override names come from [UP-PR-2562](https://github.com/Soju06/codex-lb/pull/2562), which reports bundled CLI `0.159.0-alpha.12.1`. Local inspection also found both setting strings in installed npm CLI `0.159.3`; string presence and parsed TOML do not prove live client behavior. Official configuration documentation did not establish these experimental keys in this check. Their use remains conditional on installed-client support.
+
+An unsupported multipart `/v1/live` call can yield HTTP 405, while overriding only call creation can leave the sideband outside the proxy's key-scoped ownership path. Operators configure each client and reload it when interruption is safe. A complete live check includes call creation, sideband, transcript, backend handoff and audio; local route tests verify the proxy contract only. Media remains client-to-upstream traffic.

@@ -6,6 +6,7 @@ import inspect
 import json
 import pathlib
 from collections.abc import Sequence
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -5788,3 +5789,115 @@ def test_the_join_canonicalizes_each_item_once_rather_than_once_per_comparison(
     # The chain's questions and its answer, then the client's copy of both plus
     # the new question: one key each, and not one more.
     assert keys_built == (500 + 1) + (500 + 2)
+
+
+def _agent_followup() -> dict[str, JsonValue]:
+    return {
+        "type": "agent_message",
+        "id": "amsg_worker",
+        "author": "/root/worker",
+        "recipient": "/root",
+        "content": [
+            {"type": "input_text", "text": "Check completed."},
+            {"type": "encrypted_content", "encrypted_content": "opaque-agent-content"},
+        ],
+        "internal_chat_message_metadata_passthrough": {"turn_id": "turn_agent"},
+    }
+
+
+@pytest.mark.parametrize("history", ["assistant", "tool-manifest"])
+@pytest.mark.parametrize(
+    ("shape", "expected"),
+    [
+        ("encrypted", True),
+        ("plaintext", True),
+        ("multiple", True),
+        ("blank-author", False),
+        ("blank-id", False),
+        ("missing-recipient", False),
+        ("empty-content", False),
+        ("unknown-content", False),
+        ("unknown-field", False),
+        ("malformed-metadata", False),
+        ("blank-ciphertext", False),
+    ],
+)
+def test_agent_followup_requires_same_owner_proof(history: str, shape: str, expected: bool) -> None:
+    agent = _agent_followup()
+    if shape == "plaintext":
+        agent.pop("id")
+        agent["content"] = [{"type": "input_text", "text": "Check completed."}]
+    elif shape == "blank-author":
+        agent["author"] = " "
+    elif shape == "blank-id":
+        agent["id"] = " "
+    elif shape == "missing-recipient":
+        agent.pop("recipient")
+    elif shape == "empty-content":
+        agent["content"] = []
+    elif shape == "unknown-content":
+        agent["content"] = [{"type": "input_file", "file_id": "file_owner"}]
+    elif shape == "unknown-field":
+        agent["future_owner_reference"] = "owner_1"
+    elif shape == "malformed-metadata":
+        agent["internal_chat_message_metadata_passthrough"] = "invalid"
+    elif shape == "blank-ciphertext":
+        agent["content"] = [{"type": "encrypted_content", "encrypted_content": " "}]
+    prior_output: list[JsonValue] = (
+        [{"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "Done."}]}]
+        if history == "assistant"
+        else [
+            {"type": "custom_tool_call", "call_id": "call_1", "name": "shell", "input": "pwd"},
+            {"type": "custom_tool_call_output", "call_id": "call_1", "output": "/workspace"},
+        ]
+    )
+    input_items: list[JsonValue] = [{"role": "user", "content": "Check."}, *prior_output, agent]
+    if shape == "multiple":
+        input_items.append({**_agent_followup(), "id": "amsg_second"})
+    original = deepcopy(input_items)
+    for same_owner in (False, True):
+        result = (
+            responses_input_suffix_retains_prior_output(
+                input_items, stored_count=1, allow_same_owner_agent_messages=same_owner
+            )
+            if history == "assistant"
+            else responses_input_suffix_matches_pending_tool_calls(
+                input_items,
+                stored_count=1,
+                pending_tool_calls={"call_1": "custom_tool_call"},
+                allow_same_owner_agent_messages=same_owner,
+            )
+        )
+        assert result is (same_owner and expected)
+    projection = project_responses_input_for_account_neutral_fresh_replay(input_items, stored_count=1)
+    assert projection is not None
+    assert projection.input_items == input_items
+    assert not responses_payload_is_account_neutral_fresh_replay({"input": projection.input_items})
+    assert input_items == original
+
+
+@pytest.mark.parametrize(
+    "case", ["missing-output", "missing-call", "missing-parallel-call", "unknown-manifest", "interleaved"]
+)
+def test_agent_followup_cannot_replace_missing_tool_context(case: str) -> None:
+    call: JsonValue = {"type": "custom_tool_call", "call_id": "call_1", "name": "shell", "input": "pwd"}
+    output: JsonValue = {"type": "custom_tool_call_output", "call_id": "call_1", "output": "/workspace"}
+    suffix: list[JsonValue] = [call, output, _agent_followup()]
+    manifest = {"call_1": "custom_tool_call"}
+    if case == "missing-output":
+        suffix.pop(1)
+    elif case == "missing-call":
+        suffix.pop(0)
+    elif case == "missing-parallel-call":
+        manifest["call_2"] = "custom_tool_call"
+    elif case == "unknown-manifest":
+        manifest = {}
+    elif case == "interleaved":
+        suffix = [call, _agent_followup(), output]
+    input_items: list[JsonValue] = [{"role": "user", "content": "Check."}, *suffix]
+    assert not responses_input_suffix_matches_pending_tool_calls(
+        input_items, stored_count=1, pending_tool_calls=manifest, allow_same_owner_agent_messages=True
+    )
+    assert not responses_input_suffix_retains_prior_output(
+        input_items, stored_count=1, allow_same_owner_agent_messages=True
+    )

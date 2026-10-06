@@ -1,0 +1,5 @@
+The batch selects exactly UP-ISSUE-1413, UP-ISSUE-1130, UP-ISSUE-2442, UP-ISSUE-2064 and UP-ISSUE-2076, initially all НЕ ПРОВЕРЕНО in issues-check.md on main at 6ad699833b4b1c45c402eab5babbd8bf749a3754. The previous voice/continuity batch is already dirty and is preserved.
+
+Account-import owns credential normalization/preflight contracts; deployment-installation owns the published-port contract. Account-routing already specifies rejection fencing, neutral failover, hard-owner refusal and rotation recovery. Tests supply synthetic credentials only. No production account or live login is needed.
+
+Example: an auth file with an opaque accessToken, email, planType=enterprise and accountId can use dashboard file upload or the new token-entry mode, retain identity, show non_refreshable and probe with the supplied account ID. It cannot exchange a missing refresh token after upstream rejection. An operator using Docker can paste the localhost callback URL in the existing manual-callback field or use device login without publishing 1455.

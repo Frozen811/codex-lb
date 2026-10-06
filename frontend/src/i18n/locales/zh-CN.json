@@ -36,7 +36,7 @@
   "accounts.detail.emptyTitle": "选择账户",
   "accounts.detail.saveAlias": "保存别名",
   "accounts.detail.unknownWorkspace": "个人 / 未知 workspace",
-  "accounts.importDialog.description": "上传一个或多个从 Codex 导出的 auth.json 文件。",
+  "accounts.importDialog.description": "上传 auth.json 文件，或输入访问令牌和账户信息。",
   "accounts.importDialog.fileLabel": "auth.json 文件",
   "accounts.importDialog.title": "导入账户",
   "accounts.list.addAccount": "添加账户",
@@ -2121,5 +2121,12 @@
   "accounts.sortDirection.none": "未排序",
   "accounts.grid.previous": "上一页",
   "accounts.grid.next": "下一页",
-  "accounts.importDialog.selectedFiles": "已选择的文件"
+  "accounts.importDialog.selectedFiles": "已选择的文件",
+  "accounts.importDialog.filesMode": "认证文件",
+  "accounts.importDialog.tokenMode": "访问令牌",
+  "accounts.importDialog.tokenHelp": "访问令牌无法刷新。到期后请导入新令牌。",
+  "accounts.importDialog.tokenEmail": "邮箱",
+  "accounts.importDialog.tokenAccountId": "上游账户 ID",
+  "accounts.importDialog.tokenWorkspaceId": "工作区 ID（可选）",
+  "accounts.importDialog.tokenPlan": "套餐"
 }

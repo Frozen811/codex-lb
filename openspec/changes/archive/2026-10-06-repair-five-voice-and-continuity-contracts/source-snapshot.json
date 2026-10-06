@@ -1,0 +1,49 @@
+{
+  "date": "2026-10-06 Europe/Kiev",
+  "base_sha": "6ad699833b4b1c45c402eab5babbd8bf749a3754",
+  "initial_worktree": "clean",
+  "selected_rows": {
+    "UP-PR-2562": "| [UP-PR-2562](https://github.com/Soju06/codex-lb/pull/2562) | docs: explain Codex Desktop voice endpoint configuration | OPEN / DRAFT; updated 2026-10-02T22:23:36Z; head `4c76f2372ca4` | НЕ ПРОВЕРЕНО | P2: Draft docs-only: согласовать два существующих Desktop voice overrides (call creation + authenticated sideband), top-level TOML и realtime-api-compat. Уточнить /v1/live vs backend call endpoint; media path и server behavior не подменять новой конфигурацией. |",
+    "UP-PR-2572": "| [UP-PR-2572](https://github.com/Soju06/codex-lb/pull/2572) | fix(proxy): recover rate-limited accounts after quota reset | CLOSED / NOT MERGED; updated 2026-10-03T14:38:18Z; head `cd270575df0d` | НЕ ПРОВЕРЕНО | P2: CLOSED без merge. Автор 2026-10-03 закрыл как redundant: branch основана на checkout, отставшем на 1149 commits; upstream уже имеет persisted rate-limit hold и idle reconciliation. Сверить fork behavior с §§36/51, патч автоматически не применять. |",
+    "UP-PR-2575": "| [UP-PR-2575](https://github.com/Soju06/codex-lb/pull/2575) | fix(proxy): keep the prewarm anchor on websocket replay | OPEN; updated 2026-10-04T02:07:07Z; head `27e66d4a2fe4` | НЕ ПРОВЕРЕНО | P1: GitHub closing reference: UP-ISSUE-2574. Сопоставить отдельный empty-prewarm ID/prefix fingerprint, anchor retention и доказанный full resend. Delta без полного контекста должна fail-closed; no silent context loss и no cross-account replay. |",
+    "UP-PR-2581": "| [UP-PR-2581](https://github.com/Soju06/codex-lb/pull/2581) | fix(proxy): preserve agent context across HTTP bridge reconnects | OPEN; updated 2026-10-05T08:47:48Z; head `73ff014c75fe` | НЕ ПРОВЕРЕНО | P1: GitHub closing reference: UP-ISSUE-2582. Same-owner context proof для valid agent_message после bridge reconnect; opaque/encrypted history не перемещается между accounts. Проверить original full history, stale anchor removal и follow-up turn; §41/UP-ISSUE-2493 недостаточно для нового suffix scope. |",
+    "UP-PR-2583": "| [UP-PR-2583](https://github.com/Soju06/codex-lb/pull/2583) | fix(proxy): retire a policy-excluded continuity owner that cannot return in time | OPEN; updated 2026-10-05T11:22:54Z; head `1479920423a4` | НЕ ПРОВЕРЕНО | P1: Связан с UP-ISSUE-1707 и older PR #2397. Проверить retirement недоступного owner при continuity_owner_policy_conflict и reset horizon после request deadline; merely policy-excluded healthy owner не retire. Сохранить file pin, durable identity и one-attempt gates. |"
+  },
+  "sources": [
+    {
+      "number": 2562,
+      "title": "docs: explain Codex Desktop voice endpoint configuration",
+      "state": "open",
+      "merged": false,
+      "head": "4c76f2372ca488690259c4279a11dd9b41c34995"
+    },
+    {
+      "number": 2572,
+      "title": "fix(proxy): recover rate-limited accounts after quota reset",
+      "state": "closed",
+      "merged": false,
+      "head": "cd270575df0d45469ae4581076d17ffe081c0f6b"
+    },
+    {
+      "number": 2575,
+      "title": "fix(proxy): keep the prewarm anchor on websocket replay",
+      "state": "open",
+      "merged": false,
+      "head": "27e66d4a2fe46638eeb0b929584710c7206c7c3a"
+    },
+    {
+      "number": 2581,
+      "title": "fix(proxy): preserve agent context across HTTP bridge reconnects",
+      "state": "open",
+      "merged": false,
+      "head": "73ff014c75fe6cdd448facd786c1484775ea0094"
+    },
+    {
+      "number": 2583,
+      "title": "fix(proxy): retire a policy-excluded continuity owner that cannot return in time",
+      "state": "open",
+      "merged": false,
+      "head": "1479920423a44783d37fb8345fbfd5434ae489cf"
+    }
+  ]
+}

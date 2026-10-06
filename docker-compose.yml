@@ -12,7 +12,6 @@ services:
         required: false
     ports:
       - "2455:2455"
-      - "1455:1455"
     command:
       # Keep development on the same pre-connection drain launcher as
       # production. Compose watch restarts the service after source sync.

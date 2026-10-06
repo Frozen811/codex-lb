@@ -117,7 +117,7 @@ docker volume create codex-lb-data
 docker network inspect codex-lb-net >/dev/null 2>&1 || docker network create codex-lb-net
 docker run -d --name codex-lb \
   --network codex-lb-net \
-  -p 2455:2455 -p 1455:1455 \
+  -p 2455:2455 \
   -v codex-lb-data:/var/lib/codex-lb \
   codex-lb:local
 ```
@@ -130,7 +130,7 @@ docker network inspect codex-lb-net *> $null
 if ($LASTEXITCODE -ne 0) { docker network create codex-lb-net }
 docker run -d --name codex-lb `
   --network codex-lb-net `
-  -p 2455:2455 -p 1455:1455 `
+  -p 2455:2455 `
   -v codex-lb-data:/var/lib/codex-lb `
   codex-lb:local
 ```
@@ -138,7 +138,19 @@ docker run -d --name codex-lb `
 Ports:
 
 - `2455` — dashboard + proxy API
-- `1455` — OAuth login callback (needed while adding accounts)
+- `1455` — optional temporary OAuth callback listener; left unpublished by default
+
+Use **Device code** when adding an account, or use browser login and paste the
+complete localhost callback URL into the dashboard's **manual callback** field.
+These flows do not require publishing port 1455. Leaving that host port free
+lets the native Codex client run its own login callback.
+
+For direct browser callbacks on the same host, explicitly add
+`-p 127.0.0.1:1455:1455` to `docker run` only while that host port is free.
+This can conflict with native client login. Publishing the port does not start
+the listener: codex-lb opens it temporarily when browser login begins. For a
+remote Docker host, the browser's localhost is its own machine; use device
+login or the manual callback flow.
 
 The volume retains the default SQLite database, encryption key and archives under
 `/var/lib/codex-lb/` across container recreation. External PostgreSQL/MySQL and
@@ -186,7 +198,8 @@ docker compose ps
 ```
 
 Open `http://localhost:5173` for the development dashboard. The backend is at
-`http://localhost:2455`, and account login callbacks use port `1455`. The
+`http://localhost:2455`. Host callback port `1455` is unpublished by default;
+use device login or the manual callback flow described above. The
 frontend proxies API and health requests to the backend service. Check the
 proxy with `http://localhost:5173/health/ready`.
 
@@ -215,6 +228,18 @@ It uses volume-backed SQLite without an env file. The optional `postgres` / `pos
 docker compose -f docker-compose.prod.yml up -d
 docker compose -f docker-compose.prod.yml ps
 ```
+
+To opt into direct browser callbacks on this host, add the callback overlay.
+Use the same file pair for subsequent Compose commands:
+
+```bash
+docker compose -f docker-compose.prod.yml -f deploy/docker/docker-compose.oauth.yml up -d
+```
+
+For the development setup, replace `docker-compose.prod.yml` with
+`docker-compose.yml`. The overlay publishes only `127.0.0.1:1455:1455` and
+retains the existing HTTP mapping. Ensure the native client is not using that
+host port; device login and manual callback work without this overlay.
 
 For external PostgreSQL, create `.env.local` before startup with your existing
 database URL (percent-encode special characters in user/password):
@@ -326,7 +351,7 @@ for what is and is not redacted.
 
 ```bash
 docker run -d --name codex-lb \
-  -p 2455:2455 -p 1455:1455 \
+  -p 2455:2455 \
   -e CODEX_LB_DASHBOARD_AUTH_MODE=trusted_header \
   -e CODEX_LB_DASHBOARD_AUTH_PROXY_HEADER=Remote-User \
   -e CODEX_LB_FIREWALL_TRUST_PROXY_HEADERS=true \
@@ -339,7 +364,7 @@ docker run -d --name codex-lb \
 
 ```bash
 docker run -d --name codex-lb \
-  -p 2455:2455 -p 1455:1455 \
+  -p 2455:2455 \
   -e CODEX_LB_DASHBOARD_AUTH_MODE=disabled \
   -v codex-lb-data:/var/lib/codex-lb \
   codex-lb:local

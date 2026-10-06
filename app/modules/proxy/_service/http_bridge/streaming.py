@@ -99,6 +99,7 @@ from app.modules.proxy._service.http_bridge.helpers import (
     _http_bridge_eventless_timeout_message,
     _http_bridge_image_request_max_frame_bytes,
     _http_bridge_is_context_overflow_error,
+    _http_bridge_is_continuity_owner_policy_conflict,
     _http_bridge_is_explicit_previous_response_rejection,
     _http_bridge_is_previous_response_owner_unavailable,
     _http_bridge_models_compatible,
@@ -480,6 +481,7 @@ class _VerifiedDurableFullResend:
             replay_projection.input_items,
             stored_count=replay_projection.stored_prefix_count,
             canonical_lite_developer_index=replay_projection.canonical_lite_developer_index,
+            allow_same_owner_agent_messages=True,
         ) or (
             pending_tool_calls is not None
             and responses_input_suffix_matches_pending_tool_calls(
@@ -487,6 +489,7 @@ class _VerifiedDurableFullResend:
                 stored_count=replay_projection.stored_prefix_count,
                 pending_tool_calls=pending_tool_calls,
                 canonical_lite_developer_index=replay_projection.canonical_lite_developer_index,
+                allow_same_owner_agent_messages=True,
             )
         )
         if not safe_fresh_context:
@@ -1741,6 +1744,7 @@ class _HTTPBridgeStreamingMixin:
                 replay_projection.input_items,
                 stored_count=replay_projection.stored_prefix_count,
                 canonical_lite_developer_index=replay_projection.canonical_lite_developer_index,
+                allow_same_owner_agent_messages=True,
             ) or (
                 lookup.latest_pending_tool_calls is not None
                 and responses_input_suffix_matches_pending_tool_calls(
@@ -1748,6 +1752,7 @@ class _HTTPBridgeStreamingMixin:
                     stored_count=replay_projection.stored_prefix_count,
                     pending_tool_calls=lookup.latest_pending_tool_calls,
                     canonical_lite_developer_index=replay_projection.canonical_lite_developer_index,
+                    allow_same_owner_agent_messages=True,
                 )
             )
 
@@ -2415,9 +2420,15 @@ class _HTTPBridgeStreamingMixin:
 
             if owner_retirement_attempted:
                 return False
-            if not _http_bridge_is_previous_response_owner_unavailable(exc):
+            if not (
+                _http_bridge_is_previous_response_owner_unavailable(exc)
+                or _http_bridge_is_continuity_owner_policy_conflict(exc)
+            ):
                 return False
             if payload.previous_response_id is not None or rewritten_file_account_id is not None:
+                return False
+            if durable_full_resend_proof is not None:
+                # Removing an anchor under this proof never grants a new owner.
                 return False
             retiring_account_id = request_state.preferred_account_id
             if durable_lookup is None or retiring_account_id is None:
@@ -2738,7 +2749,9 @@ class _HTTPBridgeStreamingMixin:
                     request_stage=request_state.request_stage,
                     preferred_account_id=request_state.preferred_account_id,
                     preferred_account_has_continuity_provenance=preferred_account_has_continuity_provenance,
-                    fallback_on_preferred_account_unavailable=not file_required_preferred_account,
+                    fallback_on_preferred_account_unavailable=not (
+                        file_required_preferred_account or durable_full_resend_proof is not None
+                    ),
                     request_usage_budget=request_state.request_usage_budget,
                     request_deadline=request_deadline,
                     session_header_fallback_key=session_header_fallback_key,

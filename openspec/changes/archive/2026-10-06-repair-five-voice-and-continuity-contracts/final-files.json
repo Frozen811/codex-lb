@@ -1,0 +1,38 @@
+{
+  "base_sha": "6ad699833b4b1c45c402eab5babbd8bf749a3754",
+  "selected": [
+    "UP-PR-2562",
+    "UP-PR-2572",
+    "UP-PR-2575",
+    "UP-PR-2581",
+    "UP-PR-2583"
+  ],
+  "unchanged_other_source_rows": 333,
+  "final_test_scope": {
+    "unit_passed": 693,
+    "integration_passed": 131,
+    "skipped": 0,
+    "xfailed": 0
+  },
+  "files_sha256": {
+    "app/modules/proxy/_service/http_bridge/helpers.py": "b4f7a2e06b1fa277286129cc99855150b4133baf73beed3a9a2fbd30571d7e65",
+    "app/modules/proxy/_service/http_bridge/streaming.py": "dd482d473e04a79fa1d1a934a67bb4e90e97316748d4ecdf8b68d89ab9c4e930",
+    "app/modules/proxy/_service/support.py": "2e95bf2663f59757d8ab752594940c9651ba9615028329ca9651a7a2403b0522",
+    "app/modules/proxy/_service/websocket/helpers.py": "3582563d951c63acc29a580318e2a4b55b564a3d3e124064970d549f19e7724d",
+    "app/modules/proxy/_service/websocket/mixin.py": "0ce78123174d073a7b7ccaa589febcde97759726e31848d1b5f86a00b26e783c",
+    "app/modules/proxy/replay_safety.py": "da436095fbdff1c50104b34516d8774c0e853c05f109ea2bb191e7a80301d8e8",
+    "docs/live-voice.md": "141e6fa43bc16ed8140fae0964b62c096e9bc9ecbdd16a33bff3355599d35b50",
+    "issues-check.md": "7a6ebab1f8c352d11d35eebe3895861b7f5526954e1d2632d5618971193745eb",
+    "openspec/specs/realtime-api-compat/context.md": "79991f02993fefbfe884fd5b6b77ddd98c080ed7db87e835492185c5693a23fc",
+    "openspec/specs/realtime-api-compat/spec.md": "f87f6fb8a7e55471c4434f2f18e72c4d3b506e54645ea770f075a809907575f0",
+    "openspec/specs/responses-api-compat/context.md": "7bf554aff4158809fd52fd77424ce0d924a24ea3d93c43699f78290dae37c062",
+    "openspec/specs/responses-api-compat/spec.md": "df38b49ffb999c0828a5a8ce24f2d756d3f12ac0aa52d5a54f604c0fefc58f8a",
+    "openspec/specs/sticky-session-operations/context.md": "cfab7c5f42c8b00131c5052ca2c89bcea67f893d71562fdb3095ebb950add79a",
+    "openspec/specs/sticky-session-operations/spec.md": "1a1ec6352a21542727464b21d11a94beba63cb48b798a7872e4482084723e8d8",
+    "tests/integration/test_http_responses_bridge.py": "dabc10103a7f3dab0b8acd1b8e9ab7a459709e8ebff152ee8f8a5c947c1b93d4",
+    "tests/integration/test_proxy_websocket_responses.py": "7654fa6282584fb3aa441bef7e76d597abb2cabb048350fd385fd91d0c1b2c68",
+    "tests/unit/test_proxy_utils.py": "0826e934fbd85d09cd178f3cfa72ed77d82a1062f9903e369b24d2077115eb6b",
+    "tests/unit/test_replay_safety.py": "34e9d2e8b054e9318e51fcc3f242be160f4801e3686702851e67b0734780226a",
+    "tests/integration/test_idle_rate_limit_recovery_contracts.py": "6dc8bfa903e59f37de881873a2e67d089249b1d8ad6744e900bcb7991008bc2d"
+  }
+}

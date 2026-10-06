@@ -11,6 +11,21 @@ Live Voice routes always require an existing registered [proxy API key](api-keys
 
 No new `CODEX_LB_*` setting, migration, dependency, or setup step is required. Operators who do not use Live Voice can continue running the base proxy and dashboard unchanged.
 
+## Codex Desktop with a custom provider
+
+A Desktop provider using a `/v1` Responses base needs independent voice endpoint configuration. For clients that support these experimental overrides, place both settings at the root of `~/.codex/config.toml`, before any `[table]` header:
+
+```toml
+experimental_realtime_webrtc_call_base_url = "https://your-codex-lb.example/backend-api/codex"
+experimental_realtime_ws_base_url = "https://your-codex-lb.example/v1"
+```
+
+Use your proxy origin and keep its registered proxy key and existing Responses provider configuration. The call override targets the backend JSON call-creation endpoint; a `/v1` provider base alone can instead lead the client to unsupported `POST /v1/live` and HTTP 405. The second override routes the authenticated control sideband through the proxy so it can resolve the account that created the call. A Responses provider's `supports_websockets` flag does not configure voice.
+
+These are per-machine client settings. They do not introduce server environment variables. [Upstream setup evidence](https://github.com/Soju06/codex-lb/pull/2562) reports testing with bundled CLI `0.159.0-alpha.12.1`; check support in your installed version. If necessary, reload the client when active work can safely be interrupted.
+
+Verify call creation, acceptance of `/v1/live/{call_id}`, a spoken transcript, backend handoff, and an audible reply. Local proxy route tests or successful call creation alone do not verify a live voice session. WebRTC media travels directly between the client and OpenAI; the proxy handles call creation and control sideband.
+
 ## Supported private routes
 
 A compatible Codex client uses these routes as one account-bound workflow:

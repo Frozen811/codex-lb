@@ -3820,6 +3820,15 @@ def _http_bridge_is_previous_response_owner_unavailable(exc: ProxyResponseError)
     return error.get("code") == "previous_response_owner_unavailable"
 
 
+def _http_bridge_is_continuity_owner_policy_conflict(exc: ProxyResponseError) -> bool:
+    """Identify an owner excluded by policy, subject to durable availability checks."""
+    payload = exc.payload
+    if not isinstance(payload, dict):
+        return False
+    error = payload.get("error")
+    return isinstance(error, dict) and error.get("code") == "continuity_owner_policy_conflict"
+
+
 def _http_bridge_should_attempt_soft_affinity_reroute(
     exc: ProxyResponseError,
     *,

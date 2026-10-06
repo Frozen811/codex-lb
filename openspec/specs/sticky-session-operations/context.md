@@ -74,3 +74,9 @@ Source-qualified markers leave the legacy timestamp NULL, so an older binary
 safely restores conservative hard ownership during rollback. Dropping the scope
 column loses only restart-recovery state; it does not make the retained owner
 mobile.
+
+## Policy-conflict retirement on the request path
+
+The [policy-excluded owner requirement](spec.md#requirement-policy-excluded-continuity-owners-retire-only-when-durably-unavailable) uses the existing guarded durable retirement operation. Policy exclusion is a selection outcome, not proof that an account is dead. The repository checks current account state, reset horizon and the observed session identity before changing ownership scope.
+
+For example, an unanchored continuation whose owner remains rate-limited for six hours can retire once and select a fresh account when the request has a much shorter budget. An active excluded owner or an owner resetting inside that budget stays bound. Client response anchors, file pins and same-owner-only full-resend proofs retain their ownership restrictions. Existing migrations, defaults and background abandonment grace periods remain applicable; there is no new setting.

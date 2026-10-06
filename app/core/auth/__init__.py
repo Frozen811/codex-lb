@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import uuid4
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 DEFAULT_EMAIL = "unknown@example.com"
 DEFAULT_PLAN = "unknown"
@@ -20,6 +20,18 @@ class AuthTokens(BaseModel):
     access_token: str = Field(alias="accessToken")
     refresh_token: str | None = Field(default=None, alias="refreshToken")
     account_id: str | None = Field(default=None, alias="accountId")
+
+    @field_validator("access_token")
+    @classmethod
+    def _require_access_token(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Access token must not be blank")
+        return value
+
+    @field_validator("id_token", "refresh_token")
+    @classmethod
+    def _normalize_optional_token(cls, value: str | None) -> str | None:
+        return value if value is not None and value.strip() else None
 
 
 class AuthFile(BaseModel):

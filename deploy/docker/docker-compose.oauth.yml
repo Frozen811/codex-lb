@@ -1,0 +1,7 @@
+# Opt in only when the native client's OAuth callback port is free.
+# Publishing a port does not start the temporary account-login listener.
+# docker compose -f docker-compose.prod.yml -f deploy/docker/docker-compose.oauth.yml up -d
+services:
+  server:
+    ports:
+      - "127.0.0.1:1455:1455"

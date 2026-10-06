@@ -36,7 +36,7 @@
   "accounts.detail.emptyTitle": "Select an account",
   "accounts.detail.saveAlias": "Save alias",
   "accounts.detail.unknownWorkspace": "Personal / unknown workspace",
-  "accounts.importDialog.description": "Upload one or more auth.json files exported from Codex.",
+  "accounts.importDialog.description": "Upload auth.json files or enter an access token with account details.",
   "accounts.importDialog.fileLabel": "auth.json files",
   "accounts.importDialog.title": "Import account",
   "accounts.list.addAccount": "Add account",
@@ -2121,5 +2121,12 @@
   "accounts.sortDirection.none": "Not sorted",
   "accounts.grid.previous": "Previous",
   "accounts.grid.next": "Next",
-  "accounts.importDialog.selectedFiles": "Selected files"
+  "accounts.importDialog.selectedFiles": "Selected files",
+  "accounts.importDialog.filesMode": "Auth files",
+  "accounts.importDialog.tokenMode": "Access token",
+  "accounts.importDialog.tokenHelp": "Access tokens cannot be refreshed. Import a new token when it expires.",
+  "accounts.importDialog.tokenEmail": "Email",
+  "accounts.importDialog.tokenAccountId": "Upstream account ID",
+  "accounts.importDialog.tokenWorkspaceId": "Workspace ID (optional)",
+  "accounts.importDialog.tokenPlan": "Plan"
 }
