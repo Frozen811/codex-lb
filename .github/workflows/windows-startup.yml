@@ -46,7 +46,7 @@ jobs:
           }
 
       - name: Run portability regression tests
-        run: uv run pytest tests/unit/test_memory_monitor.py tests/unit/test_check_proxy_architecture.py tests/unit/test_proxy_header_launcher_contract.py -q
+        run: uv run --no-sync pytest -n auto --dist=loadfile tests/unit/test_memory_monitor.py tests/unit/test_check_proxy_architecture.py tests/unit/test_proxy_header_launcher_contract.py tests/unit/test_test_runtime.py tests/unit/test_pytest_shards.py -q
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6

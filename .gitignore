@@ -58,6 +58,7 @@ certs/
 .agents/log/
 .agents/scheduled_tasks.lock
 .venv
+.test-results/
 
 # Local Responses traffic captures and generated parity reports
 scripts/traffic_analysis/output/*.jsonl

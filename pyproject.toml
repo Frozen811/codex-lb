@@ -103,7 +103,11 @@ docs = [
 ]
 
 [tool.pytest.ini_options]
-addopts = "-ra"
+addopts = "-ra --dist=loadfile"
+timeout = 180
+timeout_method = "thread"
+faulthandler_timeout = 300
+faulthandler_exit_on_timeout = true
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"

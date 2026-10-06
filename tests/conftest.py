@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import tempfile
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -10,14 +9,17 @@ from uuid import uuid4
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from hypothesis import settings as hypothesis_settings
+from hypothesis.database import DirectoryBasedExampleDatabase
 from sqlalchemy import text
 
-TEST_DB_DIR = Path(tempfile.mkdtemp(prefix="codex-lb-tests-"))
-TEST_DB_PATH = TEST_DB_DIR / "codex-lb.db"
+from tests.runtime import automatic_worker_count, create_test_storage
 
-os.environ["CODEX_LB_DATABASE_URL"] = os.environ.get(
-    "CODEX_LB_TEST_DATABASE_URL", f"sqlite+aiosqlite:///{TEST_DB_PATH}"
-)
+# Resolve the URL before importing app.db.session, including in fresh Windows
+# interpreters. The xdist controller owns server database provisioning/cleanup.
+TEST_STORAGE = create_test_storage()
+TEST_DB_DIR = TEST_STORAGE.path
+TEST_DB_PATH = TEST_DB_DIR / "test.db"
 os.environ["CODEX_LB_UPSTREAM_BASE_URL"] = "https://example.invalid/backend-api"
 # The HTTP responses session bridge is a request-path feature with a T4 env
 # kill switch (see app/core/config/tiers.py). The suite runs on the raw
@@ -42,6 +44,51 @@ from app.db.session import engine  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.modules.auth_providers.seed import seed_default_auth_providers  # noqa: E402
 from app.modules.dashboard_roles.seed import seed_preset_dashboard_roles  # noqa: E402
+
+
+def pytest_xdist_auto_num_workers(config: pytest.Config) -> int:
+    return automatic_worker_count()
+
+
+def pytest_configure_node(node) -> None:
+    TEST_STORAGE.prepare_worker(node.gateway.id)
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
+    hypothesis_settings.register_profile(
+        "local",
+        max_examples=50,
+        deadline=None,
+        database=DirectoryBasedExampleDatabase(Path(".hypothesis/examples") / worker_id),
+    )
+    hypothesis_settings.register_profile("ci", max_examples=50, deadline=None, derandomize=True)
+    hypothesis_settings.register_profile("thorough", max_examples=500, deadline=None)
+    profile = config.getoption("--hypothesis-profile") or os.environ.get(
+        "HYPOTHESIS_PROFILE", "ci" if os.environ.get("CI") else "local"
+    )
+    hypothesis_settings.load_profile(profile)
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    TEST_STORAGE.close()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_request_context():
+    """Helpers may create request IDs outside middleware; never leak them to another file."""
+    from app.core.utils.request_id import (
+        reset_request_id,
+        reset_request_scope_id,
+        set_request_id,
+        set_request_scope_id,
+    )
+
+    request_token = set_request_id(None)
+    scope_token = set_request_scope_id(None)
+    yield
+    reset_request_scope_id(scope_token)
+    reset_request_id(request_token)
 
 
 class _NoopScheduler:

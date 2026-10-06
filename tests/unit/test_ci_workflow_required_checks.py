@@ -34,8 +34,7 @@ def test_pytest_matrix_real_test_steps_still_run_only_for_backend_changes() -> N
     assert "if: needs.changes.outputs.backend == 'true'\n        run: make test-${{ matrix.slice.name }}" in test_job
     for step_name in (
         "Checkout repository",
-        "Set up Bun",
-        "Cache Bun dependencies",
+        "Download built dashboard",
         "Set up uv",
     ):
         step = test_job.split(f"- name: {step_name}", maxsplit=1)[1]
@@ -58,8 +57,7 @@ def test_postgres_real_test_steps_still_run_only_for_backend_changes() -> None:
     assert "if: needs.changes.outputs.backend == 'true'\n        run: make test-postgres" in pg_job
     for step_name in (
         "Checkout repository",
-        "Set up Bun",
-        "Cache Bun dependencies",
+        "Download built dashboard",
         "Set up uv",
     ):
         step = pg_job.split(f"- name: {step_name}", maxsplit=1)[1]
@@ -71,10 +69,27 @@ def test_dashboard_browser_smoke_covers_both_contract_sides_and_is_required() ->
     browser_job = _job_block(workflow, "dashboard-browser-smoke")
     required_job = _job_block(workflow, "ci-required")
 
-    assert "if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true'" in browser_job
+    assert "needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true'" in browser_job
     assert "bun run playwright install --with-deps chromium" in browser_job
     assert "run: make test-dashboard-browser-smoke" in browser_job
     assert "- dashboard-browser-smoke" in required_job
+
+
+def test_backend_consumers_share_one_dashboard_build_without_losing_placeholder_checks() -> None:
+    workflow = _ci_workflow_text()
+    build = _job_block(workflow, "frontend-build")
+    assert "needs.changes.outputs.backend == 'true'" in build
+    assert "name: Upload built dashboard" in build
+    for name in ("test", "test-integration-core", "test-postgres", "test-mysql", "dashboard-browser-smoke", "package"):
+        consumer = _job_block(workflow, name)
+        assert "needs: [changes, frontend-build]" in consumer
+        assert 'FRONTEND_BUILT: "1"' in consumer
+        assert "name: Download built dashboard" in consumer
+        assert "if: always() && !cancelled()" in consumer
+    core = _job_block(workflow, "test-integration-core")
+    assert "shard: [1, 2, 3, 4, 5, 6]" in core
+    assert "fail-fast: false" in core
+    assert "name: Upload integration durations" in core
 
 
 def test_openspec_validation_is_required_for_spec_only_changes() -> None:

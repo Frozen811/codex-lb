@@ -1,6 +1,7 @@
 import path from "node:path";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { availableParallelism, freemem, totalmem } from "node:os";
 
 import react from "@vitejs/plugin-react-swc";
 import tailwindcss from "@tailwindcss/vite";
@@ -70,7 +71,20 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: "./src/test/setup.ts",
     exclude: ["browser-smoke/**", "screenshots/**", "node_modules/**"],
-    fileParallelism: false,
+    fileParallelism: true,
+    pool: "threads",
+    isolate: true,
+    // DOM/chart suites use substantial memory. Keep automatic concurrency
+    // within the runtime's memory limit, including on Windows.
+    maxWorkers: Math.max(
+      1,
+      Math.min(
+        availableParallelism(),
+        Math.floor(Math.min(process.constrainedMemory() || totalmem(), freemem()) / (1024 ** 3)),
+      ),
+    ),
+    clearMocks: true,
+    restoreMocks: true,
     testTimeout: 15_000,
     coverage: {
       provider: "v8",

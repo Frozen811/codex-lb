@@ -1,7 +1,11 @@
 PYTEST_ARGS := -q -ra -o faulthandler_timeout=300 -o faulthandler_exit_on_timeout=true --timeout=180 --timeout-method=thread --durations=20
+PYTEST_PARALLEL_ARGS ?= -n auto --dist=loadfile
+PYTEST_REPORT_ARGS ?=
+FRONTEND_BUILT ?= 0
 POSTGRES_TEST_DATABASE_URL ?= postgresql+asyncpg://codex_lb:codex_lb@127.0.0.1:5432/codex_lb
 MYSQL_TEST_DATABASE_URL ?= mysql+asyncmy://codex_lb:codex_lb@127.0.0.1:3306/codex_lb
-INTEGRATION_CORE_SHARD_COUNT := 3
+INTEGRATION_CORE_SHARD_COUNT := 6
+PYTEST_SHARD_DURATIONS ?= .github/pytest-durations.json
 POSTGRES_PYTEST_TARGETS := \
 	tests/integration/test_affinity_invite_migration.py \
 	tests/integration/test_affinity_identity_migration.py \
@@ -179,7 +183,8 @@ help:
 	  '  make typecheck               ty check' \
 	  '  make rust-check              fmt + clippy + tests + release build' \
 	  '  make rust-audit              cargo-deny dependency policy' \
-	  '  make frontend-test           vitest coverage, same as CI' \
+	  '  make frontend-test           vitest coverage (main/merge queue)' \
+	  '  make frontend-test-fast      vitest without coverage (fast PR checks)' \
 	  '  make test-dashboard-browser-smoke  built dashboard against the real local API' \
 	  '  make test-unit               unit pytest slice, same as CI' \
 	  '  make test-integration-core   integration-core pytest slice' \
@@ -206,11 +211,21 @@ frontend-test-fast: frontend-install
 
 frontend-build: frontend-install
 	cd frontend && bun run build
+	uv run --no-project python -m scripts.build_test_dashboard --record
+
+.PHONY: frontend-ready
+ifeq ($(FRONTEND_BUILT),1)
+frontend-ready:
+	uv run --no-project python -c "from pathlib import Path; from scripts.build_dashboard import dashboard_complete; assert dashboard_complete(Path('.')), 'Downloaded dashboard artifact is incomplete'"
+else
+frontend-ready:
+	uv run --no-project python -m scripts.build_test_dashboard
+endif
 
 frontend-playwright-chromium: frontend-install
 	cd frontend && bun run playwright install chromium
 
-test-dashboard-browser-smoke: frontend-build frontend-playwright-chromium
+test-dashboard-browser-smoke: frontend-ready frontend-playwright-chromium
 	uv sync --dev --frozen
 	uv run python scripts/run_dashboard_browser_smoke.py --frontend-built
 
@@ -249,25 +264,26 @@ rust-audit:
 
 .PHONY: test-unit test-integration-core test-integration-core-shard \
 	test-integration-core-1 test-integration-core-2 test-integration-core-3 \
+	test-integration-core-4 test-integration-core-5 test-integration-core-6 \
 	test-integration-bridge test-e2e test-postgres
-test-unit: frontend-build
+test-unit: frontend-ready
 	uv sync --dev --frozen
-	PYTHONFAULTHANDLER=1 uv run pytest $(PYTEST_ARGS) tests/unit tests/simulation tests/test_request_logs_options_api.py
+	PYTHONFAULTHANDLER=1 uv run --no-sync pytest $(PYTEST_ARGS) $(PYTEST_PARALLEL_ARGS) $(PYTEST_REPORT_ARGS) tests/unit tests/simulation tests/test_request_logs_options_api.py
 
-test-integration-core: frontend-build
+test-integration-core: frontend-ready
 	uv sync --dev --frozen
-	PYTHONFAULTHANDLER=1 uv run pytest $(PYTEST_ARGS) tests/integration \
+	PYTHONFAULTHANDLER=1 uv run --no-sync pytest $(PYTEST_ARGS) $(PYTEST_PARALLEL_ARGS) $(PYTEST_REPORT_ARGS) tests/integration \
 	  --ignore=tests/integration/test_http_responses_bridge.py \
 	  --ignore=tests/integration/test_proxy_websocket_responses.py
 
-# CI splits integration-core into deterministic shards (test-count-weighted
-# greedy assignment; see .github/scripts/pytest_shards.py). The --verify call
+# CI splits integration-core into duration-weighted deterministic shards
+# (see .github/scripts/pytest_shards.py). The --verify call
 # guards that the shards always partition the full selection exactly.
-test-integration-core-shard: frontend-build
+test-integration-core-shard: frontend-ready
 	uv sync --dev --frozen
-	uv run python .github/scripts/pytest_shards.py --shard-count $(INTEGRATION_CORE_SHARD_COUNT) --verify
-	PYTHONFAULTHANDLER=1 uv run pytest $(PYTEST_ARGS) \
-	  $$(uv run python .github/scripts/pytest_shards.py --shard-count $(INTEGRATION_CORE_SHARD_COUNT) --shard $(SHARD))
+	uv run --no-sync python .github/scripts/pytest_shards.py --shard-count $(INTEGRATION_CORE_SHARD_COUNT) --durations-file $(PYTEST_SHARD_DURATIONS) --verify
+	PYTHONFAULTHANDLER=1 uv run --no-sync pytest $(PYTEST_ARGS) $(PYTEST_PARALLEL_ARGS) $(PYTEST_REPORT_ARGS) \
+	  $$(uv run --no-sync python .github/scripts/pytest_shards.py --shard-count $(INTEGRATION_CORE_SHARD_COUNT) --durations-file $(PYTEST_SHARD_DURATIONS) --shard $(SHARD))
 
 test-integration-core-1:
 	$(MAKE) test-integration-core-shard SHARD=1
@@ -278,28 +294,37 @@ test-integration-core-2:
 test-integration-core-3:
 	$(MAKE) test-integration-core-shard SHARD=3
 
-test-integration-bridge: frontend-build
+test-integration-core-4:
+	$(MAKE) test-integration-core-shard SHARD=4
+
+test-integration-core-5:
+	$(MAKE) test-integration-core-shard SHARD=5
+
+test-integration-core-6:
+	$(MAKE) test-integration-core-shard SHARD=6
+
+test-integration-bridge: frontend-ready
 	uv sync --dev --frozen
-	PYTHONFAULTHANDLER=1 uv run pytest $(PYTEST_ARGS) -vv \
+	PYTHONFAULTHANDLER=1 uv run --no-sync pytest $(PYTEST_ARGS) $(PYTEST_PARALLEL_ARGS) $(PYTEST_REPORT_ARGS) -vv \
 	  tests/integration/test_http_responses_bridge.py \
 	  tests/integration/test_proxy_websocket_responses.py
 
-test-e2e: frontend-build
+test-e2e: frontend-ready
 	uv sync --dev --frozen
-	PYTHONFAULTHANDLER=1 uv run pytest $(PYTEST_ARGS) tests/e2e
+	PYTHONFAULTHANDLER=1 uv run --no-sync pytest $(PYTEST_ARGS) $(PYTEST_PARALLEL_ARGS) $(PYTEST_REPORT_ARGS) tests/e2e
 
-test-postgres:
+test-postgres: frontend-ready
 	uv sync --dev --frozen
 	CODEX_LB_TEST_DATABASE_URL="$${CODEX_LB_TEST_DATABASE_URL:-$(POSTGRES_TEST_DATABASE_URL)}" \
 	  PYTHONFAULTHANDLER=1 \
-	  uv run pytest $(PYTEST_ARGS) $(POSTGRES_PYTEST_TARGETS)
+	  uv run --no-sync pytest $(PYTEST_ARGS) $(PYTEST_PARALLEL_ARGS) $(PYTEST_REPORT_ARGS) $(POSTGRES_PYTEST_TARGETS)
 
 .PHONY: test-mysql
-test-mysql:
+test-mysql: frontend-ready
 	uv sync --dev --frozen
 	CODEX_LB_TEST_DATABASE_URL="$${CODEX_LB_TEST_DATABASE_URL:-$(MYSQL_TEST_DATABASE_URL)}" \
 	  PYTHONFAULTHANDLER=1 \
-	  uv run pytest $(PYTEST_ARGS) $(MYSQL_PYTEST_TARGETS)
+	  uv run --no-sync pytest $(PYTEST_ARGS) $(PYTEST_PARALLEL_ARGS) $(PYTEST_REPORT_ARGS) $(MYSQL_PYTEST_TARGETS)
 
 .PHONY: migration-check migration-check-postgres migration-check-mysql
 migration-check:
@@ -321,7 +346,7 @@ migration-check-mysql:
 	uv run codex-lb-db --db-url "$(MYSQL_TEST_DATABASE_URL)" check
 
 .PHONY: package
-package: frontend-build
+package: frontend-ready
 	uv sync --frozen --no-dev
 	uv run python -c "import app; import app.main; print('import ok')"
 	rm -rf build dist *.egg-info

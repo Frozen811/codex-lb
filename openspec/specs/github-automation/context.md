@@ -154,3 +154,43 @@ Example: an import-only check would miss an unusable lifespan or missing dashboa
 Issue #2032 exposed that canonical-only validation accepts malformed active deltas. The required OpenSpec job also runs `.github/scripts/validate_changed_openspec.py` against GitHub event revisions. PR selection uses the merge base and event head, while validation runs in the normal merge checkout. A target-only invalid change added after a PR branches does not enter that PR's validation set.
 
 Full history makes the merge base available. Disabling rename detection includes both old and new paths; surviving folders are validated, fully removed folders and archive paths are skipped. Strict validation is limited to touched active folders because unrelated legacy deltas can still be invalid. Validator arguments terminate options before the folder name, so a folder named `--help` cannot skip validation.
+
+## Parallel test execution
+
+Pytest uses `-n auto --dist=loadfile`: a file retains serial ordering while
+independent files overlap. Automatic concurrency respects CPU affinity, Linux
+cgroup quotas and available memory, including Windows GlobalMemoryStatusEx.
+Workers resolve database URLs before application imports and keep encryption
+keys in their own temporary directory. SQLite uses writable `/dev/shm` on Linux
+or the platform temporary directory. PostgreSQL/MySQL use disposable databases
+with a run-specific worker suffix; the controller provisions and removes them,
+including databases belonging to crashed workers. The test user needs create/drop
+permission, and MySQL CI grants only the test namespace. A killed controller can
+leave abandoned test databases. DDL and multi-session commits remain real rather
+than being hidden by an unconditional rollback fixture.
+
+Hypothesis `local` and deterministic `ci` profiles use 50 examples; `thorough`
+uses 500. Explicit per-test budgets remain intact. Vitest uses isolated threads
+with bounded concurrency and resets mocks, timers, handlers and mutable browser
+state. Multipart tests install Node Blob/File before loading Undici's request
+constructors. Modal interaction waits for Radix's pointer-ready layer.
+
+The six integration-core shards use recorded file durations when supplied and
+static estimates otherwise. All runners use the same snapshot; JUnit artifacts
+can refresh it after a complete run. Verification prevents duplicate, missing
+or empty assignments. The frontend producer publishes one dashboard artifact
+for pytest, Playwright and packaging consumers. PR frontend checks omit coverage;
+main/merge-queue checks retain it. Required pytest placeholder contexts survive
+a skipped producer. Local build reuse hashes source, configuration and public
+assets, then validates dashboard completeness before reusing the bundle.
+The unit CI slice pins Helm 3.19.0 for deployment checks, matching the verified
+local tool version rather than relying on the runner image's tool inventory.
+
+PowerShell and Linux can run the same direct commands:
+
+```powershell
+uv sync --dev --frozen
+uv run --no-project python -m scripts.build_test_dashboard
+uv run --no-sync pytest -n auto --dist=loadfile tests/unit
+uv run --no-sync python .github/scripts/pytest_shards.py --shard-count 6 --verify
+```

@@ -335,6 +335,64 @@ These rules are intentionally lightweight. They don't require:
 uv run pytest tests/unit/test_proxy_api_responses_contract.py -q
 ```
 
+The parallel test infrastructure is governed by
+[`github-automation`](../openspec/specs/github-automation/).
+`make test-unit` and the integration targets use `-n auto --dist=loadfile`:
+files stay on one worker, and automatic concurrency respects CPU affinity,
+cgroup limits and a 1 GiB-per-worker memory budget. Use
+`PYTEST_PARALLEL_ARGS="-n 2 --dist=loadfile"` to select a count, or
+`PYTEST_PARALLEL_ARGS=""` for serial diagnosis. The dashboard build is reused
+locally when its source digest matches; CI downloads the current run's artifact
+and sets `FRONTEND_BUILT=1`, which validates assets without rebuilding.
+Building the dashboard requires the pinned Bun 1.3.14; unit deployment checks
+require Helm 3.19.0. CI installs both tools explicitly.
+
+These commands work in **PowerShell and Linux shells** without Make or Bash:
+
+```powershell
+uv sync --dev --frozen
+uv run --no-project python -m scripts.build_test_dashboard
+uv run --no-sync pytest -n auto --dist=loadfile -q --durations=20 tests/unit tests/simulation tests/test_request_logs_options_api.py
+uv run --no-sync pytest -n auto --dist=loadfile tests/integration --ignore=tests/integration/test_http_responses_bridge.py --ignore=tests/integration/test_proxy_websocket_responses.py
+uv run --no-sync pytest -n auto --dist=loadfile tests/e2e
+```
+
+SQLite files and encryption keys are worker-local: Linux uses `/dev/shm` when
+writable, and Windows uses its temporary directory. PostgreSQL/MySQL workers
+use disposable databases named `<base>_test_<run>_<worker>`. The test user needs
+permission to create/drop these databases; MySQL CI grants access only to the
+`codex_lb_test_%` namespace. Application requests and migration subprocesses
+inherit the resolved worker URL. The controller removes databases even after
+a worker crashes; a killed controller may require removing its abandoned test
+databases manually. Schema-changing tests retain their schema-reset semantics.
+
+Hypothesis defaults to 50 examples in `local` and deterministic `ci` profiles.
+Explicit per-test budgets remain intact. Run
+`uv run pytest --hypothesis-profile=thorough` for 500 examples on tests without
+an explicit override. Vitest runs isolated thread workers, restores test state,
+and keeps PR checks free of coverage instrumentation.
+
+For frontend checks in PowerShell or Linux:
+
+```powershell
+cd frontend
+bun install --frozen-lockfile
+bun run test
+```
+
+Integration-core has six deterministic shards. New files use estimates based
+on parametrization, database setup, migrations and explicit sleeps. CI uploads
+JUnit reports; downloaded reports can refresh recorded duration history:
+
+```bash
+uv run python .github/scripts/pytest_shards.py --durations-file .github/pytest-durations.json --update-from-junit integration-1.xml integration-2.xml
+uv run python .github/scripts/pytest_shards.py --shard-count 6 --durations-file .github/pytest-durations.json --verify
+```
+
+Import history from a complete run before committing it; every shard must use
+the same snapshot. Missing history uses estimates, while invalid values fail
+validation. `PYTEST_REPORT_ARGS="--junitxml=report.xml"` enables local reports.
+
 ## Release process
 
 Releases are automated via [release-please](https://github.com/googleapis/release-please):

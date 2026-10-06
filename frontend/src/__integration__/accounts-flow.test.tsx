@@ -12,9 +12,11 @@ describe("accounts flow integration", () => {
     const user = userEvent.setup({ delay: null });
     const observed: string[] = [];
     let fail = true;
-    server.use(http.post("/api/accounts/import", ({ request }) => {
+    server.use(http.post("/api/accounts/import", async ({ request }) => {
       expect(request.headers.get("content-type")).toContain("multipart/form-data");
-      const name = ["first.json", "second.json", "second.json", "third.json"][observed.length];
+      const uploaded = (await request.formData()).get("auth_json");
+      expect(uploaded).toMatchObject({ name: expect.any(String), type: "application/json" });
+      const name = (uploaded as File).name;
       observed.push(name);
       if (name === "second.json" && fail) {
         fail = false;
@@ -26,6 +28,10 @@ describe("accounts flow integration", () => {
     renderWithProviders(<App />);
     await user.click(await screen.findByRole("button", { name: "Add account" }));
     await user.click(screen.getByRole("button", { name: /Import.*auth/i }));
+    // Radix registers its modal layer on the next frame. Its input is present
+    // before the layer accepts pointer events, especially under CPU contention.
+    const dialog = await screen.findByRole("dialog");
+    await waitFor(() => expect(dialog).toHaveStyle({ pointerEvents: "auto" }));
     await user.upload(await screen.findByLabelText(/auth\.json file/i), ["first.json", "second.json", "third.json"].map(name => new File(["{}"], name, { type: "application/json" })));
     await user.click(screen.getByRole("button", { name: "Import" }));
     await waitFor(() => expect(observed).toEqual(["first.json", "second.json"]));

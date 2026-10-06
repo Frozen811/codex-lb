@@ -62,11 +62,7 @@ describe("ImportDialog", () => {
     );
     expect(onImport).toHaveBeenCalledTimes(1);
     const file = onImport.mock.calls[0][0] as File;
-    const text = await new Promise<string>((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.readAsText(file);
-    });
+    const text = await file.text();
     expect(JSON.parse(text)).toEqual({
       tokens: { accessToken: "synthetic-pat" },
       email: "pat@example.invalid",

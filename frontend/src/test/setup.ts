@@ -2,33 +2,22 @@ import "@/test/setup-local-storage";
 import "@testing-library/jest-dom/vitest";
 import { cleanup, configure } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, vi } from "vitest";
+import { Blob, File } from "node:buffer";
 
 import "@/i18n";
-import { LANGUAGE_STORAGE_KEY } from "@/i18n";
 import { resetMockState } from "@/test/mocks/handlers";
 import { server, startMockServer } from "@/test/mocks/server";
 
-if (typeof window !== "undefined") {
-  if (typeof globalThis.FormData !== "undefined") {
-    window.FormData = globalThis.FormData;
-  }
-  if (typeof globalThis.File !== "undefined") {
-    window.File = globalThis.File;
-  }
-  if (typeof globalThis.Blob !== "undefined") {
-    window.Blob = globalThis.Blob;
-  }
-}
-
-if (typeof globalThis.Request !== "undefined") {
-  const superRequest = Object.getPrototypeOf(globalThis.Request);
-  if (superRequest && typeof superRequest === "function" && superRequest.name === "Request") {
-    globalThis.Request = superRequest;
-    if (typeof window !== "undefined") {
-      window.Request = superRequest;
-    }
-  }
-}
+// Keep multipart/file constructors in the same realm as the Node fetch stack.
+// jsdom FormData passed to a native Request is otherwise encoded as text/plain.
+// Install them before MSW starts; each isolated worker owns its interceptors.
+Object.assign(globalThis, { Blob, File });
+Object.assign(window, { Blob, File });
+// Undici captures Blob/File when its WebIDL module loads. Import only after
+// assigning them, so FormData.append recognizes files instead of stringifying.
+const { FormData, Headers, Request, Response } = await import("undici");
+Object.assign(globalThis, { FormData, Headers, Request, Response });
+Object.assign(window, { FormData, Headers, Request, Response });
 
 if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
   Object.defineProperty(window, "matchMedia", {
@@ -93,17 +82,23 @@ beforeAll(() => {
 });
 
 afterEach(() => {
+  // Unmount while this test's handlers and spies are still installed.
+  cleanup();
+  vi.useRealTimers();
+  vi.clearAllMocks();
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   if (typeof window !== "undefined") {
     window.history.replaceState({}, "", "/");
     try {
-      window.localStorage.removeItem(LANGUAGE_STORAGE_KEY);
+      window.localStorage.clear();
+      window.sessionStorage.clear();
     } catch {
       /* ignore */
     }
   }
   resetMockState();
   server.resetHandlers();
-  cleanup();
 });
 
 afterAll(() => {
