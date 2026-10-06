@@ -28931,12 +28931,16 @@ async def test_stream_via_http_bridge_projects_plaintext_durable_full_resend_whe
         else:
             assert exc_info.value is owner_unavailable
         assert get_or_create.await_count == (0 if unsafe_replay_input == "missing_owner" else 1)
-        if unsafe_replay_input == "missing_owner":
+        if unsafe_replay_input in {"missing_owner", "conversation", "file"}:
+            # Account-owned conversation/file input must not trigger owner
+            # retirement or dispatch on a replacement account.
             retire_owner.assert_not_awaited()
         else:
             retire_owner.assert_awaited_once()
             assert retire_owner.await_args is not None
             assert retire_owner.await_args.kwargs["expected_account_id"] == "acc-owner"
+        assert captured_request_states == []
+        assert captured_text_data == []
         if unsafe_replay_input == "conversation":
             last_call = get_or_create.await_args
             assert last_call is not None
