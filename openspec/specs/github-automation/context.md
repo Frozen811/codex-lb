@@ -197,6 +197,12 @@ remain mandatory. Windows release smoke waits up to 15 seconds for transient
 sharing violations during temporary storage cleanup after process termination.
 Other cleanup errors and locks that remain past the deadline still fail smoke.
 
+Issue-labeler contract cases share one module-scoped Node execution with a
+60-second process deadline. Each event receives fresh labels, API mocks and
+context, and each parameterized assertion still checks the real workflow script.
+This removes eight redundant runtime startups and allows a cold Node process to
+start under parallel runner load without relying on a ten-second timing budget.
+
 The six integration-core shards use recorded file durations when supplied and
 static estimates otherwise. All runners use the same snapshot; JUnit artifacts
 can refresh it after a complete run. Verification prevents duplicate, missing
