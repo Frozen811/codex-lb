@@ -304,21 +304,30 @@ async def test_login_password_caps_later_duplicate_forwarded_identity_from_loopb
 
 
 @pytest.mark.asyncio
-async def test_remote_admin_sessions_are_capped_at_twelve_hours_even_under_thirty_days():
-    thirty_days = 30 * 24 * 60 * 60
-    _, admin_store, _, _ = await _login(
+@pytest.mark.parametrize(
+    ("configured_ttl", "expected_ttl"),
+    [
+        (3600, 3600),
+        (30 * 24 * 60 * 60, 30 * 24 * 60 * 60),
+        (30 * 24 * 60 * 60 + 1, REMOTE_DASHBOARD_SESSION_TTL_SECONDS),
+    ],
+)
+async def test_remote_password_sessions_apply_same_lifetime_policy_for_admin_and_operator(configured_ttl, expected_ttl):
+    admin_response, admin_store, _, _ = await _login(
         _build_login_request("/api/dashboard-auth/password/login"),
         context=_login_context(_user(PresetRoleSlug.ADMIN)),
-        configured_ttl=thirty_days,
+        configured_ttl=configured_ttl,
     )
-    _, operator_store, _, _ = await _login(
+    operator_response, operator_store, _, _ = await _login(
         _build_login_request("/api/dashboard-auth/password/login"),
         context=_login_context(_user(PresetRoleSlug.OPERATOR)),
-        configured_ttl=thirty_days,
+        configured_ttl=configured_ttl,
     )
 
-    assert admin_store.create_user_session.call_args.kwargs["ttl_seconds"] == REMOTE_DASHBOARD_SESSION_TTL_SECONDS
-    assert operator_store.create_user_session.call_args.kwargs["ttl_seconds"] == thirty_days
+    assert admin_store.create_user_session.call_args.kwargs["ttl_seconds"] == expected_ttl
+    assert operator_store.create_user_session.call_args.kwargs["ttl_seconds"] == expected_ttl
+    assert f"Max-Age={expected_ttl}" in admin_response.headers["set-cookie"]
+    assert f"Max-Age={expected_ttl}" in operator_response.headers["set-cookie"]
 
 
 @pytest.mark.asyncio

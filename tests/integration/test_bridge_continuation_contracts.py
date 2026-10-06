@@ -441,13 +441,15 @@ async def test_repeated_eventless_lineage_recovers_without_poisoned_anchor(
         update={
             "sse_keepalive_interval_seconds": 0.01,
             "stream_idle_timeout_seconds": 0.1,
-            "proxy_request_budget_seconds": 1.0,
+            # This case tests downstream eventless retirement, independently
+            # of the response-created retry and total request deadline.
+            "proxy_request_budget_seconds": 10.0,
         }
     )
     monkeypatch.setattr(proxy_service, "get_settings", lambda: settings)
     monkeypatch.setattr(proxy_api, "get_settings", lambda: settings)
-    monkeypatch.setattr(bridge_helpers, "HTTP_BRIDGE_STUCK_GATE_RETIRE_AFTER_SECONDS", 0.1)
-    monkeypatch.setattr(bridge_helpers, "_HTTP_BRIDGE_EVENTLESS_RESPONSE_CREATED_MAX_SECONDS", 0.1)
+    monkeypatch.setattr(bridge_helpers, "HTTP_BRIDGE_STUCK_GATE_RETIRE_AFTER_SECONDS", 2.0)
+    monkeypatch.setattr(bridge_helpers, "_HTTP_BRIDGE_EVENTLESS_RESPONSE_CREATED_MAX_SECONDS", 1.0)
     monkeypatch.setattr(retry_circuit, "_HTTP_BRIDGE_RETRY_CIRCUIT_BASE_BACKOFF_SECONDS", 0.01)
     headers = {"session_id": "bridge-silent-lineage"}
     body = {"model": "gpt-5.1", "input": [_user("first")], "stream": True, "max_output_tokens": 64}

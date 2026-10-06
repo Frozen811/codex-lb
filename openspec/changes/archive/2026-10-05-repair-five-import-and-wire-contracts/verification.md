@@ -61,3 +61,8 @@ providers, production and public release artifacts are not certified by these
 local tests. Broader PR 2065 remains separate.
 
 Final preservation readback after verified archive: 142 of the 148 prior files remain byte-identical. Exactly six intended shared files changed: registry, frontend spec/context and three locales. The other 333 source rows are byte-identical to the initial snapshot. Both delta requirement blocks match the main spec exactly, all tasks are checked, archive exists, and strict main validation remains 68/68. Publication now includes all four explicitly authorized five-item packages.
+
+The 2026-10-06 resume audit and initial cloud failures, corrections and fresh
+99-case verification are recorded in [ci-repair.md](ci-repair.md). Historical
+local results above are retained; the final exact-head CI must pass after the
+follow-up commit is published.
