@@ -15,12 +15,21 @@ function getParentRow(cell: HTMLElement): HTMLElement {
 
 async function openRowActions(user: ReturnType<typeof userEvent.setup>, row: HTMLElement) {
   const actionsButton = within(row).getByRole("button", { name: "Actions" });
+  // Rows update before Radix releases the closing modal's pointer lock.
+  await waitFor(() => expect(document.body).not.toHaveStyle({ pointerEvents: "none" }));
   await user.click(actionsButton);
+}
+
+async function findInteractiveDialog(name: string): Promise<HTMLElement> {
+  const dialog = await screen.findByRole("dialog", { name });
+  // The portal is mounted before its dismissable layer accepts pointer events.
+  await waitFor(() => expect(dialog).toHaveStyle({ pointerEvents: "auto" }));
+  return dialog;
 }
 
 describe("api keys flow integration", () => {
   it("creates, shows plain key dialog, edits, and deletes an api key", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     const createdName = "Integration Key";
     const updatedName = "Integration Key Updated";
 
@@ -28,12 +37,13 @@ describe("api keys flow integration", () => {
     renderWithProviders(<App />);
 
     const createButton = await screen.findByRole("button", { name: "Create key" });
-    expect(createButton).toBeInTheDocument();
+    await waitFor(() => expect(createButton).toBeEnabled());
     await user.click(createButton);
-    await user.type(screen.getByLabelText("Name"), createdName);
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    const createDialog = await findInteractiveDialog("Create API key");
+    await user.type(within(createDialog).getByLabelText("Name"), createdName);
+    await user.click(within(createDialog).getByRole("button", { name: "Create" }));
 
-    const createdDialog = await screen.findByRole("dialog", { name: "API key created" });
+    const createdDialog = await findInteractiveDialog("API key created");
     expect(screen.getByText(/sk-test-generated/i)).toBeInTheDocument();
     const closeCandidates = within(createdDialog).getAllByRole("button", {
       name: "Close",
@@ -42,15 +52,18 @@ describe("api keys flow integration", () => {
       closeCandidates.find((element) => element.getAttribute("data-slot") === "button") ??
       closeCandidates[0];
     await user.click(closeButton);
+    await waitFor(() => expect(createdDialog).not.toBeInTheDocument());
 
     const createdRow = getParentRow(await screen.findByText(createdName));
 
     await openRowActions(user, createdRow);
     await user.click(await screen.findByRole("menuitem", { name: /Edit/ }));
-    const nameInput = await screen.findByLabelText("Name");
+    const editDialog = await findInteractiveDialog("Edit API key");
+    const nameInput = within(editDialog).getByLabelText("Name");
     await user.clear(nameInput);
     await user.type(nameInput, updatedName);
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(within(editDialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(editDialog).not.toBeInTheDocument());
 
     const updatedRow = getParentRow(await screen.findByText(updatedName));
 
@@ -60,6 +73,7 @@ describe("api keys flow integration", () => {
     const confirmDialog = confirmTitle.closest("[role='alertdialog']");
     expect(confirmDialog).not.toBeNull();
     if (!confirmDialog) throw new Error("Expected confirm dialog");
+    await waitFor(() => expect(confirmDialog).toHaveStyle({ pointerEvents: "auto" }));
     await user.click(
       within(confirmDialog as HTMLElement).getByRole("button", { name: "Delete" }),
     );
@@ -70,19 +84,23 @@ describe("api keys flow integration", () => {
   });
 
   it("creates an api key with assigned accounts", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
 
     window.history.pushState({}, "", "/settings");
     renderWithProviders(<App />);
 
-    await user.click(await screen.findByRole("button", { name: "Create key" }));
-    await user.type(screen.getByLabelText("Name"), "Scoped Integration Key");
-    await user.click(await screen.findByRole("button", { name: "All accounts" }));
+    const createButton = await screen.findByRole("button", { name: "Create key" });
+    await waitFor(() => expect(createButton).toBeEnabled());
+    await user.click(createButton);
+    const createDialog = await findInteractiveDialog("Create API key");
+    await user.type(within(createDialog).getByLabelText("Name"), "Scoped Integration Key");
+    await user.click(within(createDialog).getByRole("button", { name: "All accounts" }));
     await user.click(screen.getByRole("menuitemcheckbox", { name: /primary@example\.com/i }));
     await user.keyboard("{Escape}");
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(createDialog).toHaveStyle({ pointerEvents: "auto" }));
+    await user.click(within(createDialog).getByRole("button", { name: "Create" }));
 
-    const createdDialog = await screen.findByRole("dialog", { name: "API key created" });
+    const createdDialog = await findInteractiveDialog("API key created");
     const closeCandidates = within(createdDialog).getAllByRole("button", {
       name: "Close",
     });
@@ -90,12 +108,14 @@ describe("api keys flow integration", () => {
       closeCandidates.find((element) => element.getAttribute("data-slot") === "button") ??
       closeCandidates[0];
     await user.click(closeButton);
+    await waitFor(() => expect(createdDialog).not.toBeInTheDocument());
 
     const createdRow = getParentRow(await screen.findByText("Scoped Integration Key"));
     await openRowActions(user, createdRow);
     await user.click(await screen.findByRole("menuitem", { name: /Edit/ }));
+    const editDialog = await findInteractiveDialog("Edit API key");
 
-    expect(await screen.findByRole("button", { name: "1 account selected" })).toBeInTheDocument();
+    expect(within(editDialog).getByRole("button", { name: "1 account selected" })).toBeInTheDocument();
   });
 
   it("creates and updates an api key restricted to image models", async () => {

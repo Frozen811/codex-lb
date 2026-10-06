@@ -175,6 +175,14 @@ with bounded concurrency and resets mocks, timers, handlers and mutable browser
 state. Multipart tests install Node Blob/File before loading Undici's request
 constructors. Modal interaction waits for Radix's pointer-ready layer.
 
+The first full cloud run exposed another scheduling assumption in the API-key
+integration flow: a visible create button can still be disabled while its data
+loads, and table updates can precede release of a closing modal's pointer lock.
+Those tests now wait for the enabled button, interactive dialog layer and modal
+removal before continuing. Dialog queries are scoped to the active modal, and
+typing avoids artificial per-character timer delays. Assertions, the 15-second
+test timeout and the 70% coverage thresholds remain unchanged.
+
 The six integration-core shards use recorded file durations when supplied and
 static estimates otherwise. All runners use the same snapshot; JUnit artifacts
 can refresh it after a complete run. Verification prevents duplicate, missing
