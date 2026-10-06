@@ -6,6 +6,9 @@ import { describe, expect, it } from "vitest";
 import App from "@/App";
 import { server } from "@/test/mocks/server";
 import { renderWithProviders } from "@/test/utils";
+// Prepare the visited lazy route before timing interactions. Coverage-driven
+// module transforms can otherwise consume the first scenario's entire budget.
+import "@/features/settings/components/settings-page";
 
 function getParentRow(cell: HTMLElement): HTMLElement {
   const row = cell.closest("tr");
@@ -28,10 +31,9 @@ async function findInteractiveDialog(name: string): Promise<HTMLElement> {
 }
 
 describe("api keys flow integration", () => {
-  it("creates, shows plain key dialog, edits, and deletes an api key", async () => {
+  it("creates an api key and shows its plain key dialog", async () => {
     const user = userEvent.setup({ delay: null });
     const createdName = "Integration Key";
-    const updatedName = "Integration Key Updated";
 
     window.history.pushState({}, "", "/settings");
     renderWithProviders(<App />);
@@ -40,7 +42,8 @@ describe("api keys flow integration", () => {
     await waitFor(() => expect(createButton).toBeEnabled());
     await user.click(createButton);
     const createDialog = await findInteractiveDialog("Create API key");
-    await user.type(within(createDialog).getByLabelText("Name"), createdName);
+    await user.click(within(createDialog).getByLabelText("Name"));
+    await user.paste(createdName);
     await user.click(within(createDialog).getByRole("button", { name: "Create" }));
 
     const createdDialog = await findInteractiveDialog("API key created");
@@ -55,13 +58,23 @@ describe("api keys flow integration", () => {
     await waitFor(() => expect(createdDialog).not.toBeInTheDocument());
 
     const createdRow = getParentRow(await screen.findByText(createdName));
+    expect(within(createdRow).getByText("Active")).toBeInTheDocument();
+  });
 
-    await openRowActions(user, createdRow);
+  it("edits and deletes an existing api key", async () => {
+    const user = userEvent.setup({ delay: null });
+    const updatedName = "Integration Key Updated";
+
+    window.history.pushState({}, "", "/settings");
+    renderWithProviders(<App />);
+    const originalRow = getParentRow(await screen.findByText("Default key"));
+
+    await openRowActions(user, originalRow);
     await user.click(await screen.findByRole("menuitem", { name: /Edit/ }));
     const editDialog = await findInteractiveDialog("Edit API key");
     const nameInput = within(editDialog).getByLabelText("Name");
     await user.clear(nameInput);
-    await user.type(nameInput, updatedName);
+    await user.paste(updatedName);
     await user.click(within(editDialog).getByRole("button", { name: "Save" }));
     await waitFor(() => expect(editDialog).not.toBeInTheDocument());
 
@@ -93,7 +106,8 @@ describe("api keys flow integration", () => {
     await waitFor(() => expect(createButton).toBeEnabled());
     await user.click(createButton);
     const createDialog = await findInteractiveDialog("Create API key");
-    await user.type(within(createDialog).getByLabelText("Name"), "Scoped Integration Key");
+    await user.click(within(createDialog).getByLabelText("Name"));
+    await user.paste("Scoped Integration Key");
     await user.click(within(createDialog).getByRole("button", { name: "All accounts" }));
     await user.click(screen.getByRole("menuitemcheckbox", { name: /primary@example\.com/i }));
     await user.keyboard("{Escape}");

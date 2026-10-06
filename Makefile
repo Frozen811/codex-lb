@@ -71,6 +71,10 @@ POSTGRES_PYTEST_TARGETS := \
 	tests/integration/test_dashboard_users_api.py::test_key_reactivation_never_leaves_active_keys_on_a_disabled_owner \
 	tests/integration/test_dashboard_users_api.py::test_key_patch_that_also_renames_orders_the_owner_before_the_key \
 	tests/integration/test_scim_v2_users.py::test_a_patch_meets_the_length_caps_a_replace_meets
+# VACUUM visibility and planner costs depend on concurrent server activity.
+# Keep these performance assertions after the parallel PostgreSQL slice.
+POSTGRES_PLAN_TARGETS := $(foreach target,$(POSTGRES_PYTEST_TARGETS),$(if $(findstring query_plan,$(target)),$(target)))
+POSTGRES_PARALLEL_TARGETS := $(filter-out $(POSTGRES_PLAN_TARGETS),$(POSTGRES_PYTEST_TARGETS))
 MYSQL_PYTEST_TARGETS := \
 	tests/integration/test_affinity_invite_migration.py \
 	tests/integration/test_affinity_identity_migration.py \
@@ -313,11 +317,19 @@ test-e2e: frontend-ready
 	uv sync --dev --frozen
 	PYTHONFAULTHANDLER=1 uv run --no-sync pytest $(PYTEST_ARGS) $(PYTEST_PARALLEL_ARGS) $(PYTEST_REPORT_ARGS) tests/e2e
 
-test-postgres: frontend-ready
+test-postgres: test-postgres-plans
+
+.PHONY: test-postgres-parallel test-postgres-plans
+test-postgres-parallel: frontend-ready
 	uv sync --dev --frozen
 	CODEX_LB_TEST_DATABASE_URL="$${CODEX_LB_TEST_DATABASE_URL:-$(POSTGRES_TEST_DATABASE_URL)}" \
 	  PYTHONFAULTHANDLER=1 \
-	  uv run --no-sync pytest $(PYTEST_ARGS) $(PYTEST_PARALLEL_ARGS) $(PYTEST_REPORT_ARGS) $(POSTGRES_PYTEST_TARGETS)
+	  uv run --no-sync pytest $(PYTEST_ARGS) $(PYTEST_PARALLEL_ARGS) $(PYTEST_REPORT_ARGS) $(POSTGRES_PARALLEL_TARGETS)
+
+test-postgres-plans: test-postgres-parallel
+	CODEX_LB_TEST_DATABASE_URL="$${CODEX_LB_TEST_DATABASE_URL:-$(POSTGRES_TEST_DATABASE_URL)}" \
+	  PYTHONFAULTHANDLER=1 \
+	  uv run --no-sync pytest $(PYTEST_ARGS) -n 0 $(PYTEST_REPORT_ARGS) $(POSTGRES_PLAN_TARGETS)
 
 .PHONY: test-mysql
 test-mysql: frontend-ready

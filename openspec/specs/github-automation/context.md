@@ -183,6 +183,20 @@ removal before continuing. Dialog queries are scoped to the active modal, and
 typing avoids artificial per-character timer delays. Assertions, the 15-second
 test timeout and the 70% coverage thresholds remain unchanged.
 
+The CRUD integration flow enters complete names with a paste interaction so
+coverage does not rerender the full form once per character. Creation and
+editing/deletion are independent flows with fresh mock state, retaining all
+behavioral assertions within the existing timeout. Their visited lazy route is
+imported before test execution so cold coverage transforms do not consume the
+interaction budget; the real App and route guards still run. Live-reset tests
+freeze the domain freshness clock during their 240-write history-retention
+exercise, then advance it explicitly for the expiry assertion. PostgreSQL query
+plan assertions run after the parallel database slice, avoiding concurrent
+transaction/visibility effects on VACUUM and planner costs; all plan assertions
+remain mandatory. Windows release smoke waits up to 15 seconds for transient
+sharing violations during temporary storage cleanup after process termination.
+Other cleanup errors and locks that remain past the deadline still fail smoke.
+
 The six integration-core shards use recorded file durations when supplied and
 static estimates otherwise. All runners use the same snapshot; JUnit artifacts
 can refresh it after a complete run. Verification prevents duplicate, missing

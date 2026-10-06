@@ -11,6 +11,8 @@ import socket
 import subprocess
 import tempfile
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.error import URLError
 from urllib.request import urlopen
@@ -45,8 +47,27 @@ def smoke_http(base_url: str, process: subprocess.Popen | None = None) -> None:
     print("release readiness, dashboard HTML, JavaScript and CSS passed")
 
 
+@contextmanager
+def smoke_directory() -> Iterator[str]:
+    directory = tempfile.TemporaryDirectory(prefix="codex-lb-smoke-")
+    try:
+        yield directory.name
+    finally:
+        # Descendant handles can still be closing after taskkill returns.
+        # Wait for sharing locks; propagate other errors and persistent locks.
+        deadline = time.monotonic() + 15
+        while True:
+            try:
+                directory.cleanup()
+                break
+            except PermissionError as error:
+                if getattr(error, "winerror", None) != 32 or time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.05)
+
+
 def smoke_package(python: Path, version: str) -> None:
-    with tempfile.TemporaryDirectory(prefix="codex-lb-smoke-") as temporary:
+    with smoke_directory() as temporary:
         root = Path(temporary)
         env = {
             key: value

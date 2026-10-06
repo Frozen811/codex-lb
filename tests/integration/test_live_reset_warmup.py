@@ -36,6 +36,11 @@ async def test_live_reset_survives_freshness_skip_and_scheduler_restart(
     db_setup: bool, monkeypatch: pytest.MonkeyPatch, window: str, prior_status: str | None
 ) -> None:
     account, snapshot, reset_at = await prepare_live_reset(window, prior_status=prior_status)
+    # The 240-write case exercises history retention, not runner speed. Keep
+    # its freshness clock fixed until the explicit expiry transition below.
+    now = utcnow()
+    monkeypatch.setattr(updater, "utcnow", lambda: now)
+    monkeypatch.setattr(usage_repository, "utcnow", lambda: now)
 
     sends = record_warmup_sends(monkeypatch)
     polls: list[str] = []
@@ -69,7 +74,7 @@ async def test_live_reset_survives_freshness_skip_and_scheduler_restart(
             original_attempt = (await LimitWarmupRepository(session).latest_by_account([account.id]))[account.id]
 
         # Expire only the updater's freshness clock, then exercise a real poll.
-        poll_time = utcnow() + timedelta(seconds=61)
+        poll_time = now + timedelta(seconds=61)
         monkeypatch.setattr(updater, "utcnow", lambda: poll_time)
         await run_scheduler_ticks(monkeypatch)
         assert polls == ["poll"]
