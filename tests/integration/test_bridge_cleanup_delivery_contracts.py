@@ -31,11 +31,13 @@ bridge_origin = _bridge_origin_fixture
 class _DeliveryOrigin:
     queues: list[_HTTPBridgeEventQueue] = field(default_factory=list)
     sent: asyncio.Event = field(default_factory=asyncio.Event)
+    finish: asyncio.Event = field(default_factory=asyncio.Event)
 
 
 @pytest.fixture
-async def delivery_origin(bridge_origin, async_client, monkeypatch):
+async def delivery_origin(bridge_origin, async_client, monkeypatch, request: pytest.FixtureRequest):
     state = _DeliveryOrigin()
+    action = request.getfixturevalue("action")
 
     def new_queue(**kwargs):
         queue = _HTTPBridgeEventQueue(max_events=2, max_bytes=512)
@@ -43,7 +45,9 @@ async def delivery_origin(bridge_origin, async_client, monkeypatch):
         return queue
 
     monkeypatch.setattr(request_submit, "_new_http_bridge_event_queue", new_queue)
-    settings = upstream_events._service_get_settings().model_copy(update={"stream_idle_timeout_seconds": 0.1})
+    settings = upstream_events._service_get_settings().model_copy(
+        update={"stream_idle_timeout_seconds": 0.1 if action == "stall" else 10.0}
+    )
     monkeypatch.setattr(upstream_events, "_service_get_settings", lambda: settings)
 
     async def upstream(request):
@@ -60,6 +64,12 @@ async def delivery_origin(bridge_origin, async_client, monkeypatch):
                 await socket.send_json(
                     {"type": "response.output_text.delta", "response_id": response_id, "delta": str(index)}
                 )
+            if action == "cancel":
+                # Keep cancellation before terminal settlement even if the
+                # bounded queue can coalesce the whole upstream delta burst.
+                state.sent.set()
+                await state.finish.wait()
+                return socket
             await socket.send_json(
                 {
                     "type": "response.completed",
@@ -87,6 +97,7 @@ async def delivery_origin(bridge_origin, async_client, monkeypatch):
         try:
             yield state
         finally:
+            state.finish.set()
             service = get_proxy_service_for_app(async_client._transport.app)
             for session in list(service._http_bridge_sessions.values()):
                 await service._close_http_bridge_session(session)
@@ -113,7 +124,11 @@ async def test_real_bridge_paused_delivery_has_bounded_cleanup(
         await asyncio.Event().wait()
 
     async def send(message):
-        if message["type"] == "http.response.body" and message.get("body") and not paused.is_set():
+        if (
+            message["type"] == "http.response.body"
+            and b"resp_delivery" in message.get("body", b"")
+            and not paused.is_set()
+        ):
             paused.set()
             await resume.wait()
             if action == "write_error":
