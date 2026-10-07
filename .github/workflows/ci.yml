@@ -660,12 +660,16 @@ jobs:
         run: make migration-check-postgres
 
   test-mysql:
-    name: Tests (pytest, MySQL)
+    name: Tests (pytest, MySQL, shard ${{ matrix.shard }})
     runs-on: ubuntu-24.04
     # Files run in separate worker databases; within-file row resets stay serial.
     timeout-minutes: 120
     needs: [changes, frontend-build]
     if: always() && !cancelled()
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     services:
       mysql:
         image: mysql:8.4
@@ -720,9 +724,48 @@ jobs:
           MYSQL_PWD: codex_lb_root
         run: mysql --protocol=TCP --host=127.0.0.1 --user=root -e 'GRANT ALL PRIVILEGES ON `codex\_lb\_test\_%`.* TO "codex_lb"@"%";'
 
-      - name: Run tests
+      - name: Run MySQL tests shard ${{ matrix.shard }}
         if: needs.changes.outputs.backend == 'true'
-        run: make test-mysql
+        run: make test-mysql-${{ matrix.shard }} PYTEST_REPORT_ARGS="--junitxml=.test-results/mysql-${{ matrix.shard }}.xml"
+
+      - name: Upload MySQL durations
+        if: always() && needs.changes.outputs.backend == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: mysql-durations-${{ matrix.shard }}
+          path: .test-results/mysql-${{ matrix.shard }}.xml
+          retention-days: 7
+
+  # Preserve the existing protected check while requiring all matrix runners.
+  test-mysql-required:
+    name: Tests (pytest, MySQL)
+    runs-on: ubuntu-24.04
+    if: always()
+    needs:
+      - test-mysql
+
+    steps:
+      - name: Require every MySQL shard to pass
+        env:
+          NEEDS_JSON: ${{ toJson(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+
+          needs = json.loads(os.environ["NEEDS_JSON"])
+          failed = {
+              name: details["result"]
+              for name, details in sorted(needs.items())
+              if details.get("result") != "success"
+          }
+          if failed:
+              for name, result in failed.items():
+                  print(f"{name}: {result}")
+              sys.exit(1)
+          print("all MySQL shards passed")
+          PY
 
   migration-check-mysql:
     name: Migration check (alembic, MySQL)
@@ -1045,6 +1088,7 @@ jobs:
       - test-integration-core-required
       - test-postgres
       - test-mysql
+      - test-mysql-required
       - migration-check
       - migration-check-postgres
       - migration-check-mysql

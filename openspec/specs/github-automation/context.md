@@ -222,3 +222,43 @@ uv run --no-project python -m scripts.build_test_dashboard
 uv run --no-sync pytest -n auto --dist=loadfile tests/unit
 uv run --no-sync python .github/scripts/pytest_shards.py --shard-count 6 --verify
 ```
+
+## MySQL CI sharding
+
+The MySQL selection lives in `.github/pytest-mysql-targets.txt`: whole files and
+specific nodes retain the previous suite's scope, including its root-level API
+file and unit-test node. The sharder groups selections by file, estimates only
+selected functions for partial files, and assigns the heaviest group to the
+lightest of three runners. Recorded durations override estimates. Every runner
+uses the same manifest and duration snapshot; each has its own MySQL 8.4 service
+and retains disposable xdist worker databases. Verification rejects empty,
+missing, duplicate and cross-runner file assignments.
+
+`make test-mysql` still runs the complete selection. `make test-mysql-1`,
+`make test-mysql-2` and `make test-mysql-3` run individual shards. Each CI shard
+uploads `mysql-durations-N` containing `mysql-N.xml`. Refresh the shared history
+after all shards finish, then commit it for the next run:
+
+```bash
+uv run --no-sync python .github/scripts/pytest_shards.py --suite mysql \
+  --durations-file .github/pytest-mysql-durations.json \
+  --update-from-junit .test-results/mysql-1.xml .test-results/mysql-2.xml .test-results/mysql-3.xml
+uv run --no-sync python .github/scripts/pytest_shards.py --suite mysql --shard-count 3 --verify
+```
+
+PowerShell can select a shard and pass the resulting arguments directly to
+pytest without Make or Bash substitution. The configured test user needs the
+existing create/drop grants for the isolated worker database namespace:
+
+```powershell
+$env:CODEX_LB_TEST_DATABASE_URL = "mysql+asyncmy://codex_lb:codex_lb@127.0.0.1:3306/codex_lb"
+$mysqlTests = @(uv run --no-sync python .github/scripts/pytest_shards.py --suite mysql --shard-count 3 --shard-index 1)
+uv run --no-sync pytest -n auto --dist=loadfile @mysqlTests
+```
+
+The compatibility context `Tests (pytest, MySQL)` requires a successful matrix;
+failure, skip or cancellation fails it. `CI Required` waits for both the matrix
+and compatibility aggregate. Backend-unrelated pull requests retain successful
+placeholder contexts for all three shards. Runtime goals are measured against
+GitHub timestamps after publishing, rather than asserted as timing-sensitive
+tests; queueing and other suites can determine the workflow's critical path.

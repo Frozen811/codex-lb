@@ -75,107 +75,9 @@ POSTGRES_PYTEST_TARGETS := \
 # Keep these performance assertions after the parallel PostgreSQL slice.
 POSTGRES_PLAN_TARGETS := $(foreach target,$(POSTGRES_PYTEST_TARGETS),$(if $(findstring query_plan,$(target)),$(target)))
 POSTGRES_PARALLEL_TARGETS := $(filter-out $(POSTGRES_PLAN_TARGETS),$(POSTGRES_PYTEST_TARGETS))
-MYSQL_PYTEST_TARGETS := \
-	tests/integration/test_affinity_invite_migration.py \
-	tests/integration/test_affinity_identity_migration.py \
-	tests/integration/test_cost_backfill.py \
-	tests/integration/test_atomic_quota_warmup_claims.py \
-	tests/integration/test_report_rollup.py \
-	tests/integration/test_reports_performance_api.py \
-	tests/integration/test_auth_provider_abstraction.py \
-	tests/integration/test_migrations.py::test_mysql_migration_contract_policy_and_drift_match \
-	tests/integration/test_migrations.py::test_mysql_upgrade_head_from_empty_database \
-	tests/integration/test_usage_repository.py \
-	tests/integration/test_automations_history_queries.py \
-	tests/integration/test_automations_api.py \
-	tests/integration/test_dashboard_users_api.py \
-	tests/integration/test_repositories.py \
-	tests/integration/test_sticky_sessions_api.py \
-	tests/integration/test_proxy_sticky_sessions.py \
-	tests/unit/test_durable_bridge_sessions.py::test_durable_bridge_retry_circuit_cooldown_uses_the_pre_update_failure_count \
-	tests/integration/test_proxy_api_extended.py \
-	tests/integration/test_api_keys_api.py \
-	tests/integration/test_codex_usage_api.py \
-	tests/integration/test_proxy_compact.py \
-	tests/integration/test_db_session_timezone.py \
-	tests/integration/test_db_commit_durability.py \
-	tests/test_request_logs_options_api.py \
-	tests/integration/test_account_usage_rollup.py \
-	tests/integration/test_account_deletion_background.py \
-	tests/integration/test_request_usage_time_rollup.py \
-	tests/integration/test_request_usage_rollup_parity.py \
-	tests/integration/test_conversation_presence_union.py \
-	tests/integration/test_data_retention.py \
-	tests/integration/test_plan_downgrade_observation_store.py \
-	tests/integration/test_accounts_api_probe.py \
-	tests/integration/test_migrations.py::test_request_usage_time_rollups_migration_upgrade_and_downgrade \
-	tests/integration/test_migrations.py::test_conversation_presence_rollup_migration_upgrade_and_downgrade \
-	tests/integration/test_migrations.py::test_account_plan_downgrade_observations_migration_upgrade_and_downgrade \
-	tests/integration/test_migrations.py::test_account_pending_deletion_migration_upgrade_and_downgrade \
-	tests/integration/test_migrations.py::test_bridge_continuity_abandonment_migration_upgrade_and_downgrade \
-	tests/integration/test_migrations.py::test_usage_history_bulk_covering_indexes_migration_upgrade_and_downgrade \
-	tests/integration/test_migration_serialization.py::test_concurrent_upgrades_on_fresh_mysql_database_apply_head_exactly_once \
-	tests/integration/test_migration_serialization.py::test_mysql_migration_lock_excludes_a_second_holder \
-	tests/integration/test_migration_serialization.py::test_mysql_run_upgrade_times_out_when_named_lock_is_held \
-	tests/integration/test_account_deletion_lifespan.py \
-	tests/integration/test_accounts_api.py \
-	tests/integration/test_accounts_api_extended.py \
-	tests/integration/test_accounts_repository.py \
-	tests/integration/test_additional_usage_flow.py \
-	tests/integration/test_api_keys_trends_api.py \
-	tests/integration/test_audit_actor_attribution.py \
-	tests/integration/test_auth_guardian_multi_replica.py \
-	tests/integration/test_auth_middleware.py \
-	tests/integration/test_background_jobs_runtime.py \
-	tests/integration/test_cache_invalidation_bus.py \
-	tests/integration/test_cache_isolation_probe_api.py \
-	tests/integration/test_cache_locality_fix.py \
-	tests/integration/test_capability_lineage_repository.py \
-	tests/integration/test_conversation_archive_runtime.py \
-	tests/integration/test_conversations_api.py \
-	tests/integration/test_dashboard_overview.py \
-	tests/integration/test_dashboard_password_auth.py \
-	tests/integration/test_dashboard_query_oom_regression.py \
-	tests/integration/test_dashboard_roles_schema.py \
-	tests/integration/test_dashboard_trailing_demand_cache.py \
-	tests/integration/test_dashboard_users_schema.py \
-	tests/integration/test_daybreak_capability_routes.py \
-	tests/integration/test_detached_persistence.py \
-	tests/integration/test_fleet_summary_api.py \
-	tests/integration/test_live_usage_ingest.py \
-	tests/integration/test_load_balancer_integration.py \
-	tests/integration/test_load_balancer_multi_replica.py \
-	tests/integration/test_local_login_policy_break_glass.py \
-	tests/integration/test_model_registry_replication.py \
-	tests/integration/test_model_source_routing.py \
-	tests/integration/test_oauth_flow.py \
-	tests/integration/test_off_loop_test_client.py \
-	tests/integration/test_operator_viewer_presets.py \
-	tests/integration/test_proxy_affinity_observation.py \
-	tests/integration/test_proxy_affinity_websocket_observation.py \
-	tests/integration/test_proxy_files.py \
-	tests/integration/test_proxy_images.py \
-	tests/integration/test_proxy_responses.py \
-	tests/integration/test_proxy_transcriptions.py \
-	tests/integration/test_proxy_transient_retry.py \
-	tests/integration/test_proxy_warmup.py \
-	tests/integration/test_quota_planner_api.py \
-	tests/integration/test_quota_warmup_cancellation.py \
-	tests/integration/test_replica_guardrails.py \
-	tests/integration/test_request_logs_api.py \
-	tests/integration/test_request_logs_filters.py \
-	tests/integration/test_request_logs_list_count.py \
-	tests/integration/test_reset_credits_replica_safety.py \
-	tests/integration/test_role_mapping_reevaluation.py \
-	tests/integration/test_role_mappings_api.py \
-	tests/integration/test_token_refresh_claims.py \
-	tests/integration/test_upstream_route_cache_invalidation.py \
-	tests/integration/test_usage_api.py \
-	tests/integration/test_usage_refresh_scheduler_scope.py \
-	tests/integration/test_usage_summary.py \
-	tests/integration/test_v1_reset_credit.py \
-	tests/integration/test_v1_usage.py \
-	tests/integration/test_warmup_accounting_exclusions.py
+MYSQL_PYTEST_TARGETS := $(shell cat .github/pytest-mysql-targets.txt)
+MYSQL_SHARD_COUNT := 3
+MYSQL_SHARD_DURATIONS ?= .github/pytest-mysql-durations.json
 SHELL := bash
 
 .PHONY: help
@@ -331,12 +233,30 @@ test-postgres-plans: test-postgres-parallel
 	  PYTHONFAULTHANDLER=1 \
 	  uv run --no-sync pytest $(PYTEST_ARGS) -n 0 $(PYTEST_REPORT_ARGS) $(POSTGRES_PLAN_TARGETS)
 
-.PHONY: test-mysql
+.PHONY: test-mysql test-mysql-shard test-mysql-1 test-mysql-2 test-mysql-3
 test-mysql: frontend-ready
 	uv sync --dev --frozen
 	CODEX_LB_TEST_DATABASE_URL="$${CODEX_LB_TEST_DATABASE_URL:-$(MYSQL_TEST_DATABASE_URL)}" \
 	  PYTHONFAULTHANDLER=1 \
 	  uv run --no-sync pytest $(PYTEST_ARGS) $(PYTEST_PARALLEL_ARGS) $(PYTEST_REPORT_ARGS) $(MYSQL_PYTEST_TARGETS)
+
+test-mysql-shard: frontend-ready
+	uv sync --dev --frozen
+	uv run --no-sync python .github/scripts/pytest_shards.py --suite mysql --shard-count $(MYSQL_SHARD_COUNT) --durations-file $(MYSQL_SHARD_DURATIONS) --verify
+	targets="$$(uv run --no-sync python .github/scripts/pytest_shards.py --suite mysql --shard-count $(MYSQL_SHARD_COUNT) --durations-file $(MYSQL_SHARD_DURATIONS) --shard-index $(SHARD))" && \
+	  CODEX_LB_TEST_DATABASE_URL="$${CODEX_LB_TEST_DATABASE_URL:-$(MYSQL_TEST_DATABASE_URL)}" \
+	  PYTHONFAULTHANDLER=1 \
+	  uv run --no-sync pytest $(PYTEST_ARGS) $(PYTEST_PARALLEL_ARGS) $(PYTEST_REPORT_ARGS) \
+	  $$targets
+
+test-mysql-1:
+	$(MAKE) test-mysql-shard SHARD=1
+
+test-mysql-2:
+	$(MAKE) test-mysql-shard SHARD=2
+
+test-mysql-3:
+	$(MAKE) test-mysql-shard SHARD=3
 
 .PHONY: migration-check migration-check-postgres migration-check-mysql
 migration-check:

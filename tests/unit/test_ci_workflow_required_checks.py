@@ -1,5 +1,12 @@
+import json
+import os
 import re
+import subprocess
+import sys
 from pathlib import Path
+
+import pytest
+import yaml
 
 CI_WORKFLOW = Path(__file__).parents[2] / ".github" / "workflows" / "ci.yml"
 
@@ -62,6 +69,57 @@ def test_postgres_real_test_steps_still_run_only_for_backend_changes() -> None:
     ):
         step = pg_job.split(f"- name: {step_name}", maxsplit=1)[1]
         assert step.lstrip().startswith("if: needs.changes.outputs.backend == 'true'")
+
+
+def test_mysql_matrix_has_three_required_contexts_and_isolated_services() -> None:
+    jobs = yaml.safe_load(_ci_workflow_text())["jobs"]
+    mysql = jobs["test-mysql"]
+    shards = mysql["strategy"]["matrix"]["shard"]
+    assert shards == [1, 2, 3]
+    assert mysql["strategy"]["fail-fast"] is False
+    assert {mysql["name"].replace("${{ matrix.shard }}", str(shard)) for shard in shards} == {
+        "Tests (pytest, MySQL, shard 1)",
+        "Tests (pytest, MySQL, shard 2)",
+        "Tests (pytest, MySQL, shard 3)",
+    }
+    assert mysql["services"]["mysql"]["image"] == "mysql:8.4"
+    assert "test-mysql" in jobs["ci-required"]["needs"]
+    assert "test-mysql-required" in jobs["ci-required"]["needs"]
+    assert jobs["test-mysql-required"]["needs"] == ["test-mysql"]
+    assert jobs["test-mysql-required"]["name"] == "Tests (pytest, MySQL)"
+
+
+def test_mysql_shards_keep_placeholder_artifact_and_report_contracts() -> None:
+    mysql = _job_block(_ci_workflow_text(), "test-mysql")
+    assert "if: always() && !cancelled()" in mysql
+    assert "name: Skip MySQL tests for unrelated changes" in mysql
+    assert "if: needs.changes.outputs.backend != 'true'" in mysql
+    assert "run: make test-mysql-${{ matrix.shard }}" in mysql
+    assert "--junitxml=.test-results/mysql-${{ matrix.shard }}.xml" in mysql
+    assert "name: mysql-durations-${{ matrix.shard }}" in mysql
+    assert "path: .test-results/mysql-${{ matrix.shard }}.xml" in mysql
+    assert "if: always() && needs.changes.outputs.backend == 'true'" in mysql
+    for step_name in (
+        "Checkout repository",
+        "Download built dashboard",
+        "Set up uv",
+        "Run MySQL tests shard ${{ matrix.shard }}",
+    ):
+        step = mysql.split(f"- name: {step_name}", maxsplit=1)[1]
+        assert step.lstrip().startswith("if: needs.changes.outputs.backend == 'true'")
+
+
+@pytest.mark.parametrize("result", ["success", "failure", "skipped", "cancelled"])
+def test_mysql_aggregate_requires_success_from_the_entire_matrix(result: str) -> None:
+    jobs = yaml.safe_load(_ci_workflow_text())["jobs"]
+    aggregate = jobs["test-mysql-required"]
+    assert aggregate["if"] == "always()"
+    run = aggregate["steps"][0]["run"]
+    script = run.split("<<'PY'\n", maxsplit=1)[1].rsplit("\nPY", maxsplit=1)[0]
+    env = os.environ.copy()
+    env["NEEDS_JSON"] = json.dumps({"test-mysql": {"result": result}})
+    process = subprocess.run([sys.executable, "-c", script], env=env, capture_output=True, text=True, timeout=30)
+    assert process.returncode == (0 if result == "success" else 1), process.stderr
 
 
 def test_dashboard_browser_smoke_covers_both_contract_sides_and_is_required() -> None:
