@@ -318,3 +318,15 @@ timeouts, coverage thresholds, real routes and file parallelism.
 
 Focused reproduction: `cd frontend && bun run test src/__integration__/firewall-flow.test.tsx src/features/cache-probe/api.test.ts src/test/mocks/handler-coverage.test.ts`.
 The full main coverage gate remains `make frontend-test`.
+
+Cloud coverage at `352e58d9` still timed out in the combined Firewall flow;
+its 1748 other Vitest tests and all backend jobs passed. Add and remove now run
+as independent route-level checks with fresh auth initialization and MSW storage
+per test. Opening confirmation must leave the IP intact; confirmed removal
+must clear storage and dispose the dialog. Adding must persist the row and
+clear the input. The legacy redirect and Advanced expansion checks remain.
+No timeout, assertion, coverage threshold or retry policy is relaxed.
+Trigger/heading discovery avoids whole-page accessible-name scans, then asserts
+the matched targets' roles and visibility; collapsed state is checked explicitly.
+Advanced expansion has its own case so cold UI mounting and CRUD interactions
+do not consume one shared timeout budget. All four cases still render the real App.

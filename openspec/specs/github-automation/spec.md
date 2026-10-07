@@ -379,14 +379,18 @@ The main CI required aggregate MUST NOT depend on this additional workflow.
 Frontend integration checks SHALL preload visited lazy routes outside the timed
 interaction body when needed to preserve the existing timeout. They SHALL keep
 the real App, route guards, interaction semantics and behavior assertions.
+Firewall flow cases MUST start with fresh auth initialization and mutable mock
+storage, and independently verify Advanced expansion, IP creation, confirmed
+IP removal and legacy routing within the unchanged timeout. Target discovery
+optimizations MUST preserve checks of the actual controls' roles and visibility.
 Cache-probe API fixtures MUST cover plan and confirmed run requests with typed,
 deterministic responses; unknown API requests MUST remain errors.
 
 #### Scenario: Firewall add/remove runs with coverage
 
-- **WHEN** a Settings integration check adds and removes an IP with coverage
-- **THEN** it verifies the stored IP and its removal through real UI interactions
-- **AND** it does not raise test timeouts or retry a failed test
+- **WHEN** Settings integration checks add and remove an IP with coverage
+- **THEN** they verify the stored IP and its removal through real UI interactions
+- **AND** each case owns fresh auth and mock storage without raising timeouts or retrying failed tests
 
 #### Scenario: Advanced settings fetches the cache-probe plan
 
