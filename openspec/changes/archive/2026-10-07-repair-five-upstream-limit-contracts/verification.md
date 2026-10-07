@@ -64,4 +64,4 @@ The graph index correctly guided the existing pipeline, but its fast refresh did
 
 Registry readback confirms exactly **5 changed source rows**, **333/333 other rows preserved byte-for-byte**, **338 total**, and **225 unverified**. The preserved-row SHA256 is `1a06d7f34e836b94a3ee72b9cd3226f0edd939e88f17fd7890102f0b57025176` before and after; initial selected rows and the comparison result are saved in [registry-preservation.json](registry-preservation.json). Scope counts: 106 local closures, 7 partial, 225 unverified.
 
-The fixing local commit is discoverable with `git log -1 --format=%H -- openspec/changes/archive/2026-10-07-repair-five-upstream-limit-contracts/verification.md`.
+The implementation commit is `6ca0f6f059a9dfaf26b69a582f2db7e2f75469c5`. The initial local-only scope above is historical: publication and successful exact-head cloud CI are recorded in [publication.md](publication.md). Its tested follow-up SHA `c50159869f3275f8f6c0541cabcc27cefeba68d1` passed CI #79, 35/35 jobs, plus the separate Windows, release-guard, and simplicity jobs (39/39 applicable jobs total).
