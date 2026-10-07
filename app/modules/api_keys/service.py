@@ -2015,6 +2015,8 @@ def _rate_limit_exceeded_error(limit: ApiKeyLimit) -> ApiKeyRateLimitExceededErr
 
 
 def _limit_applies_for_request(limit: ApiKeyLimit, *, request_model: str | None) -> bool:
+    if limit.limit_type == LimitType.CREDITS:
+        return False
     if limit.model_filter is None:
         return True
     if request_model is None:

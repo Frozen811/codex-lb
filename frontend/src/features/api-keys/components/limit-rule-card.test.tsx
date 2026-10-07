@@ -28,6 +28,11 @@ function costRule(overrides: Partial<LimitRuleCreate> = {}): LimitRuleCreate {
 }
 
 describe("LimitRuleCard", () => {
+  it("explains that credit overrides do not enforce traffic budgets", () => {
+    renderWithProviders(<LimitRuleCard rule={tokenRule({ limitType: "credits", limitWindow: "5h" })} onChange={vi.fn()} onRemove={vi.fn()} />);
+    expect(screen.getByText(/Display only: traffic does not consume these credits/)).toBeInTheDocument();
+    expect(screen.getByText("Credits (display only)")).toBeInTheDocument();
+  });
   it("renders token-type rule with correct label and value", () => {
     renderWithProviders(
       <LimitRuleCard rule={tokenRule()} onChange={vi.fn()} onRemove={vi.fn()} />,

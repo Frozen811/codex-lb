@@ -318,6 +318,7 @@ class AccountBackupItem(DashboardModel):
     status: str = "active"
     routing_policy: str = "normal"
     limit_warmup: bool = False
+    quota_limit_percent: float | None = Field(default=None, ge=0.0, le=100.0)
     tokens: CodexAuthTokens | None = None
     created_at: datetime | None = None
 

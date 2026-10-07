@@ -44,10 +44,6 @@ from app.db.session import get_background_session
 from app.modules.accounts.auth_manager import AuthManager
 from app.modules.accounts.deletion import request_account_deletion_run
 from app.modules.accounts.mappers import build_account_summaries, build_account_usage_trends
-from app.modules.accounts.quota_restriction import (
-    get_account_quota_restriction,
-    set_account_quota_restriction,
-)
 from app.modules.accounts.repository import AccountsRepository
 from app.modules.accounts.schemas import (
     AccountAdditionalQuota,
@@ -697,11 +693,12 @@ class AccountsService:
             normalized = None
         return await self._repo.update_alias(account_id, normalized)
 
-    def get_quota_limit(self, account_id: str) -> float | None:
-        return get_account_quota_restriction(account_id)
-
-    def set_quota_limit(self, account_id: str, limit_percent: float | None) -> None:
-        set_account_quota_restriction(account_id, limit_percent)
+    async def set_quota_limit(self, account_id: str, limit_percent: float | None) -> bool:
+        updated = await self._repo.update_quota_limit(account_id, limit_percent)
+        if updated:
+            get_account_selection_cache().invalidate()
+            await propagate_account_routing_change()
+        return updated
 
     async def export_backup(self) -> AccountBackupExportResponse:
         now = datetime.now(timezone.utc)
@@ -730,6 +727,7 @@ class AccountsService:
                 status=account.status.value if hasattr(account.status, "value") else str(account.status),
                 routing_policy=getattr(account, "routing_policy", "normal"),
                 limit_warmup=getattr(account, "limit_warmup_enabled", False),
+                quota_limit_percent=account.quota_limit_percent,
                 tokens=tokens,
                 created_at=account.created_at,
             )
@@ -771,6 +769,8 @@ class AccountsService:
                     await self.set_routing_policy(item.id, item.routing_policy)
                 if item.limit_warmup:
                     await self.set_limit_warmup_enabled(item.id, True)
+                if "quota_limit_percent" in item.model_fields_set:
+                    await self.set_quota_limit(item.id, item.quota_limit_percent)
                 restored_count += 1
             except Exception as exc:
                 failed_count += 1

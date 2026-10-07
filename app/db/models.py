@@ -117,6 +117,7 @@ class Account(Base):
         server_default=text("'normal'"),
         nullable=False,
     )
+    quota_limit_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     access_token_encrypted: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     refresh_token_encrypted: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)

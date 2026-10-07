@@ -461,8 +461,7 @@ async def get_account_quota_limit(
     account = await context.service.get_account(account_id)
     if not account:
         raise DashboardNotFoundError("Account not found", code="account_not_found")
-    limit = context.service.get_quota_limit(account_id)
-    return AccountQuotaLimitUpdateResponse(account_id=account_id, limit_percent=limit)
+    return AccountQuotaLimitUpdateResponse(account_id=account_id, limit_percent=account.quota_limit_percent)
 
 
 @router.put("/{account_id}/quota-limit", response_model=AccountQuotaLimitUpdateResponse)
@@ -476,7 +475,8 @@ async def update_account_quota_limit(
     account = await context.service.get_account(account_id)
     if not account:
         raise DashboardNotFoundError("Account not found", code="account_not_found")
-    context.service.set_quota_limit(account_id, payload.limit_percent)
+    if not await context.service.set_quota_limit(account_id, payload.limit_percent):
+        raise DashboardNotFoundError("Account not found", code="account_not_found")
     AuditService.log_async(
         "account_quota_limit_updated",
         actor_ip=request.client.host if request.client else None,

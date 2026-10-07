@@ -1948,6 +1948,7 @@ class LoadBalancer:
         return AccountState(
             account_id=account.id,
             status=account.status,
+            quota_limit_percent=account.quota_limit_percent,
             used_percent=None,
             reset_at=runtime.reset_at,
             primary_reset_at=None,
@@ -2570,6 +2571,7 @@ def _state_from_account(
     return AccountState(
         account_id=account.id,
         status=status,
+        quota_limit_percent=account.quota_limit_percent,
         used_percent=effective_used_percent,
         reset_at=reset_at,
         primary_reset_at=primary_reset,

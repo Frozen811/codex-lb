@@ -1,0 +1,149 @@
+{
+  "base": "ba4512387d71ba51cf1f6c27e0b5303364bcfa36",
+  "issues": [
+    {
+      "url": "https://github.com/Soju06/codex-lb/issues/2492",
+      "title": "feat: Reset API key limit usage from dashboard without regenerating keys",
+      "issue_number": 2492,
+      "body": "## Pre-flight checklist\n\n- [x] I searched existing issues and discussions for similar proposals.\n- [x] This is a concrete proposal, not an open-ended question.\n\n## Problem / motivation\n\nAdministrators can configure usage limits for API keys, but the dashboard has no action to manually reset accumulated limit usage (`currentValue`) for an existing key. The backend already supports an explicit reset via `PATCH /api/api-keys/{id}` with `resetUsage: true`, so today the only practical route is a manual API request. Regenerating a key is not a workaround: it changes the credential and requires clients to update it.\n\nThis concerns **codex-lb API-key limit counters**, not upstream account quota or Codex reset credits.\n\n## Proposed change\n\n- Add a **Reset usage** action for an individual API key in the dashboard.\n- Add a bulk action for selected keys, with an option to select all keys that have configured limits.\n- Before a reset, show a confirmation dialog listing the affected key names and count.\n- Afterward, refresh displayed usage and report per-key successes and failures. One failure should not hide successful resets of other keys.\n- Reset only the current limit counters. Preserve each key's ID, prefix, credential, configured limit types, windows, maximums, model filters, all other settings, and historical request logs.\n\nThe individual action can use the existing `resetUsage` PATCH behavior. Bulk reset can call it per key or use a dedicated endpoint if that provides better failure reporting.\n\nAcceptance criteria:\n\n- An administrator can reset one key or multiple selected keys without regenerating credentials.\n- The affected `currentValue` fields become `0`.\n- Key identity, limit configuration, and other settings remain unchanged.\n- The UI confirms the scope and clearly reports partial failures.\n\n## Alternatives considered\n\n- **Manual PATCH request:** Already possible, but error-prone and inaccessible from the dashboard.\n- **Regenerate the key:** Unacceptable because it changes a credential already used by clients.\n\n## Area\n\nDashboard UI; API key management.\n\n## Additional context\n\nThe existing backend reset behavior makes this primarily a dashboard capability request. Related but distinct: #518 concerns usage when adding a new limit to an already-used key.",
+      "state": "open",
+      "user": {
+        "login": "kostazol",
+        "name": "kostazol",
+        "email": null,
+        "avatar_url": "https://avatars.githubusercontent.com/u/30263513?v=4",
+        "id": 30263513
+      },
+      "assignees": null,
+      "labels": [
+        {
+          "name": "enhancement",
+          "color": "a2eeef",
+          "description": "New feature or request"
+        },
+        {
+          "name": "triage",
+          "color": "c5def5",
+          "description": "Awaiting triage"
+        }
+      ],
+      "milestone": null,
+      "state_reason": null,
+      "comments": 1,
+      "created_at": "2026-09-23T07:55:24Z",
+      "updated_at": "2026-09-28T08:46:56Z",
+      "closed_at": null,
+      "display_url": "https://github.com/Soju06/codex-lb/issues/2492",
+      "display_title": "feat: Reset API key limit usage from dashboard without regenerating keys"
+    },
+    {
+      "url": "https://github.com/Soju06/codex-lb/issues/2556",
+      "title": "bug(api-keys): `credits` limits never accrue usage, so they are never enforced. Bug, or manual override by design?",
+      "issue_number": 2556,
+      "body": "### Pre-flight checklist\n- [x] I searched existing issues. The closest is #499, which is about `/v1/usage` returning aggregate rows instead of key limits.\n- [x] Reproduced on `main` at `f8ffbac`.\n- [x] I can reproduce the problem with the steps below.\n\n### codex-lb version\n`main` at `f8ffbac`. The code paths below are unchanged there.\n\n### What happened?\nIn the API key editor, `credits` sits next to `total_tokens`, `input_tokens`, `output_tokens` and `cost_usd`. Its labels are \"Credits\" and \"Max value (credits)\". Normal traffic never moves its counter, though:\n\n- the reservation delta is `0` ([`service.py:1801`](https://github.com/Soju06/codex-lb/blob/f8ffbac2099a113fba54dfd8d77774f5bca80ffa/app/modules/api_keys/service.py#L1801));\n- the settlement increment is `0` ([`service.py:1855`](https://github.com/Soju06/codex-lb/blob/f8ffbac2099a113fba54dfd8d77774f5bca80ffa/app/modules/api_keys/service.py#L1855));\n- the usage sum from request logs is `0` ([`repository.py:322`](https://github.com/Soju06/codex-lb/blob/f8ffbac2099a113fba54dfd8d77774f5bca80ffa/app/modules/api_keys/repository.py#L322)).\n\nThe enforcement check is `current_value >= max_value` ([`service.py:946`](https://github.com/Soju06/codex-lb/blob/f8ffbac2099a113fba54dfd8d77774f5bca80ffa/app/modules/api_keys/service.py#L946)). Because `current_value` stays at 0, a credits limit never blocks a request. `/v1/usage` reports `current_value: 0` for it no matter how much the key has been used.\n\n### What did you expect to happen?\nI'm not sure which behavior is intended, so I'm asking. #304 added this limit type as a \"credit-based API-key limit ... for `credits` windows (`5h` and `7d`)\", described as Codex override windows for `/v1/usage` clients. I found no spec or doc that says whether traffic should accrue it. Either reading is reasonable:\n\n1. **It should be enforced like the other limit types.** Then it needs a definition of how a request converts to credits, and an increment. The pricing page's published token-to-credit rates are one option. In [#2420](https://github.com/Soju06/codex-lb/issues/2420#issuecomment-5940096125), those rates tracked upstream `used_percent` closely on two Plus accounts.\n2. **It's a value set by hand and only reported to `/v1/usage` clients.** Then the editor should say so, and maybe keep it out of the enforcement loop. As it stands, an operator who sets \"Max value (credits): 1000\" will reasonably expect requests to be blocked once usage passes 1000.\n\n### Steps to reproduce\nA temporary integration test using the helpers from `tests/integration/test_api_keys_api.py`. The upstream compact call is faked to report 100,000 tokens per request.\n\n<details><summary>test</summary>\n\n```python\nimport pytest\n\nfrom app.core.openai.models import OpenAIResponsePayload\nfrom app.db.session import SessionLocal\nfrom app.modules.api_keys.repository import ApiKeysRepository\nfrom tests.integration.test_api_keys_api import _TEST_MODELS, _import_account, proxy_module\n\n\n@pytest.mark.asyncio\nasync def test_credits_limit_accrual(async_client, monkeypatch):\n    await async_client.put(\"/api/settings\", json={\"stickyThreadsEnabled\": False,\n        \"preferEarlierResetAccounts\": False, \"totpRequiredOnLogin\": False, \"apiKeyAuthEnabled\": True})\n    created = await async_client.post(\"/api/api-keys/\", json={\"name\": \"credits-repro\", \"limits\": [\n        {\"limitType\": \"credits\", \"limitWindow\": \"5h\", \"maxValue\": 1},\n        {\"limitType\": \"total_tokens\", \"limitWindow\": \"weekly\", \"maxValue\": 1000000},\n    ]})\n    key, key_id = created.json()[\"key\"], created.json()[\"id\"]\n    await _import_account(async_client, \"acc_credits_repro\", \"credits-repro@example.com\")\n\n    async def fake_compact(_payload, _headers, _access_token, _account_id):\n        return OpenAIResponsePayload.model_validate({\"id\": \"resp_x\", \"model\": _TEST_MODELS[0], \"status\": \"completed\",\n            \"usage\": {\"input_tokens\": 70000, \"output_tokens\": 30000, \"total_tokens\": 100000}, \"output\": []})\n    monkeypatch.setattr(proxy_module, \"core_compact_responses\", fake_compact)\n\n    statuses = []\n    for _ in range(3):\n        r = await async_client.post(\"/v1/responses/compact\", headers={\"Authorization\": f\"Bearer {key}\"},\n                                    json={\"model\": _TEST_MODELS[0], \"instructions\": \"hi\", \"input\": []})\n        statuses.append(r.status_code)\n    async with SessionLocal() as session:\n        limits = await ApiKeysRepository(session).get_limits_by_key(key_id)\n        print({(l.limit_type.value, l.limit_window.value): (l.current_value, l.max_value) for l in limits})\n    print(statuses, (await async_client.get(\"/v1/usage\", headers={\"Authorization\": f\"Bearer {key}\"})).json()[\"limits\"])\n```\n</details>\n\nOutput:\n\n```\nstatuses [200, 200, 200]\nlimits (current, max) {('credits', '5h'): (0, 1), ('total_tokens', 'weekly'): (300000, 1000000)}\n/v1/usage [{'limit_type': 'credits', 'limit_window': '5h', 'max_value': 1, 'current_value': 0, 'remaining_value': 1, ...},\n           {'limit_type': 'total_tokens', 'limit_window': 'weekly', 'max_value': 1000000, 'current_value': 300000, 'remaining_value': 700000, ...}]\n```\n\nWith a credits limit of 1, all three requests went through, and the credits counter stayed at 0 while `total_tokens` reached 300,000. The existing tests that cover credits limits (`tests/integration/test_v1_usage.py`, around line 515) write `current_value` directly through the repository, so nothing exercises accrual from traffic.\n\n### Additional context\nIf option 1 is the intent, I can send a PR. #2420 has the measurements for the token-to-credit rates. Either way, the editor's help text should say which behavior applies.\n",
+      "state": "open",
+      "user": {
+        "login": "ngallodev",
+        "name": "ngallodev",
+        "email": null,
+        "avatar_url": "https://avatars.githubusercontent.com/u/49315035?v=4",
+        "id": 49315035
+      },
+      "assignees": null,
+      "labels": [
+        {
+          "name": "bug",
+          "color": "d73a4a",
+          "description": "Something isn't working"
+        },
+        {
+          "name": "triage",
+          "color": "c5def5",
+          "description": "Awaiting triage"
+        }
+      ],
+      "milestone": null,
+      "state_reason": null,
+      "comments": 0,
+      "created_at": "2026-10-02T05:19:17Z",
+      "updated_at": "2026-10-02T05:19:26Z",
+      "closed_at": null,
+      "display_url": "https://github.com/Soju06/codex-lb/issues/2556",
+      "display_title": "bug(api-keys): `credits` limits never accrue usage, so they are never enforced. Bug, or manual override by design?"
+    },
+    {
+      "url": "https://github.com/Soju06/codex-lb/issues/1080",
+      "title": "feat: add configurable longer observation windows for API key usage",
+      "issue_number": 1080,
+      "body": "### Pre-flight checklist\n\n- [x] I searched existing issues and discussions for similar proposals.\n- [x] This is a concrete proposal, not an open-ended question.\n\n### Problem / motivation\n\nThe API management page currently appears to focus on a short usage observation window, mainly the last 7 days. That is useful for quick operational checks, but it is not enough for longer-term API key management.\n\nFor operators who share or manage multiple API keys, a 7-day view makes it hard to answer questions such as:\n\n- Which API keys are consistently expensive over the last month?\n- Is a user/client slowly increasing usage over time?\n- Did a specific key have abnormal usage earlier in the billing cycle?\n- How does current usage compare with a previous 30-day period?\n\nThis becomes more important when API keys are used by different people, machines, projects, or automation jobs and the operator needs longer-term attribution rather than only recent activity.\n\n### Proposed change\n\nPlease consider adding selectable observation windows to the API management usage view.\n\nSuggested windows:\n\n- 7 days (keep the current default)\n- 30 days\n- 60 days / 90 days, if the retained data supports it\n- Custom date range, if feasible\n\nIdeally the selected window would affect the API-key usage summaries/charts consistently, so the operator can compare keys over the same time horizon.\n\n### Why this would help\n\n- Makes monthly API key cost/usage review much easier.\n- Helps spot slow-burn misuse or unexpected growth that does not stand out in a 7-day view.\n- Gives operators better evidence before changing limits, pausing keys, or contacting a user.\n- Aligns better with billing-cycle style reviews, which are usually closer to 30 days than 7 days.\n\n### Implementation notes / considerations\n\nThis may need to account for `usage_history` retention and query performance. If raw history is expensive to query for longer windows, an aggregated daily/hourly rollup could be enough for older ranges.\n\nRelated but not duplicate issues I found while searching:\n\n- #999 discusses smoothing the Weekly Credits Pace display over a shorter averaging window.\n- #708 discusses `usage_history` growth and performance concerns.\n- #956 discusses pace-aware throttling and dashboard context.\n\nThis request is specifically about making the API management page support longer observation windows for usage review.\n\n### Area\n\nDashboard UI, API key management, Usage observability",
+      "state": "closed",
+      "user": {
+        "login": "sharenla",
+        "name": "sharenla",
+        "email": null,
+        "avatar_url": "https://avatars.githubusercontent.com/u/198329913?v=4",
+        "id": 198329913
+      },
+      "assignees": null,
+      "labels": [
+        {
+          "name": "enhancement",
+          "color": "a2eeef",
+          "description": "New feature or request"
+        }
+      ],
+      "milestone": null,
+      "state_reason": "completed",
+      "comments": 1,
+      "created_at": "2026-06-23T13:48:27Z",
+      "updated_at": "2026-09-28T08:38:56Z",
+      "closed_at": "2026-09-28T08:38:56Z",
+      "display_url": "https://github.com/Soju06/codex-lb/issues/1080",
+      "display_title": "feat: add configurable longer observation windows for API key usage"
+    },
+    {
+      "url": "https://github.com/Soju06/codex-lb/issues/631",
+      "title": "Account limit restriction",
+      "issue_number": 631,
+      "body": "Use case: a person wants to share their account, but only 50% of the limit. This would work to maybe keep a bit of cloud usage leeway.",
+      "state": "open",
+      "user": {
+        "login": "hyoretsu",
+        "name": "hyoretsu",
+        "email": null,
+        "avatar_url": "https://avatars.githubusercontent.com/u/20804322?v=4",
+        "id": 20804322
+      },
+      "assignees": null,
+      "labels": [
+        {
+          "name": "enhancement",
+          "color": "a2eeef",
+          "description": "New feature or request"
+        }
+      ],
+      "milestone": null,
+      "state_reason": "reopened",
+      "comments": 16,
+      "created_at": "2026-05-14T19:59:48Z",
+      "updated_at": "2026-09-28T08:47:54Z",
+      "closed_at": null,
+      "display_url": "https://github.com/Soju06/codex-lb/issues/631",
+      "display_title": "Account limit restriction"
+    }
+  ],
+  "selected_ids": [
+    "UP-ISSUE-2492",
+    "UP-ISSUE-2556",
+    "UP-ISSUE-1080",
+    "UP-ISSUE-631",
+    "UP-PR-2463"
+  ],
+  "initial_rows": [
+    "| [UP-ISSUE-631](https://github.com/Soju06/codex-lb/issues/631) | Account limit restriction | РЕШЕНО | НЕ ПРОВЕРЕНО | — |",
+    "| [UP-ISSUE-2492](https://github.com/Soju06/codex-lb/issues/2492) | feat: Reset API key limit usage from dashboard without regenerating keys | РЕШЕНО | НЕ ПРОВЕРЕНО | — |",
+    "| [UP-ISSUE-1080](https://github.com/Soju06/codex-lb/issues/1080) | feat: add configurable longer observation windows for API key usage | РЕШЕНО | НЕ ПРОВЕРЕНО | — |",
+    "| [UP-PR-2463](https://github.com/Soju06/codex-lb/pull/2463) | PR #2463: feat(api-keys): add estimated usage-share limits | Раздел 12, L1359 | НЕ ПРОВЕРЕНО | — |",
+    "| [UP-ISSUE-2556](https://github.com/Soju06/codex-lb/issues/2556) | bug(api-keys): `credits` limits never accrue usage, so they are never enforced. Bug, or manual override by design? | OPEN; updated 2026-10-02T05:19:26Z | НЕ ПРОВЕРЕНО | P1: Проверить API-key credits limit: reservation/settlement/usage increments заявлены равными zero. Сначала установить contract automatic vs manual credits; затем исправить enforcement или убрать вводящую в заблуждение unsupported option. Не смешивать credits с tokens/USD. |"
+  ]
+}

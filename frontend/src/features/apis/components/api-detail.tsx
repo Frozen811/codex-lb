@@ -36,6 +36,7 @@ const ApiTrendChart = lazy(() =>
 
 export type ApiDetailProps = {
 	apiKey: ApiKey | null;
+	observationDays?: number;
 	trends?: {
 		cost: { t: string; v: number }[];
 		tokens: { t: string; v: number }[];
@@ -64,6 +65,7 @@ function accumulateData(
 
 export function ApiDetail({
 	apiKey,
+	observationDays = 7,
 	trends,
 	usage7Day,
 	usage7DayLoading = false,
@@ -99,10 +101,10 @@ export function ApiDetail({
 
 	const usageMessage = useMemo(() => {
 		if (usage7Day) return null;
-		if (usage7DayLoading) return t("apis.detail.loadingUsage");
-		if (usage7DayError) return t("apis.detail.usageUnavailable");
+		if (usage7DayLoading) return t("apis.detail.loadingUsage", { count: observationDays });
+		if (usage7DayError) return t("apis.detail.usageUnavailable", { count: observationDays });
 		return null;
-	}, [t, usage7Day, usage7DayError, usage7DayLoading]);
+	}, [t, usage7Day, usage7DayError, usage7DayLoading, observationDays]);
 
 	const hasDonutData = usage7Day && usage7Day.accountCosts.length > 0;
 	const hasTrends = trends && (trends.cost.length > 0 || trends.tokens.length > 0);
@@ -168,6 +170,7 @@ export function ApiDetail({
 								<AccountCostDonut
 									accountCosts={usage7Day.accountCosts}
 									totalCostUsd={usage7Day.totalCostUsd}
+									observationDays={observationDays}
 								/>
 							</Suspense>
 						</div>
@@ -184,7 +187,7 @@ export function ApiDetail({
 							<div className="mb-3 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
 								<div>
 										<h3 className="text-sm font-semibold">{t("apis.detail.usageTrend")}</h3>
-										<p className="text-xs text-muted-foreground">{t("apis.detail.usageTrendDescription")}</p>
+										<p className="text-xs text-muted-foreground">{t("apis.detail.usageTrendDescription", { count: observationDays })}</p>
 								</div>
 								<div className="flex flex-wrap items-center justify-start gap-3 md:justify-end">
 									<div className="flex items-center gap-3 text-[10px] text-muted-foreground" data-testid="api-trend-legend">

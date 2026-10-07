@@ -136,6 +136,24 @@ describe("useApiKeys", () => {
 });
 
 describe("detail queries", () => {
+	it("keeps observation windows in separate cache entries", async () => {
+		const queryClient = createTestQueryClient();
+		queryClient.setDefaultOptions({ queries: { retry: false, gcTime: Infinity } });
+		apiMocks.getApiKeyTrends.mockImplementation(async (_id, days) => createApiKeyTrends({ keyId: `days-${days}` }));
+		apiMocks.getApiKeyUsage7Day.mockImplementation(async (_id, days) => createApiKeyUsage7Day({ keyId: `days-${days}` }));
+		const { useApiKeyTrends, useApiKeyUsage7Day } = await import("@/features/apis/hooks/use-apis");
+		const { result, rerender } = renderHook(({ days }) => ({
+			trends: useApiKeyTrends("key_1", { days }),
+			usage: useApiKeyUsage7Day("key_1", { days }),
+		}), { initialProps: { days: 7 }, wrapper: createWrapper(queryClient) });
+		await waitFor(() => expect(result.current.usage.isSuccess).toBe(true));
+		rerender({ days: 30 });
+		expect(result.current.usage.data).toBeUndefined();
+		await waitFor(() => expect(result.current.usage.data?.keyId).toBe("days-30"));
+		expect(apiMocks.getApiKeyTrends).toHaveBeenCalledWith("key_1", 30);
+		expect(queryClient.getQueryData(["api-keys", "usage", "key_1", 7])).toHaveProperty("keyId", "days-7");
+		queryClient.clear();
+	});
 	it("fetches trend data only when a key is selected", async () => {
 		const queryClient = createTestQueryClient();
 		const response = createApiKeyTrends({ keyId: "key_1" });
@@ -154,7 +172,7 @@ describe("detail queries", () => {
 		await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
 		expect(result.current.data).toEqual(response);
-		expect(apiMocks.getApiKeyTrends).toHaveBeenCalledWith("key_1");
+		expect(apiMocks.getApiKeyTrends).toHaveBeenCalledWith("key_1", 7);
 	});
 
 	it("fetches 7 day usage only when a key is selected", async () => {
@@ -175,6 +193,6 @@ describe("detail queries", () => {
 		await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
 		expect(result.current.data).toEqual(response);
-		expect(apiMocks.getApiKeyUsage7Day).toHaveBeenCalledWith("key_1");
+		expect(apiMocks.getApiKeyUsage7Day).toHaveBeenCalledWith("key_1", 7);
 	});
 });

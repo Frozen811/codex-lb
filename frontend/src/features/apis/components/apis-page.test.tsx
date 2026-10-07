@@ -111,8 +111,8 @@ describe("ApisPage", () => {
 		expect(
 			screen.getByRole("combobox", { name: "Filter keys by usage" }),
 		).toHaveTextContent("Key not used");
-		expect(hookMocks.useApiKeyTrends).toHaveBeenLastCalledWith(null, { enabled: true });
-		expect(hookMocks.useApiKeyUsage7Day).toHaveBeenLastCalledWith(null, { enabled: true });
+		expect(hookMocks.useApiKeyTrends).toHaveBeenLastCalledWith(null, { enabled: true, days: 7 });
+		expect(hookMocks.useApiKeyUsage7Day).toHaveBeenLastCalledWith(null, { enabled: true, days: 7 });
 		const row = screen.getByRole("button", {
 			name: "Details for Unused client",
 		});
@@ -121,7 +121,7 @@ describe("ApisPage", () => {
 		const dialog = screen.getByRole("dialog", {
 			name: "Details for Unused client",
 		});
-		expect(hookMocks.useApiKeyTrends).toHaveBeenLastCalledWith(key.id, { enabled: true });
+		expect(hookMocks.useApiKeyTrends).toHaveBeenLastCalledWith(key.id, { enabled: true, days: 7 });
 		await user.click(within(dialog).getByRole("button", { name: "Disable" }));
 		expect(updateMutation.mutateAsync).toHaveBeenCalledWith({
 			keyId: key.id,
@@ -137,7 +137,7 @@ describe("ApisPage", () => {
 		await waitFor(() =>
 			expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
 		);
-		expect(hookMocks.useApiKeyUsage7Day).toHaveBeenLastCalledWith(null, { enabled: true });
+		expect(hookMocks.useApiKeyUsage7Day).toHaveBeenLastCalledWith(null, { enabled: true, days: 7 });
 		await user.click(screen.getByRole("button", { name: "Detail view" }));
 		expect(screen.getByTestId("api-key-info")).toBeInTheDocument();
 		expect(
@@ -150,7 +150,7 @@ describe("ApisPage", () => {
 		localStorage.setItem("codex-lb-apis-view-mode", "list");
 		const view = renderApisPage();
 		expect(screen.getByTestId("api-list-overview-row")).toBeInTheDocument();
-		expect(hookMocks.useApiKeyTrends).toHaveBeenLastCalledWith(null, { enabled: true });
+		expect(hookMocks.useApiKeyTrends).toHaveBeenLastCalledWith(null, { enabled: true, days: 7 });
 		view.unmount();
 		vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
 			throw new Error("blocked");
@@ -241,8 +241,8 @@ describe("ApisPage", () => {
 		);
 		expect(hookMocks.useApiKeys).toHaveBeenCalledWith({ enabled: false });
 		// Even with a (stale) cached key list, per-key queries stay idle.
-		expect(hookMocks.useApiKeyTrends).toHaveBeenCalledWith("key_1", { enabled: false });
-		expect(hookMocks.useApiKeyUsage7Day).toHaveBeenCalledWith("key_1", { enabled: false });
+		expect(hookMocks.useApiKeyTrends).toHaveBeenCalledWith("key_1", { enabled: false, days: 7 });
+		expect(hookMocks.useApiKeyUsage7Day).toHaveBeenCalledWith("key_1", { enabled: false, days: 7 });
 		// No key list, no create/edit/delete controls, no error card.
 		expect(screen.queryByText("Overview")).not.toBeInTheDocument();
 		expect(screen.queryByRole("button", { name: "Create API Key" })).not.toBeInTheDocument();
@@ -275,8 +275,15 @@ describe("ApisPage", () => {
 		renderApisPage();
 
 		expect(hookMocks.useApiKeys).toHaveBeenCalledWith({ enabled: true });
-		expect(hookMocks.useApiKeyTrends).toHaveBeenCalledWith("key_1", { enabled: true });
+		expect(hookMocks.useApiKeyTrends).toHaveBeenCalledWith("key_1", { enabled: true, days: 7 });
 		expect(screen.getByRole("button", { name: "Create API Key" })).toBeInTheDocument();
+	});
+
+	it("uses the selected observation window for both detail queries", async () => {
+		renderApisPage();
+		await userEvent.setup().selectOptions(screen.getByRole("combobox", { name: "Observation window" }), "30");
+		expect(hookMocks.useApiKeyTrends).toHaveBeenLastCalledWith("key_1", { enabled: true, days: 30 });
+		expect(hookMocks.useApiKeyUsage7Day).toHaveBeenLastCalledWith("key_1", { enabled: true, days: 30 });
 	});
 
 	it("labels the legacy limit bar as API Limit", () => {

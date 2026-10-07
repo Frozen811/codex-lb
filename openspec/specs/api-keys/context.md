@@ -55,3 +55,11 @@ For example, 32 input and 7 output Astra Ultrafast tokens settle 4020 microdolla
 The [image model selection contract](spec.md#requirement-supported-image-models-in-key-model-selection) shares the request validator's supported identifiers with the dashboard picker. Typed entries carry image-only metadata, no reasoning options and native ownership. Adapter entries remain available with an empty native registry, and built-in image identifiers take precedence over colliding catalog/source identifiers.
 
 For example, an administrator can create a key allowing `gpt-image-2` and later replace its allowlist with `gpt-image-1-mini`. Both selections persist through the existing key APIs. The dashboard is a configuration catalog, so it additionally exposes these adapters; the public Responses catalog retains its native filtering. Automations filter out image-only entries because they use text generation. Dashboard-read authorization is unchanged, and no provider probe is needed to populate the picker.
+
+## Usage controls and observation windows
+
+The [credit override contract](spec.md#requirement-credit-windows-are-display-only-overrides) makes the existing Codex display values explicit. There is no reliable model/tier credit conversion, so normal traffic does not accrue this counter and an exhausted credit override cannot reject traffic. Token and cost rules remain enforced budgets; existing credit values and `/v1/usage` stay readable.
+
+For example, selecting 30 days on the API-key page fetches both usage totals and the trend with `days=30`, using distinct cache entries and labels. The lifetime inventory and overview retain their lifetime scope. Retention limits the available history; changing the window cannot restore deleted logs.
+
+Bulk reset preserves credentials and request history. If two selected keys are reset and one fails, the failed key's name and error remain visible and that key remains selected for retry. Successful keys leave the selection and their counters refresh through the existing list invalidation.

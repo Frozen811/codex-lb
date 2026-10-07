@@ -29,6 +29,7 @@ async def test_accounts_service_export_backup():
     acc1.status = AccountStatus.ACTIVE
     acc1.routing_policy = "normal"
     acc1.limit_warmup_enabled = True
+    acc1.quota_limit_percent = 50.0
     acc1.chatgpt_account_id = "chatgpt-1"
     acc1.access_token_encrypted = b"access1"
     acc1.refresh_token_encrypted = b"refresh1"
@@ -58,6 +59,7 @@ async def test_accounts_service_export_backup():
     assert item.alias == "primary-work"
     assert item.plan_type == "team"
     assert item.limit_warmup is True
+    assert item.quota_limit_percent == 50.0
     assert item.tokens is not None
     assert item.tokens.access_token == "decrypted-access1"
     assert item.tokens.refresh_token == "decrypted-refresh1"

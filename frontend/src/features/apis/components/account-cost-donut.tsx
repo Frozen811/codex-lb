@@ -12,6 +12,7 @@ import type { ApiKeyAccountCost } from "@/features/apis/schemas";
 export type AccountCostDonutProps = {
   accountCosts: ApiKeyAccountCost[];
   totalCostUsd: number;
+  observationDays?: number;
 };
 
 const CHART_SIZE = 152;
@@ -32,7 +33,7 @@ type DonutDatum = {
   fill: string;
 };
 
-export function AccountCostDonut({ accountCosts, totalCostUsd }: AccountCostDonutProps) {
+export function AccountCostDonut({ accountCosts, totalCostUsd, observationDays = 7 }: AccountCostDonutProps) {
   const { t } = useTranslation();
   const isDark = useThemeStore((s) => s.theme === "dark");
   const blurred = usePrivacyStore((s) => s.blurred);
@@ -149,7 +150,7 @@ export function AccountCostDonut({ accountCosts, totalCostUsd }: AccountCostDonu
             </PieChart>
             <div className="absolute inset-[22px] flex items-center justify-center rounded-full text-center pointer-events-none">
               <div>
-                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{t("apis.accountCost.centerLabel")}</p>
+                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{t("apis.accountCost.centerLabel", { count: observationDays })}</p>
                 <p className="text-base font-semibold tabular-nums">{formatCurrency(totalCostUsd)}</p>
               </div>
             </div>

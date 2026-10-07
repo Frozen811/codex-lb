@@ -162,6 +162,8 @@ export function LimitRuleCard({ rule, onChange, onRemove }: LimitRuleCardProps) 
         />
       </div>
 
+      {isCredits ? <p className="text-xs text-muted-foreground">{t("apiKeys.limitRule.creditsDisplayOnly")}</p> : null}
+
       <div>
         <p className="text-xs text-muted-foreground">{t("apiKeys.limitRule.modelFilter")}</p>
         <ModelMultiSelect

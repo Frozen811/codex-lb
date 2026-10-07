@@ -54,6 +54,7 @@ export function ApisPage() {
 	const [detailOpen, setDetailOpen] = useState(
 		Boolean(searchParams.get("selected")),
 	);
+	const [observationDays, setObservationDays] = useState(7);
 	const changeView = (mode: ApiViewMode) => {
 		setViewMode(mode);
 		setDetailOpen(false);
@@ -108,8 +109,8 @@ export function ApisPage() {
 
 	const visibleKeyId =
 		viewMode === "detail" || detailOpen ? (selectedApiKey?.id ?? null) : null;
-	const trendsQuery = useApiKeyTrends(visibleKeyId, { enabled: canReadKeys });
-	const usage7DayQuery = useApiKeyUsage7Day(visibleKeyId, { enabled: canReadKeys });
+	const trendsQuery = useApiKeyTrends(visibleKeyId, { enabled: canReadKeys, days: observationDays });
+	const usage7DayQuery = useApiKeyUsage7Day(visibleKeyId, { enabled: canReadKeys, days: observationDays });
 
 	const mutationBusy =
 		createMutation.isPending ||
@@ -163,6 +164,7 @@ export function ApisPage() {
 	const detailPanel = (
 		<ApiDetail
 			apiKey={selectedApiKey}
+			observationDays={observationDays}
 			trends={trendsQuery.data}
 			usage7Day={usage7DayQuery.data}
 			usage7DayLoading={usage7DayQuery.isPending}
@@ -224,6 +226,17 @@ export function ApisPage() {
 					})}
 				</div>
 			</div>
+
+			<label className="flex items-center gap-2 text-sm">
+				{t("apis.observation.label")}
+				<select
+					className="rounded-md border bg-card px-2 py-1"
+					value={observationDays}
+					onChange={(event) => setObservationDays(Number(event.target.value))}
+				>
+					{[7, 30, 60, 90].map((days) => <option key={days} value={days}>{t("apis.observation.days", { count: days })}</option>)}
+				</select>
+			</label>
 
 			{pageError ? (
 				<AlertMessage variant="error">{pageError}</AlertMessage>

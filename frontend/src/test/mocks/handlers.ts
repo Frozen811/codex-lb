@@ -3028,6 +3028,14 @@ export const handlers = [
     return HttpResponse.json(createApiKeyTrends({ keyId }));
   }),
 
+  http.get("/api/api-keys/:keyId/usage", ({ params, request }) => {
+    const keyId = String(params.keyId);
+    const days = Number(new URL(request.url).searchParams.get("days") ?? 7);
+    if (!Number.isInteger(days) || days < 1 || days > 90) return HttpResponse.json({}, { status: 422 });
+    if (!findApiKey(keyId)) return HttpResponse.json({}, { status: 404 });
+    return HttpResponse.json({ ...createApiKeyUsage7Day({ keyId }), days });
+  }),
+
   http.get("/api/api-keys/:keyId/usage-7d", ({ params }) => {
     const keyId = String(params.keyId);
     const existing = findApiKey(keyId);

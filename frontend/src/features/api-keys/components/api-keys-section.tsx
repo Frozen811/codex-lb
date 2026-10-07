@@ -56,6 +56,7 @@ export function ApiKeysSection({
   const createdDialog = useDialogState<string>();
   const resetDialog = useDialogState<ApiKey[]>();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [resetFailures, setResetFailures] = useState<string[]>([]);
 
   const keys = apiKeysQuery.data ?? [];
   const busy =
@@ -103,8 +104,12 @@ export function ApiKeysSection({
       return;
     }
     const keyIds = resetDialog.data.map((k) => k.id);
-    await bulkResetUsageMutation.mutateAsync(keyIds);
-    setSelectedIds(new Set());
+    const result = await bulkResetUsageMutation.mutateAsync(keyIds);
+    setSelectedIds(new Set(result.failed.map((failure) => failure.keyId)));
+    setResetFailures(result.failed.map((failure) => {
+      const key = resetDialog.data?.find((item) => item.id === failure.keyId);
+      return `${key?.name ?? failure.keyId}: ${failure.error.message}`;
+    }));
     resetDialog.hide();
   };
 
@@ -138,6 +143,7 @@ export function ApiKeysSection({
       />
 
       {mutationError ? <AlertMessage variant="error">{mutationError}</AlertMessage> : null}
+      {resetFailures.length > 0 ? <AlertMessage variant="error">{resetFailures.join("; ")}</AlertMessage> : null}
 
       <ApiKeyTable
         keys={keys}

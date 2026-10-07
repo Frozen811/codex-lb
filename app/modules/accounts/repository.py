@@ -1128,6 +1128,18 @@ class AccountsRepository:
             await self._session.commit()
             return matched
 
+    async def update_quota_limit(self, account_id: str, limit_percent: float | None) -> bool:
+        async with sqlite_writer_section():
+            matched = await statement_matched(
+                self._session,
+                update(Account)
+                .where(Account.id == account_id, Account.delete_requested_at.is_(None))
+                .values(quota_limit_percent=limit_percent),
+                Account.id,
+            )
+            await self._session.commit()
+            return matched
+
     async def begin_delete(self, account_id: str, *, delete_history: bool = False) -> bool:
         """Mark an account for background deletion; commits in milliseconds.
 

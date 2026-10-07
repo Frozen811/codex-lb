@@ -299,3 +299,9 @@ For example, an account-neutral pre-visible request rejected by workspace A can 
 ## Team monthly quota without a measured capacity
 
 Team continues to support monthly quota for routing and background freshness even when no numeric monthly credit capacity is available. The shared supports_monthly_quota predicate preserves the prior known Free/Team support and explicit capacity overrides. For example, an exhausted Team monthly observation must preserve its explicit quota hold after an old fallback reset expires; a fresh available monthly observation may recover the account through the existing gates. Ordinary plans retain their unsupported historical monthly handling. API-key estimated share still requires numeric capacity and may report unknown evidence.
+
+## Durable account quota restrictions
+
+The [account restriction contract](spec.md#requirement-account-quota-restrictions-survive-process-restarts) stores the operator's nullable percentage on the account. Fresh selection snapshots read the same value after a restart, and updates publish the existing routing invalidation. Backup export includes the limit; legacy backups without the field leave an existing setting unchanged.
+
+For example, a 50-percent cap excludes an account at 50 percent observed primary or secondary usage, preserving the remaining headroom for other clients. Clearing the cap restores eligibility through the normal health and quota checks. Zero excludes an account even before a usage sample exists. Existing standard-quota bypass paths retain their documented behavior.

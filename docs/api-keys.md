@@ -35,6 +35,12 @@ The allowed-model picker includes all supported Images adapter identifiers, incl
 
 *Specs: [frontend-architecture](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/frontend-architecture), [api-keys](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/api-keys)*
 
+The **Observation window** selector applies 7, 30, 60, or 90 days to the selected key's usage totals and trend. The overview and inventory continue to show their labeled lifetime figures. Available history depends on retention; a longer window does not restore deleted logs.
+
+In **Settings → API keys**, **Reset usage** clears a key's configured limit counters without changing its credential or deleting request history. For a bulk reset, failed keys remain selected and their names and errors are shown so you can retry them.
+
+**Credits (display only)** defines a Codex usage-display override. Traffic does not consume this counter and reaching its maximum does not block requests. Use token or cost limits for enforced budgets, or the estimated usage-share policy below for a percentage of the subscription pool.
+
 ## Estimated usage-share limits
 
 An API key can optionally cap its estimated share of its subscription-account pool. A 20% cap gives it an estimated budget equal to 20% of the normalized long-window capacity of its assigned accounts, or of the eligible global pool when the key is unscoped. The cap can be combined with fixed token and dollar limits.

@@ -183,7 +183,7 @@ describe("apis page integration", () => {
 					],
 				});
 			}),
-			http.get("/api/api-keys/:keyId/usage-7d", ({ params }) => {
+			http.get("/api/api-keys/:keyId/usage", ({ params }) => {
 				return HttpResponse.json(
 					createApiKeyUsage7Day({
 						keyId: String(params.keyId),

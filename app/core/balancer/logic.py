@@ -177,6 +177,7 @@ class AccountState:
     # neutral. The balancer derives it from the account's recent upstream
     # error rate. Deterministic strategies ignore it.
     selection_weight_multiplier: float = 1.0
+    quota_limit_percent: float | None = None
 
 
 @dataclass
@@ -669,10 +670,16 @@ def select_account(
             # return to maximum backoff on the very next transient error.
             state.error_count = 0
             state.last_error_at = None
-        from app.modules.accounts.quota_restriction import is_account_quota_restricted
-
-        if not bypass_standard_quota and is_account_quota_restricted(
-            state.account_id, state.used_percent, state.secondary_used_percent
+        if (
+            not bypass_standard_quota
+            and state.quota_limit_percent is not None
+            and (
+                state.quota_limit_percent == 0
+                or any(
+                    used is not None and used >= state.quota_limit_percent
+                    for used in (state.used_percent, state.secondary_used_percent)
+                )
+            )
         ):
             continue
         available.append(state)
