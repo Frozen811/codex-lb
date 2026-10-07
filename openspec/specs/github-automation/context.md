@@ -262,3 +262,15 @@ and compatibility aggregate. Backend-unrelated pull requests retain successful
 placeholder contexts for all three shards. Runtime goals are measured against
 GitHub timestamps after publishing, rather than asserted as timing-sensitive
 tests; queueing and other suites can determine the workflow's critical path.
+
+Cloud verification caught host-dependent paths in new sharder test fixtures;
+selectors and duration keys in those fixtures now use `as_posix()` on every
+platform, matching the versioned manifest. It also exposed two older timing
+assumptions under parallel runner load. Browser containment assertions retry
+the complete geometry check within their existing ten-second expectation
+deadline after each viewport resize; persistent overflow still fails. The
+bridge continuation test selects startup versus streamed failure using a probe
+window equal to its unchanged ten-second request deadline (or zero for the
+streamed branch), so a half-second scheduling delay cannot select the wrong
+branch. HTTP status, terminal event, reservation, ownership and layout
+assertions remain intact; production timing settings are unchanged.

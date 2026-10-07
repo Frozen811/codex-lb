@@ -190,63 +190,68 @@ test("dashboard usage donuts stay within supported viewports", async ({ page }) 
   for (const viewportCase of viewportCases) {
     await page.setViewportSize(viewportCase.size);
 
-    const usageMetrics = await usageHeadings.evaluateAll((headings) =>
-      headings.map((heading) => {
-        const card = heading.parentElement?.parentElement;
-        const row = heading.parentElement?.nextElementSibling;
-        const chart = row?.querySelector("svg")?.parentElement;
-        const legend = row?.querySelector('[data-testid="donut-legend-list"]');
-        if (!card || !row || !chart || !legend) {
-          throw new Error("Expected the rendered donut card structure");
+    // Resizing can leave an intermediate layout while the browser updates
+    // responsive elements. Keep every containment assertion within the existing
+    // expectation deadline and fail persistent overflow.
+    await expect(async () => {
+      const usageMetrics = await usageHeadings.evaluateAll((headings) =>
+        headings.map((heading) => {
+          const card = heading.parentElement?.parentElement;
+          const row = heading.parentElement?.nextElementSibling;
+          const chart = row?.querySelector("svg")?.parentElement;
+          const legend = row?.querySelector('[data-testid="donut-legend-list"]');
+          if (!card || !row || !chart || !legend) {
+            throw new Error("Expected the rendered donut card structure");
+          }
+          const bounds = (element: Element) => {
+            const box = element.getBoundingClientRect();
+            return { left: box.left, right: box.right, width: box.width };
+          };
+          return {
+            card: bounds(card),
+            row: bounds(row),
+            chart: bounds(chart),
+            legend: bounds(legend),
+            gridColumns: getComputedStyle(card.parentElement!).gridTemplateColumns.split(" ").filter(Boolean).length,
+          };
+        }),
+      );
+      const documentMetrics = await page.evaluate(() => ({
+        clientWidth: document.documentElement.clientWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+      }));
+      const summaryRight = await page
+        .getByTestId("dashboard-account-summary-line")
+        .evaluate((element) => element.getBoundingClientRect().right);
+      const tableMetrics = await requestTable.evaluate((table) => {
+        const scroller = table.closest('[data-slot="table-container"]');
+        if (!scroller) {
+          throw new Error("Expected the request table's local scroller");
         }
-        const bounds = (element: Element) => {
-          const box = element.getBoundingClientRect();
-          return { left: box.left, right: box.right, width: box.width };
-        };
+        const box = scroller.getBoundingClientRect();
         return {
-          card: bounds(card),
-          row: bounds(row),
-          chart: bounds(chart),
-          legend: bounds(legend),
-          gridColumns: getComputedStyle(card.parentElement!).gridTemplateColumns.split(" ").filter(Boolean).length,
+          tableScrollWidth: table.scrollWidth,
+          scrollerClientWidth: scroller.clientWidth,
+          scrollerLeft: box.left,
+          scrollerRight: box.right,
+          overflowX: getComputedStyle(scroller).overflowX,
         };
-      }),
-    );
-    const documentMetrics = await page.evaluate(() => ({
-      clientWidth: document.documentElement.clientWidth,
-      scrollWidth: document.documentElement.scrollWidth,
-    }));
-    const summaryRight = await page
-      .getByTestId("dashboard-account-summary-line")
-      .evaluate((element) => element.getBoundingClientRect().right);
-    const tableMetrics = await requestTable.evaluate((table) => {
-      const scroller = table.closest('[data-slot="table-container"]');
-      if (!scroller) {
-        throw new Error("Expected the request table's local scroller");
-      }
-      const box = scroller.getBoundingClientRect();
-      return {
-        tableScrollWidth: table.scrollWidth,
-        scrollerClientWidth: scroller.clientWidth,
-        scrollerLeft: box.left,
-        scrollerRight: box.right,
-        overflowX: getComputedStyle(scroller).overflowX,
-      };
-    });
+      });
 
-    expect(documentMetrics.scrollWidth).toBeLessThanOrEqual(documentMetrics.clientWidth);
-    expect(summaryRight).toBeLessThanOrEqual(documentMetrics.clientWidth);
-    for (const metrics of usageMetrics) {
-      expect(metrics.gridColumns).toBe(viewportCase.donutColumns);
-      for (const bounds of [metrics.card, metrics.row, metrics.chart, metrics.legend]) {
-        expect(bounds.left).toBeGreaterThanOrEqual(0);
-        expect(bounds.right).toBeLessThanOrEqual(documentMetrics.clientWidth);
+      expect(documentMetrics.scrollWidth).toBeLessThanOrEqual(documentMetrics.clientWidth);
+      expect(summaryRight).toBeLessThanOrEqual(documentMetrics.clientWidth);
+      for (const metrics of usageMetrics) {
+        expect(metrics.gridColumns).toBe(viewportCase.donutColumns);
+        for (const bounds of [metrics.card, metrics.row, metrics.chart, metrics.legend]) {
+          expect(bounds.left).toBeGreaterThanOrEqual(0);
+          expect(bounds.right).toBeLessThanOrEqual(documentMetrics.clientWidth);
+        }
       }
-    }
-    expect(tableMetrics.overflowX).toBe("auto");
-    expect(tableMetrics.tableScrollWidth).toBeGreaterThan(tableMetrics.scrollerClientWidth);
-    expect(tableMetrics.scrollerLeft).toBeGreaterThanOrEqual(0);
-    expect(tableMetrics.scrollerRight).toBeLessThanOrEqual(documentMetrics.clientWidth);
+      expect(tableMetrics.overflowX).toBe("auto");
+      expect(tableMetrics.tableScrollWidth).toBeGreaterThan(tableMetrics.scrollerClientWidth);
+      expect(tableMetrics.scrollerLeft).toBeGreaterThanOrEqual(0);
+      expect(tableMetrics.scrollerRight).toBeLessThanOrEqual(documentMetrics.clientWidth);
+    }).toPass({ timeout: 10_000 });
   }
 });
 

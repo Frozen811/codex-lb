@@ -80,7 +80,7 @@ def mysql_selection(tmp_path):
         source.parent.mkdir(parents=True, exist_ok=True)
         source.write_text("def test_first(client): pass\ndef test_second(client): pass\n")
     selectors = [path.as_posix() for path in files]
-    selectors[1:2] = [f"{files[1]}::test_first", f"{files[1]}::test_second"]
+    selectors[1:2] = [f"{files[1].as_posix()}::test_first", f"{files[1].as_posix()}::test_second"]
     write_mysql_manifest(tmp_path, selectors)
     return files, selectors
 
@@ -92,8 +92,10 @@ def test_mysql_shards_balance_history_and_preserve_exact_partial_selection(shard
     shards = [sharder.mysql_shard(groups, index, 3, durations) for index in range(1, 4)]
     assert sorted(node for shard in shards for node in shard) == sorted(selectors)
     assert all(shard for shard in shards)
-    assert all(sum(any(node.split("::")[0] == str(path) for node in shard) for shard in shards) == 1 for path in files)
-    assert str(files[1]) not in [node for shard in shards for node in shard]
+    assert all(
+        sum(any(node.split("::")[0] == path.as_posix() for node in shard) for shard in shards) == 1 for path in files
+    )
+    assert files[1].as_posix() not in [node for shard in shards for node in shard]
     loads = [sum(durations[path] for path in {node.split("::")[0] for node in shard}) for shard in shards]
     assert max(loads) - min(loads) <= 5
     sharder.verify_mysql(groups, 3, durations)
@@ -107,9 +109,9 @@ def test_mysql_partial_estimates_exclude_unselected_migration_tests(sharder, tmp
         "@pytest.mark.parametrize('case', [1, 2, 3])\n"
         "async def test_other_database(client, case):\n    await asyncio.sleep(50)\n"
     )
-    selected = [f"{path}::test_mysql"]
-    assert sharder.mysql_group_weight(path, selected) < sharder.mysql_group_weight(path, [str(path)]) / 10
-    assert sharder.mysql_group_weight(path, selected, {str(path): 42}) == 42
+    selected = [f"{path.as_posix()}::test_mysql"]
+    assert sharder.mysql_group_weight(path, selected) < sharder.mysql_group_weight(path, [path.as_posix()]) / 10
+    assert sharder.mysql_group_weight(path, selected, {path.as_posix(): 42}) == 42
 
 
 @pytest.mark.parametrize(

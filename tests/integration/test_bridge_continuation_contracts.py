@@ -188,14 +188,23 @@ async def test_denied_proxy_anchor_delivers_one_terminal(
         assert [(row.status, row.input_tokens, row.output_tokens) for row in reservations] == [("finalized", 1, 1)]
     bridge_origin.mode = "deny"
     bridge_origin.delay = 0.08 if after_keepalive else 0.0
-    monkeypatch.setattr(proxy_api, "_HTTP_BRIDGE_STARTUP_ERROR_PROBE_SECONDS", 0.0 if after_keepalive else 0.5)
+    request_timeout_seconds = 10.0
+    # Select the pre-dispatch versus streamed-error branch explicitly. A short
+    # probe can expire under runner load before the local origin sends its error.
+    monkeypatch.setattr(
+        proxy_api,
+        "_HTTP_BRIDGE_STARTUP_ERROR_PROBE_SECONDS",
+        0.0 if after_keepalive else request_timeout_seconds,
+    )
     body["input"] = [
         *body["input"],
         {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "OK"}]},
         _user("next"),
         {"type": "item_reference", "id": "msg_owned"},
     ]
-    second = await asyncio.wait_for(async_client.post(path, json=body, headers=headers), timeout=10)
+    second = await asyncio.wait_for(
+        async_client.post(path, json=body, headers=headers), timeout=request_timeout_seconds
+    )
     assert any(frame.get("previous_response_id") for frame in bridge_origin.frames), bridge_origin.frames
     events = _events(second)
     failed = [event for event in events if event["type"] == "response.failed"]
