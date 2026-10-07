@@ -3425,3 +3425,12 @@ Baseline new API regressions на том же base: **5 FAIL /2 PASS**. Final di
 Пять requirements /10 scenarios в api-keys и account-routing синхронизированы; stable contexts и rendered docs обновлены, verified change архивирован. Только пять source rows изменены; остальные **333/333** побайтно сохранены. Очередь: **338 records —101 local closures, 7 partial, 230 НЕ ПРОВЕРЕНО**. Existing partials/F-045/CI-04 и external scopes сохраняются. Full suite, live provider/multi-replica/PostgreSQL/MySQL, новый cloud CI/public artifacts/production не сертифицированы.
 
 Пользователь явно поручил локальный коммит в `main`; push/PR/merge/release/deploy не запрошены и не выполняются. Исправляющий SHA определяется командой `git log -1 --format=%H -- openspec/changes/archive/2026-10-07-repair-five-key-quota-contracts/verification.md`.
+
+## 62. Исправление fork CI #74 / #75 — 2026-10-07
+
+Base `664c8b98f949329707e5cb4c62ab9ab522f26bcb`, исходное рабочее дерево чистое. Пользователь поручил исправление, коммит и новый полный CI. [Логи и локальная проверка](openspec/changes/archive/2026-10-07-repair-ci-74-75/context.md).
+
+- CI #74: **1751 frontend PASS**, затем uncaught `window is not defined` из OAuth copy-feedback timer после teardown. Владелец таймера теперь отменяет reset при unmount, игнорирует позднее clipboard completion и перезапускает интервал при повторном копировании. Five lifecycle regressions reproduced failures before the fix.
+- CI #75: standard/distroless build, container smoke и SARIF scan PASS; GitHub Security upload FAIL без причины в логе/annotation, последующий HIGH/CRITICAL gate SKIPPED. Gate перенесён перед публикацией, SARIF сохраняется артефактом; scan/upload failures остаются обязательными. API вернул только17 jobs: это не полная CI проверка. Disabled Code Scanning не подтверждён, предыдущие analyses присутствуют.
+
+Локально **29 frontend PASS** (также с V8 instrumentation), **65 Python PASS**, scoped lint/format, frontend types и strict OpenSpec **68/68 PASS**. Requirements и contexts синхронизированы, change верифицирован и архивирован. Full cloud CI требуется на новом опубликованном SHA; результат сверяется отдельно после push. Source rows, existing CI-04/F-045 и platform/production residuals не меняются.

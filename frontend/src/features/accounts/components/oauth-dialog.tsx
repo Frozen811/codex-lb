@@ -1,5 +1,5 @@
 import { Check, CircleAlert, Copy, ExternalLink, Loader2, RefreshCw } from "lucide-react";
-import { useCallback, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -30,6 +30,19 @@ function getStage(state: OAuthState): Stage {
 function CopyButton({ text }: { text: string }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
+  const mountedRef = useRef(false);
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (resetTimerRef.current !== null) {
+        clearTimeout(resetTimerRef.current);
+        resetTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const handleCopy = useCallback(async (event: MouseEvent<HTMLButtonElement>) => {
     const trigger = event.currentTarget;
@@ -40,17 +53,28 @@ function CopyButton({ text }: { text: string }) {
       const copiedToClipboard = await copyToClipboard(text, {
         container: dialogContainer instanceof HTMLElement ? dialogContainer : undefined,
       });
+      if (!mountedRef.current) {
+        return;
+      }
       if (!copiedToClipboard) {
         toast.error(t("components.copyButton.toasts.failed"));
         return;
       }
 
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      if (resetTimerRef.current !== null) {
+        clearTimeout(resetTimerRef.current);
+      }
+      resetTimerRef.current = setTimeout(() => {
+        resetTimerRef.current = null;
+        setCopied(false);
+      }, 2000);
     } catch {
-      toast.error(t("components.copyButton.toasts.failed"));
+      if (mountedRef.current) {
+        toast.error(t("components.copyButton.toasts.failed"));
+      }
     } finally {
-      if (blurAfterCopy) {
+      if (mountedRef.current && blurAfterCopy) {
         trigger.blur();
       }
     }

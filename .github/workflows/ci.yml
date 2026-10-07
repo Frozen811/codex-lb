@@ -859,6 +859,7 @@ jobs:
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e
 
       - name: Build Docker image
+        id: docker-build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: .
@@ -893,25 +894,6 @@ jobs:
             docker rm -f "$container"
           done
 
-      - name: Scan Docker image with Trivy (SARIF)
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
-        with:
-          image-ref: codex-lb:ci
-          format: sarif
-          output: trivy-results.sarif
-          severity: CRITICAL,HIGH,MEDIUM,LOW
-          ignore-unfixed: true
-          trivyignores: .trivyignore
-
-      - name: Upload Trivy scan results to GitHub Security
-        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63
-        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-        with:
-          sarif_file: trivy-results.sarif
-          # Keep PR and main uploads in the same CI category so Code Scanning
-          # can compare pull-request alerts against the default-branch baseline.
-          category: .github/workflows/ci.yml:docker
-
       - name: Enforce Trivy high-severity gate
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
@@ -921,6 +903,35 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           trivyignores: .trivyignore
+
+      - name: Scan Docker image with Trivy (SARIF)
+        id: trivy-sarif
+        if: always() && steps.docker-build.outcome == 'success'
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: codex-lb:ci
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH,MEDIUM,LOW
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+
+      - name: Retain Trivy SARIF report
+        if: always() && steps.trivy-sarif.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: trivy-sarif
+          path: trivy-results.sarif
+          if-no-files-found: error
+
+      - name: Upload Trivy scan results to GitHub Security
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63
+        if: always() && steps.trivy-sarif.outcome == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        with:
+          sarif_file: trivy-results.sarif
+          # Keep PR and main uploads in the same CI category so Code Scanning
+          # can compare pull-request alerts against the default-branch baseline.
+          category: .github/workflows/ci.yml:docker
 
   helm-lint:
     name: Helm lint + template + kubeconform

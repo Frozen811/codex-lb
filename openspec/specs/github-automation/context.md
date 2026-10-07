@@ -330,3 +330,18 @@ Trigger/heading discovery avoids whole-page accessible-name scans, then asserts
 the matched targets' roles and visibility; collapsed state is checked explicitly.
 Advanced expansion has its own case so cold UI mounting and CRUD interactions
 do not consume one shared timeout budget. All four cases still render the real App.
+
+## Container scan evidence and publication
+
+The [container scan contract](spec.md#requirement-container-scan-enforcement-precedes-report-publication)
+keeps fixed HIGH/CRITICAL findings blocking. The table gate runs before SARIF
+generation and GitHub Security publication; generated SARIF is also retained in
+the `trivy-sarif` artifact. Successful standard-image builds permit report
+generation after a failed gate, so evidence survives vulnerability findings.
+
+For example, if GitHub Security fails during upload, the gate has already
+evaluated the image and the workflow artifact retains the report. Upload
+failure remains blocking under the existing trusted-event condition. Fork CI
+#75 stopped at upload without an error message or annotation; prior Code
+Scanning analyses exist, so the failure does not establish disabled repository
+security permissions. Recovery requires a fresh cloud run, not local YAML checks.

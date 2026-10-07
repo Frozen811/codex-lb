@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -86,6 +86,80 @@ describe("OauthDialog", () => {
     }
     toastError.mockReset();
     vi.restoreAllMocks();
+  });
+
+  it.each([browserPendingState, devicePendingState])("clears copy feedback when the $method dialog unmounts", async (state) => {
+    vi.useFakeTimers();
+    Object.defineProperty(window, "isSecureContext", { configurable: true, value: true });
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+    });
+    Object.defineProperty(document, "execCommand", { configurable: true, value: undefined });
+    const { unmount } = render(
+      <OauthDialog
+        open state={state} onOpenChange={vi.fn()} onStart={vi.fn()}
+        onComplete={vi.fn()} onManualCallback={vi.fn()} onReset={vi.fn()}
+      />,
+    );
+    act(() => vi.runOnlyPendingTimers());
+    await act(async () => fireEvent.click(screen.getAllByRole("button", { name: "Copy" })[0]));
+    expect(screen.getByRole("button", { name: "Copied!" })).toBeInTheDocument();
+    expect(vi.getTimerCount()).toBe(1);
+    unmount();
+    act(() => vi.advanceTimersByTime(0));
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([true, false])("ignores clipboard completion after unmount (success=%s)", async (success) => {
+    vi.useFakeTimers();
+    let finishWrite!: () => void;
+    const writeText = vi.fn(() => new Promise<void>((resolve, reject) => {
+      finishWrite = () => success ? resolve() : reject(new Error("clipboard blocked"));
+    }));
+    Object.defineProperty(window, "isSecureContext", { configurable: true, value: true });
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    Object.defineProperty(document, "execCommand", { configurable: true, value: undefined });
+    const { unmount } = render(
+      <OauthDialog
+        open state={browserPendingState} onOpenChange={vi.fn()} onStart={vi.fn()}
+        onComplete={vi.fn()} onManualCallback={vi.fn()} onReset={vi.fn()}
+      />,
+    );
+    act(() => vi.runOnlyPendingTimers());
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    expect(writeText).toHaveBeenCalledWith(browserPendingState.authorizationUrl);
+    unmount();
+    act(() => vi.advanceTimersByTime(0));
+    await act(async () => finishWrite());
+    expect(toastError).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("restarts copied feedback from the latest successful copy", async () => {
+    vi.useFakeTimers();
+    Object.defineProperty(window, "isSecureContext", { configurable: true, value: true });
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+    });
+    Object.defineProperty(document, "execCommand", { configurable: true, value: undefined });
+    render(
+      <OauthDialog
+        open state={browserPendingState} onOpenChange={vi.fn()} onStart={vi.fn()}
+        onComplete={vi.fn()} onManualCallback={vi.fn()} onReset={vi.fn()}
+      />,
+    );
+    act(() => vi.runOnlyPendingTimers());
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Copy" })));
+    act(() => vi.advanceTimersByTime(1_000));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Copied!" })));
+    expect(vi.getTimerCount()).toBe(1);
+    act(() => vi.advanceTimersByTime(1_000));
+    expect(screen.getByRole("button", { name: "Copied!" })).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(1_000));
+    expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("keeps the browser-stage copy button focused after keyboard activation", async () => {

@@ -42,6 +42,36 @@ def _ci_workflow_text() -> str:
     return CI_WORKFLOW.read_text(encoding="utf-8")
 
 
+def test_container_vulnerability_gate_precedes_report_publication_and_retains_evidence() -> None:
+    docker = yaml.safe_load(_ci_workflow_text())["jobs"]["docker"]
+    ordered_steps = docker["steps"]
+    steps = {step["name"]: step for step in ordered_steps}
+    names = list(steps)
+    gate = steps["Enforce Trivy high-severity gate"]
+    scan = steps["Scan Docker image with Trivy (SARIF)"]
+    artifact = steps["Retain Trivy SARIF report"]
+    upload = steps["Upload Trivy scan results to GitHub Security"]
+
+    assert names.index("Enforce Trivy high-severity gate") < names.index("Scan Docker image with Trivy (SARIF)")
+    assert names.index("Scan Docker image with Trivy (SARIF)") < names.index("Retain Trivy SARIF report")
+    assert names.index("Retain Trivy SARIF report") < names.index("Upload Trivy scan results to GitHub Security")
+    assert steps["Build Docker image"]["id"] == "docker-build"
+    assert scan["id"] == "trivy-sarif"
+    assert scan["if"] == "always() && steps.docker-build.outcome == 'success'"
+    assert artifact["if"] == "always() && steps.trivy-sarif.outcome == 'success'"
+    assert artifact["uses"].startswith("actions/upload-artifact@")
+    assert artifact["with"]["path"] == scan["with"]["output"] == upload["with"]["sarif_file"]
+    assert artifact["with"]["if-no-files-found"] == "error"
+    assert "always() && steps.trivy-sarif.outcome == 'success'" in upload["if"]
+    assert "github.event.pull_request.head.repo.full_name == github.repository" in upload["if"]
+    assert gate["with"]["exit-code"] == 1
+    assert gate["with"]["severity"] == "CRITICAL,HIGH"
+    assert gate["with"]["ignore-unfixed"] is True
+    assert gate["with"]["trivyignores"] == ".trivyignore"
+    assert "continue-on-error" not in docker
+    assert all("continue-on-error" not in step for step in (gate, scan, artifact, upload))
+
+
 def _job_block(text: str, job_name: str) -> str:
     start_match = re.search(rf"^  {re.escape(job_name)}:\n", text, re.MULTILINE)
     assert start_match is not None
