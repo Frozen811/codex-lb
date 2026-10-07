@@ -1,0 +1,15 @@
+{
+  "base_sha": "352e58d9fc2189bd48639f411782d35931d56f76",
+  "initial_worktree": "clean",
+  "date": "2026-10-07",
+  "timezone": "Europe/Kiev",
+  "selected_rows": [
+    "| [UP-ISSUE-1918](https://github.com/Soju06/codex-lb/issues/1918) | bug: codex-lb incorrectly calculates usage for edu accounts | РЕШЕНО | НЕ ПРОВЕРЕНО | — |",
+    "| [UP-ISSUE-1367](https://github.com/Soju06/codex-lb/issues/1367) | bug(accounts): Team 30d quota is displayed as 5h | РЕШЕНО | НЕ ПРОВЕРЕНО | — |",
+    "| [UP-PR-2468](https://github.com/Soju06/codex-lb/pull/2468) | PR #2468: fix(quota): validate planner timezones and tolerate legacy malformed keys | Раздел 4, L514 | НЕ ПРОВЕРЕНО | — |",
+    "| [UP-PR-2489](https://github.com/Soju06/codex-lb/pull/2489) | PR #2489: fix(accounts): preserve quota chart samples and account display state | Раздел 12, L1348 | НЕ ПРОВЕРЕНО | — |",
+    "| [UP-PR-2321](https://github.com/Soju06/codex-lb/pull/2321) | PR #2321: fix(accounts): preserve observed monthly quota across plans | Раздел 12, L1388 | НЕ ПРОВЕРЕНО | — |"
+  ],
+  "source_row_count": 338,
+  "unselected_rows_sha256": "380884391644e8445e461167e2f2b577b9f1e554bb94c32c09b49f67aab1fa8e"
+}

@@ -922,6 +922,7 @@ async def test_live_monthly_team_quota_reaches_account_summary(async_client, db_
         assert summary["usage"]["monthlyRemainingPercent"] == 4
         assert summary["windowMinutesPrimary"] is None
         assert summary["windowMinutesSecondary"] is None
-        assert summary["remainingCreditsMonthly"] == pytest.approx(302.4)
+        assert summary["capacityCreditsMonthly"] is None
+        assert summary["remainingCreditsMonthly"] is None
     finally:
         await ingestor.stop()

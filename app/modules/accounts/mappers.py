@@ -126,10 +126,8 @@ def _account_to_summary(
     if (
         monthly_usage is None
         and primary_usage is not None
-        and primary_usage.window_minutes is not None
-        and primary_usage.window_minutes >= 40_000
-        and secondary_usage is None
-        and plan_type != "free"
+        and usage_core.is_monthly_window_minutes(primary_usage.window_minutes)
+        and (secondary_usage is None or secondary_usage.window_minutes == 0)
     ):
         monthly_usage = primary_usage
         effective_primary_usage = None
@@ -456,13 +454,6 @@ def _effective_usage_windows(
     secondary_usage: UsageHistory | None,
 ) -> tuple[UsageHistory | None, UsageHistory | None]:
     if primary_usage is None:
-        return None, secondary_usage
-    has_active_secondary = (
-        secondary_usage is not None
-        and secondary_usage.used_percent is not None
-        and usage_core.is_weekly_window_minutes(secondary_usage.window_minutes)
-    )
-    if usage_core.is_monthly_window_minutes(primary_usage.window_minutes) and not has_active_secondary:
         return None, secondary_usage
     if not usage_core.is_weekly_window_minutes(primary_usage.window_minutes):
         return primary_usage, secondary_usage

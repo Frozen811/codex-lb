@@ -295,3 +295,7 @@ For example, equal default-size leases leave weekly usage 95 and 38 ranked aroun
 The [workspace exclusion contract](spec.md#requirement-deactivated-workspaces-leave-eligible-failover-selection) recognizes only the exact upstream code `deactivated_workspace`. It deactivates the selected routing record with a workspace-specific reason, leaving sibling records alone. The classifier benches the account in the current walk while retaining existing walk-ending semantics.
 
 For example, an account-neutral pre-visible request rejected by workspace A can succeed on B; the next request selects B directly. Encrypted reasoning, file ownership and visible output prevent cross-account replay. An unavailable owner cannot be usefully retried. Keyed health is deferred until reservation settlement. A code-less HTTP 402 remains a surfaced request error and is not permanent workspace evidence.
+
+## Team monthly quota without a measured capacity
+
+Team continues to support monthly quota for routing and background freshness even when no numeric monthly credit capacity is available. The shared supports_monthly_quota predicate preserves the prior known Free/Team support and explicit capacity overrides. For example, an exhausted Team monthly observation must preserve its explicit quota hold after an old fallback reset expires; a fresh available monthly observation may recover the account through the existing gates. Ordinary plans retain their unsupported historical monthly handling. API-key estimated share still requires numeric capacity and may report unknown evidence.

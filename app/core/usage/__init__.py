@@ -41,7 +41,6 @@ PLAN_CAPACITY_CREDITS_SECONDARY = {
 
 PLAN_CAPACITY_CREDITS_MONTHLY = {
     "free": 1134.0,
-    "team": 7560.0,
 }
 
 # Rows written by the same upstream fetch land within milliseconds of each
@@ -228,6 +227,11 @@ def capacity_for_plan(plan_type: str | None, window: str) -> float | None:
     if window_key == "monthly":
         return PLAN_CAPACITY_CREDITS_MONTHLY.get(normalized)
     return None
+
+
+def supports_monthly_quota(plan_type: str | None) -> bool:
+    """Keep known monthly quota support independent of credit estimates."""
+    return normalize_account_plan_type(plan_type) == "team" or capacity_for_plan(plan_type, "monthly") is not None
 
 
 def default_window_minutes(window: str) -> int | None:

@@ -1,0 +1,15 @@
+{
+  "source_rows": 338,
+  "changed_ids": [
+    "UP-ISSUE-1918",
+    "UP-ISSUE-1367",
+    "UP-PR-2321",
+    "UP-PR-2489",
+    "UP-PR-2468"
+  ],
+  "unchanged_rows": 333,
+  "unchanged_rows_sha256": "380884391644e8445e461167e2f2b577b9f1e554bb94c32c09b49f67aab1fa8e",
+  "local_closures": 95,
+  "partial": 7,
+  "unverified": 236
+}

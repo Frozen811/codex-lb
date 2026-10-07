@@ -2615,7 +2615,7 @@ def _normalize_usage_inputs(
     if (
         effective_secondary_entry is not None
         and effective_secondary_entry.window == "monthly"
-        and usage_core.capacity_for_plan(account.plan_type, "monthly") is None
+        and not usage_core.supports_monthly_quota(account.plan_type)
     ):
         effective_secondary_entry = None
     primary_row = usage_history_to_window_row(primary_entry) if primary_entry is not None else None
@@ -2812,7 +2812,7 @@ def _select_long_window_entry(
     monthly_entry: UsageHistory | None,
     secondary_entry: UsageHistory | AdditionalUsageHistory | None,
 ) -> UsageHistory | AdditionalUsageHistory | None:
-    if monthly_entry is not None and usage_core.capacity_for_plan(account.plan_type, "monthly") is not None:
+    if monthly_entry is not None and usage_core.supports_monthly_quota(account.plan_type):
         return monthly_entry
     return secondary_entry
 
@@ -2833,7 +2833,7 @@ def _rate_limited_freshness_entry(
     if (
         long_window_entry is not None
         and long_window_entry.window == "monthly"
-        and usage_core.capacity_for_plan(account.plan_type, "monthly") is None
+        and not usage_core.supports_monthly_quota(account.plan_type)
     ):
         long_window_entry = None
     # Freshness cannot prove recovery while an applicable long window is

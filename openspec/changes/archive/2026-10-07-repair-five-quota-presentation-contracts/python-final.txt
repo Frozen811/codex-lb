@@ -1,0 +1,12 @@
+=============================== warnings summary ===============================
+tests/unit/test_usage.py::test_used_credits_from_percent
+  /workspace/codex-lb/.venv/lib/python3.13/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/integration/test_live_usage_ingest.py:407: PostgreSQL transaction-lock regression
+SKIPPED [1] tests/integration/test_live_usage_ingest.py:535: PostgreSQL transaction-lock regression
+SKIPPED [1] tests/integration/test_live_usage_ingest.py:617: PostgreSQL selected-owner lock regression
+SKIPPED [1] tests/integration/test_live_usage_ingest.py:735: PostgreSQL transaction-lock regression
+884 passed, 4 skipped, 1 warning in 81.92s (0:01:21)

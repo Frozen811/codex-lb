@@ -1,0 +1,13 @@
+[vite:react-swc] We recommend switching to `@vitejs/plugin-react` for improved performance as no swc plugins are used. More information at https://vite.dev/rolldown
+
+ RUN  v5.0.2 /workspace/codex-lb/frontend
+
+
+ Test Files  3 passed (3)
+      Tests  22 passed (22)
+   Start at  12:12:12
+   Duration  6.40s (transform 27%, environment 26%, setup 24%, tests 16%, import 7%)
+
+  Transform  transforming modules took 2.77s · 27% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns

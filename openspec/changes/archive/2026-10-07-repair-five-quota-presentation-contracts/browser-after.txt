@@ -1,0 +1,15 @@
+[WebServer] (node:16411) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] [vite:react-swc] We recommend switching to `@vitejs/plugin-react` for improved performance as no swc plugins are used. More information at https://vite.dev/rolldown
+
+
+Running 2 tests using 1 worker
+
+(node:16430) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/2] browser-smoke/quota-contracts.spec.ts:11:3 › quota windows and account switching at 1440px
+[2/2] browser-smoke/quota-contracts.spec.ts:11:3 › quota windows and account switching at 390px
+  2 passed (5.5s)

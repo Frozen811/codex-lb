@@ -2752,14 +2752,15 @@ def test_state_from_account_clears_primary_window_minutes_for_weekly_only(monkey
     assert state.secondary_used_percent == 20.0
 
 
-def test_state_from_account_treats_monthly_usage_as_advisory_long_window_pressure(monkeypatch):
+@pytest.mark.parametrize("plan_type", ["free", "team"])
+def test_state_from_account_treats_monthly_usage_as_advisory_long_window_pressure(monkeypatch, plan_type):
     now = 1_700_000_000.0
     future_reset = int(now + 30 * 24 * 3600)
     monkeypatch.setattr("time.time", lambda: now)
     monkeypatch.setattr("app.core.usage.quota.time.time", lambda: now)
 
     state = _state_from_account(
-        account=_make_test_account(status=AccountStatus.ACTIVE, plan_type="free"),
+        account=_make_test_account(status=AccountStatus.ACTIVE, plan_type=plan_type),
         primary_entry=None,
         secondary_entry=_make_test_usage(
             window="monthly",
@@ -2775,7 +2776,7 @@ def test_state_from_account_treats_monthly_usage_as_advisory_long_window_pressur
     assert state.reset_at is None
     assert state.secondary_used_percent == 100.0
     assert state.secondary_reset_at == future_reset
-    assert state.capacity_credits == usage_core.capacity_for_plan("free", "monthly")
+    assert state.capacity_credits == (usage_core.capacity_for_plan(plan_type, "monthly") or 0.0)
 
 
 def test_state_from_account_ignores_stale_monthly_usage_after_upgrade(monkeypatch):

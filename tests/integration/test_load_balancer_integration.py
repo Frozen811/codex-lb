@@ -23,6 +23,59 @@ from app.modules.usage.repository import AdditionalUsageRepository, UsageReposit
 pytestmark = pytest.mark.integration
 
 
+@pytest.mark.parametrize("reset_metadata", [True, False])
+async def test_team_monthly_routing_and_recovery_do_not_require_credit_estimate(db_setup, reset_metadata):
+    encryptor = TokenEncryptor()
+    now = utcnow()
+    epoch = int(now.replace(tzinfo=timezone.utc).timestamp())
+    account = Account(
+        id="team-monthly-routing",
+        email="team-monthly@example.com",
+        plan_type="team",
+        status=AccountStatus.QUOTA_EXCEEDED,
+        reset_at=epoch - 1,
+        blocked_at=epoch - 7200,
+        access_token_encrypted=encryptor.encrypt("access"),
+        refresh_token_encrypted=encryptor.encrypt("refresh"),
+        id_token_encrypted=encryptor.encrypt("id"),
+        last_refresh=now,
+    )
+    reset_at = epoch + 30 * 86400 if reset_metadata else None
+    async with SessionLocal() as session:
+        await AccountsRepository(session).upsert(account)
+        repo = UsageRepository(session)
+        await repo.add_entry(
+            account.id,
+            100.0,
+            window="monthly",
+            window_minutes=43800,
+            reset_at=reset_at,
+            recorded_at=now,
+            credits_has=False,
+            credits_unlimited=False,
+            credits_balance=0.0,
+        )
+    for _ in range(2):
+        selection = await LoadBalancer(_repo_factory).select_account(account_ids={account.id})
+        assert selection.account is None
+    async with SessionLocal() as session:
+        stored = await session.get(Account, account.id)
+        assert stored is not None
+        assert stored.status == AccountStatus.QUOTA_EXCEEDED
+        assert stored.reset_at == reset_at
+        await UsageRepository(session).add_entry(
+            account.id, 20.0, window="monthly", window_minutes=43800, reset_at=reset_at, recorded_at=utcnow()
+        )
+    selection = await LoadBalancer(_repo_factory).select_account(account_ids={account.id})
+    assert selection.account is not None
+    assert selection.account.id == account.id
+    async with SessionLocal() as session:
+        stored = await session.get(Account, account.id)
+        assert stored is not None
+        assert stored.status == AccountStatus.ACTIVE
+        assert stored.blocked_at is None
+
+
 @asynccontextmanager
 async def _repo_factory() -> AsyncIterator[ProxyRepositories]:
     async with SessionLocal() as session:
@@ -169,8 +222,9 @@ async def test_load_balancer_reactivates_after_secondary_reset(db_setup):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("has_reset_metadata", [True, False])
 @pytest.mark.parametrize("has_block_marker", [True, False])
+@pytest.mark.parametrize("plan_type", ["plus", "edu"])
 async def test_load_balancer_does_not_reactivate_explicit_quota_from_fresh_exhausted_secondary_usage(
-    db_setup, has_reset_metadata, has_block_marker
+    db_setup, has_reset_metadata, has_block_marker, plan_type
 ):
     encryptor = TokenEncryptor()
     now = utcnow()
@@ -181,7 +235,7 @@ async def test_load_balancer_does_not_reactivate_explicit_quota_from_fresh_exhau
     exhausted = Account(
         id="acc_explicit_quota_still_full",
         email="explicit_quota_still_full@example.com",
-        plan_type="plus",
+        plan_type=plan_type,
         access_token_encrypted=encryptor.encrypt("access-full"),
         refresh_token_encrypted=encryptor.encrypt("refresh-full"),
         id_token_encrypted=encryptor.encrypt("id-full"),

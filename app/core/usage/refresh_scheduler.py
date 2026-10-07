@@ -14,7 +14,7 @@ from app.core.crypto import TokenEncryptor
 from app.core.plan_types import normalize_account_plan_type
 from app.core.resilience.toggles import resolve_resilience_toggles
 from app.core.scheduling.leader_election_handle import get_leader_election as _get_leader_election
-from app.core.usage import capacity_for_plan, default_window_minutes
+from app.core.usage import capacity_for_plan, default_window_minutes, supports_monthly_quota
 from app.core.usage.refresh_policy import USAGE_REFRESH_INTERVAL_SECONDS
 from app.core.utils.time import naive_utc_to_epoch
 from app.db.models import Account, AccountLimitWarmup, AccountStatus, UsageHistory
@@ -714,7 +714,7 @@ def _select_long_window_entry(
     monthly_entry: UsageHistory | None,
     secondary_entry: UsageHistory | None,
 ) -> UsageHistory | None:
-    if monthly_entry is not None and capacity_for_plan(account.plan_type, "monthly") is not None:
+    if monthly_entry is not None and supports_monthly_quota(account.plan_type):
         return monthly_entry
     return secondary_entry
 

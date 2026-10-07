@@ -523,7 +523,7 @@ class UsageUpdater:
     async def _freshness_usage_entry(self, account: Account, latest: UsageHistory | None) -> UsageHistory | None:
         if latest is not None:
             return latest
-        if usage_core.capacity_for_plan(account.plan_type, "monthly") is None:
+        if not usage_core.supports_monthly_quota(account.plan_type):
             return None
         return await self._usage_repo.latest_entry_for_account(account.id, window="monthly")
 
@@ -548,7 +548,7 @@ class UsageUpdater:
         for window in _MAIN_USAGE_WINDOWS:
             if latest is not None and window == latest.window:
                 continue
-            if window == "monthly" and usage_core.capacity_for_plan(account.plan_type, "monthly") is None:
+            if window == "monthly" and not usage_core.supports_monthly_quota(account.plan_type):
                 # A lingering monthly row from a former plan (e.g. after a
                 # free-to-paid upgrade) is not applicable usage and must not
                 # suppress refreshes.

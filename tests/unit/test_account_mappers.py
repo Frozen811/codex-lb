@@ -191,11 +191,25 @@ def test_normalize_account_routing_policy() -> None:
 
 
 def test_capacity_for_plan_team_monthly() -> None:
-    from app.core.usage import capacity_for_plan
+    from app.core.usage import capacity_for_plan, supports_monthly_quota
 
-    assert capacity_for_plan("team", "monthly") == 7560.0
+    assert capacity_for_plan("team", "monthly") is None
     assert capacity_for_plan("team", "secondary") == 7560.0
     assert capacity_for_plan("team", "primary") == 225.0
+    assert supports_monthly_quota("team")
+    assert supports_monthly_quota("free")
+    assert not supports_monthly_quota("plus")
+
+
+def test_team_monthly_capacity_accepts_explicit_measured_override() -> None:
+    from app.core.usage import capacity_for_plan, clear_plan_capacity_overrides, set_plan_capacity_override
+
+    try:
+        set_plan_capacity_override("team", "monthly", 9000.0)
+        assert capacity_for_plan("team", "monthly") == 9000.0
+    finally:
+        clear_plan_capacity_overrides()
+    assert capacity_for_plan("team", "monthly") is None
 
 
 def test_account_to_summary_maps_team_30d_primary_window_to_monthly() -> None:

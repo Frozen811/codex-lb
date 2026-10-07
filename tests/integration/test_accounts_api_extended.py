@@ -22,6 +22,127 @@ from app.modules.usage.repository import UsageRepository
 pytestmark = pytest.mark.integration
 
 
+@pytest.mark.parametrize("plan_type", ["free", "team"])
+@pytest.mark.parametrize("minutes", [40320, 43200, 43800, 46080])
+@pytest.mark.parametrize("secondary_minutes", ["absent", 0])
+async def test_accounts_historical_monthly_quota_matches_ingestion(
+    async_client, db_setup, plan_type, minutes, secondary_minutes
+):
+    now = utcnow()
+    reset_at = naive_utc_to_epoch(now + timedelta(days=30))
+    async with SessionLocal() as session:
+        await AccountsRepository(session).upsert(_make_account("historical-monthly", "monthly@example.com", plan_type))
+        repo = UsageRepository(session)
+        await repo.add_entry(
+            "historical-monthly", 24.0, window="primary", window_minutes=minutes, reset_at=reset_at, recorded_at=now
+        )
+        if secondary_minutes != "absent":
+            await repo.add_entry(
+                "historical-monthly", 0.0, window="secondary", window_minutes=secondary_minutes, recorded_at=now
+            )
+    response = await async_client.get("/api/accounts")
+    assert response.status_code == 200
+    account = next(item for item in response.json()["accounts"] if item["accountId"] == "historical-monthly")
+    assert account["usage"] == {
+        "primaryRemainingPercent": None,
+        "secondaryRemainingPercent": None,
+        "monthlyRemainingPercent": 76.0,
+    }
+    assert account["windowMinutesMonthly"] == minutes
+    assert account["resetAtMonthly"] is not None
+    assert account["windowMinutesPrimary"] is None
+    assert account["windowMinutesSecondary"] is None
+    if plan_type == "team":
+        assert account["capacityCreditsMonthly"] is None
+        assert account["remainingCreditsMonthly"] is None
+
+
+@pytest.mark.parametrize(
+    "minutes,secondary_minutes",
+    [
+        (40319, "absent"),
+        (46081, "absent"),
+        (60000, "absent"),
+        (43800, None),
+        (43800, 300),
+        (43800, 10080),
+    ],
+)
+async def test_accounts_preserve_windows_without_monthly_only_proof(async_client, db_setup, minutes, secondary_minutes):
+    now = utcnow()
+    reset_at = naive_utc_to_epoch(now + timedelta(days=30))
+    async with SessionLocal() as session:
+        await AccountsRepository(session).upsert(_make_account("ambiguous-window", "ambiguous@example.com", "team"))
+        repo = UsageRepository(session)
+        await repo.add_entry(
+            "ambiguous-window", 24.0, window="primary", window_minutes=minutes, reset_at=reset_at, recorded_at=now
+        )
+        if secondary_minutes != "absent":
+            await repo.add_entry(
+                "ambiguous-window",
+                21.0,
+                window="secondary",
+                window_minutes=secondary_minutes,
+                reset_at=reset_at,
+                recorded_at=now,
+            )
+    response = await async_client.get("/api/accounts")
+    assert response.status_code == 200
+    account = next(item for item in response.json()["accounts"] if item["accountId"] == "ambiguous-window")
+    assert account["usage"]["primaryRemainingPercent"] == 76.0
+    assert account["windowMinutesPrimary"] == minutes
+    assert account["usage"]["monthlyRemainingPercent"] is None
+    if secondary_minutes != "absent":
+        assert account["usage"]["secondaryRemainingPercent"] == 79.0
+
+
+@pytest.mark.parametrize("status", [AccountStatus.ACTIVE, AccountStatus.QUOTA_EXCEEDED])
+@pytest.mark.parametrize(
+    "credits_has,balance,expected",
+    [
+        (None, None, "quota_exceeded"),
+        (False, 0.0, "quota_exceeded"),
+        (True, 0.0, "active"),
+        (False, 25.0, "active"),
+    ],
+)
+async def test_edu_weekly_exhaustion_respects_credit_evidence(
+    async_client, db_setup, status, credits_has, balance, expected
+):
+    now = utcnow()
+    reset_at = naive_utc_to_epoch(now + timedelta(days=5))
+    async with SessionLocal() as session:
+        account = _make_account("edu-exhausted", "edu@example.com", "edu")
+        account.status = status
+        await AccountsRepository(session).upsert(account)
+        repo = UsageRepository(session)
+        await repo.add_entry(
+            account.id,
+            40.0,
+            window="primary",
+            window_minutes=300,
+            reset_at=naive_utc_to_epoch(now + timedelta(hours=5)),
+            recorded_at=now,
+        )
+        await repo.add_entry(
+            account.id,
+            100.0,
+            window="secondary",
+            window_minutes=10080,
+            reset_at=reset_at,
+            recorded_at=now,
+            credits_has=credits_has,
+            credits_unlimited=False,
+            credits_balance=balance,
+        )
+    response = await async_client.get("/api/accounts")
+    assert response.status_code == 200
+    summary = next(item for item in response.json()["accounts"] if item["accountId"] == "edu-exhausted")
+    assert summary["status"] == expected
+    assert summary["usage"]["secondaryRemainingPercent"] == 0.0
+    assert summary["remainingCreditsSecondary"] == 0.0
+
+
 def _encode_jwt(payload: dict) -> str:
     raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
     body = base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
@@ -1145,13 +1266,14 @@ async def test_accounts_list_missing_primary_row_is_not_optimistic(async_client,
 
 
 @pytest.mark.asyncio
-async def test_accounts_list_ignores_stale_monthly_quota_after_upgrade(async_client, db_setup):
+@pytest.mark.parametrize("plan_type", ["plus", "team"])
+async def test_accounts_list_ignores_stale_monthly_quota_after_upgrade(async_client, db_setup, plan_type):
     async with SessionLocal() as session:
         accounts_repo = AccountsRepository(session)
         usage_repo = UsageRepository(session)
 
         await accounts_repo.upsert(
-            _make_account("acc_upgraded_monthly", "upgraded-monthly@example.com", plan_type="plus")
+            _make_account("acc_upgraded_monthly", "upgraded-monthly@example.com", plan_type=plan_type)
         )
         await usage_repo.add_entry(
             "acc_upgraded_monthly",
@@ -1221,9 +1343,7 @@ async def test_accounts_list_ignores_hidden_zero_capacity_primary_for_status(asy
 
 
 @pytest.mark.asyncio
-async def test_accounts_list_ignores_hidden_zero_capacity_primary_without_weekly_for_active_account(
-    async_client, db_setup
-):
+async def test_accounts_list_preserves_exhausted_historical_free_monthly_quota(async_client, db_setup):
     async with SessionLocal() as session:
         accounts_repo = AccountsRepository(session)
         usage_repo = UsageRepository(session)
@@ -1244,11 +1364,13 @@ async def test_accounts_list_ignores_hidden_zero_capacity_primary_without_weekly
     accounts = {item["accountId"]: item for item in payload["accounts"]}
 
     account = accounts["acc_free_active_primary_only"]
-    assert account["status"] == "active"
+    assert account["status"] == "quota_exceeded"
     assert account["usage"]["primaryRemainingPercent"] is None
     assert account["usage"]["secondaryRemainingPercent"] is None
     assert account["windowMinutesPrimary"] is None
     assert account["windowMinutesSecondary"] is None
+    assert account["usage"]["monthlyRemainingPercent"] == 0.0
+    assert account["windowMinutesMonthly"] == 43200
 
 
 @pytest.mark.asyncio
@@ -1435,7 +1557,7 @@ async def test_accounts_list_keeps_legacy_unknown_primary_rate_limited_until_kno
 
 
 @pytest.mark.asyncio
-async def test_accounts_list_keeps_free_rate_limited_until_weekly_quota_available(async_client, db_setup):
+async def test_accounts_list_exposes_historical_free_monthly_exhaustion_instead_of_short_window(async_client, db_setup):
     future_reset = int((utcnow() + timedelta(days=14)).timestamp())
     account = _make_account("acc_free_monthly_without_weekly", "free-monthly-no-weekly@example.com", plan_type="free")
     account.status = AccountStatus.RATE_LIMITED
@@ -1460,11 +1582,13 @@ async def test_accounts_list_keeps_free_rate_limited_until_weekly_quota_availabl
     accounts = {item["accountId"]: item for item in payload["accounts"]}
 
     account_payload = accounts["acc_free_monthly_without_weekly"]
-    assert account_payload["status"] == "rate_limited"
+    assert account_payload["status"] == "quota_exceeded"
     assert account_payload["usage"]["primaryRemainingPercent"] is None
     assert account_payload["usage"]["secondaryRemainingPercent"] is None
     assert account_payload["windowMinutesPrimary"] is None
     assert account_payload["windowMinutesSecondary"] is None
+    assert account_payload["usage"]["monthlyRemainingPercent"] == 0.0
+    assert account_payload["windowMinutesMonthly"] == 43200
 
 
 @pytest.mark.asyncio

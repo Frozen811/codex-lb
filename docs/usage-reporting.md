@@ -11,6 +11,10 @@ For direct Codex traffic over HTTP or WebSocket, the reported buckets have these
 
 ## Dashboard
 
+Account quotas follow the observed window duration. A lone 28–32-day window appears as Monthly, including historical primary-slot records and zero-duration secondary placeholders. A positive or unknown secondary duration preserves the separate observed windows. Team monthly percentages remain available while its unmeasured monthly credit capacity stays unknown; an explicit calibrated capacity can supply the estimate. Newer short or weekly samples supersede older monthly history.
+
+*Spec: [account-quota-presentation](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/account-quota-presentation)*
+
 The **Request Logs** token cell shows total tokens, with reported cached-input and reasoning counts underneath. Open **Details** to see the exact reported reasoning count and its relationship to output tokens.
 
 The **Reports** page shows the reported reasoning total for the selected date range and filters. Its coverage count states how many requests supplied a reasoning value. The daily breakdown and CSV export include the same reasoning field.

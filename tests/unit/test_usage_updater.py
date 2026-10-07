@@ -593,9 +593,10 @@ def test_usage_refresh_scheduler_splits_interval_across_accounts() -> None:
     assert refresh_scheduler_module._usage_refresh_slice_seconds(120, 0) == 120.0
 
 
-def test_usage_refresh_scheduler_selects_monthly_long_window_for_free_accounts() -> None:
+@pytest.mark.parametrize("plan_type", ["free", "team"])
+def test_usage_refresh_scheduler_selects_monthly_long_window_for_monthly_plans(plan_type) -> None:
     free_account = _make_account("acc_free", "workspace_free")
-    free_account.plan_type = "free"
+    free_account.plan_type = plan_type
     plus_account = _make_account("acc_plus", "workspace_plus")
 
     monthly = UsageHistory(
@@ -1923,7 +1924,8 @@ async def test_usage_refresh_recovers_quota_exceeded_free_weekly_account(monkeyp
 
 
 @pytest.mark.asyncio
-async def test_usage_refresh_stores_free_monthly_window_without_secondary_remap(monkeypatch) -> None:
+@pytest.mark.parametrize("plan_type,minutes", [("free", 43200), ("team", 43200), ("team", 43800)])
+async def test_usage_refresh_stores_monthly_window_without_secondary_remap(monkeypatch, plan_type, minutes) -> None:
 
     async def stub_fetch_usage(*, access_token: str, account_id: str | None, **_: Any) -> UsagePayload:
         del access_token, account_id
@@ -1933,7 +1935,7 @@ async def test_usage_refresh_stores_free_monthly_window_without_secondary_remap(
                     "primary_window": {
                         "used_percent": 24.0,
                         "reset_at": 1735689600,
-                        "limit_window_seconds": 2592000,
+                        "limit_window_seconds": minutes * 60,
                     },
                     "secondary_window": None,
                 },
@@ -1948,7 +1950,7 @@ async def test_usage_refresh_stores_free_monthly_window_without_secondary_remap(
     updater = UsageUpdater(usage_repo, accounts_repo=accounts_repo)
     account = _make_account("acc_free_monthly", "workspace_shared")
     account.status = AccountStatus.QUOTA_EXCEEDED
-    account.plan_type = "free"
+    account.plan_type = plan_type
     accounts_repo.accounts_by_id[account.id] = account
 
     await updater.refresh_accounts([account], latest_usage={})
@@ -1962,7 +1964,8 @@ async def test_usage_refresh_stores_free_monthly_window_without_secondary_remap(
 
 
 @pytest.mark.asyncio
-async def test_usage_refresh_uses_fresh_monthly_row_for_quota_freshness(monkeypatch) -> None:
+@pytest.mark.parametrize("plan_type", ["free", "team"])
+async def test_usage_refresh_uses_fresh_monthly_row_for_quota_freshness(monkeypatch, plan_type) -> None:
 
     fetch_usage_mock = AsyncMock()
     monkeypatch.setattr("app.modules.usage.updater.fetch_usage", fetch_usage_mock)
@@ -1972,7 +1975,7 @@ async def test_usage_refresh_uses_fresh_monthly_row_for_quota_freshness(monkeypa
     updater = UsageUpdater(usage_repo, accounts_repo=accounts_repo)
     account = _make_account("acc_free_monthly_fresh", "workspace_shared")
     account.status = AccountStatus.QUOTA_EXCEEDED
-    account.plan_type = "free"
+    account.plan_type = plan_type
     accounts_repo.accounts_by_id[account.id] = account
     await usage_repo.add_entry(
         account.id,
