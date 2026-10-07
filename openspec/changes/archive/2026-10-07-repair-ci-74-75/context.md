@@ -17,3 +17,15 @@ The local fix owns copy timers and guards late clipboard completion without chan
 - Both delta requirements are synced to main specs, with stable rationale in the owning context files. Strict OpenSpec validation and archive are completed before publication.
 
 Local Bun is 1.4.2; the full workflow uses its pinned runtime. Local validation does not certify Docker, Linux, databases, or remote report publication. The user authorized committing the fixes and starting another complete CI run; cloud results are recorded separately against the pushed SHA.
+
+## First full cloud run
+
+[CI #76](https://github.com/Frozen811/codex-lb/actions/runs/37645052511),
+SHA `8d5f9e99ce33687893200f8676838d04d924cf82`, created and completed all
+35 jobs. Frontend coverage and Docker passed. The strict Trivy gate ran,
+`trivy-sarif` artifact `11493088294` was retained, and GitHub Security recorded
+the analysis for this SHA without errors. Windows Startup Regression also
+passed. Migration replay tests exposed duplicate quota column DDL across all
+three databases; the workflow and aggregates remained failed. Follow-up
+implementation and exact local limitations are recorded in
+[quota migration replay](../2026-10-07-preserve-quota-limit-migration-replay/context.md).

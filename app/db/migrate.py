@@ -19,7 +19,7 @@ from alembic.script import ScriptDirectory
 from alembic.script.revision import RevisionError
 from alembic.util.exc import CommandError
 from anyio import to_thread
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import Float, create_engine, inspect, text
 from sqlalchemy import exc as sa_exc
 from sqlalchemy.engine import Connection
 
@@ -1088,6 +1088,54 @@ def _schema_ahead_error(state: MigrationState) -> MigrationBootstrapError:
     )
 
 
+def _upgrade_preserving_existing_quota_limit(config: Config, revision: str) -> None:
+    """Recover a quota-only revision without rewriting its published DDL."""
+
+    quota_revision = "20261007_000000_add_account_quota_limit"
+    sync_database_url = _required_sqlalchemy_url(config)
+    with _sync_connection(sync_database_url) as connection:
+        tables = _read_table_names(connection)
+        current_revisions = (
+            _read_current_revisions_from_connection(connection) if _ALEMBIC_VERSION_TABLE in tables else ()
+        )
+        pending = _pending_revisions(config, current_revisions, revision)
+        quota_column = (
+            next(
+                (
+                    column
+                    for column in inspect(connection).get_columns("accounts")
+                    if column["name"] == "quota_limit_percent"
+                ),
+                None,
+            )
+            if quota_revision in pending and "accounts" in tables
+            else None
+        )
+
+    if quota_column is None:
+        command.upgrade(config, revision)
+        return
+    if (
+        not isinstance(quota_column["type"], Float)
+        or not quota_column["nullable"]
+        or quota_column["default"] is not None
+    ):
+        raise MigrationBootstrapError(
+            "Existing incompatible accounts.quota_limit_percent column prevents ledger recovery"
+        )
+
+    script_directory = ScriptDirectory.from_config(config)
+    steps = script_directory._upgrade_revs(revision, cast("Any", current_revisions))
+    # Resolve relative targets before applying ancestors changes their base.
+    target_revision = steps[-1].revision.revision
+    parent_revision = script_directory.get_revision(quota_revision).down_revision
+    assert isinstance(parent_revision, str)
+    logger.warning("Preserving existing accounts.quota_limit_percent while reconciling revision=%s", quota_revision)
+    command.upgrade(config, parent_revision)
+    command.stamp(config, quota_revision)
+    command.upgrade(config, target_revision)
+
+
 def run_upgrade(
     database_url: str,
     revision: str = "head",
@@ -1164,7 +1212,7 @@ def _run_upgrade_locked(
     # reconciliation may all have moved the ledger, and the question is what
     # this database has actually applied at the moment the upgrade starts.
     _check_legacy_credential_drop(config, _required_sqlalchemy_url(config), revision)
-    command.upgrade(config, revision)
+    _upgrade_preserving_existing_quota_limit(config, revision)
 
     sync_database_url = _required_sqlalchemy_url(config)
     current_revision = _read_current_revision(sync_database_url)

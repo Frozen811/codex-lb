@@ -72,3 +72,21 @@ branch. See the [repair context](../../changes/merge-overflow-transport-migratio
 ## Example
 
 Branch A and B each create migration revisions in parallel. After merge, CI detects multiple heads and fails. The resolver adds a merge revision, reruns CI, and proceeds. During deployment, a DB still storing old `013_add_dashboard_settings_routing_strategy` in `alembic_version` is auto-remapped to `20260225_000000_add_dashboard_settings_routing_strategy` before upgrade.
+
+## Existing quota storage during ledger recovery
+
+The [quota recovery contract](spec.md#requirement-quota-restriction-storage-survives-ledger-recovery)
+handles a schema with an existing quota restriction column and a missing or
+rewound Alembic ledger. The published quota-only revision stays immutable.
+Under the migration lock, recovery resolves the original upgrade plan, checks
+for a nullable Float column without a server default, applies pending ancestors,
+then records just the quota-only revision without duplicate DDL. Existing legacy
+and retired-credential normalization still run first. Incompatible quota storage
+fails before this reconciliation proceeds; arbitrary ancestors are not inferred
+from one column's presence.
+
+For example, an account with a 37.5% restriction retains that value and its
+encrypted credentials after loss of the ledger. A `+1` target from the quota
+revision's parent ends at the same resolved revision. Missing facet indexes
+still get rebuilt by their pending ancestor before the quota stamp. Ordinary
+installs without the column execute the original additive migration.
