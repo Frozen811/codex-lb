@@ -32,6 +32,7 @@ class _DeliveryOrigin:
     queues: list[_HTTPBridgeEventQueue] = field(default_factory=list)
     sent: asyncio.Event = field(default_factory=asyncio.Event)
     finish: asyncio.Event = field(default_factory=asyncio.Event)
+    independent_enqueue_delays: int = 0
 
 
 @pytest.fixture
@@ -39,8 +40,17 @@ async def delivery_origin(bridge_origin, async_client, monkeypatch, request: pyt
     state = _DeliveryOrigin()
     action = request.getfixturevalue("action")
 
+    class DeliveryEventQueue(_HTTPBridgeEventQueue):
+        async def put(self, item: str | None) -> None:
+            if action == "stall" and state.queues and self is not state.queues[0]:
+                # Simulate scheduler contention inside the enqueue timeout.
+                # The independent draining control must tolerate this delay.
+                state.independent_enqueue_delays += 1
+                await asyncio.sleep(0.15)
+            await super().put(item)
+
     def new_queue(**kwargs):
-        queue = _HTTPBridgeEventQueue(max_events=2, max_bytes=512)
+        queue = DeliveryEventQueue(max_events=2, max_bytes=512)
         state.queues.append(queue)
         return queue
 
@@ -167,6 +177,12 @@ async def test_real_bridge_paused_delivery_has_bounded_cleanup(
                     break
                 await asyncio.sleep(0.01)
             assert queue._closed, "a paused client must not block the reader indefinitely"
+            # The accelerated timeout belongs to the stalled consumer. The
+            # independently draining control uses the ordinary allowance.
+            ordinary_settings = upstream_events._service_get_settings().model_copy(
+                update={"stream_idle_timeout_seconds": 10.0}
+            )
+            monkeypatch.setattr(upstream_events, "_service_get_settings", lambda: ordinary_settings)
             # A different request succeeds while the first consumer is still paused.
             independent = await async_client.post(
                 path,
@@ -175,6 +191,7 @@ async def test_real_bridge_paused_delivery_has_bounded_cleanup(
             )
             assert independent.status_code == 200, independent.text
             assert _events(independent)[-1]["type"] == "response.completed"
+            assert delivery_origin.independent_enqueue_delays > 0
             resume.set()
         elif action == "write_error":
             resume.set()
