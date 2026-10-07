@@ -1,4 +1,11 @@
 import type { z } from "zod";
+import {
+  CacheProbePlanSchema,
+  CacheProbeRunSchema,
+  type CacheProbePlan,
+  type CacheProbeRun,
+} from "@/features/cache-probe/schemas";
+
 import type {
 	AccountSummary,
 	AccountTrendsResponse,
@@ -1466,4 +1473,59 @@ export function createConversationDetails(
 		],
 		...overrides,
 	});
+}
+
+export function createCacheProbePlan(): CacheProbePlan {
+  return CacheProbePlanSchema.parse({
+    model: "gpt-probe",
+    seedAccount: { accountId: "acc_seed", label: "Seed" },
+    availableOtherAccounts: [{ accountId: "acc_other", label: "Other" }],
+    seedRepetitions: 3,
+    totalCalls: 4,
+    estimatedInputTokensPerCall: 28_000,
+    estimatedTotalInputTokens: 112_000,
+    maxSeedRepetitions: 5,
+    maxOtherAccounts: 1,
+    pressure: {
+      underPressure: false,
+      reason: null,
+      detail: null,
+      selectableAccountCount: 2,
+      eligibleAccountCount: 2,
+      pressuredAccountCount: 0,
+    },
+  });
+}
+
+export function createCacheProbeRun(seedRepetitions = 3, otherAccountCount = 1): CacheProbeRun {
+  const accounts = [
+    ...Array.from({ length: seedRepetitions }, () => ({ accountId: "acc_seed", label: "Seed", role: "seed" })),
+    ...Array.from({ length: otherAccountCount }, () => ({ accountId: "acc_other", label: "Other", role: "other" })),
+  ];
+  return CacheProbeRunSchema.parse({
+    runId: "probe-test-run",
+    model: "gpt-probe",
+    startedAt: "2026-10-07T00:00:00Z",
+    completedAt: "2026-10-07T00:00:01Z",
+    seedAccount: { accountId: "acc_seed", label: "Seed" },
+    seedRepetitions,
+    calls: accounts.map((account, index) => ({
+      sequence: index + 1,
+      accountId: account.accountId,
+      accountLabel: account.label,
+      role: account.role,
+      status: "miss",
+      cacheHit: false,
+      inputTokens: 28_000,
+      cachedTokens: 0,
+      latencyMs: 100,
+      errorCode: null,
+    })),
+    seedHitCount: 0,
+    seedCallCount: seedRepetitions,
+    otherHitCount: 0,
+    otherCallCount: otherAccountCount,
+    crossAccountHit: false,
+    verdict: "no_cross_account_hit",
+  });
 }

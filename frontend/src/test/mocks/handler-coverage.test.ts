@@ -123,6 +123,8 @@ const EXPECTED_ENDPOINTS = [
 	"POST /api/quota-planner/warm-now",
 	"POST /api/quota-planner/decisions/:decisionId/cancel",
 	// firewall
+	"GET /api/diagnostics/cache-isolation-probe",
+	"POST /api/diagnostics/cache-isolation-probe/run",
 	"GET /api/firewall/ips",
 	"POST /api/firewall/ips",
 	"DELETE /api/firewall/ips/:ipAddress",

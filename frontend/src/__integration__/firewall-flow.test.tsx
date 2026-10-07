@@ -8,6 +8,9 @@ import { renderWithProviders } from "@/test/utils";
 import { ADMIN_PERMISSIONS } from "@/test/mocks/factories";
 import { server } from "@/test/mocks/server";
 
+// Transform the real lazy route before the interaction timeout starts.
+await import("@/features/settings/components/settings-page");
+
 describe("firewall flow integration", () => {
   it("loads firewall section in settings and performs add/remove", async () => {
     const user = userEvent.setup({ delay: null });
@@ -61,10 +64,12 @@ describe("firewall flow integration", () => {
     expect(firewallSection).toHaveClass("scroll-mt-16");
     const fw = within(firewallSection);
 
-    await user.type(fw.getByPlaceholderText("127.0.0.1 or 2001:db8::1"), "127.0.0.1");
+    await user.click(fw.getByPlaceholderText("127.0.0.1 or 2001:db8::1"));
+    await user.paste("127.0.0.1");
     await user.click(fw.getByRole("button", { name: "Add IP" }));
 
     expect(await fw.findByText("127.0.0.1")).toBeInTheDocument();
+    expect(entries).toEqual([{ ipAddress: "127.0.0.1", createdAt: "2026-02-18T12:00:00Z" }]);
 
     await user.click(fw.getByRole("button", { name: "Remove" }));
 
@@ -72,7 +77,8 @@ describe("firewall flow integration", () => {
     await user.click(within(dialog).getByRole("button", { name: "Remove" }));
 
     await waitFor(() => {
-      expect(screen.queryByText("127.0.0.1")).not.toBeInTheDocument();
+      expect(fw.queryByText("127.0.0.1")).not.toBeInTheDocument();
+      expect(entries).toEqual([]);
     });
   });
 

@@ -1,5 +1,6 @@
 import { HttpResponse, http } from "msw";
 import { z } from "zod";
+import { CacheProbeRunRequestSchema } from "@/features/cache-probe/schemas";
 
 import type { InviteDescription } from "@/features/auth/schemas";
 import type { DashboardRole, DashboardUser } from "@/features/access/api";
@@ -16,6 +17,8 @@ import {
   type ConversationDetails,
   type ConversationEntry,
   createAccountSummary,
+  createCacheProbePlan,
+  createCacheProbeRun,
   createAccountTrends,
   createApiKey,
   createApiKeyCreateResponse,
@@ -1541,6 +1544,26 @@ export const handlers = [
       return HttpResponse.json(binding);
     },
   ),
+
+  http.get("/api/diagnostics/cache-isolation-probe", () => HttpResponse.json(createCacheProbePlan())),
+
+  http.post("/api/diagnostics/cache-isolation-probe/run", async ({ request }) => {
+    const payload = CacheProbeRunRequestSchema.safeParse(await request.json());
+    const plan = createCacheProbePlan();
+    if (
+      !payload.success ||
+      payload.data.seedRepetitions > plan.maxSeedRepetitions ||
+      payload.data.otherAccountCount > plan.maxOtherAccounts
+    ) {
+      return HttpResponse.json(
+        { error: { code: "invalid_probe_request", message: "Invalid confirmed probe request" } },
+        { status: 400 },
+      );
+    }
+    return HttpResponse.json(
+      createCacheProbeRun(payload.data.seedRepetitions, payload.data.otherAccountCount),
+    );
+  }),
 
   http.get("/api/firewall/ips", () => {
     return HttpResponse.json({

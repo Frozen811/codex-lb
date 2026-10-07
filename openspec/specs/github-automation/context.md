@@ -305,3 +305,16 @@ uv run --no-sync pytest -n auto --dist=loadfile -m extended_property --hypothesi
 The previous successful full pipeline was 6m20s. Cloud runtime is measured
 again after publication; scheduled exploration has its own duration and does
 not replace or shorten the full mandatory suite.
+
+The second cloud attempt at `ee090bc6` exposed a pre-existing Firewall flow
+interaction timeout under coverage (15 seconds), while all backend jobs passed.
+The test now preloads the real Settings route outside its interaction body,
+pastes an IP once rather than rerendering per character, and scopes the removal
+query to Firewall. Its assertions additionally check the mock's persisted
+add/remove state. Diagnostic plan/run MSW handlers were missing from Advanced
+settings; typed deterministic fixtures and real-client contract checks now
+cover them. Unknown requests still fail. This follow-up keeps the original
+timeouts, coverage thresholds, real routes and file parallelism.
+
+Focused reproduction: `cd frontend && bun run test src/__integration__/firewall-flow.test.tsx src/features/cache-probe/api.test.ts src/test/mocks/handler-coverage.test.ts`.
+The full main coverage gate remains `make frontend-test`.
