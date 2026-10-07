@@ -13,7 +13,7 @@ from pydantic import (
     field_validator,
 )
 
-from app.core.errors import OpenAIErrorParam
+from app.core.errors import OpenAIErrorParam, normalize_error_reset
 from app.core.types import JsonValue
 
 type ModelLikeInput = JsonValue | BaseModel
@@ -40,6 +40,11 @@ class OpenAIError(BaseModel):
     plan_type: StrictStr | None = None
     resets_at: StrictInt | StrictFloat | None = None
     resets_in_seconds: StrictInt | StrictFloat | None = None
+
+    @field_validator("resets_at", "resets_in_seconds")
+    @classmethod
+    def validate_reset_number(cls, value: int | float | None) -> int | float | None:
+        return normalize_error_reset(value)
 
     def model_post_init(self, __context: object) -> None:
         self._param_state = OpenAIErrorParam(

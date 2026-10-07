@@ -1,0 +1,23 @@
+{
+  "baseline": "205e9c54bbab433c2621378e5c05a86f2fd253cb",
+  "selected_ids": [
+    "UP-PR-2449",
+    "UP-PR-2439",
+    "UP-PR-2440",
+    "UP-PR-2403",
+    "UP-PR-2391"
+  ],
+  "initial_rows": [
+    "| [UP-PR-2449](https://github.com/Soju06/codex-lb/pull/2449) | PR #2449: fix(proxy): read the usage-limit rejection off the frame upstream actually sends | Раздел 2, L145 | НЕ ПРОВЕРЕНО | — |",
+    "| [UP-PR-2439](https://github.com/Soju06/codex-lb/pull/2439) | PR #2439: fix(proxy): preserve upstream quota reset metadata on terminal errors | Раздел 2, L175 | НЕ ПРОВЕРЕНО | — |",
+    "| [UP-PR-2440](https://github.com/Soju06/codex-lb/pull/2440) | PR #2440: fix(proxy): preserve upstream reset metadata in retry health | Раздел 2, L169 | НЕ ПРОВЕРЕНО | — |",
+    "| [UP-PR-2403](https://github.com/Soju06/codex-lb/pull/2403) | PR #2403: feat(proxy): classify usage-limit rejections and answer pool-walk exclusion | Раздел 2, L163 | НЕ ПРОВЕРЕНО | — |",
+    "| [UP-PR-2391](https://github.com/Soju06/codex-lb/pull/2391) | PR #2391: feat(proxy): shape the failover decision around the pool and render its terminal | Раздел 2, L157 | НЕ ПРОВЕРЕНО | — |"
+  ],
+  "changed_source_rows": 5,
+  "preserved_source_rows": 333,
+  "preserved_before_sha256": "1a06d7f34e836b94a3ee72b9cd3226f0edd939e88f17fd7890102f0b57025176",
+  "preserved_after_sha256": "1a06d7f34e836b94a3ee72b9cd3226f0edd939e88f17fd7890102f0b57025176",
+  "source_rows": 338,
+  "unverified_rows": 225
+}

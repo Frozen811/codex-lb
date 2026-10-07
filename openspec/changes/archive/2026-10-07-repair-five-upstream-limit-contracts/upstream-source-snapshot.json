@@ -1,0 +1,47 @@
+[
+  {
+    "number": 2449,
+    "url": "https://github.com/Soju06/codex-lb/pull/2449",
+    "title": "fix(proxy): read the usage-limit rejection off the frame upstream actually sends",
+    "state": "closed",
+    "merged": true,
+    "updated_at": "2026-09-21T01:45:00Z",
+    "head": "95dc86ccd8ef75d1e2db736a436d460a2b7f6149"
+  },
+  {
+    "number": 2439,
+    "url": "https://github.com/Soju06/codex-lb/pull/2439",
+    "title": "fix(proxy): preserve upstream quota reset metadata on terminal errors",
+    "state": "open",
+    "merged": false,
+    "updated_at": "2026-10-07T11:27:55Z",
+    "head": "d4a3280d552a80a4ba6623e4e4a9e0350fabfa3c"
+  },
+  {
+    "number": 2440,
+    "url": "https://github.com/Soju06/codex-lb/pull/2440",
+    "title": "fix(proxy): preserve upstream reset metadata in retry health",
+    "state": "open",
+    "merged": false,
+    "updated_at": "2026-10-02T15:16:21Z",
+    "head": "59bbf74ca9bd55e0a8388e14011d04874aed028b"
+  },
+  {
+    "number": 2403,
+    "url": "https://github.com/Soju06/codex-lb/pull/2403",
+    "title": "feat(proxy): classify usage-limit rejections and answer pool-walk exclusion",
+    "state": "open",
+    "merged": false,
+    "updated_at": "2026-10-07T11:27:46Z",
+    "head": "ddd5512c84def7560094a544b4c3a0ac5301d909"
+  },
+  {
+    "number": 2391,
+    "url": "https://github.com/Soju06/codex-lb/pull/2391",
+    "title": "feat(proxy): shape the failover decision around the pool and render its terminal",
+    "state": "open",
+    "merged": false,
+    "updated_at": "2026-10-07T11:27:44Z",
+    "head": "c65057095ec9dcd96b8aa94602d9f6f853e6bbf7"
+  }
+]

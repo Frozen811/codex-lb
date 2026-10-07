@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import json
+
+import pytest
+
 from app.core.errors import (
     PREVIOUS_RESPONSE_STREAM_INCOMPLETE_MESSAGE,
     OpenAIErrorParam,
@@ -9,6 +13,61 @@ from app.core.errors import (
     previous_response_stream_incomplete_error,
     response_failed_event,
 )
+from app.core.openai.models import OpenAIError
+from app.core.types import JsonValue
+from app.modules.proxy._service.streaming.retry import _response_failed_event_from_upstream_error
+from app.modules.proxy._service.websocket.helpers import _websocket_event_upstream_error
+from app.modules.proxy.helpers import _parse_openai_error, _upstream_error_from_openai
+
+
+@pytest.mark.parametrize("reset", [True, False, "bad", float("nan"), float("inf"), float("-inf")])
+def test_quota_terminal_ignores_malformed_reset_metadata(reset: JsonValue) -> None:
+    event = _response_failed_event_from_upstream_error(
+        "usage_limit_reached", {"message": "limit reached", "resets_at": reset}
+    )
+
+    assert event["response"]["error"] == {
+        "code": "usage_limit_reached",
+        "message": "limit reached",
+        "type": "server_error",
+    }
+    json.dumps(event, allow_nan=False)
+
+
+@pytest.mark.parametrize("field", ["resets_at", "resets_in_seconds"])
+@pytest.mark.parametrize("reset", [True, "bad", float("nan"), float("inf"), float("-inf"), "NaN", "Infinity"])
+def test_upstream_quota_parser_validates_reset_fields_independently(field: str, reset: JsonValue) -> None:
+    valid_field = "resets_in_seconds" if field == "resets_at" else "resets_at"
+    valid_reset = 432_000 if valid_field == "resets_in_seconds" else 2_000_432_000
+    error = {"code": "usage_limit_reached", "message": "limit reached", field: reset, valid_field: valid_reset}
+
+    parsed = _parse_openai_error({"error": error})
+    assert parsed is not None
+    assert parsed.code == "usage_limit_reached"
+    assert parsed.message == "limit reached"
+    assert _upstream_error_from_openai(parsed) == {"message": "limit reached", valid_field: valid_reset}
+    assert _websocket_event_upstream_error("error", {"type": "error", "error": error}) == {
+        "message": "limit reached",
+        valid_field: valid_reset,
+    }
+
+
+@pytest.mark.parametrize("reset", [2_000_432_000, 2_000_432_000.5, "2000432000.5"])
+def test_upstream_quota_parser_preserves_finite_reset_compatibility(reset: int | float | str) -> None:
+    parsed = _parse_openai_error({"error": {"message": "limit reached", "resets_at": reset}})
+    assert parsed is not None
+    expected = float(reset) if isinstance(reset, str) else reset
+    assert parsed.resets_at == expected
+    event = _response_failed_event_from_upstream_error("usage_limit_reached", _upstream_error_from_openai(parsed))
+    assert event["response"]["error"]["resets_at"] == int(expected)
+    assert "resets_in_seconds" not in event["response"]["error"]
+
+
+@pytest.mark.parametrize("reset", [float("nan"), float("inf"), float("-inf")])
+def test_typed_upstream_error_ignores_nonfinite_resets(reset: float) -> None:
+    parsed = OpenAIError(message="limit reached", resets_at=reset, resets_in_seconds=432_000)
+    assert parsed.resets_at is None
+    assert parsed.resets_in_seconds == 432_000
 
 
 def test_response_failed_event_includes_incomplete_details():

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 import time
 from collections.abc import Mapping
@@ -188,6 +189,17 @@ def native_giveup_retryable_message(
     return f"Please try again in {seconds_text}s. codex-lb: upstream {code_text}; {original}."
 
 
+def normalize_error_reset(value: JsonValue) -> int | float | None:
+    """Keep finite reset numbers without interpreting their health horizon."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and math.isfinite(value):
+        return value
+    return None
+
+
 def openai_error(
     code: str,
     message: str,
@@ -196,6 +208,7 @@ def openai_error(
     resets_at: int | float | None = None,
 ) -> OpenAIErrorEnvelope:
     detail: OpenAIErrorDetail = {"message": message, "type": error_type, "code": code}
+    resets_at = normalize_error_reset(resets_at)
     if resets_at is not None:
         detail["resets_at"] = int(resets_at)
     return {"error": detail}

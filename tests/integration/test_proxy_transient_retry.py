@@ -55,6 +55,77 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["/v1/responses", "/backend-api/codex/responses"])
+@pytest.mark.parametrize("reset", [True, float("nan"), float("inf")])
+async def test_stream_quota_terminal_ignores_invalid_reset_after_visible_output(async_client, monkeypatch, path, reset):
+    account_id = await _import_account(async_client, "acc_invalid_reset", "invalid-reset@example.com")
+    seen_accounts = []
+
+    async def fake_stream(payload, headers, access_token, account_id, base_url=None, raise_for_status=False):
+        seen_accounts.append(account_id)
+        yield _sse_event({"type": "response.created", "response": {"id": "resp_invalid_reset"}})
+        raise ProxyResponseError(
+            429,
+            {
+                "error": {
+                    "code": "usage_limit_reached",
+                    "message": "The usage limit has been reached",
+                    "resets_at": reset,
+                    "resets_in_seconds": 432_000,
+                }
+            },
+        )
+
+    monkeypatch.setattr(proxy_module, "core_stream_responses", fake_stream)
+    response = await async_client.post(path, json={"model": "gpt-5.1", "input": "hello", "stream": True})
+    assert response.status_code == 200
+    events = _extract_events(response.text.splitlines())
+    terminal = events[-1]
+    assert terminal["type"] == "response.failed"
+    assert terminal["response"]["error"]["code"] == "usage_limit_reached"
+    assert terminal["response"]["error"]["message"] == "The usage limit has been reached"
+    assert "resets_at" not in terminal["response"]["error"]
+    assert terminal["response"]["error"]["resets_in_seconds"] == 432_000
+    json.dumps(events, allow_nan=False)
+    assert seen_accounts == ["acc_invalid_reset"]
+    async with SessionLocal() as session:
+        account = await session.get(Account, account_id)
+        assert account is not None
+        assert account.status == AccountStatus.RATE_LIMITED
+        assert account.reset_at is not None
+        assert account.reset_at > time.time() + 431_900
+
+
+@pytest.mark.asyncio
+async def test_stream_request_error_echoing_usage_limit_does_not_bench_or_rotate(async_client, monkeypatch):
+    account_a = await _import_account(async_client, "acc_echo_a", "echo-a@example.com")
+    account_b = await _import_account(async_client, "acc_echo_b", "echo-b@example.com")
+    seen_accounts = []
+    message = 'Invalid input: "The usage limit has been reached"'
+
+    async def fake_stream(payload, headers, access_token, account_id, base_url=None, raise_for_status=False):
+        seen_accounts.append(account_id)
+        yield _sse_event(
+            {"type": "response.failed", "response": {"error": {"code": "invalid_request_error", "message": message}}}
+        )
+
+    monkeypatch.setattr(proxy_module, "core_stream_responses", fake_stream)
+    response = await async_client.post(
+        "/backend-api/codex/responses", json={"model": "gpt-5.1", "input": "hello", "stream": True}
+    )
+    assert response.status_code == 200
+    terminal = _extract_events(response.text.splitlines())[-1]
+    assert terminal["response"]["error"]["code"] == "invalid_request_error"
+    assert terminal["response"]["error"]["message"] == message
+    assert len(seen_accounts) == 1
+    async with SessionLocal() as session:
+        for account_id in (account_a, account_b):
+            account = await session.get(Account, account_id)
+            assert account is not None
+            assert account.status == AccountStatus.ACTIVE
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("refresh_outcome", ["permanent", "rejected_again", "success"])
 async def test_stream_auth_recovery_does_not_repeat_rejected_account(async_client, monkeypatch, refresh_outcome):
     account_a = await _import_account(async_client, "acc_auth_a", "auth-a@example.com")

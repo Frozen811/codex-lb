@@ -14062,6 +14062,74 @@ async def test_v1_responses_http_bridge_surfaces_selected_replacement_failure(as
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("visible", [False, True])
+async def test_http_bridge_codeless_usage_limit_benches_last_account(async_client, monkeypatch, visible):
+    _install_bridge_settings(monkeypatch, enabled=True)
+    account_id = await _import_account(async_client, "acc_bridge_last_limit", "bridge-last-limit@example.com")
+    connect_calls = []
+
+    class LimitedWebSocket(_FakeBridgeUpstreamWebSocket):
+        async def send_text(self, text: str) -> None:
+            self.sent_text.append(text)
+            if visible:
+                await self._messages.put(
+                    _FakeUpstreamMessage(
+                        "text", text=json.dumps({"type": "response.created", "response": {"id": "resp_limit"}})
+                    )
+                )
+            await self._messages.put(
+                _FakeUpstreamMessage(
+                    "text",
+                    text=json.dumps(
+                        {
+                            "type": "response.failed",
+                            "response": {
+                                **({"id": "resp_limit"} if visible else {}),
+                                "error": {"message": "The usage limit has been reached"},
+                            },
+                        }
+                    ),
+                )
+            )
+
+    upstream = LimitedWebSocket("resp_limit")
+
+    async def ensure_fresh(self, target, *, force=False, timeout_seconds):
+        return target
+
+    async def connect(headers, access_token, account_id_header, *, base_url=None, session=None):
+        connect_calls.append(account_id_header)
+        return upstream
+
+    monkeypatch.setattr(proxy_module.ProxyService, "_ensure_fresh_with_budget", ensure_fresh)
+    monkeypatch.setattr(proxy_module, "connect_responses_websocket", connect)
+    response = await async_client.post(
+        "/backend-api/codex/responses", json={"model": "gpt-5.1", "input": "hello", "stream": True}
+    )
+    if visible:
+        assert response.status_code == 200
+        events = [
+            json.loads(line[6:])
+            for line in response.text.splitlines()
+            if line.startswith("data: ") and line[6:] != "[DONE]"
+        ]
+        assert events[-1]["type"] == "response.failed"
+        error = events[-1]["response"]["error"]
+    else:
+        assert response.status_code == 502
+        error = response.json()["error"]
+        # A failed pre-created replay without a status-bearing quota envelope
+        # retains the existing fail-closed terminal. Health still records the
+        # original code-less usage limit even on the last account.
+        assert error["code"] == "stream_incomplete"
+    account = await _get_account(account_id)
+    assert account.status == AccountStatus.RATE_LIMITED
+    if visible:
+        assert error["message"] == "The usage limit has been reached"
+    assert len(connect_calls) == 1
+
+
+@pytest.mark.asyncio
 async def test_v1_responses_http_bridge_preserves_rate_limit_metadata_in_429(async_client, monkeypatch):
     _install_bridge_settings(monkeypatch, enabled=True)
     account_id = await _import_account(
