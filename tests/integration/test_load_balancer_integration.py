@@ -248,7 +248,7 @@ async def test_load_balancer_does_not_reactivate_explicit_quota_from_fresh_exhau
     available = Account(
         id="acc_explicit_quota_replacement",
         email="explicit_quota_replacement@example.com",
-        plan_type="plus",
+        plan_type=plan_type,
         access_token_encrypted=encryptor.encrypt("access-ok"),
         refresh_token_encrypted=encryptor.encrypt("refresh-ok"),
         id_token_encrypted=encryptor.encrypt("id-ok"),
@@ -805,3 +805,54 @@ async def test_load_balancer_fill_first_cycles_through_accounts(db_setup):
     third = await balancer.select_account(routing_strategy="fill_first")
     assert third.account is not None
     assert third.account.id == accounts[1].id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("plan_type", ["plus", "pro"])
+async def test_relative_availability_keeps_usage_order_with_two_open_leases(db_setup, plan_type):
+    from app.modules.proxy._load_balancer.tunables import RoutingTunables
+
+    encryptor = TokenEncryptor()
+    now = utcnow()
+    reset_at = int(now.replace(tzinfo=timezone.utc).timestamp()) + 5 * 24 * 3600
+    async with SessionLocal() as session:
+        repo = AccountsRepository(session)
+        usage = UsageRepository(session)
+        for account_id, used in [("a-heavy", 95.0), ("z-light", 38.0)]:
+            await repo.upsert(
+                Account(
+                    id=account_id,
+                    email=f"{account_id}@example.com",
+                    plan_type=plan_type,
+                    access_token_encrypted=encryptor.encrypt("access"),
+                    refresh_token_encrypted=encryptor.encrypt("refresh"),
+                    id_token_encrypted=encryptor.encrypt("id"),
+                    last_refresh=now,
+                    status=AccountStatus.ACTIVE,
+                )
+            )
+            for window, minutes in [("primary", 300), ("secondary", 10080)]:
+                await usage.add_entry(
+                    account_id, used, window=window, window_minutes=minutes, reset_at=reset_at, recorded_at=now
+                )
+    balancer = LoadBalancer(_repo_factory)
+    leases = []
+    try:
+        for account_id in ["a-heavy", "z-light"]:
+            lease = await balancer.acquire_account_lease(account_id, kind="stream", estimated_tokens=10240)
+            assert lease is not None
+            leases.append(lease)
+            assert await balancer.account_pressure_snapshot(account_id) == (0, 1, 10240)
+        for weight in [0.0, 1.0, 10000.0]:
+            selected = await balancer.select_account(
+                routing_strategy="relative_availability",
+                relative_availability_top_k=1,
+                routing_tunables=RoutingTunables(lease_token_weight=weight),
+            )
+            assert selected.account is not None
+            assert selected.account.id == "z-light"
+    finally:
+        for lease in leases:
+            await balancer.release_account_lease(lease)
+    for account_id in ["a-heavy", "z-light"]:
+        assert await balancer.account_pressure_snapshot(account_id) == (0, 0, 0.0)

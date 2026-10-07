@@ -1819,3 +1819,37 @@ async def test_accounts_list_stale_rate_limited_status_recovers_after_background
     # The recovered account's only sample still has an elapsed reset; the
     # display stays absent until a fresh sample arrives.
     assert reconciled_account["usage"]["primaryRemainingPercent"] is None
+
+
+@pytest.mark.asyncio
+async def test_edu_exhaustion_keeps_weekly_hold_and_quota_projection(async_client, db_setup):
+    now = utcnow()
+    now_epoch = int(now.replace(tzinfo=timezone.utc).timestamp())
+    reset_at = now_epoch + 7 * 24 * 3600
+    account = _make_account("acc_edu_exhausted", "edu-exhausted@example.com", plan_type="edu")
+    account.status = AccountStatus.QUOTA_EXCEEDED
+    account.reset_at = now_epoch - 1
+    async with SessionLocal() as session:
+        await AccountsRepository(session).upsert(account)
+        usage = UsageRepository(session)
+        await usage.add_entry(
+            account.id,
+            15.0,
+            window="primary",
+            window_minutes=300,
+            reset_at=now_epoch + 3600,
+            recorded_at=now,
+            credits_has=False,
+            credits_unlimited=False,
+            credits_balance=0.0,
+        )
+        await usage.add_entry(
+            account.id, 100.0, window="secondary", window_minutes=10080, reset_at=reset_at, recorded_at=now
+        )
+    response = await async_client.get("/api/accounts")
+    assert response.status_code == 200
+    summary = next(row for row in response.json()["accounts"] if row["accountId"] == account.id)
+    assert summary["status"] == "quota_exceeded"
+    assert summary["usage"]["secondaryRemainingPercent"] == 0.0
+    assert summary["windowMinutesSecondary"] == 10080
+    assert summary["resetAtSecondary"] is not None

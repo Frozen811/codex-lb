@@ -320,7 +320,7 @@ Completion.
 
 ### Requirement: Chat Completions passthrough fields are shape-checked, not deep-validated
 
-The service MUST treat the `messages`, `tools` and `input` fields of `/v1/chat/completions` requests as opaque JSON: it MUST NOT re-validate or coerce their nested values against a per-field type schema. Message structure MUST be enforced by the chat mapping rules (messages are objects with a string `role` from the supported set; content, `tool_calls` and `tool_call_id` rules) and each violation MUST return a 4xx OpenAI `invalid_request_error`; because these rules run at the request level, such envelopes carry no per-item `error.param` path. Message keys the mapping does not inspect MUST NOT be rejected for their type: `refusal` of any non-string type is ignored (it contributes a refusal content part only when it is a non-empty string), `name`/`call_id`/`tool_call_id` values are type-checked only where the mapping for that role consumes them, and an assistant `tool_calls` of `null` is treated as omitted (a present, non-null `tool_calls` MUST still be an array). `tools` MUST be an array and `messages` MUST be an array when present, and neither may nest objects/arrays deeper than 200 levels; violations MUST return HTTP 400 with `error.param` naming the field. Non-finite numbers (for example `1e400`) inside these fields serialize as `null` in the mapped payload. Tool definitions MUST reach the mapped Responses tools byte-for-byte apart from the documented chat-to-Responses tool normalization.
+The service MUST treat the `messages`, `tools` and `input` fields of `/v1/chat/completions` requests as opaque JSON: it MUST NOT re-validate or coerce their nested values against a per-field type schema. Message structure MUST be enforced by the chat mapping rules (messages are objects with a string `role` from the supported set; content, `tool_calls` and `tool_call_id` rules) and each violation MUST return a 4xx OpenAI `invalid_request_error`; because these rules run at the request level, such envelopes carry no per-item `error.param` path. Message keys the mapping does not inspect MUST NOT be rejected for their type: `refusal` of any non-string type is ignored (it contributes a refusal content part only when it is a non-empty string), `name`/`call_id`/`tool_call_id` values are type-checked only where the mapping for that role consumes them, and an assistant `tool_calls` of `null` is treated as omitted (a present, non-null `tool_calls` MUST still be an array). `tools` MUST be an array and `messages` MUST be an array when present, and neither may nest objects/arrays deeper than 200 levels; violations MUST return HTTP 400 with `error.param` naming the field. Opaque extra fields on the request and its response-format/stream controls MUST obey the same 200-container depth limit and field-local HTTP 400 error contract. Non-finite numbers (for example `1e400`) inside these fields serialize as `null` in the mapped payload. Tool definitions MUST reach the mapped Responses tools byte-for-byte apart from the documented chat-to-Responses tool normalization.
 
 #### Scenario: Non-array chat tools are rejected with the tools param
 
@@ -353,6 +353,12 @@ The service MUST treat the `messages`, `tools` and `input` fields of `/v1/chat/c
 - **GIVEN** a chat function tool whose `function.parameters` schema contains nested objects, arrays, floats, booleans and nulls
 - **WHEN** the service maps the request to Responses
 - **THEN** the mapped tool's `parameters` is byte-identical to the client's JSON
+
+
+#### Scenario: Extra Chat Completions fields obey the nesting limit
+- **WHEN** a Chat Completions request includes an extra field nested more than 200 container levels deep
+- **THEN** validation rejects it with HTTP 400, `invalid_request_error`, and `error.param` naming that field
+- **AND** values within the limit remain serializable
 
 ### Requirement: Daybreak capability intent fails closed on Chat Completions
 

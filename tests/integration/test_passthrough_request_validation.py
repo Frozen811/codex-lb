@@ -109,3 +109,26 @@ async def test_openapi_still_generates_with_passthrough_request_fields(async_cli
     assert "messages" in schema["components"]["schemas"]["ChatCompletionsRequest"]["properties"]
     body_schema = schema["paths"]["/backend-api/codex/responses"]["post"]["requestBody"]["content"]["application/json"]
     assert body_schema["schema"]["type"] == "object"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "route",
+    [
+        "/backend-api/codex/responses",
+        "/v1/responses",
+        "/v1/chat/completions",
+        "/backend-api/codex/responses/compact",
+        "/v1/responses/compact",
+    ],
+)
+async def test_deep_extension_fields_are_rejected_before_dispatch(async_client, route):
+    extension = {"leaf": 1}
+    for _ in range(300):
+        extension = [extension]
+    response = await async_client.post(
+        route, json={"model": "gpt-5.1", "instructions": "hi", "input": "hello", "extension": extension}
+    )
+    assert response.status_code == 400
+    assert response.json()["error"]["type"] == "invalid_request_error"
+    assert response.json()["error"]["param"] == "extension"

@@ -1,0 +1,10 @@
+{
+  "base": "126c0323630c43b2bb3e4dacb38ca869883baa4c",
+  "records": [
+    "| F-082 | P2 | ПОДТВЕРЖДЕНО / ОТКРЫТО | Unrelated test_passthrough_nesting_at_the_limit_is_accepted_and_serializable: 9 Pydantic depth-exceeded serialization failures. Exact HEAD requests.py импортирован отдельно без замены working tree: те же 9 failed/3 passed. Вне выбранной пятёрки, не исправлено; golden payload bytes PASS. §53; [Baseline evidence](openspec/changes/archive/2026-10-05-repair-five-auth-routing-input-contracts/verification.md#unrelated-baseline-failure-and-external-limits). |",
+    "| [UP-ISSUE-1918](https://github.com/Soju06/codex-lb/issues/1918) | bug: codex-lb incorrectly calculates usage for edu accounts | РЕШЕНО | НЕ ПРОВЕРЕНО | — |",
+    "| [UP-ISSUE-1367](https://github.com/Soju06/codex-lb/issues/1367) | bug(accounts): Team 30d quota is displayed as 5h | РЕШЕНО | НЕ ПРОВЕРЕНО | — |",
+    "| [UP-PR-2468](https://github.com/Soju06/codex-lb/pull/2468) | PR #2468: fix(quota): validate planner timezones and tolerate legacy malformed keys | Раздел 4, L514 | НЕ ПРОВЕРЕНО | — |",
+    "| [UP-ISSUE-2554](https://github.com/Soju06/codex-lb/issues/2554) | bug(routing): leased-token pressure divides tokens by plan credits, so one open stream makes a Plus account look 100% used | OPEN; updated 2026-10-01T20:38:24Z | НЕ ПРОВЕРЕНО | P1: Воспроизвести lease token estimate / plan credits unit mismatch и потерю ранжирования relative_availability при открытых streams. Предложенный fix: UP-PR-2558; сравнить persisted usage, sticky secondary budget и all-zero fallback. |"
+  ]
+}

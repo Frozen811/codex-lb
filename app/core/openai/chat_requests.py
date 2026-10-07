@@ -3,13 +3,14 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import cast
 
-from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny, SkipValidation, field_validator, model_validator
+from pydantic import ConfigDict, Field, SerializeAsAny, SkipValidation, field_validator, model_validator
 
 from app.core.openai.contracts import OpenAIMessage
 from app.core.openai.message_coercion import _content_parts, coerce_messages
 from app.core.openai.requests import (
     PassthroughJsonList,
     PassthroughJsonValue,
+    PassthroughRequestModel,
     ResponsesRequest,
     ResponsesTextControls,
     ResponsesTextFormat,
@@ -40,7 +41,7 @@ def _json_mapping(value: JsonValue | OpenAIMessage) -> Mapping[str, JsonValue] |
     return value
 
 
-class ChatCompletionsRequest(BaseModel):
+class ChatCompletionsRequest(PassthroughRequestModel):
     model_config = ConfigDict(extra="allow")
 
     model: str = Field(min_length=1)
@@ -202,7 +203,7 @@ class ChatCompletionsRequest(BaseModel):
         return ResponsesRequest.model_validate(data)
 
 
-class ChatResponseFormatJsonSchema(BaseModel):
+class ChatResponseFormatJsonSchema(PassthroughRequestModel):
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
     name: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,64}$")
@@ -210,7 +211,7 @@ class ChatResponseFormatJsonSchema(BaseModel):
     strict: bool | None = None
 
 
-class ChatResponseFormat(BaseModel):
+class ChatResponseFormat(PassthroughRequestModel):
     model_config = ConfigDict(extra="allow")
 
     type: str = Field(min_length=1)
@@ -223,7 +224,7 @@ class ChatResponseFormat(BaseModel):
         return self
 
 
-class ChatStreamOptions(BaseModel):
+class ChatStreamOptions(PassthroughRequestModel):
     model_config = ConfigDict(extra="allow")
 
     include_usage: bool | None = None

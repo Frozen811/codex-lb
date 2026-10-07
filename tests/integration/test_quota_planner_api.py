@@ -145,7 +145,9 @@ async def test_legacy_clock_times_remain_readable_and_individually_correctable(m
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("timezone_name", ["/Europe/Stockholm", "Europe/../Stockholm", "Unknown/Timezone"])
+@pytest.mark.parametrize(
+    "timezone_name", ["/Europe/Stockholm", "Europe/../Stockholm", "Unknown/Timezone", "../UTC", "Europe/Stockholm\x00"]
+)
 async def test_quota_planner_rejects_invalid_timezone_without_saving(monkeypatch, async_client, timezone_name):
     monkeypatch.setattr("app.modules.quota_planner.api.AuditService.log_async", lambda *args, **kwargs: None)
     before = (await async_client.get("/api/quota-planner/settings")).json()

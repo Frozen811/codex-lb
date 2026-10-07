@@ -7553,7 +7553,7 @@ After an HTTP bridge session's resource-close owner completes, removal of that e
 
 ### Requirement: Passthrough Responses request fields are shape-checked, not deep-validated
 
-The service MUST treat the `input`, `tools` and `text.format.schema` fields of `/backend-api/codex/responses` and `/v1/responses` requests, and the `messages` field of `/v1/responses` requests, as opaque JSON: it MUST NOT re-validate or coerce their nested values against a JSON value schema, and the nested values MUST reach the upstream payload byte-for-byte except where a documented normalization (tool type aliases, input sanitation, instruction hoisting) rewrites them. The service MUST still enforce the top-level shape locally: `input` MUST be a string or an array, `tools` MUST be an array, and `messages` MUST be an array when present. Because the upstream serializer cannot emit JSON nested deeper than roughly 250 container levels, a passthrough field whose objects/arrays nest deeper than 200 levels MUST be rejected at validation time rather than failing later while the request is being serialized. A shape or depth violation MUST be rejected with HTTP 400, `error.type = "invalid_request_error"`, and `error.param` naming the offending field. Non-finite numbers (for example `1e400`, which `json.loads` accepts but JSON cannot represent) serialize as `null` in the forwarded payload. The OpenAPI document MUST still be generated for every request model that declares these fields.
+The service MUST treat the `input`, `tools` and `text.format.schema` fields of `/backend-api/codex/responses` and `/v1/responses` requests, and the `messages` field of `/v1/responses` requests, as opaque JSON: it MUST NOT re-validate or coerce their nested values against a JSON value schema, and the nested values MUST reach the upstream payload byte-for-byte except where a documented normalization (tool type aliases, input sanitation, instruction hoisting) rewrites them. The service MUST still enforce the top-level shape locally: `input` MUST be a string or an array, `tools` MUST be an array, and `messages` MUST be an array when present. Because the upstream serializer cannot emit JSON nested deeper than roughly 250 container levels, a passthrough field whose objects/arrays nest deeper than 200 levels MUST be rejected at validation time rather than failing later while the request is being serialized. A shape or depth violation MUST be rejected with HTTP 400, `error.type = "invalid_request_error"`, and `error.param` naming the offending field. Non-finite numbers (for example `1e400`, which `json.loads` accepts but JSON cannot represent) serialize as `null` in the forwarded payload. Opaque extra fields on these request models and nested reasoning/text controls MUST obey the same 200-container depth limit and field-local rejection contract. The OpenAPI document MUST still be generated for every request model that declares these fields.
 
 #### Scenario: Non-array tools are rejected with the tools param
 
@@ -7588,6 +7588,12 @@ The service MUST treat the `input`, `tools` and `text.format.schema` fields of `
 
 - **WHEN** `GET /openapi.json` is requested
 - **THEN** the document is returned with `V1ResponsesRequest`, `ResponsesCompactRequest` and the `/backend-api/codex/responses` request body schemas present
+
+
+#### Scenario: Opaque extension fields cannot bypass depth validation
+- **WHEN** a Responses, compact or Chat Completions request contains an extra field nested more than 200 container levels deep
+- **THEN** validation rejects it with HTTP 400, `invalid_request_error`, and `error.param` naming that extra field
+- **AND** extra fields within the limit remain serializable and retain their JSON values
 
 ### Requirement: Responses Lite signaling enforces all-turns reasoning context
 

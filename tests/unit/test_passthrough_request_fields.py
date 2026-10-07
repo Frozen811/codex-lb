@@ -365,3 +365,40 @@ def test_validate_passthrough_depth_counts_container_levels_including_dict_subcl
         validate_passthrough_depth(_nested(3), limit=3)
     with pytest.raises(ValueError, match="nesting exceeds 2 levels"):
         validate_passthrough_depth([_Obj(a=[_Obj(b=1)])], limit=2)
+
+
+@pytest.mark.parametrize(
+    "model_cls",
+    [ResponsesRequest, ResponsesCompactRequest, V1ResponsesRequest, V1ResponsesCompactRequest, ChatCompletionsRequest],
+)
+@pytest.mark.parametrize("depth", [200, 201, 300])
+def test_extension_fields_obey_passthrough_depth_limit(model_cls, depth):
+    extension = _nested(depth - 1)
+    payload = {"model": "m", "instructions": "", "input": "hi", "extension": extension}
+    if depth <= PASSTHROUGH_MAX_DEPTH:
+        request = model_cls.model_validate(payload)
+        assert request.model_extra is not None
+        assert request.model_extra["extension"] is extension
+        assert request.model_dump(mode="json")["extension"] == extension
+        assert json.loads(request.model_dump_json())["extension"] == extension
+        _forward(request)
+    else:
+        with pytest.raises(ValidationError) as exc_info:
+            model_cls.model_validate(payload)
+        assert openai_validation_error(exc_info.value)["error"]["param"] == "extension"
+
+
+@pytest.mark.parametrize(
+    "section,param",
+    [("reasoning", "reasoning.extension"), ("text", "text.extension"), ("text.format", "text.format.extension")],
+)
+def test_nested_control_extension_depth_errors_identify_the_field(section, param):
+    extra = {"extension": _nested(300)}
+    controls = (
+        {"text": {"format": {"type": "json_schema", "name": "n", **extra}}}
+        if section == "text.format"
+        else {section: extra}
+    )
+    with pytest.raises(ValidationError) as exc_info:
+        V1ResponsesRequest.model_validate({"model": "m", "input": "hi", **controls})
+    assert openai_validation_error(exc_info.value)["error"]["param"] == param

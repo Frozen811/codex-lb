@@ -4,9 +4,10 @@ import json
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import cast
+from typing import Annotated, cast
 
 from pydantic import (
+    AfterValidator,
     BaseModel,
     ConfigDict,
     Field,
@@ -134,6 +135,20 @@ def validate_passthrough_depth(value: object, *, limit: int = PASSTHROUGH_MAX_DE
             children: Iterable[object] = node.values() if isinstance(node, dict) else cast(list[object], node)
             next_frontier.extend([child for child in children if isinstance(child, _JSON_CONTAINER_TYPES)])
         frontier = next_frontier
+
+
+def _validate_extension_depth(value: JsonValue) -> JsonValue:
+    validate_passthrough_depth(value)
+    return value
+
+
+class PassthroughRequestModel(BaseModel):
+    """Keep extension JSON opaque while rejecting unserializable nesting."""
+
+    model_config = ConfigDict(extra="allow")
+    __pydantic_extra__: dict[str, Annotated[PassthroughJsonValue, AfterValidator(_validate_extension_depth)]] = Field(
+        init=False
+    )
 
 
 def validate_tool_types(tools: list[JsonValue], *, allow_builtin_tools: bool = False) -> list[JsonValue]:
@@ -642,14 +657,14 @@ def _json_list_or_none(value: JsonValue) -> list[JsonValue] | None:
     return value
 
 
-class ResponsesReasoning(BaseModel):
+class ResponsesReasoning(PassthroughRequestModel):
     model_config = ConfigDict(extra="allow")
 
     effort: str | None = None
     summary: str | None = None
 
 
-class ResponsesTextFormat(BaseModel):
+class ResponsesTextFormat(PassthroughRequestModel):
     model_config = ConfigDict(extra="allow", populate_by_name=True, serialize_by_alias=True)
 
     type: str | None = None
@@ -664,14 +679,14 @@ class ResponsesTextFormat(BaseModel):
         return value
 
 
-class ResponsesTextControls(BaseModel):
+class ResponsesTextControls(PassthroughRequestModel):
     model_config = ConfigDict(extra="allow")
 
     verbosity: str | None = None
     format: ResponsesTextFormat | None = None
 
 
-class ResponsesRequest(BaseModel):
+class ResponsesRequest(PassthroughRequestModel):
     model_config = ConfigDict(extra="allow")
     _codex_lb_client_reasoning_effort: str | None = PrivateAttr(default=None)
     _codex_lb_provider_reasoning_effort_materialized: bool = PrivateAttr(default=False)
@@ -806,7 +821,7 @@ class ResponsesRequest(BaseModel):
         return _strip_unsupported_fields(self.model_dump_for_forwarding(), strip_replayed_tool_call_namespaces=False)
 
 
-class ResponsesCompactRequest(BaseModel):
+class ResponsesCompactRequest(PassthroughRequestModel):
     model_config = ConfigDict(extra="allow")
     _codex_lb_client_reasoning_effort: str | None = PrivateAttr(default=None)
 
