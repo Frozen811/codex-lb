@@ -274,3 +274,34 @@ window equal to its unchanged ten-second request deadline (or zero for the
 streamed branch), so a half-second scheduling delay cannot select the wrong
 branch. HTTP status, terminal event, reservation, ownership and layout
 assertions remain intact; production timing settings are unchanged.
+
+## Quality checks within the fast CI budget
+
+The mandatory pipeline retains its suites, three MySQL runners and existing
+normal property budgets. Virtual-clock checks cover bridge startup errors at
+2s minus/plus 1ms and cancellation before/after stream handoff, with quiescence
+asserted before teardown. Server-database race tests park both independent
+sessions after reading a reserved row, then release them together to exercise
+its conditional ownership claim. SQLite keeps its real writer serialization:
+a barrier inside that section would itself deadlock. Admission and terminal
+replay assert the durable quota and reservation state.
+
+Selected SSE, balancer and OpenAI request properties use `property_settings`.
+Explicit budgets (including 8, 30 and 100) stay unchanged in regular runs;
+`thorough` raises selected budgets to at least 500. Explicit edge examples run
+in both modes. The separate `Extended Property Tests` workflow runs at 02:23
+UTC or by manual dispatch, records the seed/commit before testing, prints
+Hypothesis statistics and uploads seed metadata, JUnit and hidden failure
+evidence on success or failure. It does not gate `CI Required`; discovered
+bugs should become deterministic mandatory regressions.
+
+For example, reproduce an artifact's seed against its recorded commit:
+
+```powershell
+uv sync --dev --frozen
+uv run --no-sync pytest -n auto --dist=loadfile -m extended_property --hypothesis-profile=thorough --hypothesis-seed 20261007 tests/unit/test_sse.py tests/unit/test_balancer_fuzz.py tests/unit/test_openai_requests.py
+```
+
+The previous successful full pipeline was 6m20s. Cloud runtime is measured
+again after publication; scheduled exploration has its own duration and does
+not replace or shorten the full mandatory suite.

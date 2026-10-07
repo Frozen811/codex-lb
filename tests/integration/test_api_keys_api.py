@@ -37,7 +37,13 @@ from app.db.models import (
 from app.db.session import SessionLocal
 from app.modules.api_keys.last_used_coalescer import get_api_key_last_used_coalescer
 from app.modules.api_keys.repository import ApiKeysRepository
-from app.modules.api_keys.service import ApiKeyCreateData, ApiKeyInvalidError, ApiKeysService, LimitRuleInput
+from app.modules.api_keys.service import (
+    ApiKeyCreateData,
+    ApiKeyInvalidError,
+    ApiKeyRateLimitExceededError,
+    ApiKeysService,
+    LimitRuleInput,
+)
 from app.modules.model_sources.forwarding import (
     SourceChatCompletion,
     SourceResponsesStream,
@@ -5151,3 +5157,146 @@ async def test_v1_responses_ultrafast_cost_logs_and_settlement(
     assert blocked.status_code == 429
     assert blocked.json()["error"]["code"] == "rate_limit_exceeded"
     assert seen["calls"] == 1
+
+
+async def test_concurrent_quota_admission_allows_only_one_reservation(
+    db_setup, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    del db_setup
+    async with SessionLocal() as session:
+        created = await ApiKeysService(ApiKeysRepository(session)).create_key(
+            ApiKeyCreateData(
+                name="concurrent-admission",
+                allowed_models=None,
+                expires_at=None,
+                limits=[LimitRuleInput(limit_type="total_tokens", limit_window="weekly", max_value=100)],
+            )
+        )
+        dialect = session.get_bind().dialect.name
+    start, read_barrier = asyncio.Barrier(2), asyncio.Barrier(2)
+    original_read = ApiKeysRepository.get_for_limit_enforcement
+
+    async def synchronized_read(self, key_id: str):
+        row = await original_read(self, key_id)
+        if dialect != "sqlite":
+            assert row is not None
+            assert row.limits[0].current_value == 0
+            await read_barrier.wait()
+        return row
+
+    monkeypatch.setattr(ApiKeysRepository, "get_for_limit_enforcement", synchronized_read)
+
+    async def admit() -> bool:
+        async with SessionLocal() as session:
+            await start.wait()
+            try:
+                reservation = await ApiKeysService(ApiKeysRepository(session)).enforce_limits_for_request(
+                    created.id, request_model="gpt-5.1"
+                )
+                assert reservation is not None
+                return True
+            except ApiKeyRateLimitExceededError:
+                return False
+
+    async with asyncio.timeout(10):
+        async with asyncio.TaskGroup() as group:
+            contenders = [group.create_task(admit()) for _ in range(2)]
+    assert all(task.done() for task in contenders)
+    assert sum(task.result() for task in contenders) == 1
+    async with SessionLocal() as session:
+        limits = await ApiKeysRepository(session).get_limits_by_key(created.id)
+        rows = (
+            await session.scalars(select(ApiKeyUsageReservation).where(ApiKeyUsageReservation.api_key_id == created.id))
+        ).all()
+        assert limits[0].current_value == 100
+        assert len(rows) == 1
+        assert rows[0].status == "reserved"
+
+
+@pytest.mark.parametrize("operations", [("finalize", "finalize"), ("release", "release"), ("finalize", "release")])
+async def test_concurrent_reservation_accounting_settles_exactly_once(
+    db_setup, monkeypatch: pytest.MonkeyPatch, operations: tuple[str, str]
+) -> None:
+    del db_setup
+    async with SessionLocal() as session:
+        service = ApiKeysService(ApiKeysRepository(session))
+        created = await service.create_key(
+            ApiKeyCreateData(
+                name="concurrent-settlement",
+                allowed_models=None,
+                expires_at=None,
+                limits=[LimitRuleInput(limit_type="total_tokens", limit_window="weekly", max_value=100)],
+            )
+        )
+        reserved = await service.enforce_limits_for_request(created.id, request_model="gpt-5.1")
+        assert reserved is not None
+        dialect = session.get_bind().dialect.name
+
+    start, read_barrier = asyncio.Barrier(2), asyncio.Barrier(2)
+    original_read = ApiKeysRepository.get_usage_reservation
+    original_claim = ApiKeysRepository.transition_usage_reservation_status
+    racing = True
+    claims: list[bool] = []
+    snapshots: list[str] = []
+
+    async def synchronized_read(self, reservation_id: str):
+        snapshot = await original_read(self, reservation_id)
+        if racing:
+            assert snapshot is not None
+            snapshots.append(snapshot.status)
+            # SQLite deliberately serializes the entire writer section. A
+            # barrier inside that section would deadlock. Server databases
+            # must also prove the CAS claim with two stale reserved snapshots.
+            if dialect != "sqlite":
+                assert snapshot.status == "reserved"
+                await read_barrier.wait()
+        return snapshot
+
+    async def record_claim(self, reservation_id: str, *, expected_status: str, new_status: str) -> bool:
+        claimed = await original_claim(self, reservation_id, expected_status=expected_status, new_status=new_status)
+        claims.append(claimed)
+        return claimed
+
+    monkeypatch.setattr(ApiKeysRepository, "get_usage_reservation", synchronized_read)
+    monkeypatch.setattr(ApiKeysRepository, "transition_usage_reservation_status", record_claim)
+
+    async def finish(operation: str, *, synchronize: bool) -> None:
+        async with SessionLocal() as session:
+            if synchronize:
+                await start.wait()
+            service = ApiKeysService(ApiKeysRepository(session))
+            if operation == "finalize":
+                await service.finalize_usage_reservation(
+                    reserved.reservation_id, model="gpt-5.1", input_tokens=11, output_tokens=6
+                )
+            else:
+                await service.release_usage_reservation(reserved.reservation_id)
+
+    async with asyncio.timeout(10):
+        async with asyncio.TaskGroup() as group:
+            contenders = [group.create_task(finish(operation, synchronize=True)) for operation in operations]
+    racing = False
+    assert all(task.done() for task in contenders)
+    assert len(snapshots) == 2
+    assert sum(claims) == 1
+    if dialect != "sqlite":
+        assert snapshots == ["reserved", "reserved"]
+        assert sorted(claims) == [False, True]
+
+    async def accounting_snapshot() -> tuple[str, int, int | None]:
+        async with SessionLocal() as session:
+            repo = ApiKeysRepository(session)
+            row = await repo.get_usage_reservation(reserved.reservation_id)
+            assert row is not None
+            assert len(row.items) == 1
+            limits = await repo.get_limits_by_key(created.id)
+            return row.status, limits[0].current_value, row.items[0].actual_delta
+
+    result = await accounting_snapshot()
+    assert result in {("finalized", 17, 17), ("released", 0, 0)}
+    if len(set(operations)) == 1:
+        assert result[0] == ("finalized" if operations[0] == "finalize" else "released")
+    # A replay of either terminal action must retain the winning accounting.
+    for operation in ("finalize", "release"):
+        await finish(operation, synchronize=False)
+    assert await accounting_snapshot() == result

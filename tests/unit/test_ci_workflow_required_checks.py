@@ -11,6 +11,33 @@ import yaml
 CI_WORKFLOW = Path(__file__).parents[2] / ".github" / "workflows" / "ci.yml"
 
 
+def test_extended_properties_are_replayable_and_independent_of_required_ci() -> None:
+    path = CI_WORKFLOW.with_name("extended-properties.yml")
+    workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+    triggers = workflow.get("on", workflow.get(True))
+    assert set(triggers) == {"schedule", "workflow_dispatch"}
+    assert triggers["schedule"] == [{"cron": "23 2 * * *"}]
+    assert "seed" in triggers["workflow_dispatch"]["inputs"]
+    assert workflow["permissions"] == {"contents": "read"}
+    job = workflow["jobs"]["properties"]
+    assert "needs" not in job
+    steps = {step["name"]: step for step in job["steps"]}
+    run = steps["Run selected extended properties"]["run"]
+    assert "--hypothesis-profile=thorough" in run
+    assert '--hypothesis-seed "$HYPOTHESIS_SEED"' in run
+    assert "-m extended_property" in run
+    assert steps["Run selected extended properties"]["shell"] == "bash"
+    assert "| tee .test-results/extended-properties/pytest.log" in run
+    assert "--junitxml=" in run
+    assert "continue-on-error" not in job
+    assert "continue-on-error" not in steps["Run selected extended properties"]
+    evidence = steps["Upload reproduction evidence"]
+    assert evidence["if"] == "always()"
+    assert evidence["with"]["include-hidden-files"] is True
+    assert ".hypothesis/" in evidence["with"]["path"]
+    assert "extended" not in _job_block(_ci_workflow_text(), "ci-required")
+
+
 def _ci_workflow_text() -> str:
     return CI_WORKFLOW.read_text(encoding="utf-8")
 

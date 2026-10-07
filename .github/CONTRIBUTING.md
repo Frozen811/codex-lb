@@ -450,3 +450,25 @@ See [SECURITY.md](./SECURITY.md) for full details.
 
 Happy hacking. If you get stuck, open a draft PR or start a Discussion —
 maintainers would rather see a half-finished idea than no idea at all.
+
+### Extended property checks
+
+Regular CI retains explicit per-test Hypothesis budgets. Selected SSE,
+load-balancer and OpenAI request properties carry `extended_property`: their
+`property_settings` decorator raises the budget to at least 500 only under
+`thorough`. Pinned edge examples run in the normal suite too. Other tests with
+explicit settings keep their budgets, even under `thorough`.
+
+`Extended Property Tests` runs separately every night at 02:23 UTC and supports
+manual dispatch. Its artifacts contain `seed.json`, JUnit and Hypothesis
+failure evidence. Reproduce with the recorded commit and seed in PowerShell
+or Linux:
+
+```powershell
+uv run --no-sync pytest -n auto --dist=loadfile -m extended_property --hypothesis-profile=thorough --hypothesis-seed 20261007 tests/unit/test_sse.py tests/unit/test_balancer_fuzz.py tests/unit/test_openai_requests.py
+```
+
+An extended failure remains a failed workflow. Investigate it and promote the
+minimal failing example to an explicit example or mandatory regression; do not
+use retries to hide it. The additional workflow is independent of `CI Required`
+and does not remove any existing PR or main checks.

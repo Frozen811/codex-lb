@@ -100,3 +100,19 @@ APIs retain the Detail view as default. A local browser preference enables a com
 ## Ordered auth-file imports and capability control labels
 
 The import dialog sends a selected list through the existing single-file mutation, with one request active at a time. If a.json succeeds and b.json fails, the remaining queue is b.json followed by c.json; successful imports remain available and are not repeated on retry. File objects remain in component memory and only filenames are displayed. The batch owns its busy state across per-file mutation transitions and rejects dismissal or duplicate submission until it settles. Model Source controls use translated accessible names and per-form IDs so label clicks address the correct checkbox. See the owning requirements in [spec.md](spec.md) and the five-record verification artifact.
+
+## Chart containment while resizing
+
+Frame-by-frame browser checks exposed a transient 48px document overflow when
+switching from mobile columns to desktop columns: Recharts' area SVG retained
+its previous width until its ResizeObserver update. The sparkline responsive
+container clips that stale width locally; table horizontal scrolling remains
+local to its existing scroller. Settled appearance stays the same.
+
+The browser smoke waits for DOM/font readiness and independent stable geometry
+across animation frames, while recording document overflow throughout each
+resize. It checks all final donut, summary and table bounds once after
+readiness. It does not retry failed containment assertions, add fixed sleeps,
+or raise the existing expectation deadline. For example, resizing the seeded
+dashboard from 390px to 1440px must keep every observed document frame within
+its viewport even before the chart adopts its new measured width.

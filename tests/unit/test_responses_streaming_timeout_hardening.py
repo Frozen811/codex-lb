@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import gc
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
+from typing import cast
 
 import pytest
 
@@ -13,6 +14,151 @@ from app.modules.proxy import api as proxy_api
 from tests.simulation.virtual_time import VirtualClock, VirtualScheduler
 
 pytestmark = pytest.mark.unit
+
+
+async def _next_stream_item(stream: AsyncIterator[str]) -> str:
+    return await anext(stream)
+
+
+@pytest.mark.parametrize("offset", [-0.001, 0.001], ids=["before-deadline", "after-deadline"])
+@pytest.mark.parametrize("event_error", [False, True], ids=["exception", "failed-event"])
+async def test_bridge_startup_error_boundary_uses_production_window(offset: float, event_error: bool) -> None:
+    clock = VirtualClock()
+    scheduler = VirtualScheduler(clock)
+    window = proxy_api._HTTP_BRIDGE_STARTUP_ERROR_PROBE_SECONDS
+    closed = asyncio.Event()
+    failed_event = (
+        'event: response.failed\ndata: {"type":"response.failed","response":{"status":"failed",'
+        '"error":{"code":"stream_incomplete","message":"upstream denied","type":"server_error"}}}\n\n'
+    )
+
+    async def upstream() -> AsyncIterator[str]:
+        try:
+            await scheduler.sleep(window + offset)
+            if event_error:
+                yield failed_event
+            else:
+                raise ProxyResponseError(502, local_overload_error("upstream denied", code="stream_incomplete"))
+        finally:
+            closed.set()
+
+    probe = scheduler.create_task(
+        proxy_api._probe_stream_startup_error(
+            upstream(), convert_event_errors=True, timeout_seconds=window, scheduler=scheduler, clock=clock
+        )
+    )
+    try:
+        await scheduler.drain()
+        await scheduler.advance(window - 0.002)
+        assert not probe.done(), "The production startup window must not expire early"
+        await scheduler.advance(0.001 if offset < 0 else 0.002)
+        assert probe.done(), "An error or the startup deadline must resolve the probe"
+        stream, startup_error = await probe
+        if offset < 0:
+            assert startup_error is not None
+            if event_error:
+                assert not isinstance(startup_error, ProxyResponseError)
+                assert startup_error.error is not None
+                assert startup_error.error.code == "stream_incomplete"
+            else:
+                assert isinstance(startup_error, ProxyResponseError)
+                assert startup_error.status_code == 502
+            assert closed.is_set()
+        else:
+            assert startup_error is None
+            assert not closed.is_set(), "Handoff must keep the upstream alive"
+            consumption = scheduler.create_task(_next_stream_item(stream))
+            await scheduler.drain()
+            assert not consumption.done()
+            await scheduler.advance(0.001)
+            if event_error:
+                assert await consumption == failed_event
+            else:
+                with pytest.raises(ProxyResponseError) as error:
+                    await consumption
+                assert error.value.status_code == 502
+        await cast(AsyncGenerator[str, None], stream).aclose()
+        await scheduler.drain()
+        assert closed.is_set()
+        assert all(task.done() for task in scheduler.owned_tasks)
+        assert scheduler.pending_timers == 0
+    finally:
+        await scheduler.cancel_owned_tasks()
+
+
+@pytest.mark.parametrize("after_handoff", [False, True], ids=["during-probe", "during-stream"])
+async def test_bridge_startup_cancellation_reaps_upstream(after_handoff: bool) -> None:
+    clock = VirtualClock()
+    scheduler = VirtualScheduler(clock)
+    window = proxy_api._HTTP_BRIDGE_STARTUP_ERROR_PROBE_SECONDS
+    entered, closed = asyncio.Event(), asyncio.Event()
+
+    async def upstream() -> AsyncIterator[str]:
+        try:
+            entered.set()
+            await scheduler.sleep(100 * window)
+            yield "response.created"
+        finally:
+            closed.set()
+
+    probe = scheduler.create_task(
+        proxy_api._probe_stream_startup_error(upstream(), timeout_seconds=window, scheduler=scheduler, clock=clock)
+    )
+    try:
+        await scheduler.drain()
+        assert entered.is_set()
+        assert not closed.is_set()
+        if after_handoff:
+            await scheduler.advance(window)
+            assert probe.done()
+            stream, startup_error = await probe
+            assert startup_error is None
+            cancelled = scheduler.create_task(_next_stream_item(stream))
+            await scheduler.drain()
+        else:
+            cancelled = probe
+        cancelled.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await cancelled
+        await scheduler.drain()
+        assert closed.is_set()
+        assert all(task.done() for task in scheduler.owned_tasks)
+        assert scheduler.pending_timers == 0
+    finally:
+        await scheduler.cancel_owned_tasks()
+
+
+async def test_bridge_capacity_discovery_preserves_its_absolute_production_deadline() -> None:
+    clock = VirtualClock()
+    scheduler = VirtualScheduler(clock)
+    window = proxy_api._HTTP_BRIDGE_STARTUP_ERROR_PROBE_SECONDS
+    discovery = proxy_api._CAPACITY_STARTUP_SIGNAL_DISCOVERY_SECONDS
+    first_task = _virtual_first_item_task(scheduler, delay=10 * window)
+    probe = scheduler.create_task(
+        proxy_api._wait_for_first_stream_probe(
+            first_task,
+            timeout_seconds=window,
+            capacity_wait_event=asyncio.Event(),
+            capacity_ready_event=proxy_api._CapacityStartupReadyEvent(clock=clock),
+            scheduler=scheduler,
+            clock=clock,
+        )
+    )
+    try:
+        await scheduler.drain()
+        await scheduler.advance(window + discovery - 0.001)
+        assert not probe.done(), "Capacity discovery must retain its bounded grace period"
+        await scheduler.advance(0.001)
+        assert probe.done(), "An absent capacity signal must not extend the absolute deadline"
+        assert await probe is False
+        assert not first_task.done(), "The response owner receives the unfinished upstream task"
+        first_task.cancel()
+        await asyncio.gather(first_task, return_exceptions=True)
+        await scheduler.drain()
+        assert all(task.done() for task in scheduler.owned_tasks)
+        assert scheduler.pending_timers == 0
+    finally:
+        await scheduler.cancel_owned_tasks()
 
 
 def _virtual_first_item_task(scheduler: VirtualScheduler, *, delay: float) -> asyncio.Task[str]:

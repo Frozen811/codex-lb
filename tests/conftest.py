@@ -63,7 +63,13 @@ def pytest_configure(config: pytest.Config) -> None:
         database=DirectoryBasedExampleDatabase(Path(".hypothesis/examples") / worker_id),
     )
     hypothesis_settings.register_profile("ci", max_examples=50, deadline=None, derandomize=True)
-    hypothesis_settings.register_profile("thorough", max_examples=500, deadline=None)
+    hypothesis_settings.register_profile(
+        "thorough",
+        max_examples=500,
+        deadline=None,
+        derandomize=False,
+        database=DirectoryBasedExampleDatabase(Path(".hypothesis/examples") / worker_id),
+    )
     profile = config.getoption("--hypothesis-profile") or os.environ.get(
         "HYPOTHESIS_PROFILE", "ci" if os.environ.get("CI") else "local"
     )

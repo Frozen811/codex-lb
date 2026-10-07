@@ -16,7 +16,7 @@ export function SparklineChart({ data, color, index, height = 40 }: SparklineCha
   const gradientId = `sparkline-fill-${index}`;
 
   return (
-    <ResponsiveContainer width="100%" height={height}>
+    <ResponsiveContainer className="overflow-hidden" width="100%" height={height}>
       <AreaChart data={data} margin={CHART_MARGIN}>
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">

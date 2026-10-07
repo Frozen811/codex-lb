@@ -115,6 +115,7 @@ markers = [
     "e2e: end-to-end flow tests",
     "integration: tests that exercise multiple layers together",
     "unit: fast isolated tests",
+    "extended_property: properties with expanded nightly budgets and explicit replay seeds",
     "usage_refresh_request_path: keep UsageUpdater request-path refreshes live (see tests/conftest.py)",
 ]
 testpaths = ["tests"]

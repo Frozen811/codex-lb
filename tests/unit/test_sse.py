@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator
 from typing import Any, cast
 
 import pytest
-from hypothesis import given, settings
+from hypothesis import example, given
 from hypothesis import strategies as st
 
 from app.core.openai.parsing import _LIFECYCLE_EVENT_TYPES, classify_event_type, parse_sse_event
@@ -28,6 +28,7 @@ from app.core.utils.sse import (
     sse_block_with_payload,
     sse_event_type_from_block,
 )
+from tests.property_settings import property_settings
 from tests.unit.hypothesis_strategies import json_objects, json_values
 
 pytestmark = pytest.mark.unit
@@ -40,13 +41,15 @@ def test_format_sse_event_serializes_payload():
 
 
 @given(payload=json_objects)
-@settings(max_examples=40, deadline=None)
+@example(payload={"line": "\r\n\u2028\u2029", "nested": {"empty": [], "null": None}})
+@property_settings(max_examples=40)
 def test_format_sse_event_round_trips_arbitrary_json_objects(payload):
     assert parse_sse_data_json(format_sse_event(payload)) == payload
 
 
 @given(payload=json_objects)
-@settings(max_examples=40, deadline=None)
+@example(payload={"unicode": "Привет 🌍", "blank": "", "bool": False})
+@property_settings(max_examples=40)
 def test_format_sse_data_round_trips_arbitrary_json_objects(payload):
     assert parse_sse_data_json(format_sse_data(payload)) == payload
 
@@ -56,7 +59,8 @@ def test_format_sse_data_round_trips_arbitrary_json_objects(payload):
     key=st.text(max_size=40),
     value=st.integers(),
 )
-@settings(max_examples=30, deadline=None)
+@example(boundary="\r\n", key='quoted"\nkey', value=0)
+@property_settings(max_examples=30)
 def test_sse_line_boundaries_are_equivalent_in_multiline_data(boundary, key, value):
     encoded_key = json.dumps(key, ensure_ascii=True)
     block = f"data: {{{encoded_key}:" + boundary + f"data: {value}}}" + boundary * 2
@@ -65,7 +69,8 @@ def test_sse_line_boundaries_are_equivalent_in_multiline_data(boundary, key, val
 
 
 @given(text=st.text(max_size=80))
-@settings(max_examples=30, deadline=None)
+@example(text="\r\n\u2028\u2029")
+@property_settings(max_examples=30)
 def test_sse_unicode_line_separators_remain_data(text):
     payload = {"value": f"before{text}\u2028middle\u2029after"}
     block = "data: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
@@ -78,7 +83,7 @@ def test_sse_unicode_line_separators_remain_data(text):
     first=st.text(alphabet=st.characters(blacklist_categories=("C", "Z")), min_size=1, max_size=40),
     second=st.text(alphabet=st.characters(blacklist_categories=("C", "Z")), min_size=1, max_size=40),
 )
-@settings(max_examples=30, deadline=None)
+@property_settings(max_examples=30)
 def test_sse_multiline_data_ignores_comments_and_joins_with_newline(boundary, first, second):
     block = f": comment{boundary}data: {first}{boundary}event: ignored{boundary}data: {second}{boundary}{boundary}"
 
@@ -86,7 +91,7 @@ def test_sse_multiline_data_ignores_comments_and_joins_with_newline(boundary, fi
 
 
 @given(value=st.one_of(st.none(), st.booleans(), st.integers(), st.lists(json_values, max_size=4)))
-@settings(max_examples=30, deadline=None)
+@property_settings(max_examples=30)
 def test_parse_sse_data_json_rejects_non_object_json(value):
     assert parse_sse_data_json("data: " + json.dumps(value) + "\n\n") is None
 
@@ -343,7 +348,7 @@ def test_parse_sse_data_json_text_matches_framed_parse(text: str) -> None:
 
 
 @given(payload=json_objects, ensure_ascii=st.booleans(), indent=st.sampled_from([None, 2]))
-@settings(max_examples=60, deadline=None)
+@property_settings(max_examples=60)
 def test_parse_sse_data_json_text_matches_framed_parse_for_json_objects(payload, ensure_ascii, indent) -> None:
     text = json.dumps(payload, ensure_ascii=ensure_ascii, indent=indent)
     assert parse_sse_data_json_text(text) == parse_sse_data_json(f"data: {text}\n\n")
@@ -402,7 +407,7 @@ def test_format_sse_event_from_text_falls_back_to_serialization_for_non_canonica
 
 
 @given(payload=json_objects, ensure_ascii=st.booleans())
-@settings(max_examples=40, deadline=None)
+@property_settings(max_examples=40)
 def test_format_sse_event_from_text_round_trips_arbitrary_json_objects(payload, ensure_ascii) -> None:
     text = json.dumps(payload, ensure_ascii=ensure_ascii, separators=(",", ":"))
     block = format_sse_event_from_text(payload, text)
@@ -452,7 +457,7 @@ def test_parsed_sse_block_with_none_payload_matches_unparseable_parse() -> None:
 
 
 @given(payload=json_objects)
-@settings(max_examples=40, deadline=None)
+@property_settings(max_examples=40)
 def test_sse_block_with_payload_agrees_with_full_parse(payload) -> None:
     plain = format_sse_event(payload)
     block = sse_block_with_payload(plain, parse_sse_data_json(plain))

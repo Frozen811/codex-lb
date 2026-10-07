@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 
 import pytest
-from hypothesis import given, settings
+from hypothesis import example, given
 from hypothesis import strategies as st
 
 from app.core.balancer.logic import (
@@ -19,6 +19,7 @@ from app.core.balancer.logic import (
 )
 from app.db.models import AccountStatus
 from app.modules.proxy._load_balancer.sticky_selection import _select_account_preferring_budget_safe
+from tests.property_settings import property_settings
 
 pytestmark = pytest.mark.unit
 
@@ -88,7 +89,12 @@ account_state_strategy = st.builds(
     strategy=routing_strategies,
     now=st.floats(min_value=1_000_000.0, max_value=2_000_000.0, allow_nan=False),
 )
-@settings(max_examples=100, deadline=None)
+@example(
+    states=[AccountState(account_id="exhausted", status=AccountStatus.ACTIVE, used_percent=100.0)],
+    strategy="round_robin",
+    now=1_000_000.0,
+)
+@property_settings(max_examples=100)
 def test_fuzz_select_account_never_crashes(
     states: list[AccountState],
     strategy: RoutingStrategy,
@@ -109,7 +115,14 @@ def test_fuzz_select_account_never_crashes(
     states=st.lists(account_state_strategy, min_size=2, max_size=10, unique_by=lambda s: s.account_id),
     now=st.floats(min_value=1_000_000.0, max_value=2_000_000.0, allow_nan=False),
 )
-@settings(max_examples=100, deadline=None)
+@example(
+    states=[
+        AccountState(account_id="empty", status=AccountStatus.ACTIVE, used_percent=None),
+        AccountState(account_id="full", status=AccountStatus.ACTIVE, used_percent=100.0),
+    ],
+    now=1_000_000.0,
+)
+@property_settings(max_examples=100)
 def test_fuzz_select_account_inactive_invariant(
     states: list[AccountState],
     now: float,
@@ -139,7 +152,7 @@ def test_fuzz_select_account_inactive_invariant(
     strategy=routing_strategies,
     threshold=st.floats(min_value=10.0, max_value=95.0, allow_nan=False),
 )
-@settings(max_examples=75, deadline=None)
+@property_settings(max_examples=75)
 def test_fuzz_budget_safe_selection_invariants(
     states: list[AccountState],
     strategy: RoutingStrategy,

@@ -1,0 +1,74 @@
+name: Extended Property Tests
+
+on:
+  schedule:
+    - cron: "23 2 * * *"
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: "Replay seed from seed.json (empty generates a new seed)"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  properties:
+    name: Extended properties (500 examples)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+          prune-cache: true
+
+      - name: Install dependencies
+        run: uv sync --dev --frozen
+
+      - name: Record replay seed
+        id: replay
+        env:
+          REQUESTED_SEED: ${{ inputs.seed }}
+        run: >-
+          uv run --no-sync python .github/scripts/prepare_property_run.py
+          --seed "$REQUESTED_SEED" --output .test-results/extended-properties/seed.json
+
+      - name: Run selected extended properties
+        shell: bash
+        env:
+          HYPOTHESIS_SEED: ${{ steps.replay.outputs.seed }}
+          PYTHONFAULTHANDLER: "1"
+        run: >-
+          uv run --no-sync pytest -n auto --dist=loadfile -m extended_property
+          --hypothesis-profile=thorough --hypothesis-seed "$HYPOTHESIS_SEED"
+          --hypothesis-show-statistics
+          --junitxml=.test-results/extended-properties/junit.xml
+          tests/unit/test_sse.py tests/unit/test_balancer_fuzz.py tests/unit/test_openai_requests.py
+          | tee .test-results/extended-properties/pytest.log
+
+      - name: Upload reproduction evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: extended-properties-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .test-results/extended-properties/
+            .hypothesis/
+          include-hidden-files: true
+          retention-days: 14
+          if-no-files-found: error

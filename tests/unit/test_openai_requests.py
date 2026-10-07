@@ -6,7 +6,7 @@ from copy import deepcopy
 from typing import Mapping, cast
 
 import pytest
-from hypothesis import given, settings
+from hypothesis import example, given
 from hypothesis import strategies as st
 from pydantic import ValidationError
 
@@ -30,6 +30,7 @@ from app.core.openai.requests import (
 )
 from app.core.openai.v1_requests import V1ResponsesCompactRequest, V1ResponsesRequest
 from app.core.types import JsonValue
+from tests.property_settings import property_settings
 from tests.unit.hypothesis_strategies import json_arrays, json_directive_types, json_objects, json_values
 
 
@@ -128,7 +129,13 @@ def test_known_unsupported_upstream_fields_are_stripped():
 
 
 @given(json_arrays)
-@settings(deadline=None)
+@example(
+    [
+        {"type": "function_call", "call_id": "call_edge", "name": "tool", "arguments": "{}"},
+        {"type": "function_call_output", "call_id": "call_edge", "output": ""},
+    ]
+)
+@property_settings()
 def test_sanitize_input_items_is_idempotent_for_json(input_items):
     original = deepcopy(input_items)
     try:
@@ -146,7 +153,8 @@ def test_sanitize_input_items_is_idempotent_for_json(input_items):
     item_type=json_directive_types,
     extra=json_objects,
 )
-@settings(deadline=None)
+@example(role="developer", item_type=0, extra={"role": "user", "type": "message", "content": ""})
+@property_settings()
 def test_sanitize_input_items_preserves_typed_directives(role, item_type, extra):
     directive = dict(extra)
     directive.update({"role": role, "type": item_type})
@@ -155,7 +163,7 @@ def test_sanitize_input_items_preserves_typed_directives(role, item_type, extra)
 
 
 @given(payload=json_objects.map(lambda value: {key: item for key, item in value.items() if key != "input"}))
-@settings(deadline=None)
+@property_settings()
 def test_strip_unsupported_fields_is_idempotent(payload):
     payload = cast(dict[str, JsonValue], payload)
     first = _strip_unsupported_fields(deepcopy(payload))
@@ -166,7 +174,8 @@ def test_strip_unsupported_fields_is_idempotent(payload):
 
 
 @given(namespace=json_values)
-@settings(deadline=None)
+@example(namespace={"tool": "tools", "empty": []})
+@property_settings()
 def test_strip_unsupported_fields_namespace_flag_controls_replayed_calls(namespace):
     payload = cast(dict[str, JsonValue], {"input": [{"type": "function_call", "namespace": namespace}]})
 
@@ -1402,7 +1411,7 @@ def test_compact_many_small_items_include_array_wire_framing_in_budget():
 
 
 @given(input_items=json_arrays)
-@settings(max_examples=30, deadline=None)
+@property_settings(max_examples=30)
 def test_compact_trim_leaves_budget_fitting_json_unchanged(input_items):
     if _estimated_json_tokens(input_items) > _MAX_COMPACT_UPSTREAM_ESTIMATED_TOKENS:
         return
@@ -1416,7 +1425,7 @@ def test_compact_trim_leaves_budget_fitting_json_unchanged(input_items):
 
 
 @given(size=st.integers(min_value=400_000, max_value=500_000))
-@settings(max_examples=8, deadline=None)
+@property_settings(max_examples=8)
 def test_compact_trim_keeps_budget_order_and_is_stable(size):
     input_items = [
         {"id": "head", "role": "user", "content": "head"},
@@ -1437,7 +1446,7 @@ def test_compact_trim_keeps_budget_order_and_is_stable(size):
 
 
 @given(size=st.integers(min_value=400_000, max_value=500_000))
-@settings(max_examples=8, deadline=None)
+@property_settings(max_examples=8)
 def test_compact_trim_marker_accounts_for_omitted_middle_item(size):
     input_items = [
         {"id": "head", "role": "user", "content": "head"},
@@ -1471,7 +1480,7 @@ def test_compact_trim_marker_accounts_for_omitted_middle_item(size):
     ),
     filler_size=st.integers(min_value=300_000, max_value=400_000),
 )
-@settings(max_examples=8, deadline=None)
+@property_settings(max_examples=8)
 def test_compact_trim_keeps_generated_tool_pairs(pair, filler_size):
     call_type, output_type = pair
     call = {
@@ -1507,7 +1516,7 @@ def test_compact_trim_keeps_generated_tool_pairs(pair, filler_size):
 
 
 @given(anchor=st.sampled_from(["goal", "plan"]), filler_size=st.integers(350_000, 450_000))
-@settings(max_examples=8, deadline=None)
+@property_settings(max_examples=8)
 def test_compact_trim_keeps_generated_state_anchor(anchor, filler_size):
     anchor_text = (
         '<codex_internal_context source="goal">continue the goal</codex_internal_context>'
@@ -1539,7 +1548,7 @@ def test_compact_trim_keeps_generated_state_anchor(anchor, filler_size):
 
 
 @given(size=st.integers(min_value=400_000, max_value=500_000))
-@settings(max_examples=8, deadline=None)
+@property_settings(max_examples=8)
 def test_compact_trim_rejects_generated_oversized_latest_item(size):
     payload = cast(
         dict[str, JsonValue],
