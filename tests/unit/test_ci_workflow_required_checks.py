@@ -42,6 +42,36 @@ def _ci_workflow_text() -> str:
     return CI_WORKFLOW.read_text(encoding="utf-8")
 
 
+def test_browser_dependency_installation_has_finite_execution_bounds() -> None:
+    jobs = yaml.safe_load(_ci_workflow_text())["jobs"]
+    browser = jobs["dashboard-browser-smoke"]
+    steps = {step["name"]: step for step in browser["steps"]}
+    install = steps["Install Playwright Chromium"]
+
+    assert 0 < browser.get("timeout-minutes", 360) <= 20
+    assert 0 < install.get("timeout-minutes", 360) <= 10
+    assert "--with-deps chromium" in install["run"]
+    assert "if" not in install
+    assert "continue-on-error" not in browser
+    assert all("continue-on-error" not in step for step in browser["steps"])
+    assert "dashboard-browser-smoke" in jobs["ci-required"]["needs"]
+    assert steps["Run dashboard browser smoke test"]["run"] == "make test-dashboard-browser-smoke"
+
+
+def test_browser_apt_timeouts_are_configured_before_mandatory_install() -> None:
+    browser = yaml.safe_load(_ci_workflow_text())["jobs"]["dashboard-browser-smoke"]
+    steps = browser["steps"]
+    configure = next(step for step in steps if step["name"] == "Bound APT dependency acquisition")
+    install = next(step for step in steps if step["name"] == "Install Playwright Chromium")
+
+    assert steps.index(configure) < steps.index(install)
+    assert "if" not in configure
+    script = configure["run"]
+    assert "sudo tee /etc/apt/apt.conf.d/99-codex-lb-ci-network" in script
+    for option, value in (("Acquire::Retries", 2), ("Acquire::http::Timeout", 30), ("Acquire::https::Timeout", 30)):
+        assert f'{option} "{value}";' in script
+
+
 def test_container_vulnerability_gate_precedes_report_publication_and_retains_evidence() -> None:
     docker = yaml.safe_load(_ci_workflow_text())["jobs"]["docker"]
     ordered_steps = docker["steps"]

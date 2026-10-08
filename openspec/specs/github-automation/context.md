@@ -1,5 +1,13 @@
 # Context: github-automation
 
+## Bounded browser dependency acquisition
+
+The [browser setup requirement](spec.md#requirement-dashboard-browser-smoke-dependency-installation-is-bounded) keeps an unresponsive Ubuntu mirror from occupying a runner for the default six-hour job limit. In fork CI #80, Chromium cache restoration succeeded but `playwright install --with-deps chromium` hung while updating APT metadata; all 33 other CI jobs finished successfully before browser cancellation blocked CI Required.
+
+APT HTTP/HTTPS acquisition uses thirty-second connection/data limits and two retries in an ephemeral runner configuration file. This survives Playwright's sudo boundary. The installation step is bounded to ten minutes and the whole browser job to twenty minutes, covering failures outside APT's network handling. For example, an unresponsive mirror is retried within the bound and an unsuccessful installation remains a failed required check. Cache hits do not skip operating-system dependencies or browser tests; no continue-on-error or aggregate bypass is added.
+
+Sources: [GitHub step/job timeouts](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idtimeout-minutes), [APT acquisition configuration](https://manpages.ubuntu.com/manpages/noble/man5/apt.conf.5.html), and [Playwright CI setup](https://playwright.dev/docs/ci). The production service's settings and timeouts are unrelated to these runner-only bounds.
+
 ## Conservative PR area detection
 
 The area detector validates the API's file inventory against the event's changed-file count before using it to skip expensive checks. Rename origins are additional filter inputs, not extra changed-file records. Missing counts, malformed/duplicate entries, pagination cycles, API failures or the documented 3000-file API ceiling select the full suite using the existing CI workflow path. Workflow, selector, shared API helper and line-ending policy edits also select every area.

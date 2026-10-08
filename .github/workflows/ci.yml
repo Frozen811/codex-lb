@@ -244,6 +244,7 @@ jobs:
   dashboard-browser-smoke:
     name: Dashboard browser smoke (Playwright)
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     needs: [changes, frontend-build]
     if: always() && !cancelled() && needs.frontend-build.result == 'success' && (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true')
 
@@ -294,7 +295,16 @@ jobs:
       - name: Install frontend dependencies
         run: make frontend-install
 
+      - name: Bound APT dependency acquisition
+        run: |
+          sudo tee /etc/apt/apt.conf.d/99-codex-lb-ci-network >/dev/null <<'EOF'
+          Acquire::Retries "2";
+          Acquire::http::Timeout "30";
+          Acquire::https::Timeout "30";
+          EOF
+
       - name: Install Playwright Chromium
+        timeout-minutes: 10
         run: cd frontend && bun run playwright install --with-deps chromium
 
       - name: Run dashboard browser smoke test
