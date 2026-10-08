@@ -11,6 +11,7 @@ import pytest
 from sqlalchemy import select, text, update
 
 import app.modules.proxy.service as proxy_module
+from app.core.config.settings import get_settings as get_app_settings
 from app.core.crypto import TokenEncryptor
 from app.core.openai.models import OpenAIResponsePayload
 from app.core.utils.time import naive_utc_to_epoch, utcnow
@@ -96,26 +97,29 @@ def _install_proxy_settings_cache(
     sticky_reallocation_budget_threshold_pct: float = 95.0,
     proxy_request_budget_seconds: float = 75.0,
 ) -> None:
-    settings = SimpleNamespace(
-        prefer_earlier_reset_accounts=prefer_earlier_reset_accounts,
-        sticky_threads_enabled=sticky_threads_enabled,
-        openai_cache_affinity_max_age_seconds=openai_cache_affinity_max_age_seconds,
-        sticky_reallocation_budget_threshold_pct=sticky_reallocation_budget_threshold_pct,
-        routing_strategy="usage_weighted",
-        proxy_request_budget_seconds=proxy_request_budget_seconds,
-        compact_request_budget_seconds=75.0,
-        transcription_request_budget_seconds=120.0,
-        upstream_stream_transport="auto",
-        trace_channels=frozenset(),
-        http_responses_session_bridge_enabled=False,
-        http_responses_session_bridge_instance_id="sticky-session-test",
-        http_responses_session_bridge_max_sessions=128,
-        http_responses_session_bridge_queue_limit=8,
-        http_responses_session_bridge_prompt_cache_idle_ttl_seconds=3600,
-        http_responses_session_bridge_gateway_safe_mode=False,
-        proxy_account_stream_recovery_reserve=1,
-        proxy_api_key_fair_share_congestion_threshold_pct=0,
-        proxy_response_create_limit=64,
+    settings = get_app_settings().model_copy(
+        update=dict(
+            prefer_earlier_reset_accounts=prefer_earlier_reset_accounts,
+            sticky_threads_enabled=sticky_threads_enabled,
+            openai_cache_affinity_max_age_seconds=openai_cache_affinity_max_age_seconds,
+            sticky_reallocation_budget_threshold_pct=sticky_reallocation_budget_threshold_pct,
+            routing_strategy="usage_weighted",
+            proxy_request_budget_seconds=proxy_request_budget_seconds,
+            http_responses_stream_request_budget_seconds=proxy_request_budget_seconds,
+            compact_request_budget_seconds=75.0,
+            transcription_request_budget_seconds=120.0,
+            upstream_stream_transport="auto",
+            trace_channels=frozenset(),
+            http_responses_session_bridge_enabled=False,
+            http_responses_session_bridge_instance_id="sticky-session-test",
+            http_responses_session_bridge_max_sessions=128,
+            http_responses_session_bridge_queue_limit=8,
+            http_responses_session_bridge_prompt_cache_idle_ttl_seconds=3600,
+            http_responses_session_bridge_gateway_safe_mode=False,
+            proxy_account_stream_recovery_reserve=1,
+            proxy_api_key_fair_share_congestion_threshold_pct=0,
+            proxy_response_create_limit=64,
+        )
     )
     monkeypatch.setattr(proxy_module, "get_settings_cache", lambda: _SettingsCache(settings))
     monkeypatch.setattr(proxy_module, "get_settings", lambda: settings)
@@ -677,6 +681,7 @@ async def test_codex_goal_restart_cannot_retire_owner_outside_api_key_scope(
     from sqlalchemy import select
 
     from app.db.models import StickySession
+    from app.modules.proxy._service.streaming import retry as retry_module
     from app.modules.proxy.sticky_repository import StickySessionsRepository
 
     settings_response = await async_client.put(
@@ -730,6 +735,17 @@ async def test_codex_goal_restart_cannot_retire_owner_outside_api_key_scope(
         sticky_threads_enabled=False,
     )
 
+    original_recovery = retry_module._account_selection_recovery_sleep_seconds
+    scoped_refusals = []
+
+    def scoped_recovery(selection):
+        if selection.error_code == "hard_affinity_saturated":
+            assert selection.hard_affinity_owner_excluded, "an out-of-scope hard owner cannot recover in this pool"
+            scoped_refusals.append(selection)
+        return original_recovery(selection)
+
+    monkeypatch.setattr(retry_module, "_account_selection_recovery_sleep_seconds", scoped_recovery)
+
     async def fail_stream(*args, **kwargs):
         del args, kwargs
         raise AssertionError("an out-of-scope owner must fail closed before upstream dispatch")
@@ -767,6 +783,7 @@ async def test_codex_goal_restart_cannot_retire_owner_outside_api_key_scope(
     ]
     failed_event = next(event for event in events if event.get("type") == "response.failed")
     assert failed_event["response"]["error"]["code"] == "hard_affinity_saturated"
+    assert len(scoped_refusals) == 1
     async with SessionLocal() as session:
         raw_row = await session.scalar(
             select(StickySession).where(

@@ -355,6 +355,8 @@ class StickySelectionRequest(Generic[SelectionInputsT]):
     # from the pre-exclusion continuity pool, which also differs from the
     # routable pool by catalog-evidence model filtering.
     exclude_account_ids: frozenset[str] = frozenset()
+    # Immutable caller pool (including API-key account assignments); None is unrestricted.
+    account_ids: frozenset[str] | None = None
     # Requested model; scopes the per-model latency cohort weight of fresh draws.
     model: str | None = None
     # First-iteration owner read performed by the caller inside its shared
@@ -402,7 +404,7 @@ class StickySelectionOutcome(Generic[SelectionInputsT]):
     resets_at: int | None = None
     disposition: StickySelectionDisposition = "shared_result"
     # Set only alongside ``hard_affinity_saturated`` when the resolved hard
-    # owner is one of the caller's own ``exclude_account_ids``
+    # owner is explicitly excluded or outside the caller's allowed pool
     # (``_hard_affinity_owner_excluded_by_caller``).
     hard_affinity_owner_excluded: bool = False
 
@@ -412,6 +414,7 @@ def _hard_affinity_owner_excluded_by_caller(
     error_code: str | None,
     owner_account_id: str | None | object,
     exclude_account_ids: frozenset[str],
+    account_ids: frozenset[str] | None = None,
 ) -> bool:
     """Whether this ``hard_affinity_saturated`` was caused by the caller's own exclusion.
 
@@ -422,7 +425,8 @@ def _hard_affinity_owner_excluded_by_caller(
 
     * the owner is briefly unavailable (cap, health backoff, status) -- it may
       recover inside the wait, which is exactly why the short wait exists;
-    * the caller passed the owner in ``exclude_account_ids`` -- the exclusion
+    * the caller excluded the owner or omitted it from its allowed pool --
+      the exclusion
       filter drops it from the pool before ownership narrows selection to it
       (``select_account``), so **no** amount of waiting can produce a
       candidate while the caller keeps excluding it. Selection is not going to
@@ -433,12 +437,14 @@ def _hard_affinity_owner_excluded_by_caller(
     account the row resolved to. Reporting the distinction (rather than the
     owner id itself) keeps the account id out of surfaces that would have to
     redact it, and answers exactly the question every caller asks: "is my own
-    exclusion set the reason, so is waiting futile?"
+    exclusion or allowed pool the reason, so is waiting futile?"
     """
     return (
         error_code == "hard_affinity_saturated"
         and isinstance(owner_account_id, str)
-        and owner_account_id in exclude_account_ids
+        and (
+            owner_account_id in exclude_account_ids or (account_ids is not None and owner_account_id not in account_ids)
+        )
     )
 
 
@@ -1432,6 +1438,7 @@ async def run_sticky_selection_path(
             error_code=selection_error_code,
             owner_account_id=sticky_existing_account_id,
             exclude_account_ids=request.exclude_account_ids,
+            account_ids=request.account_ids,
         ),
     )
 

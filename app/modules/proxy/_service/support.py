@@ -582,7 +582,8 @@ def _account_selection_recovery_sleep_seconds(selection: AccountSelection) -> fl
 
     ``hard_affinity_owner_excluded`` is the selector's proof that the hard
     ``CODEX_SESSION`` owner it resolved is one of the caller's own
-    ``exclude_account_ids``. The owner cannot become selectable while that
+    ``exclude_account_ids`` or is outside its fixed allowed account pool.
+    The owner cannot become selectable while that
     exclusion holds and a hard row never spills to another account, so the
     short owner-recovery window earns nothing here: every re-selection would
     report the same ``hard_affinity_saturated`` until the request budget is

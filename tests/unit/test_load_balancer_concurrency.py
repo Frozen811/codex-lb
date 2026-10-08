@@ -3041,6 +3041,35 @@ async def test_account_cap_failure_with_an_excluded_sticky_owner_is_not_a_hard_a
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("owner_in_scope", [False, True])
+async def test_hard_codex_owner_scope_controls_recovery_exclusion(owner_in_scope: bool) -> None:
+    balancer, owner, alternate, sticky_repo = _make_cap_spillover_balancer("hard-owner-key-scope")
+    assert alternate is not None
+    owner.status = AccountStatus.RATE_LIMITED
+    owner.reset_at = int(datetime.now(tz=timezone.utc).timestamp()) + 3600
+    raw_session = "hard-owner-key-scope-session"
+    sticky_repo.account_ids_by_key = {raw_session: owner.id}
+
+    selected = await balancer.select_account(
+        sticky_key=_codex_session_selection_key(raw_session),
+        sticky_kind=StickySessionKind.CODEX_SESSION,
+        sticky_source="session_header",
+        legacy_sticky_key=raw_session,
+        spill_bare_session_on_account_cap=True,
+        routing_strategy="usage_weighted",
+        lease_kind="stream",
+        account_ids={owner.id, alternate.id} if owner_in_scope else {alternate.id},
+    )
+
+    assert selected.account is None
+    assert selected.error_code == "hard_affinity_saturated"
+    assert selected.hard_affinity_owner_excluded is (not owner_in_scope)
+    assert sticky_repo.account_ids_by_key == {raw_session: owner.id}
+    assert sticky_repo.upserts == []
+    assert sticky_repo.deleted == []
+
+
+@pytest.mark.asyncio
 async def test_hard_codex_session_owner_unavailable_without_an_exclusion_keeps_its_recovery_wait() -> None:
     """Parity guard for #2163: an owner the caller did NOT exclude may be
     unselectable only for as long as its status/health transition lasts, so the

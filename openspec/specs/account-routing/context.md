@@ -305,3 +305,10 @@ Team continues to support monthly quota for routing and background freshness eve
 The [account restriction contract](spec.md#requirement-account-quota-restrictions-survive-process-restarts) stores the operator's nullable percentage on the account. Fresh selection snapshots read the same value after a restart, and updates publish the existing routing invalidation. Backup export includes the limit; legacy backups without the field leave an existing setting unchanged.
 
 For example, a 50-percent cap excludes an account at 50 percent observed primary or secondary usage, preserving the remaining headroom for other clients. Clearing the cap restores eligibility through the normal health and quota checks. Zero excludes an account even before a usage sample exists. Existing standard-quota bypass paths retain their documented behavior.
+
+
+## Caller pool exclusion and hard-owner recovery
+
+The [scoped-out owner requirement](spec.md#requirement-caller-scoped-out-hard-owners-do-not-earn-recovery-waits) distinguishes an immutable request constraint from temporary account health. For example, an API key allowing only account B cannot recover a hard session owner A while the request keeps that allowed set. Selection retains its hard-affinity failure and signals the existing no-wait path; it neither dispatches to B nor retires/rebinds A. An allowed A that is briefly rate-limited retains its recovery window. An omitted allowed set remains unrestricted.
+
+The selector passes only the existing boolean exclusion proof to consumers, keeping owner identity out of error surfaces. Explicit retry exclusions and allowed-pool exclusion both make recovery futile; live health and missing database rows are not inferred to be policy exclusions. The real route control preserves the owner row and error envelope without waiting on a 75-second wall-clock boundary. Its fixture uses a complete Settings copy with the same explicit budgets, so dashboard overlays can apply normally.

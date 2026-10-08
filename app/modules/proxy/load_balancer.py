@@ -229,9 +229,8 @@ class AccountSelection:
     lease: AccountLease | None = None
     catalog_omission_quota_admission: CatalogOmissionQuotaAdmission | None = None
     continuity_owner_no_longer_exists: bool = False
-    # ``hard_affinity_saturated`` whose resolved owner is one of the caller's
-    # own ``exclude_account_ids``: the wait a transient owner outage earns
-    # cannot clear this one (``_hard_affinity_owner_excluded_by_caller``).
+    # Hard-affinity saturation caused by a caller exclusion or allowed-pool filter.
+    # No recovery wait can clear this (_hard_affinity_owner_excluded_by_caller).
     hard_affinity_owner_excluded: bool = False
 
 
@@ -978,6 +977,7 @@ class LoadBalancer:
                     api_key_id=api_key_id,
                     api_key_stream_fair_share_threshold_pct=api_key_stream_fair_share_threshold_pct,
                     exclude_account_ids=frozenset(excluded_ids),
+                    account_ids=frozenset(account_ids) if account_ids is not None else None,
                     model=model,
                     selection_inputs=selection_inputs,
                     reload_inputs=load_selection_inputs,
