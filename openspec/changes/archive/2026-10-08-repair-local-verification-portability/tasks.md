@@ -11,5 +11,5 @@
 ## 2. Publication and CI
 
 - [x] 2.1 Run focused regression/static/OpenSpec checks, synchronize context/specs and save local repair evidence.
-- [ ] 2.2 Commit and push repair to fork main; verify remote SHA and all applicable full-CI jobs and aggregates to success.
-- [ ] 2.3 Save exact workflow evidence and update/reread registry publication status while preserving existing source rows and residual scope.
+- [x] 2.2 Commit and push repair to fork main; verify remote SHA and all applicable full-CI jobs and aggregates to success.
+- [x] 2.3 Save exact workflow evidence and update/reread registry publication status while preserving existing source rows and residual scope.

@@ -1,0 +1,395 @@
+{
+  "date": "2026-10-08",
+  "timezone": "Europe/Kiev",
+  "source_sha": "cab6493b0a3cbeb6241fb455caee17dde8ddb270",
+  "remote_sha": "cab6493b0a3cbeb6241fb455caee17dde8ddb270",
+  "ci_jobs": 35,
+  "applicable_jobs": 39,
+  "runs": [
+    {
+      "id": 37821937489,
+      "name": "Sync Beta Release PR",
+      "event": "workflow_run",
+      "status": "completed",
+      "conclusion": "skipped",
+      "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821937489",
+      "run_attempt": 1,
+      "run_number": 146,
+      "head_sha": "cab6493b0a3cbeb6241fb455caee17dde8ddb270",
+      "jobs": [
+        {
+          "id": 113464902674,
+          "name": "sync-beta-release-pr",
+          "status": "completed",
+          "conclusion": "skipped",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821937489/job/113464902674"
+        }
+      ]
+    },
+    {
+      "id": 37821931286,
+      "name": "Release guards",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821931286",
+      "run_attempt": 1,
+      "run_number": 91,
+      "head_sha": "cab6493b0a3cbeb6241fb455caee17dde8ddb270",
+      "jobs": [
+        {
+          "id": 113464878897,
+          "name": "Stable release guard",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821931286/job/113464878897"
+        },
+        {
+          "id": 113464879091,
+          "name": "Beta release guard",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821931286/job/113464879091"
+        }
+      ]
+    },
+    {
+      "id": 37821931931,
+      "name": "Simplicity budgets",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821931931",
+      "run_attempt": 1,
+      "run_number": 88,
+      "head_sha": "cab6493b0a3cbeb6241fb455caee17dde8ddb270",
+      "jobs": [
+        {
+          "id": 113464881442,
+          "name": "Simplicity budgets",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821931931/job/113464881442"
+        }
+      ]
+    },
+    {
+      "id": 37821930950,
+      "name": "Release Please",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "skipped",
+      "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930950",
+      "run_attempt": 1,
+      "run_number": 73,
+      "head_sha": "cab6493b0a3cbeb6241fb455caee17dde8ddb270",
+      "jobs": [
+        {
+          "id": 113464917883,
+          "name": "release-please",
+          "status": "completed",
+          "conclusion": "skipped",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930950/job/113464917883"
+        }
+      ]
+    },
+    {
+      "id": 37821930983,
+      "name": "Sync Beta Release PR",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "skipped",
+      "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930983",
+      "run_attempt": 1,
+      "run_number": 145,
+      "head_sha": "cab6493b0a3cbeb6241fb455caee17dde8ddb270",
+      "jobs": [
+        {
+          "id": 113464882857,
+          "name": "sync-beta-release-pr",
+          "status": "completed",
+          "conclusion": "skipped",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930983/job/113464882857"
+        }
+      ]
+    },
+    {
+      "id": 37821930900,
+      "name": "Windows Startup Regression",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930900",
+      "run_attempt": 1,
+      "run_number": 55,
+      "head_sha": "cab6493b0a3cbeb6241fb455caee17dde8ddb270",
+      "jobs": [
+        {
+          "id": 113464877894,
+          "name": "Windows startup regression",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930900/job/113464877894"
+        }
+      ]
+    },
+    {
+      "id": 37821930906,
+      "name": "CI",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906",
+      "run_attempt": 1,
+      "run_number": 88,
+      "head_sha": "cab6493b0a3cbeb6241fb455caee17dde8ddb270",
+      "jobs": [
+        {
+          "id": 113464877755,
+          "name": "Detect changes",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113464877755"
+        },
+        {
+          "id": 113464878184,
+          "name": "OpenSpec validation",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113464878184"
+        },
+        {
+          "id": 113464878231,
+          "name": "Contributors attribution",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113464878231"
+        },
+        {
+          "id": 113464972702,
+          "name": "Rust workspace",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113464972702"
+        },
+        {
+          "id": 113464972718,
+          "name": "Frontend lint (eslint)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113464972718"
+        },
+        {
+          "id": 113464972822,
+          "name": "Frontend tests (vitest + coverage)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113464972822"
+        },
+        {
+          "id": 113464972832,
+          "name": "Frontend build (vite)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113464972832"
+        },
+        {
+          "id": 113464972875,
+          "name": "Lint (ruff)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113464972875"
+        },
+        {
+          "id": 113464972883,
+          "name": "Frontend type check (tsc)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113464972883"
+        },
+        {
+          "id": 113464972935,
+          "name": "Docker build",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113464972935"
+        },
+        {
+          "id": 113464972980,
+          "name": "Type check (ty)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113464972980"
+        },
+        {
+          "id": 113464972984,
+          "name": "Migration check (alembic, MySQL)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113464972984"
+        },
+        {
+          "id": 113464972995,
+          "name": "Migration check (alembic)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113464972995"
+        },
+        {
+          "id": 113464973040,
+          "name": "Migration check (alembic, PostgreSQL)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113464973040"
+        },
+        {
+          "id": 113464973083,
+          "name": "Helm smoke install (kind)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113464973083"
+        },
+        {
+          "id": 113464973115,
+          "name": "Nix flake check",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113464973115"
+        },
+        {
+          "id": 113464973218,
+          "name": "Helm lint + template + kubeconform",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113464973218"
+        },
+        {
+          "id": 113465233645,
+          "name": "Tests (pytest, e2e)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113465233645"
+        },
+        {
+          "id": 113465233656,
+          "name": "Tests (pytest, MySQL, shard 1)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113465233656"
+        },
+        {
+          "id": 113465233682,
+          "name": "Tests (pytest, integration-bridge)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113465233682"
+        },
+        {
+          "id": 113465233686,
+          "name": "Tests (pytest, integration-core-5)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113465233686"
+        },
+        {
+          "id": 113465233733,
+          "name": "Package (build)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113465233733"
+        },
+        {
+          "id": 113465233745,
+          "name": "Tests (pytest, MySQL, shard 3)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113465233745"
+        },
+        {
+          "id": 113465233788,
+          "name": "Tests (pytest, MySQL, shard 2)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113465233788"
+        },
+        {
+          "id": 113465233801,
+          "name": "Tests (pytest, PostgreSQL)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113465233801"
+        },
+        {
+          "id": 113465233820,
+          "name": "Tests (pytest, integration-core-2)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113465233820"
+        },
+        {
+          "id": 113465233829,
+          "name": "Tests (pytest, integration-core-3)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113465233829"
+        },
+        {
+          "id": 113465233840,
+          "name": "Tests (pytest, unit)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113465233840"
+        },
+        {
+          "id": 113465233855,
+          "name": "Tests (pytest, integration-core-1)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113465233855"
+        },
+        {
+          "id": 113465233872,
+          "name": "Tests (pytest, integration-core-6)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113465233872"
+        },
+        {
+          "id": 113465234147,
+          "name": "Tests (pytest, integration-core-4)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113465234147"
+        },
+        {
+          "id": 113465234174,
+          "name": "Dashboard browser smoke (Playwright)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113465234174"
+        },
+        {
+          "id": 113467495788,
+          "name": "Tests (pytest, MySQL)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113467495788"
+        },
+        {
+          "id": 113467609213,
+          "name": "Tests (pytest, integration-core)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113467609213"
+        },
+        {
+          "id": 113467654062,
+          "name": "CI Required",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Frozen811/codex-lb/actions/runs/37821930906/job/113467654062"
+        }
+      ]
+    }
+  ]
+}

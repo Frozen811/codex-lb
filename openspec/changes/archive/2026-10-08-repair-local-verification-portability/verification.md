@@ -6,9 +6,9 @@ Date: 2026-10-08, Europe/Kiev. The user explicitly authorized committing **all**
 
 The initial manifest contains 77 dirty/untracked paths spanning the auth/credit, image/compact/terminal and input/forwarding packages. Their bytes were backed up outside the repository. Every staged blob was checked against `git hash-object --path` before commit. All 77 paths were committed as `71c5332ca24666455aa6836f0bd05f9e8b304cc2`, pushed without force to `Frozen811/codex-lb:main`, and verified by `git ls-remote`. No prior work was discarded.
 
-## CI #86 evidence and repairs
+## CI #87 evidence and repairs
 
-[Full CI #86](https://github.com/Frozen811/codex-lb/actions/runs/37818859876), attempt 1, ran the complete 35-job matrix on that SHA and completed **FAILURE: 25 success /10 failure**, including failed dependent aggregates. Docs, Windows startup, release guards and simplicity completed successfully. The source was genuinely tested across SQLite, PostgreSQL, MySQL, bridge, browser, Rust, Docker, Helm and Nix; this first run is historical and is not represented as green.
+[Full CI #87](https://github.com/Frozen811/codex-lb/actions/runs/37818859876), attempt 1, ran the complete 35-job matrix on that SHA and completed **FAILURE: 25 success /10 failure**, including failed dependent aggregates. Docs, Windows startup, release guards and simplicity completed successfully. The source was genuinely tested across SQLite, PostgreSQL, MySQL, bridge, browser, Rust, Docker, Helm and Nix; this first run is historical and is not represented as green.
 
 The distinct failures were:
 
@@ -56,4 +56,4 @@ uv run pytest -q tests/unit/test_proxy_utils.py -k 'chat_startup_probe_consumes 
 
 Whole-repository Ruff, formatting (1498 files) and ty pass. Architecture, cancellation, timing, settings (98/98), migration topology (272 revisions, unchanged single head) and simplicity checks pass. Strict pinned OpenSpec change/main validation passes, **68/68** specs; strict MkDocs passes. Three added requirements across compatibility-tooling and Responses are synchronized with stable context. Whitespace checks pass.
 
-Remaining work in this active change is exact-SHA complete cloud verification and publication evidence. Source queue remains 338 records with 121 local closures, 7 partial and 210 unverified; no additional upstream task was closed by the CI repair. Existing public/provider/production boundaries remain.
+Full exact-SHA cloud verification and publication evidence are complete; see publication.md and cloud-evidence.json. Source queue remains 338 records with 121 local closures, 7 partial and 210 unverified; no additional upstream task was closed by the CI repair. Existing public/provider/production boundaries remain.
