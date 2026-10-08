@@ -203,6 +203,38 @@ def _raw_stream_recorder(monkeypatch: pytest.MonkeyPatch, raw_transports: list[s
     monkeypatch.setattr(proxy_module, "core_stream_responses", raw_stream)
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["/v1/responses", "/backend-api/codex/responses"])
+@pytest.mark.parametrize("nested", [False, True])
+async def test_oversized_malformed_image_keeps_raw_shape_precedence(
+    async_client, inline_bridge_transport, monkeypatch, path: str, nested: bool
+):
+    state = inline_bridge_transport
+    monkeypatch.setattr(http_bridge_helpers_module, "_HTTP_BRIDGE_INLINE_IMAGE_MAX_ENCODED_FAST_PATH_BYTES", 8)
+    monkeypatch.setattr(http_bridge_helpers_module, "_HTTP_BRIDGE_INLINE_IMAGE_MAX_DECODED_BYTES", 6)
+    raw_transports: list[str | None] = []
+    _raw_stream_recorder(monkeypatch, raw_transports)
+    legal = "data:image/png;base64,AAAAAAAAAAAA"
+    malformed = "data:image/jpeg;base64,AAAAAAAA!AAA"
+    if nested:
+        body = _body(
+            _image_turn(legal),
+            {"type": "function_call_output", "call_id": "call_shape", "output": [_image_turn(malformed)]},
+        )
+    else:
+        body = _body(_image_turn(legal, malformed))
+
+    response = await async_client.post(path, json=body)
+
+    assert response.status_code == 200, response.text
+    assert "response.completed" in response.text
+    assert state.connects == 0
+    assert len(raw_transports) == 1
+    following = await _collect_sse_events(async_client, path, json_body=_body(_text_turn("continue")))
+    _assert_created_text_delta_completed(following)
+    assert state.connects == 1
+
+
 @pytest_asyncio.fixture
 async def inline_bridge_transport(async_client, app_instance, monkeypatch):
     """Real routes + bridge; NO inline-image flag set (production default).

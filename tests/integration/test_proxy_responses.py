@@ -31,6 +31,7 @@ from app.core.utils.time import utcnow
 from app.db.models import Account, AccountStatus, DashboardSettings, RequestLog, StickySessionKind
 from app.db.session import SessionLocal
 from app.modules.accounts import auth_manager as auth_manager_module
+from app.modules.accounts.repository import AccountsRepository
 from app.modules.api_keys.service import ApiKeyUsageReservationData
 from app.modules.proxy._service.http_bridge import streaming as http_bridge_streaming_module
 from app.modules.proxy._service.streaming import retry as streaming_retry_module
@@ -168,7 +169,8 @@ def _disable_http_bridge(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_v1_responses_health_write_failure_keeps_one_terminal(async_client, monkeypatch, caplog):
+@pytest.mark.parametrize("path", ["/v1/responses", "/backend-api/codex/responses"])
+async def test_v1_responses_health_write_failure_keeps_one_terminal(async_client, monkeypatch, caplog, path: str):
     auth_json = _make_auth_json("acc_post_terminal_health", "post-terminal-health@example.com")
     imported = await async_client.post(
         "/api/accounts/import",
@@ -193,7 +195,7 @@ async def test_v1_responses_health_write_failure_keeps_one_terminal(async_client
     monkeypatch.setattr(proxy_module.ProxyService, "_handle_stream_error", fail_health)
 
     response = await async_client.post(
-        "/v1/responses",
+        path,
         json={"model": "gpt-5.1", "instructions": "hi", "input": "hello", "stream": True},
     )
 
@@ -620,8 +622,9 @@ async def test_backend_responses_forwards_explicit_empty_tools(async_client, mon
 @pytest.mark.asyncio
 @pytest.mark.parametrize("path", ["/backend-api/codex/responses", "/v1/responses"])
 @pytest.mark.parametrize("access_accepted", [True, False], ids=["access-accepted", "access-rejected"])
+@pytest.mark.parametrize("delete_during_recovery", [False, True], ids=["visible", "deleted"])
 async def test_responses_preflight_retains_unexpired_access_after_refresh_failure(
-    async_client, monkeypatch, path, access_accepted
+    async_client, monkeypatch, path, access_accepted, delete_during_recovery
 ):
     auth_manager_module._clear_refresh_singleflight_state()
     raw_account_id = "acc_preflight_refresh_invalidated"
@@ -664,12 +667,34 @@ async def test_responses_preflight_retains_unexpired_access_after_refresh_failur
     monkeypatch.setattr(auth_manager_module, "refresh_access_token", reject_refresh)
     monkeypatch.setattr(proxy_module, "core_stream_responses", accept_access)
 
+    if delete_during_recovery:
+        original_get_fresh = AccountsRepository.get_by_id_fresh
+
+        async def delete_before_recovery(repo, account_id):
+            fresh = await original_get_fresh(repo, account_id)
+            if fresh is not None and fresh.status == AccountStatus.REAUTH_REQUIRED:
+                async with SessionLocal() as peer_session:
+                    peer = await peer_session.get(Account, account_id)
+                    assert peer is not None
+                    peer.delete_requested_at = utcnow()
+                    await peer_session.commit()
+                fresh = await original_get_fresh(repo, account_id)
+            return fresh
+
+        monkeypatch.setattr(AccountsRepository, "get_by_id_fresh", delete_before_recovery)
+
     response = await async_client.post(
         path,
         json={"model": "gpt-5.4", "instructions": "hi", "input": [], "stream": True},
     )
 
-    if access_accepted:
+    if delete_during_recovery:
+        assert response.status_code in (200, 401)
+        if response.status_code == 200:
+            event = _extract_first_event(response.text.splitlines())
+            assert event["type"] == "response.failed"
+        assert dispatched_tokens == []
+    elif access_accepted:
         assert response.status_code == 200
         event = _extract_first_event(response.text.splitlines())
         assert event["type"] == "response.completed"
@@ -677,7 +702,8 @@ async def test_responses_preflight_retains_unexpired_access_after_refresh_failur
         assert response.status_code == 401
         assert response.json()["error"]["code"] == "invalid_api_key"
     assert refresh_calls == 1
-    assert dispatched_tokens == [access_token]
+    if not delete_during_recovery:
+        assert dispatched_tokens == [access_token]
     async with SessionLocal() as session:
         account = (await session.execute(select(Account))).scalars().one()
         assert account.status == AccountStatus.REAUTH_REQUIRED
@@ -685,6 +711,7 @@ async def test_responses_preflight_retains_unexpired_access_after_refresh_failur
         assert "re-login required" in account.deactivation_reason
         assert (account.access_token_encrypted, account.refresh_token_encrypted, account.last_refresh) == before
         assert TokenEncryptor().decrypt(account.access_token_encrypted) == access_token
+        assert (account.delete_requested_at is not None) == delete_during_recovery
 
 
 @pytest.mark.asyncio

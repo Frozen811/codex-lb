@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import pytest
+
 from app.db.models import Account, AccountStatus, UsageHistory
 from app.modules.accounts import mappers
 from app.modules.accounts.mappers import (
@@ -92,6 +94,31 @@ def _secondary_usage(**overrides) -> UsageHistory:
     }
     values.update(overrides)
     return UsageHistory(**values)
+
+
+@pytest.mark.parametrize("balance", [None, 0.0, -1.0, 12.5])
+@pytest.mark.parametrize("primary_used", [20.0, 100.0])
+def test_summary_requires_spendable_credits(balance: float | None, primary_used: float) -> None:
+    account = _account()
+    primary = _primary_usage(used_percent=primary_used)
+    secondary = _secondary_usage(credits_has=True, credits_unlimited=False, credits_balance=balance)
+    expected = AccountStatus.QUOTA_EXCEEDED
+    if balance is not None and balance > 0:
+        expected = AccountStatus.ACTIVE if primary_used < 100 else AccountStatus.RATE_LIMITED
+    assert (
+        _effective_status_from_usage(
+            account,
+            status_seed=account.status,
+            primary_usage=primary,
+            primary_used_percent=primary.used_percent,
+            secondary_usage=secondary,
+            secondary_used_percent=secondary.used_percent,
+            monthly_usage=None,
+            monthly_used_percent=None,
+            runtime_reset=float(account.reset_at) if account.reset_at else None,
+        )
+        == expected
+    )
 
 
 def test_effective_status_uses_secondary_credits_to_reactivate_quota_exceeded_account() -> None:

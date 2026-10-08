@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Protocol, cast
 
-from app.core.auth.refresh import RefreshError, should_refresh
+from app.core.auth.refresh import RefreshError
 from app.core.config.background_jobs import auth_guardian_blocked_by_topology, background_job_enabled
 from app.core.scheduling.leader_election_handle import (
     LeaderElectionLike as _LeaderElectionLike,
@@ -39,8 +39,11 @@ _JITTER_SECONDS = 300.0
 _FAILURE_BACKOFF_BASE_SECONDS = 300.0
 _FAILURE_BACKOFF_MAX_SECONDS = 3600.0
 
+# Idle keepalive is independent of the eight-day request freshness policy.
+_IDLE_KEEPALIVE_AGE = timedelta(hours=12)
+
 # RATE_LIMITED and QUOTA_EXCEEDED recover to ACTIVE through usage-refresh
-# reconciliation, then become guardian-eligible within the canonical refresh window.
+# reconciliation, then become guardian-eligible under the idle keepalive age gate.
 _AUTH_GUARDIAN_ELIGIBLE_STATUSES = frozenset({AccountStatus.ACTIVE, AccountStatus.PAUSED})
 
 
@@ -308,7 +311,7 @@ def _auth_guardian_account_is_stale_eligible(
 ) -> bool:
     if account.status not in _AUTH_GUARDIAN_ELIGIBLE_STATUSES:
         return False
-    return should_refresh(account.last_refresh, now)
+    return to_utc_naive(now) - to_utc_naive(account.last_refresh) > _IDLE_KEEPALIVE_AGE
 
 
 async def _dashboard_guardian_enabled() -> bool:

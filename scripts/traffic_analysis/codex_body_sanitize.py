@@ -946,14 +946,28 @@ _INPUT_ITEM = _Switch(
                 "tools": _Arr(_TOOL),
             }
         ),
-        "function_call": _tool_call("function_call", {"name": _KnownLabel(CODEX_TOOL_NAMES), "arguments": _Text()}),
+        "function_call": _tool_call(
+            "function_call", {"name": _KnownLabel(CODEX_TOOL_NAMES), "arguments": _Text(), "async": _Scalar()}
+        ),
         "function_call_output": _tool_call("function_call_output", {"output": _OUTPUT}),
-        "custom_tool_call": _tool_call("custom_tool_call", {"name": _KnownLabel(CODEX_TOOL_NAMES), "input": _Text()}),
+        "custom_tool_call": _tool_call(
+            "custom_tool_call", {"name": _KnownLabel(CODEX_TOOL_NAMES), "input": _Text(), "async": _Scalar()}
+        ),
         "custom_tool_call_output": _tool_call("custom_tool_call_output", {"output": _OUTPUT}),
         "apply_patch_call": _tool_call(
             "apply_patch_call", {"operation": _APPLY_PATCH_OPERATION, "patch": _Text(), "input": _Text()}
         ),
         "apply_patch_call_output": _tool_call("apply_patch_call_output", {"output": _OUTPUT}),
+        # ``ResponseItem::ToolSearchCall`` / ``ToolSearchOutput`` as codex-rs
+        # serialises them: the output carries ``LoadableToolSpec`` declarations
+        # under ``tools`` and has no ``output`` field.
+        "tool_search_call": _tool_call(
+            "tool_search_call",
+            {"execution": _Enum(TOOL_SEARCH_EXECUTIONS), "arguments": _Obj({"query": _Text()})},
+        ),
+        "tool_search_output": _tool_call(
+            "tool_search_output", {"execution": _Enum(TOOL_SEARCH_EXECUTIONS), "tools": _Arr(_TOOL)}
+        ),
         "reasoning": _Obj(
             {
                 "type": _Enum(frozenset({"reasoning"})),

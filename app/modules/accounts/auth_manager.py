@@ -359,6 +359,7 @@ class AuthManager:
                 latest = await self._repo.get_by_id_fresh(account.id)
                 if (
                     latest is None
+                    or latest.delete_requested_at is not None
                     or latest.status != AccountStatus.REAUTH_REQUIRED
                     or latest.deactivation_reason != PERMANENT_FAILURE_CODES[exc.code]
                 ):

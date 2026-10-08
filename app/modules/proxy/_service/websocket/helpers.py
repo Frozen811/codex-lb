@@ -303,6 +303,7 @@ from app.modules.proxy._service.support import (
     _WebSocketReceiveTimeout,
     _WebSocketRequestState,
     _WebSocketUpstreamControl,
+    update_pending_async_tools,
 )
 from app.modules.proxy._service.support import (
     _HTTPBridgeOwnerForward as _HTTPBridgeOwnerForward,
@@ -763,6 +764,7 @@ def _retire_websocket_continuity_anchor(continuity_state: _WebSocketContinuitySt
     continuity_state.last_completed_input_prefix_fingerprint = None
     continuity_state.last_pending_function_call_ids = []
     continuity_state.last_pending_tool_call_types = {}
+    continuity_state.pending_async_tool_calls.clear()
 
 
 def _websocket_continuity_anchor_for_payload(
@@ -836,6 +838,7 @@ _WEBSOCKET_TOOL_CALL_ITEM_TYPES_BY_OUTPUT_TYPE = {
     "function_call_output": "function_call",
     "custom_tool_call_output": "custom_tool_call",
     "apply_patch_call_output": "apply_patch_call",
+    "tool_search_output": "tool_search_call",
     "computer_call_output": "computer_call",
 }
 _WEBSOCKET_TOOL_CALL_ITEM_TYPES = frozenset(_WEBSOCKET_TOOL_CALL_ITEM_TYPES_BY_OUTPUT_TYPE.values())
@@ -914,6 +917,9 @@ def _record_websocket_continuity_completion(
     # meaningful for fingerprinted list inputs, so the count/fingerprint pair
     # is cleared rather than left stale when the completed turn cannot
     # provide one.
+    if request_state.previous_response_id != continuity_state.last_completed_response_id:
+        continuity_state.pending_async_tool_calls.clear()
+    update_pending_async_tools(continuity_state.pending_async_tool_calls, request_state)
     continuity_state.last_completed_response_id = response_id
     if request_state.input_item_count > 0 and request_state.input_full_fingerprint is not None:
         continuity_state.last_completed_input_count = request_state.input_item_count
@@ -2468,32 +2474,51 @@ def _serialize_websocket_error_event(payload: dict[str, JsonValue]) -> str:
 
 
 def _trim_websocket_previous_response_input_items(input_items: list[JsonValue]) -> list[JsonValue]:
+    replay_safe_input_items = _sanitize_websocket_previous_response_input_items(input_items)
     first_output_index = next(
         (
             index
             for index, item in enumerate(input_items)
             if _websocket_input_item_type(item)
-            in {"function_call_output", "custom_tool_call_output", "apply_patch_call_output"}
+            in {"function_call_output", "custom_tool_call_output", "apply_patch_call_output", "tool_search_output"}
         ),
         None,
     )
-    if first_output_index is None or first_output_index == 0:
-        return input_items
+    if first_output_index is None:
+        return replay_safe_input_items
+    if first_output_index == 0:
+        return replay_safe_input_items
     prefix = input_items[:first_output_index]
     if not all(_is_websocket_previous_response_output_item(item) for item in prefix):
-        return input_items
-    return input_items[first_output_index:]
+        return replay_safe_input_items
+    return replay_safe_input_items[first_output_index:]
+
+
+def _sanitize_websocket_previous_response_input_items(input_items: list[JsonValue]) -> list[JsonValue]:
+    return [_strip_websocket_replayed_tool_search_id(item) for item in input_items]
 
 
 def _is_websocket_previous_response_output_item(item: JsonValue) -> bool:
     if isinstance(item, dict) and _websocket_input_item_type(item) is None and item.get("role") == "assistant":
         return True
     item_type = _websocket_input_item_type(item)
-    if item_type in {"reasoning", "function_call", "custom_tool_call", "apply_patch_call"}:
+    if item_type in {"reasoning", "function_call", "custom_tool_call", "apply_patch_call", "tool_search_call"}:
         return True
     if item_type != "message" or not isinstance(item, dict):
         return False
     return item.get("role") == "assistant"
+
+
+def _strip_websocket_replayed_tool_search_id(item: JsonValue) -> JsonValue:
+    if (
+        not isinstance(item, dict)
+        or _websocket_input_item_type(item) not in {"tool_search_call", "tool_search_output"}
+        or "id" not in item
+    ):
+        return item
+    stripped = dict(item)
+    stripped.pop("id", None)
+    return stripped
 
 
 def _websocket_input_item_type(item: JsonValue) -> str | None:

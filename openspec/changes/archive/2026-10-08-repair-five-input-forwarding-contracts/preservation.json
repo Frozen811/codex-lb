@@ -1,0 +1,34 @@
+{
+  "initial_dirty_files": 37,
+  "byte_identical": 31,
+  "intended_overlaps": [
+    "app/modules/proxy/_service/http_bridge/helpers.py",
+    "app/modules/proxy/api.py",
+    "docs/traffic-parity.md",
+    "issues-check.md",
+    "openspec/specs/responses-api-compat/context.md",
+    "openspec/specs/responses-api-compat/spec.md"
+  ],
+  "other_source_rows_preserved": 333,
+  "selected": [
+    "UP-ISSUE-2499",
+    "UP-PR-1952",
+    "UP-PR-2099",
+    "UP-PR-2277",
+    "UP-PR-2488"
+  ],
+  "source_count": 338,
+  "base": "8369ec720c5ac935f7a64fe3f30aa1cbc323f5e5",
+  "readback_rows": [
+    "| [UP-ISSUE-2499](https://github.com/Soju06/codex-lb/issues/2499) | bug(model-sources): multi-agent capability does not preserve client collaboration tools | RESOLVED / MERGED IN FORK | ЗАКРЫТО ЛОКАЛЬНО | §71; Local catalog/source HTTP contract verified: both catalog views, persisted instructions, complete collaboration namespaces/choices and negative opt-in controls on canonical/slash routes; 97 integration PASS. Live real Codex parent/child session not certified. [Verification](openspec/changes/archive/2026-10-08-repair-five-input-forwarding-contracts/verification.md). |\r",
+    "| [UP-PR-1952](https://github.com/Soju06/codex-lb/pull/1952) | PR #1952: fix(proxy): preserve tool search pairs through replay | Раздел 12, L1426 | ЗАКРЫТО ЛОКАЛЬНО | §71; Fixed HTTP/WS tool-search replay, ID sanitization, safe loaded declarations (including null defer_loading rejection), durable relocation identity and raw V1 compact-trigger boundary; replacement-account routes PASS. [Verification](openspec/changes/archive/2026-10-08-repair-five-input-forwarding-contracts/verification.md). |\r",
+    "| [UP-PR-2099](https://github.com/Soju06/codex-lb/pull/2099) | PR #2099: feat(proxy): preserve async tool results across continuations | Раздел 12, L1415 | ЗАКРЫТО ЛОКАЛЬНО | §71; Fixed async function/custom delayed outputs, synchronous-only interruption, anchor/owner cleanup, settled-prefix and durable-manifest fencing; 448 integration PASS including controlled real upstream sockets. Live client/provider remains external. [Verification](openspec/changes/archive/2026-10-08-repair-five-input-forwarding-contracts/verification.md). |\r",
+    "| [UP-PR-2277](https://github.com/Soju06/codex-lb/pull/2277) | PR #2277: fix(proxy): preserve continuation anchors during input normalization | Раздел 12, L1398 | ЗАКРЫТО ЛОКАЛЬНО | §71; Stronger fork self-contained classifier verified: 16 public canonical/slash route boundaries plus signed owner roundtrips preserve anchors for strings/large/parallel outputs. Upstream size heuristic superseded; V2/tamper/omission controls preserved. [Verification](openspec/changes/archive/2026-10-08-repair-five-input-forwarding-contracts/verification.md). |\r",
+    "| [UP-PR-2488](https://github.com/Soju06/codex-lb/pull/2488) | PR #2488: fix(proxy): handle CRLF and malformed UTF-8 in owner forwarding | Раздел 12, L1349 | ЗАКРЫТО ЛОКАЛЬНО | §71; Owner-client SSE mixed CR/LF, split/malformed UTF-8, before-EOF delivery, deadlines/signatures/cancellation: 86 PASS. Existing fix independently verified; live multi-replica/provider scope remains external. [Verification](openspec/changes/archive/2026-10-08-repair-five-input-forwarding-contracts/verification.md). |\r"
+  ],
+  "helper_other_content_preserved": true,
+  "prior_api_reconstructed_exactly": true,
+  "prior_docs_reconstructed_exactly": true,
+  "prior_context_exact_byte_prefix": true,
+  "unchanged_prior_requirement_blocks": 282
+}

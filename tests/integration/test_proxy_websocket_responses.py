@@ -6449,7 +6449,9 @@ def test_v1_responses_websocket_masks_short_previous_response_not_found_without_
         connect_count += 1
         if connect_count == 1:
             return SimpleNamespace(id="acct_ws_prev_mask", codex_installation_id="account-installation"), first_upstream
-        return SimpleNamespace(id="acct_ws_prev_mask", codex_installation_id="account-installation"), recovered_upstream
+        return SimpleNamespace(
+            id="acct_ws_replay_other", codex_installation_id="account-installation"
+        ), recovered_upstream
 
     monkeypatch.setattr(proxy_api_module, "_websocket_firewall_denial_response", allow_firewall)
     monkeypatch.setattr(proxy_api_module, "validate_proxy_api_key_authorization", allow_proxy_api_key)
@@ -6642,8 +6644,19 @@ def test_v1_responses_websocket_marks_fresh_turn_as_retry_safe_at_prep_time(
 
 
 @pytest.mark.parametrize("endpoint", ["/v1/responses", "/backend-api/codex/responses"])
+@pytest.mark.parametrize(
+    "async_call",
+    [
+        None,
+        ("function_call", "valid"),
+        ("custom_tool_call", "valid"),
+        ("function_call", " "),
+        ("custom_tool_call", "\t\n"),
+    ],
+)
 def test_responses_websocket_replays_client_full_resend_previous_response_miss_without_anchor(
     endpoint,
+    async_call,
     app_instance,
     monkeypatch,
 ):
@@ -6780,6 +6793,20 @@ def test_responses_websocket_replays_client_full_resend_previous_response_miss_w
         {"role": "user", "content": [{"type": "input_text", "text": "continue"}]},
     ]
 
+    valid_replay = async_call is None or bool(async_call[1].strip())
+    if async_call is not None:
+        call_type, call_id = async_call
+        full_resend_input.insert(
+            2,
+            {
+                "type": call_type,
+                "call_id": call_id,
+                "name": "work",
+                "arguments" if call_type == "function_call" else "input": "{}",
+                "async": True,
+            },
+        )
+
     with TestClient(app_instance) as client:
         with client.websocket_connect(endpoint) as websocket:
             websocket.send_text(
@@ -6810,10 +6837,18 @@ def test_responses_websocket_replays_client_full_resend_previous_response_miss_w
                 )
             )
             created_2 = json.loads(websocket.receive_text())
-            completed_2 = json.loads(websocket.receive_text())
+            completed_2 = json.loads(websocket.receive_text()) if valid_replay else None
+
+    if not valid_replay:
+        assert created_2["type"] == "response.failed"
+        assert created_2["response"]["error"]["code"] == "previous_response_owner_unavailable"
+        assert connect_count == 2
+        assert recovered_upstream.sent_text == []
+        return
 
     assert created_2["type"] == "response.created"
     assert created_2["response"]["id"] == "resp_ws_prev_retry"
+    assert completed_2 is not None
     assert completed_2["type"] == "response.completed"
     assert "previous_response_not_found" not in json.dumps(created_2)
     assert connect_count == 2
@@ -6824,6 +6859,204 @@ def test_responses_websocket_replays_client_full_resend_previous_response_miss_w
     assert "previous_response_id" not in replay_payload
     assert replay_payload["input"] == full_resend_input
     assert replay_payload["client_metadata"] == {"x-codex-installation-id": "account-installation"}
+
+
+def test_backend_responses_websocket_replays_tool_search_pair_to_replacement_account(
+    app_instance,
+    monkeypatch,
+):
+    owner_upstream = _SequencedUpstreamWebSocket(
+        [],
+        deferred_message_batches=[
+            _websocket_response_batch("resp_ws_tool_search_anchor"),
+            [
+                _FakeUpstreamMessage(
+                    "text",
+                    text=json.dumps(
+                        {
+                            "type": "response.failed",
+                            "response": {
+                                "id": "resp_ws_tool_search_owner_failed",
+                                "status": "failed",
+                                "error": {
+                                    "type": "rate_limit_error",
+                                    "code": "usage_limit_reached",
+                                    "message": "owner quota exhausted",
+                                },
+                            },
+                        },
+                        separators=(",", ":"),
+                    ),
+                )
+            ],
+        ],
+    )
+    replacement_upstream = _SequencedUpstreamWebSocket(
+        [],
+        deferred_message_batches=[_websocket_response_batch("resp_ws_tool_search_replay")],
+    )
+    accounts = {
+        "owner": SimpleNamespace(id="acct_ws_tool_search_owner", codex_installation_id="owner-installation"),
+        "replacement": SimpleNamespace(
+            id="acct_ws_tool_search_replacement",
+            codex_installation_id="replacement-installation",
+        ),
+    }
+    selection_exclusions: list[set[str]] = []
+    opened_accounts: list[str] = []
+    handled_stream_errors: list[tuple[str, str]] = []
+
+    class _FakeSettingsCache:
+        async def get(self):
+            return _websocket_settings()
+
+    async def allow_firewall(_websocket):
+        return None
+
+    async def allow_proxy_api_key(_authorization: str | None, *, request: object | None = None):
+        return None
+
+    async def fake_select_websocket_connect_account(
+        self,
+        deadline,
+        *,
+        request_state,
+        exclude_account_ids,
+        **kwargs,
+    ):
+        del self, deadline, request_state, kwargs
+        excluded = set(cast(set[str], exclude_account_ids))
+        selection_exclusions.append(excluded)
+        return accounts["replacement"] if accounts["owner"].id in excluded else accounts["owner"]
+
+    async def fake_try_open_websocket_connect_attempt(self, account, headers, **kwargs):
+        del self, headers, kwargs
+        opened_accounts.append(account.id)
+        if account.id == accounts["owner"].id:
+            return account, owner_upstream
+        return account, replacement_upstream
+
+    async def fake_handle_stream_error(self, account, error, error_code, **kwargs):
+        del self, error, kwargs
+        handled_stream_errors.append((account.id, error_code))
+
+    monkeypatch.setattr(proxy_api_module, "_websocket_firewall_denial_response", allow_firewall)
+    monkeypatch.setattr(proxy_api_module, "validate_proxy_api_key_authorization", allow_proxy_api_key)
+    monkeypatch.setattr(proxy_module, "get_settings_cache", lambda: _FakeSettingsCache())
+    monkeypatch.setattr(
+        proxy_module.ProxyService,
+        "_select_websocket_connect_account",
+        fake_select_websocket_connect_account,
+    )
+    monkeypatch.setattr(
+        proxy_module.ProxyService,
+        "_try_open_websocket_connect_attempt",
+        fake_try_open_websocket_connect_attempt,
+    )
+    monkeypatch.setattr(proxy_module.ProxyService, "_handle_stream_error", fake_handle_stream_error)
+
+    historical_input = {"role": "user", "content": [{"type": "input_text", "text": "find release notes"}]}
+    tool_search_call = {
+        "type": "tool_search_call",
+        "id": "tsc_owner_scoped",
+        "call_id": "call_ws_tool_search",
+        "arguments": {"query": "codex-lb tool search replay"},
+        "execution": "client",
+        "status": "completed",
+    }
+    tool_search_output = {
+        "type": "tool_search_output",
+        "id": "tso_owner_scoped",
+        "call_id": "call_ws_tool_search",
+        "tools": [
+            {
+                "type": "namespace",
+                "name": "mcp__codex_apps__calendar",
+                "description": "Plan events",
+                "tools": [
+                    {
+                        "type": "function",
+                        "name": "create_event",
+                        "description": "Create a calendar event.",
+                        "strict": False,
+                        "defer_loading": True,
+                        "parameters": {"type": "object", "properties": {}},
+                    }
+                ],
+            }
+        ],
+        "execution": "client",
+        "status": "completed",
+    }
+    followup_input = {"role": "user", "content": [{"type": "input_text", "text": "continue with that result"}]}
+    expected_replay_input = [
+        historical_input,
+        {key: value for key, value in tool_search_call.items() if key != "id"},
+        {key: value for key, value in tool_search_output.items() if key != "id"},
+        followup_input,
+    ]
+
+    with TestClient(app_instance) as client:
+        with client.websocket_connect(
+            "/backend-api/codex/responses",
+            headers={"session_id": "sid-ws-tool-search-replay"},
+        ) as websocket:
+            websocket.send_text(
+                json.dumps(
+                    {
+                        "type": "response.create",
+                        "model": "gpt-5.4",
+                        "input": [historical_input],
+                        "stream": True,
+                    }
+                )
+            )
+            first_created = json.loads(websocket.receive_text())
+            first_completed = json.loads(websocket.receive_text())
+            assert first_created["type"] == "response.created"
+            assert first_completed["type"] == "response.completed"
+
+            websocket.send_text(
+                json.dumps(
+                    {
+                        "type": "response.create",
+                        "model": "gpt-5.4",
+                        "input": [
+                            historical_input,
+                            tool_search_call,
+                            tool_search_output,
+                            followup_input,
+                        ],
+                        "stream": True,
+                    }
+                )
+            )
+            replay_created = json.loads(websocket.receive_text())
+            replay_completed = json.loads(websocket.receive_text())
+
+    assert replay_created["type"] == "response.created"
+    assert replay_created["response"]["id"] == "resp_ws_tool_search_replay"
+    assert replay_completed["type"] == "response.completed"
+    assert opened_accounts == [
+        accounts["owner"].id,
+        accounts["replacement"].id,
+    ]
+    assert selection_exclusions == [
+        set(),
+        {accounts["owner"].id},
+    ]
+    assert handled_stream_errors == [(accounts["owner"].id, "usage_limit_reached")]
+    owner_followup_payload = json.loads(owner_upstream.sent_text[1])
+    assert owner_followup_payload["previous_response_id"] == "resp_ws_tool_search_anchor"
+    assert owner_followup_payload["input"] == [
+        tool_search_call,
+        tool_search_output,
+        followup_input,
+    ]
+    replay_payload = json.loads(replacement_upstream.sent_text[0])
+    assert "previous_response_id" not in replay_payload
+    assert replay_payload["input"] == expected_replay_input
+    assert replay_payload["client_metadata"] == {"x-codex-installation-id": "replacement-installation"}
 
 
 def test_v1_responses_websocket_masks_invalid_request_previous_response_not_found_without_retry(

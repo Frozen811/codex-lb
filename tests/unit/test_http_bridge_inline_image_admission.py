@@ -111,6 +111,47 @@ def test_fast_path_bound_arithmetic() -> None:
     assert len(base64.b64encode(b"J" * 5_000_000)) == 6_666_668
 
 
+@pytest.mark.parametrize(
+    "encoded",
+    ["AAAAAAAA!AAA", "AAAAAAAA AAA", "AAAAAAAA_AAA", "AAAAAAAAАAAA", "AAAAAAAAAAAAA", "AAAAAAAAA===", "AAAA=AAAAAAA"],
+)
+def test_oversized_malformed_base64_keeps_unsupported_shape(monkeypatch, encoded: str) -> None:
+    monkeypatch.setattr(http_bridge_helpers, "_HTTP_BRIDGE_INLINE_IMAGE_MAX_ENCODED_FAST_PATH_BYTES", 8)
+    monkeypatch.setattr(http_bridge_helpers, "_HTTP_BRIDGE_INLINE_IMAGE_MAX_DECODED_BYTES", 6)
+    with mock.patch.object(http_bridge_helpers.base64, "b64decode", side_effect=AssertionError("must not decode")):
+        assert http_bridge_helpers._inline_data_image_url_verdict("data:image/png;base64," + encoded) == (
+            "unsupported",
+            0,
+        )
+
+
+@pytest.mark.parametrize(("encoded", "decoded_bytes"), [("AAAAAAAAAAAA", 9), ("AAAAAAAAAAA=", 8), ("AAAAAAAAAA==", 7)])
+def test_oversized_legal_base64_reports_padding_adjusted_size(monkeypatch, encoded: str, decoded_bytes: int) -> None:
+    monkeypatch.setattr(http_bridge_helpers, "_HTTP_BRIDGE_INLINE_IMAGE_MAX_ENCODED_FAST_PATH_BYTES", 8)
+    monkeypatch.setattr(http_bridge_helpers, "_HTTP_BRIDGE_INLINE_IMAGE_MAX_DECODED_BYTES", 6)
+    with mock.patch.object(http_bridge_helpers.base64, "b64decode", side_effect=AssertionError("must not decode")):
+        assert http_bridge_helpers._inline_data_image_url_verdict("data:image/png;base64," + encoded) == (
+            "image_too_large",
+            decoded_bytes,
+        )
+
+
+@pytest.mark.parametrize("malformed_first", [False, True])
+def test_oversized_malformed_sibling_wins_in_either_order(monkeypatch, malformed_first: bool) -> None:
+    monkeypatch.setattr(http_bridge_helpers, "_HTTP_BRIDGE_INLINE_IMAGE_MAX_ENCODED_FAST_PATH_BYTES", 8)
+    monkeypatch.setattr(http_bridge_helpers, "_HTTP_BRIDGE_INLINE_IMAGE_MAX_DECODED_BYTES", 6)
+    urls = ["data:image/png;base64,AAAAAAAAAAAA", "data:image/jpeg;base64,AAAAAAAA!AAA"]
+    if malformed_first:
+        urls.reverse()
+    assert http_bridge_helpers._inline_input_image_request_admission(_image_payload(*urls)).verdict == "unsupported"
+
+
+def test_real_encoded_bound_rejects_malformed_alphabet_without_decoding() -> None:
+    malformed = _FAST_PATH_OVER_IMAGE_URL[:-1] + "!"
+    with mock.patch.object(http_bridge_helpers.base64, "b64decode", side_effect=AssertionError("must not decode")):
+        assert http_bridge_helpers._inline_data_image_url_verdict(malformed) == ("unsupported", 0)
+
+
 def test_over_budget_admission_names_the_worst_image() -> None:
     admission = http_bridge_helpers._inline_input_image_request_admission(_image_payload(_OVER_BUDGET_IMAGE_URL))
     assert admission.verdict == "image_too_large"

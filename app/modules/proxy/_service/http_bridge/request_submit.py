@@ -191,6 +191,7 @@ from app.modules.proxy._service.support import (
     _request_log_client_fields,
     _websocket_request_can_replay_before_visible_output,
     _WebSocketRequestState,
+    submitted_tool_output_types,
 )
 from app.modules.proxy._service.support import (
     _websocket_route_log_kwargs as _websocket_route_log_kwargs,
@@ -854,6 +855,7 @@ class _HTTPBridgeRequestSubmitMixin:
             generate_false_prewarm=generate_false_prewarm,
             response_create_max_bytes_override=response_create_max_bytes,
         )
+        request_state.submitted_tool_output_types = submitted_tool_output_types(payload.input)
         if deduped_replayed_input_count is not None:
             request_state.input_item_count = deduped_replayed_input_count
             request_state.input_full_fingerprint = deduped_replayed_input_fingerprint

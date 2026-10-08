@@ -346,6 +346,22 @@ def test_account_neutral_replay_projection_removes_response_owned_bookkeeping() 
             "internal_chat_message_metadata_passthrough": metadata,
         },
         {
+            "type": "tool_search_call",
+            "call_id": "call_search",
+            "arguments": {"query": "github"},
+            "execution": "client",
+            "status": "completed",
+            "internal_chat_message_metadata_passthrough": metadata,
+        },
+        {
+            "type": "tool_search_output",
+            "call_id": "call_search",
+            "execution": "client",
+            "status": "completed",
+            "tools": [],
+            "internal_chat_message_metadata_passthrough": metadata,
+        },
+        {
             "type": "message",
             "role": "assistant",
             "status": "completed",
@@ -3703,14 +3719,14 @@ _POSITIONS: tuple[_Position, ...] = (
         _call_of("function_call", name="lookup", arguments="{}"),
         (),
         _ITEM_FIELDS["function_call"],
-        frozenset({"arguments", "call_id", "name"}),
+        frozenset({"arguments", "async", "call_id", "name"}),
     ),
     _Position(
         "custom tool call",
         _call_of("custom_tool_call", name="shell", input="ls"),
         (),
         _ITEM_FIELDS["custom_tool_call"],
-        frozenset({"call_id", "input", "name"}),
+        frozenset({"async", "call_id", "input", "name"}),
     ),
     _Position(
         "apply patch call",
@@ -3750,6 +3766,20 @@ _POSITIONS: tuple[_Position, ...] = (
         frozenset({"call_id", "output"}),
     ),
     _Position(
+        "tool search call",
+        {"type": "tool_search_call", "call_id": "call_s", "arguments": {"query": "lookup"}},
+        (),
+        _ITEM_FIELDS["tool_search_call"],
+        frozenset({"arguments", "call_id"}),
+    ),
+    _Position(
+        "tool search output",
+        {"type": "tool_search_output", "call_id": "call_s", "tools": [{"type": "function", "name": "lookup"}]},
+        (),
+        _ITEM_FIELDS["tool_search_output"],
+        frozenset({"call_id", "tools"}),
+    ),
+    _Position(
         "custom tool call output",
         _call_of("custom_tool_call_output", output="ok"),
         (),
@@ -3781,6 +3811,8 @@ _POSITIONS: tuple[_Position, ...] = (
 # names does. Keyed by field name and shared across positions, so a field that
 # means one thing in two places cannot be given two readings here either.
 _LEGAL_VALUES: dict[str, tuple[JsonValue, JsonValue]] = {
+    "async": (False, True),
+    "execution": ("client", "client"),
     "allowed_domains": (["a.test"], ["b.test"]),
     "arguments": ('{"q":1}', '{"q":2}'),
     "call_id": ("call_one", "call_two"),
@@ -3991,6 +4023,8 @@ _SAMPLE_ITEM_BY_TYPE: dict[str, dict[str, JsonValue]] = {
     "input_image": {"type": "input_image", "image_url": "https://example.test/bare.png", "detail": "low"},
     "input_text": {"type": "input_text", "text": "sent on its own"},
     "message": _user_item("go"),
+    "tool_search_call": {"type": "tool_search_call", "call_id": "call_s", "arguments": {"query": "lookup"}},
+    "tool_search_output": {"type": "tool_search_output", "call_id": "call_s", "tools": []},
 }
 
 
@@ -5901,3 +5935,50 @@ def test_agent_followup_cannot_replace_missing_tool_context(case: str) -> None:
     assert not responses_input_suffix_retains_prior_output(
         input_items, stored_count=1, allow_same_owner_agent_messages=True
     )
+
+
+@pytest.mark.parametrize("call_type", ["function_call", "custom_tool_call"])
+def test_relocation_overlap_keeps_changed_async_identity(call_type: str) -> None:
+    call: dict[str, JsonValue] = {"type": call_type, "call_id": "call_async", "name": "work"}
+    call["arguments" if call_type == "function_call" else "input"] = "{}"
+    assert _relocation_comparison_key(call) != _relocation_comparison_key({**call, "async": True})
+    assert _relocation_comparison_key(call) == _relocation_comparison_key({**call, "async": False})
+
+
+def test_relocation_retains_loaded_search_pairs_and_matches_reordered_query_objects() -> None:
+    tools: list[JsonValue] = [
+        {
+            "type": "namespace",
+            "name": "workspace",
+            "tools": [{"type": "function", "name": "lookup", "defer_loading": True}],
+        }
+    ]
+    call: dict[str, JsonValue] = {
+        "type": "tool_search_call",
+        "id": "search_owner_id",
+        "call_id": "call_search",
+        "arguments": {"query": "lookup", "limit": 2},
+        "execution": "client",
+        "status": "completed",
+    }
+    output: dict[str, JsonValue] = {
+        "type": "tool_search_output",
+        "id": "search_output_owner_id",
+        "call_id": "call_search",
+        "tools": tools,
+        "execution": "client",
+        "status": "completed",
+    }
+    transcript = (_transcript_turn([_user_item("first")], [call, output, _assistant_item("answer")]),)
+    replayed_call = {key: value for key, value in call.items() if key != "id"}
+    replayed_output = {key: value for key, value in output.items() if key != "id"}
+    client_input: list[JsonValue] = [
+        {**replayed_call, "arguments": {"limit": 2, "query": "lookup"}},
+        replayed_output,
+        _replayed_assistant_item("answer"),
+        _user_item("second"),
+    ]
+    rebuilt = _rebuild_result(transcript, client_input)
+    assert rebuilt is not None
+    assert rebuilt.payload["input"] == [_user_item("first"), *client_input]
+    assert rebuilt.carries_durable_items is True

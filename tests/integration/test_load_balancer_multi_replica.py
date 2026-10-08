@@ -96,6 +96,35 @@ async def _seed_accounts_with_usage(*accounts_with_usage: tuple[Account, float, 
             )
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("balance,unlimited", [(None, False), (0.0, False), (-1.0, False), (12.5, False), (None, True)])
+async def test_secondary_credit_flag_requires_spendable_capacity(db_setup, balance, unlimited):
+    now = int(time.time())
+    account = _make_account("flag-credit", status=AccountStatus.QUOTA_EXCEEDED, blocked_at=now - 1, reset_at=now + 3600)
+    async with SessionLocal() as session:
+        await AccountsRepository(session).upsert(account)
+        for window, used in (("primary", 20.0), ("secondary", 100.0)):
+            await UsageRepository(session).add_entry(
+                account_id=account.id,
+                window=window,
+                used_percent=used,
+                reset_at=now + 3600,
+                window_minutes=300 if window == "primary" else 10080,
+                credits_has=True,
+                credits_unlimited=unlimited,
+                credits_balance=balance,
+                recorded_at=utcnow(),
+            )
+    spendable = unlimited or (balance is not None and balance > 0)
+    for balancer in (LoadBalancer(_repo_factory), LoadBalancer(_repo_factory)):
+        result = await balancer.select_account(account_ids={account.id})
+        assert (result.account is not None) == spendable
+        if spendable:
+            assert result.account.id == account.id
+        row = await _fetch_account(account.id)
+        assert row.status == (AccountStatus.ACTIVE if spendable else AccountStatus.QUOTA_EXCEEDED)
+
+
 async def _fetch_account(account_id: str) -> Account:
     async with SessionLocal() as session:
         account = await session.get(Account, account_id)
@@ -327,11 +356,17 @@ async def test_peer_replica_requires_post_block_credits_to_recover_quota(
         )
 
     selection = await LoadBalancer(_repo_factory).select_account(account_ids={limited.id})
-    assert selection.account is not None
-    assert selection.account.id == limited.id
     recovered = await _fetch_account(limited.id)
-    assert recovered.status == AccountStatus.ACTIVE
-    assert recovered.blocked_at is None
+    spendable = credits_unlimited is True or (credits_balance is not None and credits_balance > 0)
+    if spendable:
+        assert selection.account is not None
+        assert selection.account.id == limited.id
+        assert recovered.status == AccountStatus.ACTIVE
+        assert recovered.blocked_at is None
+    else:
+        assert selection.account is None
+        assert recovered.status == AccountStatus.QUOTA_EXCEEDED
+        assert recovered.blocked_at == blocked.blocked_at
 
 
 @pytest.mark.asyncio

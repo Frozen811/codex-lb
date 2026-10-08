@@ -3136,7 +3136,7 @@ account-owner requests whose upstream resource is bound to the selected account.
 
 ### Requirement: Responses input images bypass the HTTP bridge
 
-For `/v1/responses` and `/backend-api/codex/responses`, bounded inline images MUST reuse the HTTP responses bridge when inline-image admission is enabled, no `image_generation` tool is declared, and every input image anywhere in the input has a strict nonempty base64 PNG/JPEG data URL decoding to at most 5,000,000 bytes. Admitted image bytes MUST remain verbatim, including replayed history, and the existing thread connection and prompt-cache identity MUST be retained. A shape-valid image above the decoded limit or an admitted final frame above 64 MiB MUST fail locally with HTTP 400 `payload_too_large`, `param=input`, before dispatch, without slimming or a size-driven raw fallback. Explicit upstream HTTP policy and recent WebSocket failure fallback MUST retain their existing behavior.
+For `/v1/responses` and `/backend-api/codex/responses`, bounded inline images MUST reuse the HTTP responses bridge when inline-image admission is enabled, no `image_generation` tool is declared, and every input image anywhere in the input has a strict nonempty base64 PNG/JPEG data URL decoding to at most 5,000,000 bytes. Admitted image bytes MUST remain verbatim, including replayed history, and the existing thread connection and prompt-cache identity MUST be retained. A shape-valid image above the decoded limit or an admitted final frame above 64 MiB MUST fail locally with HTTP 400 `payload_too_large`, `param=input`, before dispatch, without slimming or a size-driven raw fallback. Malformed base64 MUST remain an unsupported shape even above the encoded length shortcut, and MUST take precedence over a valid oversized sibling anywhere in the input. Explicit upstream HTTP policy and recent WebSocket failure fallback MUST retain their existing behavior.
 
 Other image-bearing requests, including compact requests, MUST retain their existing raw-path routing or uploaded-reference rejection. Disabling inline-image admission MUST restore the blanket image bypass. A raw image bypass MUST be request-local and MUST NOT by itself pin upstream HTTP. Image creates without acknowledgement MUST retain the existing bounded pre-created retry policy and original request deadline; an exhausted deadline MUST NOT permit another dispatch. Their terminal path MUST release pending admission and settle the reservation. A terminal invalid-image error MUST be surfaced promptly without replay and MUST leave subsequent text turns usable.
 
@@ -3175,6 +3175,12 @@ Other image-bearing requests, including compact requests, MUST retain their exis
 - **WHEN** upstream rejects an admitted image before response creation
 - **THEN** the client receives the terminal image error
 - **AND** a subsequent text turn can complete on the same account
+
+#### Scenario: Malformed oversized base64 retains unsupported-shape precedence
+
+- **WHEN** an input image has malformed base64 above the encoded length shortcut, including alongside a valid oversized image
+- **THEN** the request retains unsupported-image raw-path routing without a bridge-generated payload_too_large error
+- **AND** a legal oversized image without an unsupported sibling still fails before dispatch
 
 ### Requirement: Security-work authorization errors can route to authorized accounts
 
@@ -3483,7 +3489,7 @@ OpenAI-style `/v1/responses/compact` is otherwise unchanged by this requirement;
 - **AND** the forwarded compact input contains one terminal trigger
 
 ### Requirement: Request logs expose upstream Responses transport
-For streaming Responses proxy requests, persisted request logs MUST distinguish the downstream client transport from the upstream egress transport by recording the upstream transport in `request_logs.upstream_transport` while preserving `request_logs.transport` as the downstream client transport.
+For streaming Responses proxy requests, persisted request logs MUST distinguish the downstream client transport from the upstream egress transport by recording the upstream transport in `request_logs.upstream_transport` while preserving `request_logs.transport` as the downstream client transport. New attempts MUST record the resolved `http` or `websocket` egress rather than the configured `auto` mode, while retaining that mode for client-side transport fallback.
 
 #### Scenario: downstream HTTP single-shot records upstream HTTP
 - **GIVEN** the downstream request transport is HTTP
@@ -3497,7 +3503,7 @@ For streaming Responses proxy requests, persisted request logs MUST distinguish 
 - **AND** smart HTTP-downstream routing keeps the base upstream `"auto"` mode for a sticky Responses request
 - **WHEN** the request log is persisted
 - **THEN** `transport` is `"http"`
-- **AND** `upstream_transport` is `"auto"`
+- **AND** `upstream_transport` is the resolved `"http"` or `"websocket"` egress
 
 #### Scenario: historical or unrelated rows tolerate missing upstream transport
 - **GIVEN** a request log row predates upstream transport persistence or belongs to a request kind that does not know its upstream transport
@@ -3735,6 +3741,20 @@ When `/backend-api/codex/responses/compact` is called for Codex auto-compaction,
 - **THEN** the upstream call receives both connect and total timeout overrides from the remaining compact request budget
 - **AND** no other total timeout is applied to the upstream compact call
 - **AND** the request log records `request_kind` as `compaction`
+
+The default total compact budget MUST be 900 seconds. A remaining-budget override MUST only shorten the configured total budget. Without an override, SSE event collection MUST use the independent stream idle timeout; with an override, the collector MUST use that override while the configured total cap remains authoritative.
+
+#### Scenario: Default compact budget preserves the long response window
+- **WHEN** no compact budget is configured
+- **THEN** the total budget is 900 seconds and the upstream call retains the existing settlement reserve
+
+#### Scenario: An explicit budget and override cannot widen the total cap
+- **WHEN** the configured compact budget is 60 seconds and a remaining-budget override is 120 seconds
+- **THEN** the low-level total timeout remains at most 60 seconds
+
+#### Scenario: SSE idle collection is independent without an override
+- **WHEN** the total budget is 900 seconds and the stream idle timeout is 45 seconds without an override
+- **THEN** the SSE collector uses 45 seconds while the total timeout retains the compact budget
 
 ### Requirement: Responses Lite signaling is derived from the normalized body
 
@@ -5000,7 +5020,7 @@ those paths.
 - **AND** a client calls `POST /backend-api/codex/responses` for that model whose
   input contains a `compaction_trigger` item
 - **THEN** the request is not forwarded to the external source
-- **AND** it follows the subscription-backed Codex compaction path instead
+- **AND** it receives the source-owned remote-compaction refusal before subscription admission
 
 #### Scenario: V1 compaction_trigger remains eligible for model sources
 
@@ -9783,9 +9803,10 @@ behaviour, including a model no source exposes, a source the API key is not
 assigned to, a chat-only source asked for a Responses route, and a
 subscription-registry slug that an unscoped API key never source-routes.
 
-Requests excluded from source routing — a terminal `compaction_trigger`, and
-Responses requests pinned to the subscription account that received an uploaded
-file — MUST NOT be refused, and MUST proceed to subscription routing as before.
+Responses requests without a terminal Codex compaction trigger that are pinned
+to the subscription account that received an uploaded file MUST NOT be refused by disabled-source lookup and MUST proceed to
+subscription routing as before. Terminal Codex compaction triggers MUST follow
+the source-owned remote-compaction refusal contract before native admission.
 
 The WebSocket transport cannot forward to a model source, so its
 source-ownership guards SHALL treat a model owned only by a switched-off source
@@ -10602,11 +10623,11 @@ their unrelated fields do not participate in effort authorization.
 
 An HTTP bridge request MAY move from an unavailable continuity owner to another account only after a typed pre-visible `continuity_owner_unavailable` account-selection result, which the HTTP bridge maps to `previous_response_owner_unavailable`, and positive durable proof that the request contains the complete retained input history. A missing durable owner is not a selector result and MUST fail closed without replay. The durable row MUST provide a positive input-item count and full fingerprint, and the corresponding raw prefix of the incoming list-shaped input MUST match both before any projection occurs.
 
-After the raw prefix proof, the service MUST construct a deterministic plaintext projection by omitting `reasoning`, `web_search_call`, `tool_search_call`, and `tool_search_output` items and removing upstream `id` fields from every retained input item. Retained `internal_chat_message_metadata_passthrough` MUST contain only a nonblank string `turn_id` when present. The projected suffix after the projected prefix MUST contain a completed assistant `output_text` or `refusal` boundary with nonblank content followed by nonblank fresh text or valid fresh file/image input. The suffix MAY contain multiple intervening turns only when every non-final user-input sequence is followed by another completed assistant boundary and the final sequence ends in fresh input. Direct intrinsic calls MAY precede an assistant boundary only when terminal completed or failed outputs settle every represented call in order. A call at the end of the verified raw prefix MAY be settled by its matching output at the start of the suffix. A direct-call/output sequence alone MUST NOT prove completeness because the persisted metadata does not identify omitted parallel calls. A matching prefix followed only by new user input, empty content, tool-call-only output, in-progress or partial retained output, duplicate, unmatched, or unresolved calls, or misordered call output MUST fail closed.
+After the raw prefix proof, the service MUST construct a deterministic plaintext projection by omitting `reasoning` and completed `web_search_call` items while retaining validated completed client-owned `tool_search_call` / `tool_search_output` pairs and removing upstream `id` fields from every retained input item. Retained `internal_chat_message_metadata_passthrough` MUST contain only a nonblank string `turn_id` when present. The projected suffix after the projected prefix MUST contain a completed assistant `output_text` or `refusal` boundary with nonblank content followed by nonblank fresh text, valid fresh file/image input, or a matching typed delayed async tool output. The suffix MAY contain multiple intervening turns only when every non-final user-input sequence is followed by another completed assistant boundary and the final sequence ends in fresh input. Direct synchronous intrinsic calls MAY precede an assistant boundary only when terminal completed or failed outputs settle every represented synchronous call in order. Validated function/custom calls with boolean `async: true` MAY remain unresolved across completed assistant boundaries; their matching typed delayed outputs MUST retain exact nonblank IDs and all call/output validation evidence. A call at the end of the verified raw prefix MAY be settled by its matching output at the start of the suffix. A direct-call/output sequence alone MUST NOT prove completeness because the persisted metadata does not identify omitted parallel calls. A matching prefix followed only by new user input, empty content, tool-call-only output, in-progress or partial retained output, duplicate or unmatched calls, unresolved synchronous calls, malformed async evidence, or misordered synchronous call output MUST fail closed.
 
 The service MUST validate the complete projected request after removing `previous_response_id`; it MUST reject nonblank conversation or prompt handles, remaining encrypted content, compaction, opaque account-scoped file/container/vector handles, nonportable file schemes, hosted, MCP, program-mediated, or unknown call or tool-choice state, unknown top-level fields, unknown or malformed top-level reasoning configuration, malformed message/content shapes, and tool outputs without exactly one matching intrinsic call. Assistant messages MUST contain only supported output parts, while user, system, and developer messages MUST contain only supported input parts. Inline data images and HTTP(S) file/image content MAY remain eligible. Eligible declared tools, tool choices, and retained direct calls MUST be shape-validated, account-neutral, and self-contained. Web-search filters, context size, and approximate location MUST use only the recognized nested fields and value types. An apply-patch call MUST use exactly one representation: a recognized structured `operation` with its exact discriminated fields, a nonblank legacy `patch`, or a nonblank legacy `input`.
 
-For an eligible replay, the service MUST remove `previous_response_id`, strip every downstream session/turn alias, clear hard affinity, exclude the unavailable owner, prevent initial bridge-owner forwarding, and submit the complete projected request through a fresh server-namespaced recovery lane. It MUST NOT replay after downstream-visible output. Selection policy conflicts, authentication/connection failures after selection, incomplete history, or any unsafe request state MUST remain fail-closed.
+For an eligible replay, the service MUST remove `previous_response_id`, strip every downstream session/turn alias, clear hard affinity, exclude the unavailable owner, prevent initial bridge-owner forwarding, and submit the complete projected request through a fresh server-namespaced recovery lane. It MUST NOT replay after downstream-visible output. Selection policy conflicts, authentication/connection failures after selection, incomplete history, or any unsafe request state MUST remain fail-closed. A planning-stage rejection for an unsafe or unprovable bridge continuation MUST preserve its existing 404 `bridge_previous_response_not_found` envelope; a typed selector-time owner-unavailable rejection MUST retain its 502 `previous_response_owner_unavailable` envelope. Neither rejection SHALL permit dispatch to a replacement account without positive replay proof.
 
 #### Scenario: Client-supplied full resend moves from A to B
 
@@ -10629,7 +10650,7 @@ For an eligible replay, the service MUST remove `previous_response_id`, strip ev
 - **GIVEN** a verified full resend contains encrypted reasoning, server-assigned item IDs, and completed web or tool-search bookkeeping
 - **AND** its retained assistant and direct-tool content is otherwise complete and portable
 - **WHEN** required-owner selection returns typed `continuity_owner_unavailable` before output
-- **THEN** the bridge omits the reasoning and search bookkeeping and strips upstream item identities
+- **THEN** the bridge omits reasoning and completed web-search bookkeeping, retains validated client tool-search pairs and loaded definitions, and strips upstream item identities
 - **AND** no encrypted content or upstream item identity is sent to account B
 - **AND** the validated plaintext projection is submitted once on account B
 
@@ -10637,7 +10658,7 @@ For an eligible replay, the service MUST remove `previous_response_id`, strip ev
 
 - **GIVEN** a full resend contains a conversation or prompt handle, compaction, encrypted content outside an omitted reasoning item, an opaque account-scoped file/container/vector handle, a nonportable file scheme, hosted or MCP call or tool-choice state, an unknown call type, or an unmatched tool output
 - **WHEN** its required owner is unavailable
-- **THEN** the request fails with `previous_response_owner_unavailable`
+- **THEN** the request fails closed with the rejection envelope of the stage that refused replay
 - **AND** none of that state is sent to another account
 
 #### Scenario: Request shape is not completely understood
@@ -10652,7 +10673,7 @@ For an eligible replay, the service MUST remove `previous_response_id`, strip ev
 - **GIVEN** the incoming input prefix matches the durable count and fingerprint
 - **AND** the suffix contains only a new user message, a direct-call/output sequence without a later completed assistant boundary, partial retained output, or unresolved direct calls
 - **WHEN** the required owner is unavailable
-- **THEN** replay eligibility fails closed with `previous_response_owner_unavailable`
+- **THEN** replay eligibility fails closed with the rejection envelope of the stage that refused replay
 - **AND** the proxy does not drop the previous-response anchor or send the incomplete transcript to another account
 
 #### Scenario: Owner was selected before a later failure
@@ -11688,3 +11709,82 @@ A prefix-verified durable HTTP bridge resend SHALL accept well-formed `agent_mes
 #### Scenario: Output or operation fencing blocks retry
 - **WHEN** the request has visible upstream output or lacks a required stale-anchor operation fence
 - **THEN** no replacement replay is dispatched
+
+### Requirement: Source-owned models refuse remote compaction before native admission
+
+Terminal compaction triggers on `/backend-api/codex/responses` and explicit
+`/backend-api/codex/responses/compact` and `/v1/responses/compact` requests MUST
+refuse models owned by enabled Responses-compatible sources with HTTP 400,
+`code=compaction_unsupported` and `type=invalid_request_error`. Models owned
+only by a disabled source MUST receive HTTP 503 `model_source_disabled` with
+`type=upstream_error`. Refusal MUST precede subscription selection, admission,
+reservation and upstream dispatch, and MUST NOT create a dispatch request log.
+
+Ownership MUST follow the existing source candidate order, model allowlist,
+source-assignment scope and subscription-registry precedence. Source refusal
+MUST NOT change ordinary source streaming or the existing `/v1/responses`
+terminal-trigger forwarding semantics. The two explicit compact endpoints with
+a trailing slash MUST execute the same validation, routing, ownership and
+accounting behavior as their canonical forms, without requiring a redirect.
+
+#### Scenario: Enabled source compact request is refused
+
+- **WHEN** a source-owned model requests terminal Codex compaction or either explicit compact endpoint
+- **THEN** it receives `400 compaction_unsupported` before selection, admission, reservation or dispatch
+- **AND** no dispatch request log is created
+
+#### Scenario: Disabled source compact request is refused
+
+- **WHEN** only a disabled Responses-compatible source owns the compact model
+- **THEN** the client receives `503 model_source_disabled` without native admission or dispatch
+
+#### Scenario: Assigned API key limits remain untouched by refusal
+
+- **WHEN** a key with a model allowlist, source assignment and token limit requests compaction for its assigned source model
+- **THEN** the unsupported request leaves no reservation
+
+#### Scenario: Trailing-slash source compaction uses the same refusal
+
+- **WHEN** an enabled or disabled source model requests an explicit compact endpoint with a trailing slash
+- **THEN** it receives the same refusal as the canonical endpoint without a redirect
+
+#### Scenario: Trailing-slash native compaction preserves success
+
+- **WHEN** a subscription model successfully compacts through either explicit endpoint with a trailing slash
+- **THEN** the same handler returns the compact result and preserves the native credentials and headers
+
+### Requirement: Completed client tool-search pairs survive fresh replay
+
+After a verified replay prefix, the proxy MUST retain completed client-owned tool_search_call/tool_search_output pairs and their loaded tool definitions. Fresh replay MUST remove their response-owned item IDs while preserving exact call IDs. Loaded declarations MUST be account-neutral function/custom tools, optionally inside one namespace; defer_loading MUST be boolean when present, including rejection of explicit null. Missing or malformed tools, failed/server execution, hosted/MCP declarations, unknown fields and nested namespaces MUST fail closed. JSON-schema property names MUST NOT be treated as live account references. Existing top-level declared-tool allowlists MUST remain unchanged. Durable transcript overlap MUST identify search calls by call ID and canonical query arguments and outputs by call ID and declared tool type/name identities, recursively through one loaded namespace; recording IDs and dictionary key order MUST NOT prevent recognition of a restated pair.
+
+#### Scenario: Completed loaded tools reach a replacement account
+- **WHEN** a verified HTTP or WebSocket full resend contains a completed client search pair and safe loaded declarations
+- **THEN** the replacement request retains both items and their declarations without response-owned IDs
+
+#### Scenario: Unsafe search output remains owner-bound
+- **WHEN** a search output contains server execution, failed status, hosted tools, malformed declarations or nested namespaces
+- **THEN** the proxy rejects account-neutral replay and does not dispatch to another account
+
+#### Scenario: Restated tool-search history is not dispatched twice
+- **WHEN** a client restates a durable search pair with reordered argument keys and without owner-assigned item IDs
+- **THEN** relocation recognizes the same pair and forwards each retained call/output exactly once with its loaded declarations
+
+### Requirement: Async tool identities survive anchored intervening turns
+
+Both Responses transports MUST track function/custom calls marked with boolean async=true independently from synchronous pending calls. Anchored intervening turns MUST synthesize interrupted outputs only for synchronous calls. Later outputs MUST complete only matching exact nonblank call IDs with the matching call type. Account rebind, denied-anchor retirement and mismatched durable rehydration MUST clear async state. Replay MUST validate known fields, markers, ownership and complete settled async evidence before excluding asynchronous calls from synchronous manifest comparison. A persisted synchronous pending call MUST NOT become asynchronous through client mutation. Durable transcript overlap MUST distinguish synchronous and asynchronous call identities while treating an absent marker and boolean false as the same synchronous mode.
+
+#### Scenario: Mixed pending calls receive only one interrupted output
+- **WHEN** an anchored response emits one async function/custom call and one synchronous call and the next turn omits their outputs
+- **THEN** only the synchronous call receives an interrupted output and the async identity remains available for its delayed typed output
+
+#### Scenario: Invalid async evidence prevents alternate dispatch
+- **WHEN** a replay has a nonboolean marker, missing/blank call ID, wrong output type, unsafe settled prefix or async marker conflicting with the durable synchronous manifest
+- **THEN** account-neutral recovery fails closed
+
+#### Scenario: Owner retirement clears outstanding async work
+- **WHEN** continuity retires its anchor or changes owning account or durable anchor
+- **THEN** prior async calls cannot suppress interrupted completion on the new owner
+
+#### Scenario: A changed async marker does not erase durable evidence
+- **WHEN** a restated call changes its marker between synchronous and asynchronous modes
+- **THEN** transcript overlap does not treat the altered call as identical evidence

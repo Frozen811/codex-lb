@@ -110,27 +110,34 @@ def test_select_auth_guardian_candidates_returns_stale_eligible_accounts_only() 
 
     selected = select_auth_guardian_candidates(accounts, now=now, limit=10)
 
-    assert [account.id for account in selected] == ["oldest-active", "stale-paused", "stale-active"]
+    assert [account.id for account in selected] == [
+        "oldest-active",
+        "stale-paused",
+        "stale-active",
+        "thirteen-hour-active",
+    ]
 
     batched = select_auth_guardian_candidates(accounts, now=now, limit=2)
 
     assert [account.id for account in batched] == ["oldest-active", "stale-paused"]
 
 
-def test_select_auth_guardian_candidates_tracks_shared_refresh_window(
+@pytest.mark.parametrize("status", [AccountStatus.ACTIVE, AccountStatus.PAUSED])
+@pytest.mark.parametrize("request_days", [1, 3, 8])
+def test_guardian_idle_age_is_independent_of_request_freshness(
     monkeypatch: pytest.MonkeyPatch,
+    status: AccountStatus,
+    request_days: int,
 ) -> None:
     now = datetime(2026, 1, 10, 12, 0, 0)
     account = _account(
         "policy",
-        status=AccountStatus.ACTIVE,
-        last_refresh=now - timedelta(days=2),
+        status=status,
+        last_refresh=now - timedelta(hours=13),
     )
-
-    monkeypatch.setattr(refresh_module, "TOKEN_REFRESH_INTERVAL_DAYS", 1)
+    monkeypatch.setattr(refresh_module, "TOKEN_REFRESH_INTERVAL_DAYS", request_days)
     assert select_auth_guardian_candidates([account], now=now, limit=10) == [account]
-
-    monkeypatch.setattr(refresh_module, "TOKEN_REFRESH_INTERVAL_DAYS", 3)
+    account.last_refresh = now - timedelta(hours=12)
     assert select_auth_guardian_candidates([account], now=now, limit=10) == []
 
 
@@ -413,7 +420,7 @@ async def test_auth_guardian_refresh_once_refreshes_stale_active_and_skips_other
 
 
 @pytest.mark.asyncio
-async def test_auth_guardian_rechecks_shared_freshness_before_refresh() -> None:
+async def test_auth_guardian_rechecks_idle_age_before_refresh() -> None:
     now = datetime(2026, 1, 2, 12, 0, 0)
     account = _account("became-fresh", status=AccountStatus.ACTIVE, last_refresh=_stale_refresh(now))
     calls: list[str] = []
@@ -422,7 +429,7 @@ async def test_auth_guardian_rechecks_shared_freshness_before_refresh() -> None:
         async def get_by_id(self, account_id: str) -> Account | None:
             current = await super().get_by_id(account_id)
             if current is not None:
-                current.last_refresh = now - timedelta(hours=13)
+                current.last_refresh = now - timedelta(hours=12)
             return current
 
     scheduler = _tick_scheduler(

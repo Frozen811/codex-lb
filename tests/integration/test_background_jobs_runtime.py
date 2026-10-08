@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from datetime import timedelta
 from unittest.mock import AsyncMock
 
 import pytest
@@ -17,12 +18,14 @@ import pytest
 import app.core.usage.reset_credits_refresh_scheduler as reset_credits_module
 import app.modules.automations.scheduler as automations_scheduler_module
 from app.core.auth.guardian import AuthGuardianScheduler
+from app.core.auth.refresh import TokenRefreshResult
 from app.core.config.settings import get_settings
 from app.core.crypto import TokenEncryptor
 from app.core.usage.reset_credits_refresh_scheduler import RateLimitResetCreditsRefreshScheduler
 from app.core.utils.time import utcnow
 from app.db.models import Account, AccountStatus
 from app.db.session import SessionLocal
+from app.modules.accounts import auth_manager as auth_manager_module
 from app.modules.accounts.repository import AccountsRepository
 from app.modules.automations.repository import AutomationsRepository
 from app.modules.automations.scheduler import AutomationsScheduler
@@ -111,6 +114,58 @@ async def test_automations_tick_follows_dashboard_pause_without_restart(async_cl
     await _put(async_client, automationsSchedulerEnabled=True)
     await scheduler._run_due_once()
     assert body_runs == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [AccountStatus.ACTIVE, AccountStatus.PAUSED])
+async def test_guardian_runtime_refreshes_thirteen_hour_idle_credentials(async_client, monkeypatch, status):
+    account = await _create_account("guardian-idle")
+    now = utcnow()
+    async with SessionLocal() as session:
+        stored = await session.get(Account, account.id)
+        stored.status = status
+        stored.last_refresh = now - timedelta(hours=13)
+        await session.commit()
+
+    calls = []
+
+    async def refresh(token, **kwargs):
+        calls.append(token)
+        return TokenRefreshResult(
+            access_token="new-access",
+            refresh_token="new-refresh",
+            id_token="new-id",
+            account_id=None,
+            plan_type=None,
+            email=None,
+        )
+
+    @asynccontextmanager
+    async def repo_factory():
+        async with SessionLocal() as session:
+            yield AccountsRepository(session)
+
+    monkeypatch.setattr(auth_manager_module, "refresh_access_token", refresh)
+    auth_manager_module._clear_refresh_singleflight_state()
+    scheduler = AuthGuardianScheduler(
+        interval_seconds=21600,
+        enabled=True,
+        batch_size=100,
+        concurrency=3,
+        jitter_seconds=0,
+        leader_election_factory=lambda: _AlwaysLeader(),
+        repo_factory=repo_factory,
+        now=lambda: now,
+    )
+    await scheduler._refresh_once()
+    assert calls == ["refresh-guardian-idle"]
+    async with SessionLocal() as session:
+        stored = await session.get(Account, account.id)
+        assert stored.status == status
+        assert stored.last_refresh > now - timedelta(hours=12)
+        assert TokenEncryptor().decrypt(stored.access_token_encrypted) == "new-access"
+    await scheduler._refresh_once()
+    assert len(calls) == 1
 
 
 async def _create_account(account_id: str) -> Account:

@@ -30,6 +30,12 @@ The output calls out the transport on every turn. A B-side SSE stream and a
 C-side WebSocket can therefore be compared semantically without pretending
 that their framing is identical.
 
+Sanitized Responses fixtures retain optional `async` markers on function and
+custom calls and preserve the pairing of client tool-search calls with their
+loaded tool declarations. Query text and call identifiers still use deterministic
+redaction. See the [tool continuity fixture contract](https://github.com/Frozen811/codex-lb/blob/main/openspec/specs/compatibility-tooling/spec.md#requirement-responses-fixture-sanitization-preserves-tool-continuity-evidence)
+and [Responses replay requirements](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/responses-api-compat).
+
 ## Safety and storage
 
 The addon always redacts authorization, API-key, cookie, and proxy credential
@@ -668,10 +674,12 @@ Before either runner starts, the suite stamps the isolated `auth.json`'s
 recorded refresh time to the current instant — every key the account importer
 accepts (`lastRefreshAt`, `last_refresh`), so no stale alias outranks the stamp
 — with mode 600 preserved and tokens untouched. An imported
-account inherits that timestamp, and codex-lb proactively exchanges a refresh
-token once the account is older than the fixed eight-day
-`TOKEN_REFRESH_INTERVAL_DAYS` window (`app/core/auth/refresh.py`). Without the
-stamp, a run started with a week-old isolated credential would exchange that
+account inherits that timestamp. Ordinary request preflight exchanges a refresh
+token after the fixed eight-day `TOKEN_REFRESH_INTERVAL_DAYS` window
+(`app/core/auth/refresh.py`); Auth Guardian independently keeps idle active and
+paused credentials alive after more than twelve hours
+([usage refresh policy](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/usage-refresh-policy)). Without the
+stamp, a run started with an old isolated credential could exchange that
 real, single-use refresh token against `https://auth.openai.com` — the OAuth
 host is a protocol constant, so redirecting `CODEX_LB_UPSTREAM_BASE_URL` at the
 fixture does not cover it — rotating the credential into a database the suite

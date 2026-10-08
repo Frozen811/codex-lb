@@ -17,11 +17,10 @@ _TOOL_CALL_TYPE_BY_OUTPUT_TYPE = {
     "function_call_output": "function_call",
     "custom_tool_call_output": "custom_tool_call",
     "apply_patch_call_output": "apply_patch_call",
+    "tool_search_output": "tool_search_call",
 }
 _TOOL_CALL_TYPES = frozenset(_TOOL_CALL_TYPE_BY_OUTPUT_TYPE.values())
-_ACCOUNT_NEUTRAL_REPLAY_OMITTED_ITEM_TYPES = frozenset(
-    {"reasoning", "tool_search_call", "tool_search_output", "web_search_call"}
-)
+_ACCOUNT_NEUTRAL_REPLAY_OMITTED_ITEM_TYPES = frozenset({"reasoning", "web_search_call"})
 _INTERNAL_CHAT_MESSAGE_METADATA_FIELD = "internal_chat_message_metadata_passthrough"
 _ACCOUNT_NEUTRAL_INTERNAL_CHAT_MESSAGE_METADATA_FIELDS = frozenset({"turn_id"})
 _ACCOUNT_NEUTRAL_TOOL_TYPES = frozenset({"custom", "function", "web_search", "web_search_preview"})
@@ -35,6 +34,8 @@ _ACCOUNT_NEUTRAL_TOOL_CHOICE_STRINGS = frozenset({"auto", "none", "required"})
 _ACCOUNT_NEUTRAL_WEB_SEARCH_CONTEXT_SIZES = frozenset({"high", "low", "medium"})
 _ACCOUNT_NEUTRAL_WEB_SEARCH_FILTER_FIELDS = frozenset({"allowed_domains"})
 _ACCOUNT_NEUTRAL_WEB_SEARCH_LOCATION_FIELDS = frozenset({"city", "country", "region", "timezone", "type"})
+_ACCOUNT_NEUTRAL_TOOL_SEARCH_LOADABLE_TOOL_TYPES = frozenset({"custom", "function"})
+_ACCOUNT_NEUTRAL_TOOL_SEARCH_NAMESPACE_FIELDS = frozenset({"description", "name", "tools", "type"})
 _ACCOUNT_NEUTRAL_MESSAGE_ROLES = frozenset({"assistant", "developer", "system", "user"})
 _ACCOUNT_NEUTRAL_INPUT_ITEM_TYPES = frozenset(
     {
@@ -49,6 +50,8 @@ _ACCOUNT_NEUTRAL_INPUT_ITEM_TYPES = frozenset(
         "input_image",
         "input_text",
         "message",
+        "tool_search_call",
+        "tool_search_output",
     }
 )
 _ACCOUNT_NEUTRAL_MESSAGE_CONTENT_TYPES = frozenset(
@@ -89,16 +92,42 @@ _ACCOUNT_NEUTRAL_INPUT_ITEM_FIELDS = {
         {"call_id", "caller", "id", _INTERNAL_CHAT_MESSAGE_METADATA_FIELD, "output", "status", "type"}
     ),
     "custom_tool_call": frozenset(
-        {"call_id", "caller", "id", "input", _INTERNAL_CHAT_MESSAGE_METADATA_FIELD, "name", "status", "type"}
+        {
+            "async",
+            "call_id",
+            "caller",
+            "id",
+            "input",
+            _INTERNAL_CHAT_MESSAGE_METADATA_FIELD,
+            "name",
+            "status",
+            "type",
+        }
     ),
     "custom_tool_call_output": frozenset(
         {"call_id", "caller", "id", _INTERNAL_CHAT_MESSAGE_METADATA_FIELD, "output", "status", "type"}
     ),
     "function_call": frozenset(
-        {"arguments", "call_id", "caller", "id", _INTERNAL_CHAT_MESSAGE_METADATA_FIELD, "name", "status", "type"}
+        {
+            "arguments",
+            "async",
+            "call_id",
+            "caller",
+            "id",
+            _INTERNAL_CHAT_MESSAGE_METADATA_FIELD,
+            "name",
+            "status",
+            "type",
+        }
     ),
     "function_call_output": frozenset(
         {"call_id", "caller", "id", _INTERNAL_CHAT_MESSAGE_METADATA_FIELD, "output", "status", "type"}
+    ),
+    "tool_search_call": frozenset(
+        {"arguments", "call_id", "caller", "execution", "id", _INTERNAL_CHAT_MESSAGE_METADATA_FIELD, "status", "type"}
+    ),
+    "tool_search_output": frozenset(
+        {"call_id", "caller", "execution", "id", _INTERNAL_CHAT_MESSAGE_METADATA_FIELD, "status", "tools", "type"}
     ),
 }
 _ACCOUNT_NEUTRAL_ITEM_STATUSES = frozenset({"completed", "failed"})
@@ -344,6 +373,7 @@ def _project_account_neutral_replay_item(
 
 def responses_input_items_are_self_contained_fresh_replay(input_items: list[JsonValue]) -> bool:
     unsettled_call_ids_by_type: dict[str, set[str]] = {item_type: set() for item_type in _TOOL_CALL_TYPES}
+    async_unsettled_call_ids_by_type: dict[str, set[str]] = {item_type: set() for item_type in _TOOL_CALL_TYPES}
     seen_call_ids: set[str] = set()
     settled_call_ids: set[str] = set()
     for item in input_items:
@@ -360,7 +390,7 @@ def responses_input_items_are_self_contained_fresh_replay(input_items: list[Json
         if not _input_item_has_only_known_fields(item, item_type):
             return False
         call_id_value = item.get("call_id")
-        call_id = call_id_value if isinstance(call_id_value, str) and call_id_value else None
+        call_id = call_id_value if isinstance(call_id_value, str) and call_id_value.strip() else None
         if item_type in _TOOL_CALL_TYPES:
             if (
                 call_id is None
@@ -370,17 +400,25 @@ def responses_input_items_are_self_contained_fresh_replay(input_items: list[Json
             ):
                 return False
             seen_call_ids.add(call_id)
+            if item.get("async") is True:
+                async_unsettled_call_ids_by_type[item_type].add(call_id)
+                continue
             unsettled_call_ids_by_type[item_type].add(call_id)
             continue
         call_item_type = _TOOL_CALL_TYPE_BY_OUTPUT_TYPE.get(item_type or "")
         if call_item_type is not None:
             if (
                 call_id is None
-                or call_id not in unsettled_call_ids_by_type[call_item_type]
                 or call_id in settled_call_ids
                 or not _caller_is_self_contained(item)
                 or not _tool_output_is_self_contained(item_type or "", item)
             ):
+                return False
+            if call_id in async_unsettled_call_ids_by_type[call_item_type]:
+                async_unsettled_call_ids_by_type[call_item_type].remove(call_id)
+                settled_call_ids.add(call_id)
+                continue
+            if call_id not in unsettled_call_ids_by_type[call_item_type]:
                 return False
             unsettled_call_ids_by_type[call_item_type].remove(call_id)
             settled_call_ids.add(call_id)
@@ -414,7 +452,15 @@ def responses_input_suffix_retains_prior_output(
     )
     if prefix_state is None:
         return False
-    pending_suffix_calls, seen_suffix_call_ids = prefix_state
+    pending_suffix_calls, seen_suffix_call_ids, async_calls = prefix_state
+    async_items = [
+        item
+        for item in input_items[:stored_count]
+        if isinstance(item, dict)
+        and isinstance(call_id := item.get("call_id"), str)
+        and call_id in async_calls
+        and async_calls[call_id] == item.get("type")
+    ]
     retained_output_seen = False
     retained_output_is_final_answer = False
     fresh_followup_seen = False
@@ -429,13 +475,17 @@ def responses_input_suffix_retains_prior_output(
             return False
         item_type = item_type_value if isinstance(item_type_value, str) else None
         if item_type in _TOOL_CALL_TYPES:
-            if item.get("status") not in (None, "completed"):
+            if item.get("status") not in (None, "completed") or not _tool_call_has_valid_async_marker(item):
                 return False
             call_id = item.get("call_id")
             if not isinstance(call_id, str) or not call_id or call_id in seen_suffix_call_ids:
                 return False
             seen_suffix_call_ids.add(call_id)
-            pending_suffix_calls.append((item_type, call_id))
+            if item.get("async") is True:
+                async_calls[call_id] = item_type
+                async_items.append(item)
+            else:
+                pending_suffix_calls.append((item_type, call_id))
             # Without a persisted output manifest, a call/output pair cannot
             # prove that an omitted parallel call was not part of the response.
             # Require a later completed assistant message as the turn boundary.
@@ -450,9 +500,19 @@ def responses_input_suffix_retains_prior_output(
             if item.get("status") not in (None, "completed", "failed"):
                 return False
             call_id = item.get("call_id")
-            if not isinstance(call_id, str) or not pending_suffix_calls:
+            if not isinstance(call_id, str):
                 return False
-            if pending_suffix_calls[0] != (call_type, call_id):
+            if call_id in async_calls:
+                if async_calls[call_id] != call_type:
+                    return False
+                del async_calls[call_id]
+                async_items.append(item)
+                if retained_output_seen:
+                    fresh_followup_seen = True
+                    fresh_followup_count += 1
+                    fresh_followup_is_user_message = False
+                continue
+            if not pending_suffix_calls or pending_suffix_calls[0] != (call_type, call_id):
                 return False
             pending_suffix_calls.popleft()
             continue
@@ -484,7 +544,13 @@ def responses_input_suffix_retains_prior_output(
             fresh_developer_followup_seen = True
             continue
         return False
-    return retained_output_seen and fresh_followup_seen and not pending_suffix_calls
+    return (
+        retained_output_seen
+        and fresh_followup_seen
+        and not pending_suffix_calls
+        and all(_is_nonblank_string(item.get("call_id")) for item in async_items)
+        and responses_input_items_are_self_contained_fresh_replay([*async_items])
+    )
 
 
 def responses_input_suffix_matches_pending_tool_calls(
@@ -522,20 +588,42 @@ def responses_input_suffix_matches_pending_tool_calls(
         isinstance(item, dict)
         and isinstance(item.get("type"), str)
         and item.get("type") in (_TOOL_CALL_TYPES | _TOOL_CALL_TYPE_BY_OUTPUT_TYPE.keys())
+        and _is_nonblank_string(item.get("call_id"))
         for item in suffix
     ):
         return False
-    if not responses_input_items_are_self_contained_fresh_replay(suffix):
+    # Validate async items before excluding them from the synchronous manifest.
+    # Outstanding prefix calls supply the context for delayed async outputs.
+    prefix_async_calls = [
+        item
+        for item in input_items[:stored_count]
+        if isinstance(item, dict)
+        and isinstance(call_id := item.get("call_id"), str)
+        and call_id in prefix_state[2]
+        and prefix_state[2][call_id] == item.get("type")
+    ]
+    if not responses_input_items_are_self_contained_fresh_replay([*prefix_async_calls, *suffix]):
         return False
     suffix_calls: dict[str, str] = {}
     suffix_outputs: dict[str, str] = {}
+    async_calls: dict[str, str] = dict(prefix_state[2])
     for item in cast(list[dict[str, JsonValue]], suffix):
         item_type = cast(str, item["type"])
         call_id = cast(str, item["call_id"])
         if item_type in _TOOL_CALL_TYPES:
+            if item.get("async") is True:
+                async_calls[call_id] = item_type
+                continue
             suffix_calls[call_id] = item_type
         else:
-            suffix_outputs[call_id] = _TOOL_CALL_TYPE_BY_OUTPUT_TYPE[item_type]
+            mapped = _TOOL_CALL_TYPE_BY_OUTPUT_TYPE[item_type]
+            expected_async = async_calls.get(call_id)
+            if expected_async is not None:
+                if expected_async != mapped:
+                    return False
+                del async_calls[call_id]
+                continue
+            suffix_outputs[call_id] = mapped
     expected = dict(pending_tool_calls)
     return suffix_calls == expected and suffix_outputs == expected
 
@@ -575,8 +663,10 @@ def _direct_tool_call_prefix_state(
     *,
     allow_historical_developer_interleave: bool = False,
     canonical_lite_developer_index: int | None = None,
-) -> tuple[deque[tuple[str, str]], set[str]] | None:
+) -> tuple[deque[tuple[str, str]], set[str], dict[str, str]] | None:
     pending_calls: deque[tuple[str, str]] = deque()
+    async_unsettled: dict[str, str] = {}
+    async_items: list[JsonValue] = []
     seen_call_ids: set[str] = set()
     # A pending window opens when ``pending_calls`` becomes non-empty and closes when it
     # drains. Historical interleaving is proven only for a window that never held more than
@@ -613,12 +703,16 @@ def _direct_tool_call_prefix_state(
                 continue
             return None
         if item_type in _TOOL_CALL_TYPES:
-            if item.get("status") not in (None, "completed"):
+            if item.get("status") not in (None, "completed") or not _tool_call_has_valid_async_marker(item):
                 return None
             call_id = item.get("call_id")
             if not isinstance(call_id, str) or not call_id or call_id in seen_call_ids:
                 return None
             seen_call_ids.add(call_id)
+            if item.get("async") is True:
+                async_unsettled[call_id] = item_type
+                async_items.append(item)
+                continue
             pending_calls.append((item_type, call_id))
             if len(pending_calls) > 1:
                 # A window that already spent its interleaved developer message must not
@@ -633,15 +727,19 @@ def _direct_tool_call_prefix_state(
             if item.get("status") not in (None, "completed", "failed"):
                 return None
             call_id = item.get("call_id")
-            if not isinstance(call_id, str) or not pending_calls:
+            if not isinstance(call_id, str):
                 return None
-            if pending_calls[0] != (call_type, call_id):
-                return None
-            pending_calls.popleft()
-            if not pending_calls:
-                pending_window_developer_seen = False
-                pending_window_held_parallel_calls = False
-            continue
+            if pending_calls and pending_calls[0] == (call_type, call_id):
+                pending_calls.popleft()
+                if not pending_calls:
+                    pending_window_developer_seen = False
+                    pending_window_held_parallel_calls = False
+                continue
+            if async_unsettled.get(call_id) == call_type:
+                del async_unsettled[call_id]
+                async_items.append(item)
+                continue
+            return None
         if pending_calls and (
             (item_type in (None, "message") and _is_one_of(item.get("role"), _ACCOUNT_NEUTRAL_MESSAGE_ROLES))
             or item_type in {"input_file", "input_image", "input_text"}
@@ -654,7 +752,10 @@ def _direct_tool_call_prefix_state(
         fallthrough_call_id = item.get("call_id")
         if isinstance(fallthrough_call_id, str) and fallthrough_call_id:
             seen_call_ids.add(fallthrough_call_id)
-    return pending_calls, seen_call_ids
+    # Settlement removes outstanding work, not the evidence requiring validation.
+    if not responses_input_items_are_self_contained_fresh_replay(async_items):
+        return None
+    return pending_calls, seen_call_ids, async_unsettled
 
 
 def _historical_pending_developer_message_is_transparent(
@@ -747,13 +848,25 @@ def _is_fresh_followup_input(item: Mapping[str, JsonValue]) -> bool:
     )
 
 
+def _tool_call_has_valid_async_marker(item: Mapping[str, JsonValue]) -> bool:
+    return "async" not in item or isinstance(item["async"], bool)
+
+
 def _tool_call_is_self_contained(item_type: str, item: Mapping[str, JsonValue]) -> bool:
-    if item.get("status") not in (None, "completed"):
+    if item.get("status") not in (None, "completed") or not _tool_call_has_valid_async_marker(item):
         return False
     if item_type == "function_call":
         return _is_nonblank_string(item.get("name")) and isinstance(item.get("arguments"), str)
     if item_type == "custom_tool_call":
         return _is_nonblank_string(item.get("name")) and isinstance(item.get("input"), str)
+    if item_type == "tool_search_call":
+        arguments = item.get("arguments")
+        return (
+            isinstance(arguments, dict)
+            and item.get("execution") in (None, "client")
+            and not _contains_account_scoped_input_state(arguments)
+            and not _contains_mcp_tool_state(arguments)
+        )
     operation = item.get("operation")
     patch = item.get("patch")
     input_value = item.get("input")
@@ -803,6 +916,15 @@ def _apply_patch_operation_is_self_contained(operation: JsonValue | None) -> boo
 def _tool_output_is_self_contained(item_type: str, item: Mapping[str, JsonValue]) -> bool:
     if item.get("status") not in (None, "completed", "failed"):
         return False
+    if item_type == "tool_search_output":
+        # Codex serializes ``ToolSearchOutput { call_id, status, execution, tools }``
+        # where ``tools`` holds ``LoadableToolSpec`` declarations; there is no
+        # ``output`` field, so any other shape cannot originate from Codex.
+        return (
+            item.get("status") != "failed"
+            and item.get("execution") in (None, "client")
+            and _tool_search_output_tools_are_account_neutral(item.get("tools"))
+        )
     output = item.get("output")
     if isinstance(output, str):
         return True
@@ -942,6 +1064,43 @@ def _tools_are_account_neutral(tools: JsonValue) -> bool:
     return isinstance(tools, list) and all(
         isinstance(tool, dict) and _tool_declaration_is_account_neutral(tool) for tool in tools
     )
+
+
+def _tool_search_output_tools_are_account_neutral(tools: JsonValue) -> bool:
+    return isinstance(tools, list) and all(
+        isinstance(tool, dict) and _loadable_tool_spec_is_account_neutral(tool, allow_namespace=True) for tool in tools
+    )
+
+
+def _loadable_tool_spec_is_account_neutral(tool: Mapping[str, JsonValue], *, allow_namespace: bool) -> bool:
+    """Apply the declared-tool rules to a ``LoadableToolSpec`` discovered by tool search.
+
+    Codex emits ``function`` / ``custom`` declarations, optionally grouped under a
+    ``namespace`` whose ``tools`` hold the same declarations. ``defer_loading`` is
+    a client-side loading hint, so it is accepted as a bool; everything else must
+    satisfy the top-level tool declaration rules, including the account-scoped
+    state scan that skips JSON-schema ``parameters``.
+    """
+    tool_type = tool.get("type")
+    if tool_type == "namespace":
+        nested_tools = tool.get("tools")
+        return (
+            allow_namespace
+            and set(tool) <= _ACCOUNT_NEUTRAL_TOOL_SEARCH_NAMESPACE_FIELDS
+            and _is_nonblank_string(tool.get("name"))
+            and (tool.get("description") is None or isinstance(tool.get("description"), str))
+            and isinstance(nested_tools, list)
+            and all(
+                isinstance(nested, dict) and _loadable_tool_spec_is_account_neutral(nested, allow_namespace=False)
+                for nested in nested_tools
+            )
+        )
+    if not _is_one_of(tool_type, _ACCOUNT_NEUTRAL_TOOL_SEARCH_LOADABLE_TOOL_TYPES):
+        return False
+    if "defer_loading" in tool and not isinstance(tool["defer_loading"], bool):
+        return False
+    declaration = {key: value for key, value in tool.items() if key != "defer_loading"}
+    return _tool_declaration_is_account_neutral(declaration)
 
 
 def _tool_declaration_is_account_neutral(tool: Mapping[str, JsonValue]) -> bool:
@@ -1155,6 +1314,10 @@ def _contains_account_scoped_input_state(value: JsonValue) -> bool:
                 return True
             if item_type == "additional_tools" and not _tools_are_account_neutral(current.get("tools")):
                 return True
+            if item_type == "tool_search_output" and not _tool_search_output_tools_are_account_neutral(
+                current.get("tools")
+            ):
+                return True
             if (
                 isinstance(item_type, str)
                 and (item_type.endswith("_call") or item_type.endswith("_call_output"))
@@ -1165,8 +1328,23 @@ def _contains_account_scoped_input_state(value: JsonValue) -> bool:
             if _mapping_has_account_scoped_reference(current):
                 return True
             pending.extend(
-                nested for key, nested in current.items() if not (item_type == "additional_tools" and key == "tools")
+                nested
+                for key, nested in current.items()
+                if not (key == "tools" and item_type in {"additional_tools", "tool_search_output"})
             )
+        elif isinstance(current, list):
+            pending.extend(current)
+    return False
+
+
+def _contains_mcp_tool_state(value: JsonValue) -> bool:
+    pending = [value]
+    while pending:
+        current = pending.pop()
+        if isinstance(current, dict):
+            if current.get("type") == "mcp" or _is_nonblank_string(current.get("server_label")):
+                return True
+            pending.extend(current.values())
         elif isinstance(current, list):
             pending.extend(current)
     return False
@@ -1424,14 +1602,32 @@ def _relocation_comparison_key(item: JsonValue) -> object:
         return ("message", "user", (_relocation_content_part_identity(item),))
     if item_type == "additional_tools":
         return (item_type, item.get("role"), _relocation_declared_tools_identity(item.get("tools")))
+    if item_type == "tool_search_call":
+        return (
+            item_type,
+            item.get("call_id"),
+            json.dumps(item.get("arguments"), sort_keys=True, separators=(",", ":")),
+        )
+    if item_type == "tool_search_output":
+        return (
+            item_type,
+            item.get("call_id"),
+            _relocation_declared_tools_identity(item.get("tools"), allow_namespace=True),
+        )
     if item_type in _TOOL_CALL_TYPES:
-        return (item_type, item.get("call_id"), item.get("name"), _relocation_call_arguments_identity(item))
+        return (
+            item_type,
+            item.get("call_id"),
+            item.get("name"),
+            _relocation_call_arguments_identity(item),
+            item.get("async") is True,
+        )
     if item_type in _TOOL_CALL_TYPE_BY_OUTPUT_TYPE:
         return (item_type, item.get("call_id"), _relocation_tool_result_identity(item.get("output")))
     return object()
 
 
-def _relocation_declared_tools_identity(tools: JsonValue | None) -> object:
+def _relocation_declared_tools_identity(tools: JsonValue | None, *, allow_namespace: bool = False) -> object:
     """Which tools a bundle declares, not how it described them.
 
     A declaration's description, strictness, parameter schema, custom format and
@@ -1444,11 +1640,15 @@ def _relocation_declared_tools_identity(tools: JsonValue | None) -> object:
 
     if not isinstance(tools, list):
         return object()
-    return tuple(_relocation_tool_declaration_identity(tool) for tool in tools)
+    return tuple(_relocation_tool_declaration_identity(tool, allow_namespace=allow_namespace) for tool in tools)
 
 
-def _relocation_tool_declaration_identity(tool: JsonValue) -> object:
-    if not isinstance(tool, Mapping) or not _is_one_of(tool.get("type"), _ACCOUNT_NEUTRAL_TOOL_TYPES):
+def _relocation_tool_declaration_identity(tool: JsonValue, *, allow_namespace: bool = False) -> object:
+    if not isinstance(tool, Mapping):
+        return object()
+    if allow_namespace and tool.get("type") == "namespace":
+        return ("namespace", tool.get("name"), _relocation_declared_tools_identity(tool.get("tools")))
+    if not _is_one_of(tool.get("type"), _ACCOUNT_NEUTRAL_TOOL_TYPES):
         return object()
     # The hosted search tools carry no name, so for them the type is all of it.
     return (tool.get("type"), tool.get("name"))

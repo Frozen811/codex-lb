@@ -7,6 +7,7 @@ import inspect
 import json
 import logging
 import math
+import re
 import sys
 import time
 from collections.abc import Callable, Coroutine, Iterable, Sequence
@@ -769,6 +770,7 @@ _HTTP_BRIDGE_INLINE_IMAGE_DATA_PREFIXES: Final = ("data:image/jpeg;base64,", "da
 _HTTP_BRIDGE_INLINE_IMAGE_DATA_PREFIX_MAX_BYTES: Final = max(
     len(prefix) for prefix in _HTTP_BRIDGE_INLINE_IMAGE_DATA_PREFIXES
 )
+_HTTP_BRIDGE_INLINE_IMAGE_BASE64_PATTERN: Final = re.compile(r"[A-Za-z0-9+/]+={0,2}")
 # Complete-frame budget for image-bearing bridge requests: the COMPLETE
 # serialized ``response.create`` frame sent on the bridge upstream websocket —
 # envelope, ``type``, ``client_metadata``, bridge operation id, thread-cache
@@ -874,7 +876,12 @@ def _inline_data_image_url_verdict(image_url: object) -> tuple[str, int]:
     if encoded_length <= 0:
         return _HTTP_BRIDGE_INLINE_IMAGE_UNSUPPORTED, 0
     if encoded_length > _HTTP_BRIDGE_INLINE_IMAGE_MAX_ENCODED_FAST_PATH_BYTES:
-        return _HTTP_BRIDGE_INLINE_IMAGE_IMAGE_TOO_LARGE, encoded_length * 3 // 4
+        # Check syntax on the original URL without copying or decoding the
+        # segment: unsupported shapes must win over an oversized sibling.
+        if encoded_length % 4 or _HTTP_BRIDGE_INLINE_IMAGE_BASE64_PATTERN.fullmatch(image_url, len(prefix)) is None:
+            return _HTTP_BRIDGE_INLINE_IMAGE_UNSUPPORTED, 0
+        padding = 2 if image_url.endswith("==") else int(image_url.endswith("="))
+        return _HTTP_BRIDGE_INLINE_IMAGE_IMAGE_TOO_LARGE, encoded_length // 4 * 3 - padding
     try:
         decoded = base64.b64decode(image_url[len(prefix) :], validate=True)
     except (binascii.Error, ValueError):
@@ -1360,31 +1367,46 @@ def _http_bridge_precreated_retry_failure_error(
 
 
 def _trim_http_bridge_previous_response_input_items(input_items: list[JsonValue]) -> list[JsonValue]:
+    replay_safe_input_items = [_strip_http_bridge_replayed_tool_search_id(item) for item in input_items]
     first_output_index = next(
         (
             index
             for index, item in enumerate(input_items)
             if _http_bridge_input_item_type(item)
-            in {"function_call_output", "custom_tool_call_output", "apply_patch_call_output"}
+            in {"function_call_output", "custom_tool_call_output", "apply_patch_call_output", "tool_search_output"}
         ),
         None,
     )
-    if first_output_index is None or first_output_index == 0:
-        return input_items
+    if first_output_index is None:
+        return replay_safe_input_items
+    if first_output_index == 0:
+        return replay_safe_input_items
     prefix = input_items[:first_output_index]
     if not all(_is_http_bridge_previous_response_output_item(item) for item in prefix):
-        return input_items
-    return input_items[first_output_index:]
+        return replay_safe_input_items
+    return replay_safe_input_items[first_output_index:]
 
 
 def _is_http_bridge_previous_response_output_item(item: JsonValue) -> bool:
     item_type = _http_bridge_input_item_type(item)
-    if item_type in {"reasoning", "function_call", "custom_tool_call", "apply_patch_call"}:
+    if item_type in {"reasoning", "function_call", "custom_tool_call", "apply_patch_call", "tool_search_call"}:
         return _has_http_bridge_response_output_marker(item)
     if item_type != "message" or not isinstance(item, dict):
         return False
     role = item.get("role")
     return role == "assistant" and _has_http_bridge_response_output_marker(item)
+
+
+def _strip_http_bridge_replayed_tool_search_id(item: JsonValue) -> JsonValue:
+    if (
+        not isinstance(item, dict)
+        or _http_bridge_input_item_type(item) not in {"tool_search_call", "tool_search_output"}
+        or "id" not in item
+    ):
+        return item
+    stripped = dict(item)
+    stripped.pop("id", None)
+    return stripped
 
 
 def _has_http_bridge_response_output_marker(item: JsonValue) -> bool:

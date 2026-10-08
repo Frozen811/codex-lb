@@ -420,9 +420,9 @@ When an account is `RATE_LIMITED` or `QUOTA_EXCEEDED` and its persisted `reset_a
 
 ### Requirement: Credit-backed secondary quota remains usable
 
-When account status is derived from persisted usage snapshots, an exhausted secondary-window usage percentage MUST NOT by itself mark an account `quota_exceeded` if the governing usage snapshot reports usable credit-backed capacity. Usable credit-backed capacity is present when `credits_unlimited` is true, `credits_has` is true, or `credits_balance` is positive.
+When account status is derived from persisted usage snapshots, an exhausted secondary-window usage percentage MUST NOT by itself mark an account `quota_exceeded` if the governing usage snapshot reports usable credit-backed capacity. Usable credit-backed capacity is present when `credits_unlimited` is true or `credits_balance` is positive; `credits_has` alone MUST NOT establish spendable capacity.
 
-This credit-aware interpretation MUST be shared by proxy account selection and account/dashboard summary status mapping so an account selected as usable by the proxy is not simultaneously displayed as `quota_exceeded` in the operator summary. Exhausted primary-window usage MUST still take precedence as `rate_limited`, and paused or deactivated accounts MUST NOT be reactivated solely because a usage snapshot reports usable credits.
+This credit-aware interpretation MUST be shared by proxy account selection and account/dashboard summary status mapping so an account selected as usable by the proxy is not simultaneously displayed as `quota_exceeded` in the operator summary. Primary-window exhaustion with an available or credit-covered secondary window MUST still produce `rate_limited`; both exhausted windows without spendable credits MUST produce `quota_exceeded` with the secondary reset, and paused or deactivated accounts MUST NOT be reactivated solely because a usage snapshot reports usable credits.
 
 #### Scenario: Secondary quota exhausted with credits remains active
 
@@ -445,6 +445,12 @@ This credit-aware interpretation MUST be shared by proxy account selection and a
 - **AND** its usage snapshot reports usable credit-backed capacity
 - **WHEN** proxy selection or account-summary mapping derives the effective status
 - **THEN** the account remains `paused` or `deactivated`
+
+#### Scenario: Credit flag without spendable balance
+
+- **WHEN** the secondary window is exhausted and credits_has is true with a missing, zero or negative balance and no unlimited credits
+- **THEN** selection and the operator summary retain quota_exceeded
+- **AND** if both windows are exhausted the secondary reset remains authoritative
 
 ### Requirement: Reset-confirmed limit warm-up
 
@@ -591,7 +597,7 @@ The dashboard MUST expose an admin-only endpoint that sends a single minimal `re
 
 ### Requirement: Credit-backed usage remains selectable after quota windows fill
 
-When deriving effective account status from upstream usage samples, the system MUST treat the latest credit metadata as an override for secondary quota-derived blocking state. If the latest usage sample with credit metadata reports `credits_has = true`, `credits_unlimited = true`, or `credits_balance > 0`, then secondary quota windows at `100%` MUST NOT by themselves make the account `quota_exceeded`. Primary-window exhaustion MUST keep `rate_limited` precedence even when credits are available.
+When deriving effective account status from upstream usage samples, the system MUST treat the latest credit metadata as an override for secondary quota-derived blocking state. If the latest usage sample with credit metadata reports `credits_unlimited = true` or `credits_balance > 0`, then secondary quota windows at `100%` MUST NOT by themselves make the account `quota_exceeded`. Primary-window exhaustion MUST keep `rate_limited` precedence when the secondary window is available or covered by spendable credits. Both exhausted windows without spendable credits MUST remain `quota_exceeded`. A bare `credits_has = true` flag MUST NOT grant the override.
 
 This override MUST NOT reactivate accounts that are explicitly `paused` or
 `deactivated`. When multiple usage samples carry credit metadata, the newest
@@ -868,19 +874,19 @@ Usage refresh MUST write usage and change account status only for the credential
 
 ### Requirement: Proactive active account credential refresh
 
-Codex-LB SHALL periodically refresh account credentials in the background when an account's last refresh is older than a configured maximum age. Accounts with status `active` or `paused` SHALL be eligible for proactive credential refresh; accounts with status `reauth_required` or `deactivated` SHALL NOT be selected. Proactive credential refresh MUST NOT change a paused account's routing eligibility: a paused account remains excluded from request routing regardless of refresh outcome, except that a permanent refresh failure transitions the account to its documented permanent-failure status the same way it does for active accounts. The proactive refresh scheduler SHALL be enabled by default with zero required configuration. Whether a refresh pass runs SHALL be decided by the dashboard setting `auth_guardian_enabled` (a nullable `dashboard_settings` column; NULL inherits the deprecated `CODEX_LB_AUTH_GUARDIAN_ENABLED` environment variable, then the default `true`), exposed with provenance on `GET`/`PUT /api/settings`. The scheduler loop SHALL always start; each refresh pass SHALL read the effective value from the dashboard-settings snapshot at the start of the pass and SHALL skip the pass while it is `false`, so a change made in the dashboard applies on the next pass on every replica without a restart. The multi-replica leader guard remains a precondition for any refresh work.
+Codex-LB SHALL periodically refresh account credentials in the background when an account's last refresh is strictly older than twelve hours, independently of ordinary request-time freshness. Accounts with status `active` or `paused` SHALL be eligible for proactive credential refresh; accounts with status `reauth_required` or `deactivated` SHALL NOT be selected. Proactive credential refresh MUST NOT change a paused account's routing eligibility: a paused account remains excluded from request routing regardless of refresh outcome, except that a permanent refresh failure transitions the account to its documented permanent-failure status the same way it does for active accounts. The proactive refresh scheduler SHALL be enabled by default with zero required configuration. Whether a refresh pass runs SHALL be decided by the dashboard setting `auth_guardian_enabled` (a nullable `dashboard_settings` column; NULL inherits the deprecated `CODEX_LB_AUTH_GUARDIAN_ENABLED` environment variable, then the default `true`), exposed with provenance on `GET`/`PUT /api/settings`. The scheduler loop SHALL always start; each refresh pass SHALL read the effective value from the dashboard-settings snapshot at the start of the pass and SHALL skip the pass while it is `false`, so a change made in the dashboard applies on the next pass on every replica without a restart. The multi-replica leader guard remains a precondition for any refresh work.
 
 #### Scenario: Idle active account becomes stale
 
 - **GIVEN** an account has status `active`
-- **AND** its `last_refresh` is older than the configured Auth Guardian max age
+- **AND** its `last_refresh` is older than twelve hours
 - **WHEN** Auth Guardian runs on the elected leader
 - **THEN** Codex-LB force-refreshes that account without requiring request traffic to select it first
 
 #### Scenario: Idle paused account keeps its refresh token alive
 
 - **GIVEN** an account has status `paused`
-- **AND** its `last_refresh` is older than the configured Auth Guardian max age
+- **AND** its `last_refresh` is older than twelve hours
 - **WHEN** Auth Guardian runs on the elected leader
 - **THEN** Codex-LB force-refreshes that account's credentials
 - **AND** the account's status remains `paused`
@@ -889,7 +895,7 @@ Codex-LB SHALL periodically refresh account credentials in the background when a
 #### Scenario: Known-bad credentials are not refreshed
 
 - **GIVEN** an account has status `reauth_required` or `deactivated`
-- **AND** its `last_refresh` is older than the configured Auth Guardian max age
+- **AND** its `last_refresh` is older than twelve hours
 - **WHEN** Auth Guardian selects refresh candidates
 - **THEN** the account is not selected
 
@@ -913,6 +919,12 @@ Codex-LB SHALL periodically refresh account credentials in the background when a
 - **WHEN** an operator sets `auth_guardian_enabled` to `true` in the dashboard
 - **THEN** refresh passes run and `provenance.auth_guardian_enabled.source` is `dashboard`
 - **AND** clearing the dashboard value returns to the environment value (`source` `env`)
+
+#### Scenario: Guardian rechecks idle age independently of request freshness
+
+- **WHEN** an active or paused account is thirteen hours old while request-time freshness is eight days
+- **THEN** the guardian force-refreshes it
+- **AND** a row refreshed by a peer to exactly twelve hours old or newer is skipped at the persisted-row recheck
 
 ### Requirement: Auth Guardian bounded and safe execution
 
@@ -2440,8 +2452,7 @@ The durable account/window/reset attempt claim SHALL consume recovered evidence 
 
 ### Requirement: Preflight refresh credential failure retains unexpired access tokens
 
-When an account undergoes active preflight refresh in `ensure_fresh` and the upstream refresh exchange fails with a recognized permanent credential failure code (`refresh_token_invalidated`, `refresh_token_expired`, `invalid_grant`, `app_session_terminated`), the system MUST re-read the latest account row from the database.
-If the freshly re-read account's access token expiration is strictly in the future (`account_access_token_expires_at > time.time()`), the system MUST adopt the row without raising a `RefreshError`, allowing callers to continue using the unexpired access token.
+When an ordinary active-account preflight receives a permanent refresh-credential-only failure (`refresh_token_invalidated`, `refresh_token_expired`, `refresh_token_reused`, `invalid_refresh_token` or `invalid_grant`), the system MUST re-read the latest account row. Recovery MUST require a row without a deletion marker, status `reauth_required`, the matching canonical refresh warning and a known access-token expiration strictly in the future. The request SHALL continue with that stored token only while these conditions hold, without clearing the warning or changing credentials or refresh timestamps. Forced callers sharing the exchange MUST still fail. Actual access rejection, account/session invalidation, transient failures, expired or unknown access tokens and operator-disabled states MUST NOT qualify for this fallback.
 
 #### Scenario: Unexpired access token is retained after preflight refresh revocation
 - **GIVEN** an active account with an unexpired access token whose `last_refresh` warrants preflight refresh
@@ -2449,6 +2460,23 @@ If the freshly re-read account's access token expiration is strictly in the futu
 - **THEN** the account is marked `reauth_required` in the database
 - **AND** `ensure_fresh` does not raise `RefreshError`
 - **AND** the unexpired access token is returned and dispatched upstream
+
+#### Scenario: Operator deletion wins over preflight recovery
+
+- **WHEN** ordinary preflight receives a permanent refresh-only failure but the fresh account row has been marked for deletion
+- **THEN** the request MUST fail without dispatching the retained access token
+- **AND** the deletion marker, credentials and refresh warning MUST remain unchanged
+
+#### Scenario: Forced caller and ordinary caller share refresh failure
+
+- **WHEN** ordinary and forced callers share one failed refresh exchange in either arrival order
+- **THEN** only the ordinary active caller with an eligible persisted row retains its access token
+- **AND** the forced caller receives the refresh failure
+
+#### Scenario: Session invalidation does not qualify as refresh-only failure
+
+- **WHEN** preflight fails because the account session or access credentials have been invalidated
+- **THEN** the request fails even if the stored access-token expiry is in the future
 
 ### Requirement: Cross-account reset credit consumption requires target identity
 

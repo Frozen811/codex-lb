@@ -1,5 +1,29 @@
 # Usage Refresh Policy Context
 
+## Idle credentials, spendable credits and recovery authority
+
+Auth Guardian keeps active and paused credentials alive after more than twelve
+hours, independently of the ordinary eight-day request freshness policy. Its
+initial admission and persisted-row recheck use the same idle age. For example,
+an account refreshed thirteen hours ago is request-fresh but guardian-eligible;
+a peer refresh to exactly twelve hours ago makes it ineligible. Leadership,
+bounded concurrency, backoff and paused routing status still apply.
+
+The secondary-quota credit override requires a positive balance or unlimited
+credits. `credits_has=true` with a missing, zero or negative balance is metadata,
+not spendable capacity. A 100% weekly account with balance 0 remains unavailable;
+balance 12.5 can cover that window. Primary exhaustion with a credit-covered
+secondary window remains rate-limited; both exhausted windows without spendable
+credits remain quota-exceeded with the secondary reset.
+
+Ordinary preflight may retain a known unexpired access token after an explicit
+refresh-only credential failure. It rechecks the persisted warning and operator
+state; a deletion marker defeats fallback. Forced callers and account/session
+invalidation still fail, and recovery never clears the warning. Rejection writes
+and retained reset recovery continue to use their existing guarded evidence and
+claims. See the [normative requirements](spec.md) and
+[five-record verification](../../changes/archive/2026-10-08-repair-five-auth-credit-contracts/verification.md).
+
 ## Purpose
 
 This context explains how codex-lb derives an account's usage and status, and

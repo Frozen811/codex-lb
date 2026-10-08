@@ -55,7 +55,16 @@ class _JsonSession:
 
 
 @pytest.mark.asyncio
-async def test_proxy_compact_route_strips_chunked_and_connection_headers(async_client, monkeypatch):
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/backend-api/codex/responses/compact",
+        "/backend-api/codex/responses/compact/",
+        "/v1/responses/compact",
+        "/v1/responses/compact/",
+    ],
+)
+async def test_proxy_compact_route_strips_chunked_and_connection_headers(async_client, monkeypatch, path: str):
     """A decoded compact request must not leak its inbound HTTP framing upstream."""
     raw_account_id = "acc_compact_chunked_headers"
     response = await async_client.post(
@@ -81,7 +90,7 @@ async def test_proxy_compact_route_strips_chunked_and_connection_headers(async_c
     monkeypatch.setattr(proxy_client_module, "discover_native_egress_client", lambda: None)
     native_user_agent = "codex_exec/0.151.0 (Ubuntu 24.4.0; x86_64) dumb"
     response = await async_client.post(
-        "/backend-api/codex/responses/compact",
+        path,
         json={"model": "gpt-5.1", "instructions": "compact", "input": []},
         headers={
             "User-Agent": native_user_agent,
@@ -100,6 +109,7 @@ async def test_proxy_compact_route_strips_chunked_and_connection_headers(async_c
     )
 
     assert response.status_code == 200, response.text
+    assert not response.history
     assert session.calls
     upstream = {key.lower(): value for key, value in cast(dict[str, str], session.calls[0]["headers"]).items()}
     assert "transfer-encoding" not in upstream

@@ -1,0 +1,62 @@
+{
+  "date": "2026-10-08",
+  "timezone": "Europe/Kiev",
+  "base": "8369ec720c5ac935f7a64fe3f30aa1cbc323f5e5",
+  "selected": [
+    {
+      "number": 2488,
+      "title": "fix(proxy): handle CRLF and malformed UTF-8 in owner forwarding",
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "head": "a31ef4a77b47fea60a1634e64bfd2902c397b810",
+      "updated_at": "2026-10-05T11:58:56Z",
+      "url": "https://github.com/Soju06/codex-lb/pull/2488",
+      "initial_row": "| [UP-PR-2488](https://github.com/Soju06/codex-lb/pull/2488) | PR #2488: fix(proxy): handle CRLF and malformed UTF-8 in owner forwarding | Раздел 12, L1349 | НЕ ПРОВЕРЕНО | — |"
+    },
+    {
+      "number": 1952,
+      "title": "fix(proxy): preserve tool search pairs through replay",
+      "state": "open",
+      "draft": false,
+      "merged": false,
+      "head": "374b72168103e41818582def87eacc1fc5bc4963",
+      "updated_at": "2026-10-04T16:58:55Z",
+      "url": "https://github.com/Soju06/codex-lb/pull/1952",
+      "initial_row": "| [UP-PR-1952](https://github.com/Soju06/codex-lb/pull/1952) | PR #1952: fix(proxy): preserve tool search pairs through replay | Раздел 12, L1426 | НЕ ПРОВЕРЕНО | — |"
+    },
+    {
+      "number": 2277,
+      "title": "fix(proxy): preserve continuation anchors during input normalization",
+      "state": "open",
+      "draft": false,
+      "merged": false,
+      "head": "444a04733c0aa2acbf1a0f7593875e83a5da8b01",
+      "updated_at": "2026-09-22T05:07:17Z",
+      "url": "https://github.com/Soju06/codex-lb/pull/2277",
+      "initial_row": "| [UP-PR-2277](https://github.com/Soju06/codex-lb/pull/2277) | PR #2277: fix(proxy): preserve continuation anchors during input normalization | Раздел 12, L1398 | НЕ ПРОВЕРЕНО | — |"
+    },
+    {
+      "number": 2099,
+      "title": "feat(proxy): preserve async tool results across continuations",
+      "state": "open",
+      "draft": false,
+      "merged": false,
+      "head": "59e77b80bf65d650b50acc5452aab8fb273ffbc2",
+      "updated_at": "2026-09-28T10:43:42Z",
+      "url": "https://github.com/Soju06/codex-lb/pull/2099",
+      "initial_row": "| [UP-PR-2099](https://github.com/Soju06/codex-lb/pull/2099) | PR #2099: feat(proxy): preserve async tool results across continuations | Раздел 12, L1415 | НЕ ПРОВЕРЕНО | — |"
+    },
+    {
+      "number": 2499,
+      "title": "bug(model-sources): multi-agent capability does not preserve client collaboration tools",
+      "state": "open",
+      "draft": null,
+      "merged": null,
+      "head": null,
+      "updated_at": "2026-09-28T08:47:21Z",
+      "url": "https://github.com/Soju06/codex-lb/issues/2499",
+      "initial_row": "| [UP-ISSUE-2499](https://github.com/Soju06/codex-lb/issues/2499) | bug(model-sources): multi-agent capability does not preserve client collaboration tools | RESOLVED / MERGED IN FORK | НЕ ПРОВЕРЕНО | — |"
+    }
+  ]
+}
