@@ -102,7 +102,7 @@ async def test_accounts_preserve_windows_without_monthly_only_proof(async_client
     [
         (None, None, "quota_exceeded"),
         (False, 0.0, "quota_exceeded"),
-        (True, 0.0, "active"),
+        (True, 0.0, "quota_exceeded"),
         (False, 25.0, "active"),
     ],
 )

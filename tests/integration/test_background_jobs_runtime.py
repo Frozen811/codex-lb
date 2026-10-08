@@ -123,6 +123,7 @@ async def test_guardian_runtime_refreshes_thirteen_hour_idle_credentials(async_c
     now = utcnow()
     async with SessionLocal() as session:
         stored = await session.get(Account, account.id)
+        assert stored is not None
         stored.status = status
         stored.last_refresh = now - timedelta(hours=13)
         await session.commit()
@@ -161,6 +162,7 @@ async def test_guardian_runtime_refreshes_thirteen_hour_idle_credentials(async_c
     assert calls == ["refresh-guardian-idle"]
     async with SessionLocal() as session:
         stored = await session.get(Account, account.id)
+        assert stored is not None
         assert stored.status == status
         assert stored.last_refresh > now - timedelta(hours=12)
         assert TokenEncryptor().decrypt(stored.access_token_encrypted) == "new-access"

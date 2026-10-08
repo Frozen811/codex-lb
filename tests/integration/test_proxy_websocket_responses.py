@@ -6652,6 +6652,11 @@ def test_v1_responses_websocket_marks_fresh_turn_as_retry_safe_at_prep_time(
         ("custom_tool_call", "valid"),
         ("function_call", " "),
         ("custom_tool_call", "\t\n"),
+        ("function_call", None),
+        ("custom_tool_call", None),
+        ("function_call", "valid", "true"),
+        ("custom_tool_call", "valid", 1),
+        ("function_call", "valid", None),
     ],
 )
 def test_responses_websocket_replays_client_full_resend_previous_response_miss_without_anchor(
@@ -6793,9 +6798,13 @@ def test_responses_websocket_replays_client_full_resend_previous_response_miss_w
         {"role": "user", "content": [{"type": "input_text", "text": "continue"}]},
     ]
 
-    valid_replay = async_call is None or bool(async_call[1].strip())
+    valid_replay = async_call is None or (
+        isinstance(async_call[1], str)
+        and bool(async_call[1].strip())
+        and (len(async_call) == 2 or isinstance(async_call[2], bool))
+    )
     if async_call is not None:
-        call_type, call_id = async_call
+        call_type, call_id = async_call[:2]
         full_resend_input.insert(
             2,
             {
@@ -6803,7 +6812,7 @@ def test_responses_websocket_replays_client_full_resend_previous_response_miss_w
                 "call_id": call_id,
                 "name": "work",
                 "arguments" if call_type == "function_call" else "input": "{}",
-                "async": True,
+                "async": True if len(async_call) == 2 else async_call[2],
             },
         )
 
@@ -6841,8 +6850,9 @@ def test_responses_websocket_replays_client_full_resend_previous_response_miss_w
 
     if not valid_replay:
         assert created_2["type"] == "response.failed"
-        assert created_2["response"]["error"]["code"] == "previous_response_owner_unavailable"
-        assert connect_count == 2
+        expected_code = "stream_incomplete" if endpoint.startswith("/v1") else "previous_response_not_found"
+        assert created_2["response"]["error"]["code"] == expected_code
+        assert connect_count == 1
         assert recovered_upstream.sent_text == []
         return
 

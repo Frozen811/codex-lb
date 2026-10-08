@@ -852,6 +852,11 @@ def _websocket_input_items_are_self_contained_fresh_replay(input_items: list[Jso
         item_type = _websocket_input_item_type(item)
         call_id_value = item.get("call_id")
         call_id = call_id_value if isinstance(call_id_value, str) and call_id_value else None
+        if item_type in {"function_call", "custom_tool_call"} and "async" in item:
+            if not isinstance(item["async"], bool):
+                return False
+            if item["async"] and (call_id is None or not call_id.strip()):
+                return False
         if item_type in _WEBSOCKET_TOOL_CALL_ITEM_TYPES:
             if call_id is not None:
                 seen_call_ids_by_type[item_type].add(call_id)

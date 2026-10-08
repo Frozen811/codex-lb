@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 _COPY_CHUNK_BYTES = 1024 * 1024
+_DIRECTORY_FSYNC_SUPPORTED = os.name != "nt"
 
 
 def read_json(path: str | Path) -> Any:
@@ -52,6 +53,8 @@ def file_attestation(label: str, path: str | Path) -> dict[str, Any]:
 
 
 def _fsync_directory(path: Path) -> None:
+    if not _DIRECTORY_FSYNC_SUPPORTED:
+        return
     descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
     try:
         os.fsync(descriptor)

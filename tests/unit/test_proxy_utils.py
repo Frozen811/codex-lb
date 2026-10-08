@@ -17,7 +17,7 @@ from contextlib import asynccontextmanager, suppress
 from copy import deepcopy
 from datetime import timedelta
 from types import SimpleNamespace
-from typing import Any, AsyncIterator, Iterator, Literal, Self, cast
+from typing import Any, AsyncGenerator, AsyncIterator, Iterator, Literal, Self, cast
 from unittest.mock import ANY, AsyncMock, MagicMock
 from unittest.mock import call as mock_call
 
@@ -114,7 +114,7 @@ from app.modules.proxy.work_admission import AdmissionLease
 from app.modules.request_logs.repository import PreviousResponseOwnerRecord, RequestLogsRepository
 from app.modules.usage.repository import AdditionalUsageRepository, UsageRepository
 from app.modules.usage.updater import UsageUpdater
-from tests.simulation.virtual_time import VirtualClock
+from tests.simulation.virtual_time import VirtualClock, VirtualScheduler
 from tests.unit._proxy_test_helpers import runtime_basic_auth_url
 from tests.unit.hypothesis_strategies import json_objects, json_values
 
@@ -1823,33 +1823,52 @@ async def test_chat_startup_probe_consumes_capacity_marker_after_startup_event()
 
 @pytest.mark.asyncio
 async def test_chat_startup_probe_consumes_repeated_capacity_markers_before_first_event() -> None:
+    clock = VirtualClock()
+    scheduler = VirtualScheduler(clock)
     capacity_wait_event = asyncio.Event()
     release_next_event = asyncio.Event()
 
     async def delayed_chat_stream() -> AsyncIterator[str]:
-        await asyncio.sleep(0.01)
+        await scheduler.sleep(0.01)
         capacity_wait_event.set()
-        await asyncio.sleep(0.01)
+        await scheduler.sleep(0.01)
         capacity_wait_event.set()
         yield 'data: {"type":"response.created"}\n\n'
         await release_next_event.wait()
         yield 'data: {"type":"response.output_text.delta","delta":"hello"}\n\n'
 
-    probe_task = asyncio.create_task(
+    probe_task = scheduler.create_task(
         proxy_api._probe_chat_stream_startup_error(
             delayed_chat_stream(),
             timeout_seconds=0.001,
             capacity_wait_event=capacity_wait_event,
+            scheduler=scheduler,
+            clock=clock,
         )
     )
     try:
-        stream, startup_error = await asyncio.wait_for(probe_task, timeout=0.1)
+        await scheduler.drain()
+        await scheduler.advance(0.01)
+        assert capacity_wait_event.is_set()
+        assert not probe_task.done()
+        await scheduler.advance(0.01)
+        assert not capacity_wait_event.is_set()
+        assert not probe_task.done()
+        await scheduler.advance(0.051)
+        assert probe_task.done()
+        stream, startup_error = await probe_task
+        assert startup_error is None
+        assert not capacity_wait_event.is_set()
+        assert await anext(stream) == 'data: {"type":"response.created"}\n\n'
+        release_next_event.set()
+        assert await anext(stream) == 'data: {"type":"response.output_text.delta","delta":"hello"}\n\n'
+        await cast(AsyncGenerator[str, None], stream).aclose()
+        await scheduler.drain()
+        assert scheduler.pending_timers == 0
+        assert all(task.done() for task in scheduler.owned_tasks)
     finally:
         release_next_event.set()
-
-    assert startup_error is None
-    assert capacity_wait_event.is_set() is False
-    assert await anext(stream) == 'data: {"type":"response.created"}\n\n'
+        await scheduler.cancel_owned_tasks()
 
 
 @pytest.mark.asyncio

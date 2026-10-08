@@ -120,6 +120,7 @@ async def test_secondary_credit_flag_requires_spendable_capacity(db_setup, balan
         result = await balancer.select_account(account_ids={account.id})
         assert (result.account is not None) == spendable
         if spendable:
+            assert result.account is not None
             assert result.account.id == account.id
         row = await _fetch_account(account.id)
         assert row.status == (AccountStatus.ACTIVE if spendable else AccountStatus.QUOTA_EXCEEDED)

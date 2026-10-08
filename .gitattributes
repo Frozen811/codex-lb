@@ -1,3 +1,4 @@
 frontend/bun.nix linguist-generated=true
 *.sh text eol=lf
 *.nix text eol=lf
+scripts/traffic_analysis/catalogs/*.json text eol=lf

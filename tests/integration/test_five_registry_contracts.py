@@ -270,12 +270,8 @@ async def test_compact_keeps_developer_content_on_actual_upstream_wire(async_cli
                 "model": "gpt-5.2",
                 "input": [developer, {"role": "user", "content": "Compact this history"}],
             },
-            follow_redirects=True,
+            follow_redirects=False,
         )
-        if suffix:
-            assert response.status_code == 405, response.text
-            assert observed == []
-            return
         assert response.status_code == 200, response.text
     assert len(observed) == 1
     assert observed[0]["instructions"] == ""
