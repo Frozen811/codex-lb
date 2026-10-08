@@ -1763,7 +1763,9 @@ class _WebSocketMixin:
                                         exc_info=True,
                                     )
                                 break
-                    if downstream_receive_task is None or downstream_receive_task.done():
+                    # A completed receive still owns a message until consumed,
+                    # including when it became ready during upstream handoff.
+                    if downstream_receive_task is None:
                         downstream_receive_task = scheduler_for(proxy).create_task(
                             websocket.receive(),
                             name="proxy-downstream-websocket-receive",

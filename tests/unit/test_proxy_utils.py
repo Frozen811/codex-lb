@@ -35827,7 +35827,8 @@ async def test_proxy_responses_websocket_replays_staged_turn_before_drain_close(
 
 
 @pytest.mark.asyncio
-async def test_proxy_responses_websocket_clean_close_handoff_retains_queued_turn(monkeypatch):
+@pytest.mark.parametrize("queued_during_handoff", [False, True])
+async def test_proxy_responses_websocket_clean_close_handoff_retains_queued_turn(monkeypatch, queued_during_handoff):
     request_logs = _RequestLogsRecorder()
     service = proxy_service.ProxyService(_repo_factory(request_logs))
     settings = _make_proxy_settings()
@@ -35862,6 +35863,9 @@ async def test_proxy_responses_websocket_clean_close_handoff_retains_queued_turn
         def __init__(self) -> None:
             self.turn1_completed = asyncio.Event()
             self.turn2_completed = asyncio.Event()
+            self.second_receive_started = asyncio.Event()
+            self.release_queued_turn = asyncio.Event()
+            self.queued_turn_ready = asyncio.Event()
             self.sent_text: list[str] = []
             self.receive_index = 0
 
@@ -35870,8 +35874,13 @@ async def test_proxy_responses_websocket_clean_close_handoff_retains_queued_turn
             if self.receive_index == 1:
                 return {"type": "websocket.receive", "text": first_request}
             if self.receive_index == 2:
+                self.second_receive_started.set()
                 await self.turn1_completed.wait()
-                await asyncio.sleep(0.05)
+                if queued_during_handoff:
+                    await self.release_queued_turn.wait()
+                else:
+                    await asyncio.sleep(0.05)
+                self.queued_turn_ready.set()
                 return {"type": "websocket.receive", "text": second_request}
             await self.turn2_completed.wait()
             return {"type": "websocket.disconnect"}
@@ -35899,7 +35908,10 @@ async def test_proxy_responses_websocket_clean_close_handoff_retains_queued_turn
             self.closed = False
 
         async def receive(self) -> SimpleNamespace:
-            return await self.messages.get()
+            message = await self.messages.get()
+            if queued_during_handoff and self.response_id == "resp_turn_1" and message.kind == "close":
+                await downstream.second_receive_started.wait()
+            return message
 
         async def send_text(self, text: str) -> None:
             self.sent_text.append(text)
@@ -35952,6 +35964,9 @@ async def test_proxy_responses_websocket_clean_close_handoff_retains_queued_turn
 
         async def close(self) -> None:
             self.closed = True
+            if queued_during_handoff and self.response_id == "resp_turn_1" and asyncio.current_task() is scope_task:
+                downstream.release_queued_turn.set()
+                await downstream.queued_turn_ready.wait()
 
     downstream = _MultiTurnDownstreamWebSocket()
     account = _make_account("acc_ws_clean_close")
@@ -35983,6 +35998,7 @@ async def test_proxy_responses_websocket_clean_close_handoff_retains_queued_turn
                 await scope_task
 
     assert connect_count == 2
+    assert downstream.queued_turn_ready.is_set()
     emitted_types = [json.loads(text)["type"] for text in downstream.sent_text]
     assert emitted_types == [
         "response.created",
