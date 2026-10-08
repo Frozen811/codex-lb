@@ -91,8 +91,9 @@ async def terminal_origin(bridge_origin, monkeypatch, async_client):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("path", ["/v1/responses", "/v1/responses/", "/backend-api/codex/responses"])
+@pytest.mark.parametrize("delay_terminal_publication", [False, True])
 async def test_reason_only_incomplete_opens_durable_circuit_before_next_dispatch(
-    async_client, app_instance, bridge_origin, terminal_origin, path
+    async_client, app_instance, monkeypatch, bridge_origin, terminal_origin, path, delay_terminal_publication
 ):
     headers = {"session_id": "incomplete-circuit-route"}
     seed = await async_client.post(
@@ -102,6 +103,36 @@ async def test_reason_only_incomplete_opens_durable_circuit_before_next_dispatch
     assert _events(seed)[-1]["type"] == "response.completed"
     service = get_proxy_service_for_app(app_instance)
     assert await service.drain_persistence_tasks(timeout_seconds=5)
+    terminal_claimed = asyncio.Event()
+    publish_terminal = asyncio.Event()
+    post_submit_checked = asyncio.Event()
+    hold_second_submit = False
+    if delay_terminal_publication:
+        original_record = service._record_http_bridge_retry_circuit_failure
+        original_submit = service._submit_http_bridge_request
+        original_cooldown = service._http_bridge_precreated_retry_cooldown_seconds
+
+        async def record(*args, **kwargs):
+            count = await original_record(*args, **kwargs)
+            if count == 2:
+                terminal_claimed.set()
+                await publish_terminal.wait()
+            return count
+
+        async def submit(*args, **kwargs):
+            await original_submit(*args, **kwargs)
+            if hold_second_submit:
+                await asyncio.wait_for(terminal_claimed.wait(), timeout=5)
+
+        async def cooldown(*args, **kwargs):
+            remaining = await original_cooldown(*args, **kwargs)
+            if terminal_claimed.is_set():
+                post_submit_checked.set()
+            return remaining
+
+        monkeypatch.setattr(service, "_record_http_bridge_retry_circuit_failure", record)
+        monkeypatch.setattr(service, "_submit_http_bridge_request", submit)
+        monkeypatch.setattr(service, "_http_bridge_precreated_retry_cooldown_seconds", cooldown)
     terminal_origin.terminal = {
         "type": "response.incomplete",
         "response": {
@@ -113,7 +144,16 @@ async def test_reason_only_incomplete_opens_durable_circuit_before_next_dispatch
     body = {"model": "gpt-5.1", "input": [_user("next")], "stream": True, "previous_response_id": "resp_retry_seed"}
     for expected_count in (1, 2):
         body["input"] = [_user(f"next {expected_count}")]
-        response = await asyncio.wait_for(async_client.post(path, headers=headers, json=body), timeout=10)
+        hold_second_submit = delay_terminal_publication and expected_count == 2
+        if hold_second_submit:
+            response_task = asyncio.create_task(async_client.post(path, headers=headers, json=body))
+            try:
+                await asyncio.wait_for(post_submit_checked.wait(), timeout=5)
+            finally:
+                publish_terminal.set()
+                response = await asyncio.wait_for(response_task, timeout=10)
+        else:
+            response = await asyncio.wait_for(async_client.post(path, headers=headers, json=body), timeout=10)
         assert response.status_code == 200, response.text
         assert _events(response)[-1] == terminal_origin.terminal
         assert await service.drain_persistence_tasks(timeout_seconds=5)

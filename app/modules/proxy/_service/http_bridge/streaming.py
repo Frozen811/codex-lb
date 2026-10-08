@@ -4964,6 +4964,10 @@ class _HTTPBridgeStreamingMixin:
             and not request_state.verified_stale_anchor_replay
             and request_state.response_id is None
             and request_state.response_event_count == 0
+            # An owned upstream terminal may open the circuit before its
+            # payload is enqueued; that terminal must still be delivered.
+            and request_state.terminal_settlement_phase != "claimed"
+            and request_state.upstream_terminal_at is None
             and event_queue.empty()
         ):
             if PROMETHEUS_AVAILABLE and stream_idle_timeout_total is not None:
