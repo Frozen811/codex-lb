@@ -80,7 +80,9 @@ class InFlightMiddleware:
                     send,
                     status_code=503,
                     payload=(
-                        local_unavailable_error(_DRAIN_MESSAGE) if is_proxy_path(path) else {"detail": _DRAIN_MESSAGE}
+                        local_unavailable_error(_DRAIN_MESSAGE)
+                        if is_proxy_path(path) or path.rstrip("/") == "/codex/responses"
+                        else {"detail": _DRAIN_MESSAGE}
                     ),
                     headers=merge_retry_after_headers(),
                 )

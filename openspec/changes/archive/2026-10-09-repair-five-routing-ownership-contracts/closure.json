@@ -1,0 +1,56 @@
+{
+  "status": "verified-and-archived",
+  "head": "005c8aa4d06be1d0d2f1ccdb2e0f90b725884f8e",
+  "date": "2026-10-09 Europe/Kiev",
+  "selected": [
+    "UP-PR-2332",
+    "UP-PR-2469",
+    "UP-PR-2486",
+    "UP-PR-2458",
+    "UP-PR-2001"
+  ],
+  "own_saved_rows": [
+    "| [UP-PR-2332](https://github.com/Soju06/codex-lb/pull/2332) | PR #2332: fix(proxy): fail over account-local model rejection | Раздел 3, L427 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §78: existing exact model_not_found проверен через HTTP и 10 WS cases: bounded movable failover, unchanged 404/envelope, health neutrality, hard-owner controls. Локально; provider/cloud отдельно. [verification](openspec/changes/archive/2026-10-09-repair-five-routing-ownership-contracts/verification.md). |",
+    "| [UP-PR-2469](https://github.com/Soju06/codex-lb/pull/2469) | PR #2469: fix(proxy): preserve routed file failover provenance | Раздел 3, L451 | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | §78: typed replay prohibition больше не теряется в file adapter; поздний poll refusal после retry не переносит finalization. 1 red product case; 4 new poll и 63 existing file/client/unary controls PASS. First-poll unpinned failover сохранён. [verification](openspec/changes/archive/2026-10-09-repair-five-routing-ownership-contracts/verification.md). |",
+    "| [UP-PR-2486](https://github.com/Soju06/codex-lb/pull/2486) | PR #2486: fix(balancer): admit a hard continuity owner serving its own transient backoff | Раздел 12, L1351 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §78: existing core/sticky/unbound hard-owner backoff admission подтверждён; 4 new active/paused/excluded/cap cases, unchanged counters, pressure cleanup и healthy sibling controls PASS. Persistent holds/caps не обходятся. [verification](openspec/changes/archive/2026-10-09-repair-five-routing-ownership-contracts/verification.md). |",
+    "| [UP-PR-2458](https://github.com/Soju06/codex-lb/pull/2458) | PR #2458: fix(proxy): recover bridge-bypassed quota failover | Раздел 12, L1363 | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | §78: retained-reasoning bypass quota replay теперь использует durable proof + strict projection и re-derived affinity без старого hard key. 8 new real-route owner/proof/quota/selection cases и existing full-history/file controls PASS; healthy original body/aliases сохранены. Current fork plain-resend policy сохранена; upstream policy acceptance отдельно. [verification](openspec/changes/archive/2026-10-09-repair-five-routing-ownership-contracts/verification.md). |",
+    "| [UP-PR-2001](https://github.com/Soju06/codex-lb/pull/2001) | PR #2001: fix(proxy): release payload owner after pre-visible quota rejection | Раздел 12, L1424 | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | §78: coded pre-visible quota не создаёт dispatch owner для known ciphertext-only state; unchanged reasoning/compaction replay, private provenance и health-neutral replacement rejection. Four canonical/slash paths, ownership/unknown/visibility/ambiguity/burst и keyed settlement-before-health PASS. Live ciphertext portability отдельно. [verification](openspec/changes/archive/2026-10-09-repair-five-routing-ownership-contracts/verification.md). |"
+  ],
+  "other_rows_preserved": 333,
+  "unrelated_dirty_files_preserved": 129,
+  "preserved_spec_context_prefixes": [
+    {
+      "path": "openspec/specs/responses-api-compat/spec.md",
+      "preserved": true,
+      "comparison": "baseline bytes"
+    },
+    {
+      "path": "openspec/specs/responses-api-compat/context.md",
+      "preserved": true,
+      "comparison": "baseline bytes"
+    },
+    {
+      "path": "openspec/specs/account-routing/spec.md",
+      "preserved": true,
+      "comparison": "HEAD content with normalized EOL"
+    },
+    {
+      "path": "openspec/specs/account-routing/context.md",
+      "preserved": true,
+      "comparison": "HEAD content with normalized EOL"
+    }
+  ],
+  "queue": {
+    "total": 338,
+    "local_closures": 146,
+    "partial": 7,
+    "unverified": 185
+  },
+  "distinct_tests_passed": 1144,
+  "new_requirements": 6,
+  "scenarios": 15,
+  "published": false,
+  "archive": "C:\\codex-lb\\openspec\\changes\\archive\\2026-10-09-repair-five-routing-ownership-contracts",
+  "registry_saved_readback": true,
+  "unrelated_rows_saved_readback": true
+}

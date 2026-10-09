@@ -82,3 +82,25 @@ Codex release.
 Version-pinned Codex sources:
 - [API-key discovery gate](https://github.com/openai/codex/blob/687a119f0fcaace47e1f1abcc77cec6c813fd6da/codex-rs/models-manager/src/manager.rs#L485-L495)
 - [Custom-provider catalog support](https://github.com/openai/codex/blob/687a119f0fcaace47e1f1abcc77cec6c813fd6da/codex-rs/model-provider/src/models_endpoint.rs#L201-L209)
+
+## Astra bootstrap and retained Spark discovery
+
+The [Astra bootstrap requirement](spec.md#requirement-astra-bootstrap-metadata-preserves-captured-native-capabilities)
+uses [OpenAI Codex rust-v0.153.4](https://github.com/openai/codex/blob/rust-v0.153.4/codex-rs/models-manager/models.json)
+as a captured startup fallback. It retains the 272000 backend input budget,
+872000 ceiling, low default reasoning, unified_exec shell and native code-mode
+capabilities. Pricing remains owned by the shared pricing snapshot. A live
+authoritative catalog can omit Astra; bootstrap must not grant live access.
+
+Spark is a quota-only bootstrap model: omission from a general catalog does
+not prove withdrawal of the separate allowance. A controlled Pro catalog
+containing only Luna was persisted to isolated SQLite and restored through
+the startup reconciliation path; native, compatible and dashboard catalog
+APIs retained Spark. This proves catalog visibility, not live inference
+entitlement or provider acceptance.
+
+Published and inline API-key discovery fragments are checked after merging
+provider-only fragments with the shipped top-level feature settings, as the
+guide instructs. The existing installed-client harness requires macOS
+sandbox-exec, so Windows validation of TOML does not establish live picker
+behavior on a current client.

@@ -57,3 +57,11 @@ with frozen test dependencies. Fixture startup now uses a bounded30s monotonic
 window for cold imports; drain/forced-exit deadlines were not increased. Native
 Windows TerminateProcess/Ctrl+C and Linux SIGTERM/SIGINT are not equivalent.
 See issues-check.md section26 for runtime identities, exact outcomes and limits.
+
+## Persistence ownership and interrupted stops (2026-10-09)
+
+The [ownership requirements](spec.md) distinguish handler completion from detached persistence completion. A done settlement remains observable while its callback can still create a reservation-release fallback. Status uses validated counts and flags: pending owners report `pending`, completed ownership reports `drained`, and unavailable or inconsistent observation reports `unknown` without a count. This is an instantaneous view, not a historical write-success certificate.
+
+For example, after an HTTP stream ends, `in_flight=0` and `request_persistence_pending=1` can coexist. Only after settlement callbacks release ownership does the count become zero. Fallback-cancelled scheduler cleanup stays in the clean-shutdown proof even when the stop caller is interrupted. Cooperative grace still leaves its worker running when the caller is cancelled.
+
+Drain denial for `/codex/responses` and its slash variant retains the same retryable HTTP 503, Retry-After 5 and OpenAI envelope as v1/backend-api proxy paths. Other WebSocket protocols retain their generic detail response. Windows in-process and SQLite tests do not substitute for POSIX process-signal or external database evidence.

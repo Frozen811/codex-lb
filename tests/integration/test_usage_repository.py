@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.crypto import TokenEncryptor
 from app.core.utils.time import utcnow
-from app.db.models import Account, AccountStatus
+from app.db.models import Account, AccountStatus, UsageHistory
 from app.db.session import SessionLocal, engine
 from app.modules.accounts.repository import AccountsRepository
 from app.modules.usage.repository import (
@@ -1260,6 +1260,55 @@ async def test_bulk_history_since_per_account_cutoffs_parity(db_setup):
     # Parity with the shared-floor fetch after per-account trimming.
     trimmed = [snapshot for snapshot in unbounded["acc-short"] if snapshot.recorded_at >= cutoffs["acc-short"]]
     assert [snapshot.used_percent for snapshot in trimmed] == [20.0]
+
+
+@pytest.mark.parametrize("window", ["primary", "secondary"])
+@pytest.mark.parametrize("cap", [0, 1, 3])
+@pytest.mark.parametrize("with_floor", [False, True])
+@pytest.mark.asyncio
+async def test_capped_history_keeps_timestamp_ties_and_exact_floor_once(db_setup, window, cap, with_floor):
+    now = datetime(2026, 10, 9, 12)
+    floor = now - timedelta(hours=3)
+    async with SessionLocal() as session:
+        repo = UsageRepository(session)
+        await AccountsRepository(session).upsert(_make_account("acc-cap-boundary"))
+        old = [
+            UsageHistory(
+                account_id="acc-cap-boundary",
+                used_percent=float(index),
+                recorded_at=floor - timedelta(hours=1),
+                window=None if window == "primary" and index % 2 == 0 else window,
+            )
+            for index in range(100)
+        ]
+        recent = [
+            UsageHistory(
+                account_id="acc-cap-boundary",
+                used_percent=100.0 + index,
+                recorded_at=floor + timedelta(minutes=index),
+                window=window,
+            )
+            for index in range(5)
+        ]
+        session.add_all(old + recent)
+        await session.commit()
+        result = await repo.bulk_history_since(
+            ["acc-cap-boundary"],
+            window,
+            now - timedelta(days=7),
+            cutoffs={"acc-cap-boundary": floor - timedelta(hours=2)},
+            per_account_row_cap=cap,
+            uncapped_recent_floor=floor if with_floor else None,
+        )
+    values = [snapshot.used_percent for snapshot in result.get("acc-cap-boundary", [])]
+    expected = (
+        ([float(index) for index in range(100 - cap, 100)] + [100.0 + index for index in range(5)])
+        if with_floor
+        else [100.0 + index for index in range(5 - cap, 5)]
+    )
+    assert values == expected
+    ids = [snapshot.id for snapshot in result.get("acc-cap-boundary", [])]
+    assert len(ids) == len(set(ids))
 
 
 @pytest.mark.asyncio

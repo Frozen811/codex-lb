@@ -1,0 +1,98 @@
+FFFFFFFF                                                                 [100%]
+================================== FAILURES ===================================
+________ test_retag_preserves_opaque_transcript_and_counts_only_header ________
+tests\unit\test_operator_data_batch.py:30: in test_retag_preserves_opaque_transcript_and_counts_only_header
+    result = retag_codex_sessions(codex_home=tmp_path, source_provider="openai", target_provider="codex-lb")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\codex_sessions_retag.py:95: in retag_codex_sessions
+    provider_counts_before = _provider_counts(codex_home)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\codex_sessions_retag.py:487: in _provider_counts
+    for record in _read_jsonl_records(path):
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+app\codex_sessions_retag.py:311: in _read_jsonl_records
+    for line in handle:
+                ^^^^^^
+<frozen codecs>:325: in decode
+    ???
+E   UnicodeDecodeError: 'utf-8' codec can't decode byte 0xff in position 129: invalid start byte
+_____ test_retag_invalid_initial_metadata_fails_before_backup[malformed] ______
+tests\unit\test_operator_data_batch.py:41: in test_retag_invalid_initial_metadata_fails_before_backup
+    with pytest.raises(ValueError, match="metadata"):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE ValueError
+_____ test_retag_invalid_initial_metadata_fails_before_backup[oversized] ______
+tests\unit\test_operator_data_batch.py:41: in test_retag_invalid_initial_metadata_fails_before_backup
+    with pytest.raises(ValueError, match="metadata"):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE ValueError
+____________________ test_retag_cli_exposes_json_progress _____________________
+tests\unit\test_operator_data_batch.py:48: in test_retag_cli_exposes_json_progress
+    args = cli._parse_args(["codex-sessions", "retag", "--from", "openai", "--to", "codex-lb", "--progress-json"])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\cli.py:171: in _parse_args
+    return parser.parse_args(argv)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1930: in parse_args
+    self.error(msg)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2686: in error
+    self.exit(2, _('%(prog)s: error: %(message)s\n') % args)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2673: in exit
+    _sys.exit(status)
+E   SystemExit: 2
+---------------------------- Captured stderr call -----------------------------
+usage: pytest [-h] [--host HOST] [--port PORT] [--ssl-certfile SSL_CERTFILE] [--ssl-keyfile SSL_KEYFILE]
+              [--timeout-keep-alive TIMEOUT_KEEP_ALIVE] [--log-level {critical,error,warning,info,debug}]
+              [--log-file LOG_FILE] [--ws-max-size WS_MAX_SIZE]
+              {codex-sessions,admin} ...
+pytest: error: unrecognized arguments: --progress-json
+___ test_unknown_revision_failure_explains_guarded_recovery_without_writes ____
+tests\unit\test_operator_data_batch.py:65: in test_unknown_revision_failure_explains_guarded_recovery_without_writes
+    assert text in message
+E   AssertionError: assert 'schema and data compatibility' in 'Database schema revision(s) future_unknown_revision are not known to this build (head=20261007_000000_add_account_quo...ated by a newer version. Deploy a matching or newer image, or run an Alembic downgrade to a revision this build knows.'
+__________ test_online_revision_progress_success_downgrade_and_noop ___________
+tests\unit\test_operator_data_batch.py:78: in test_online_revision_progress_success_downgrade_and_noop
+    assert any(f"Migration started revision={revision} direction=upgrade" in m for m in messages)
+E   assert False
+E    +  where False = any(<generator object test_online_revision_progress_success_downgrade_and_noop.<locals>.<genexpr> at 0x000001D001B82500>)
+_________________ test_migration_cli_progress_stays_on_stderr _________________
+tests\unit\test_operator_data_batch.py:93: in test_migration_cli_progress_stays_on_stderr
+    assert "Migration started revision=" in output.err
+E   AssertionError: assert 'Migration started revision=' in ''
+E    +  where '' = CaptureResult(out='current_revision=20260213_000000_base_schema\n', err='').err
+__________________ test_retag_cli_json_progress_and_summary ___________________
+tests\unit\test_operator_data_batch.py:98: in test_retag_cli_json_progress_and_summary
+    args = cli._parse_args(["codex-sessions", "retag", "--from", "openai", "--to", "codex-lb", "--codex-home", str(tmp_path), "--yes", "--progress-json"])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\cli.py:171: in _parse_args
+    return parser.parse_args(argv)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1930: in parse_args
+    self.error(msg)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2686: in error
+    self.exit(2, _('%(prog)s: error: %(message)s\n') % args)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2673: in exit
+    _sys.exit(status)
+E   SystemExit: 2
+---------------------------- Captured stderr call -----------------------------
+usage: pytest [-h] [--host HOST] [--port PORT] [--ssl-certfile SSL_CERTFILE] [--ssl-keyfile SSL_KEYFILE]
+              [--timeout-keep-alive TIMEOUT_KEEP_ALIVE] [--log-level {critical,error,warning,info,debug}]
+              [--log-file LOG_FILE] [--ws-max-size WS_MAX_SIZE]
+              {codex-sessions,admin} ...
+pytest: error: unrecognized arguments: --progress-json
+============================== warnings summary ===============================
+tests/unit/test_operator_data_batch.py::test_retag_preserves_opaque_transcript_and_counts_only_header
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/unit/test_operator_data_batch.py::test_retag_preserves_opaque_transcript_and_counts_only_header
+FAILED tests/unit/test_operator_data_batch.py::test_retag_invalid_initial_metadata_fails_before_backup[malformed]
+FAILED tests/unit/test_operator_data_batch.py::test_retag_invalid_initial_metadata_fails_before_backup[oversized]
+FAILED tests/unit/test_operator_data_batch.py::test_retag_cli_exposes_json_progress
+FAILED tests/unit/test_operator_data_batch.py::test_unknown_revision_failure_explains_guarded_recovery_without_writes
+FAILED tests/unit/test_operator_data_batch.py::test_online_revision_progress_success_downgrade_and_noop
+FAILED tests/unit/test_operator_data_batch.py::test_migration_cli_progress_stays_on_stderr
+FAILED tests/unit/test_operator_data_batch.py::test_retag_cli_json_progress_and_summary
+8 failed, 1 warning in 3.75s

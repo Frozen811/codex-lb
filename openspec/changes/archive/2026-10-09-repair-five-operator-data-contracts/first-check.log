@@ -1,0 +1,16 @@
+......F..........................................................        [100%]
+================================== FAILURES ===================================
+_________________ test_migration_cli_progress_stays_on_stderr _________________
+tests\unit\test_operator_data_batch.py:105: in test_migration_cli_progress_stays_on_stderr
+    assert "Migration started revision=" in output.err
+E   AssertionError: assert 'Migration started revision=' in ''
+E    +  where '' = CaptureResult(out='current_revision=20260213_000000_base_schema\n', err='').err
+============================== warnings summary ===============================
+tests/unit/test_operator_data_batch.py::test_retag_preserves_opaque_transcript_and_counts_only_header
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/unit/test_operator_data_batch.py::test_migration_cli_progress_stays_on_stderr
+1 failed, 64 passed, 1 warning in 7.21s

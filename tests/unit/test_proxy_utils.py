@@ -888,9 +888,9 @@ async def test_reasoning_replay_400_increments_counter_without_changing_health(
     )
 
     counter.inc.assert_called_once_with()
-    # Observation only: classification and account health handling are exactly today's.
+    # The diagnostic remains observable while the request-shaped rejection is health-neutral.
     assert classified["failure_class"] == "non_retryable"
-    load_balancer.record_error.assert_awaited_once()
+    load_balancer.record_error.assert_not_awaited()
     load_balancer.mark_rate_limit.assert_not_awaited()
     proxy._schedule_cancel_safe_cleanup.assert_not_called()
 

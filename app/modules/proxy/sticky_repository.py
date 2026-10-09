@@ -27,7 +27,7 @@ from app.modules.sticky_sessions.schemas import StickySessionSortBy, StickySessi
 # bind parameters, which this chunk size also respects.
 _DELETE_ENTRIES_CHUNK_SIZE = 250
 
-_ContinuitySource = Literal["session_header", "thread_header", "turn_state"]
+_ContinuitySource = Literal["session_header", "thread_header", "turn_state", "history_session"]
 _SESSION_HEADER_ABANDONMENT_SCOPE = "session_header"
 
 # A same-owner TTL refresh upsert only rewrites ``updated_at``. On hot

@@ -1,0 +1,214 @@
+[
+  {
+    "id": "UP-PR-2445",
+    "number": 2445,
+    "title": "feat(proxy): forward the Codex plugin catalog upstream so chatgpt_base_url can point at codex-lb",
+    "body": "## Summary\n\nForward Codex CLI's plugin-catalog reads (`/ps/plugins/*`, `/plugins/featured`) upstream, so a user can set `chatgpt_base_url = \"http://127.0.0.1:2455\"` — which makes `/status` show the **pool's** limits via the existing `GET /api/codex/usage` — without losing the remote marketplace.\n\n**Why:** Codex reads the limits it displays from `chatgpt_base_url`. Behind codex-lb the default (`https://chatgpt.com/backend-api`) describes only the local `auth.json` account, so a user whose local account is exhausted sees `5h 0% left` while healthy pool accounts serve every turn. Pointing `chatgpt_base_url` at codex-lb's origin fixes that (Codex then calls `/api/codex/usage`), but Codex fetches its plugin catalog from the same base — and codex-lb had no route for it, so the SPA fallback answered with dashboard HTML and the `openai-curated-remote` marketplace silently vanished (3,889 plugins → 0, `featuredPluginIds` 23 → 0). Users had to pick between correct limits and a working marketplace.\n\n## Type of change\n\n- [x] `feat:` — new user-facing feature or capability\n\nLinked issue: none (no existing issue mentions `chatgpt_base_url`, the plugin catalog, or `/status` limits).\n\n## OpenSpec\n\n- [x] This PR includes / updates an OpenSpec change: `openspec/changes/codex-plugin-catalog-passthrough/` (new capability `codex-plugin-catalog-passthrough`; `api-firewall` modified). `openspec validate codex-plugin-catalog-passthrough --strict` passes.\n- [x] This PR touches a codex-faithful path: the passthrough preserves method, query string (repeated keys, order) and returns upstream status/body/allowlisted headers verbatim; nothing diverges.\n\n## What changed\n\n- `app/modules/proxy/api.py` — `plugin_catalog_router` at the origin root: `GET /plugins/featured`, `GET /ps/plugins/{path}` → `_codex_control_proxy` (pool credentials, session affinity, same fail-closed capability handling as the other control routes). GET only; other methods 405.\n- `app/core/clients/proxy.py` — `ps/` and `plugins/` join `wham/` as root-level upstream namespaces (no `codex/` prefix).\n- `app/main.py` — register the router; `ps/`, `plugins/` become API namespaces for the SPA fallback (unknown paths 404 instead of HTML).\n- `app/core/handlers/exceptions.py` — those namespaces use the OpenAI error envelope.\n- `app/core/middleware/api_firewall.py` — the surface is firewall-protected like `/backend-api/codex` and `/v1` (it spends pool credentials upstream).\n- `docs/client-setup.md`, `docs/examples/codex/config.toml` — document `chatgpt_base_url` pointing at codex-lb.\n\n## How the Codex paths were established\n\nDriving `codex app-server` (0.154.0) with a throwaway HTTP listener standing in for `chatgpt_base_url` (no model tokens spent):\n\n| `chatgpt_base_url`         | usage path Codex calls        |\n|----------------------------|-------------------------------|\n| `http://host` (origin)     | `GET /api/codex/usage`        |\n| `http://host/backend-api`  | `GET /backend-api/wham/usage` |\n\nWith the origin form, the same host receives `GET /ps/plugins/list?scope=GLOBAL&limit=200`, `/ps/plugins/installed?limit=200[&includeDownloadUrls=true]`, `/ps/plugins/suggested/codex?scope=GLOBAL`, `/plugins/featured?platform=codex`, and — on `plugin/install` from the remote marketplace — `GET /ps/plugins/{name}?includeDownloadUrls=true`. All GETs. The binary also carries `/ps/plugins/search` and `/ps/plugins/workspace/{created,shared}`; the `{path}` route covers them.\n\n## Verification\n\n- `make lint` components: ruff check/format, all five architecture checks — green. `ty check`: no diagnostics in touched files (the 14 reported are pre-existing in `pyproject.toml`/`scripts`/unrelated tests).\n- New: `tests/integration/test_codex_plugin_catalog_passthrough.py` (every observed catalog read forwards verbatim with pool credentials — not the caller's token — and POST is 405); unit URL-mapping cases in `test_codex_upstream_paths.py`; 404-envelope cases in `test_health_and_errors.py`; firewall cases in `test_api_firewall_middleware.py`; route inventory + fail-closed capability cases in `test_daybreak_capability_routes.py`.\n- Targeted suites: 223 passed. The 2 failures in `test_health_and_errors.py` are environmental on this Windows host (symlink privilege `WinError 1314`; frontend not built) and unrelated to this change.\n- Not exercised: a live `plugin/install` through the passthrough against the real upstream (no second credential store was stood up for the test). The read that precedes an install is covered; if a later Codex version adds a write to this namespace it will surface as a 405, by design.\n\n## Known limitation (documented in the change's `context.md`)\n\n`/ps/plugins/installed` reflects whichever pool account served the request, not the caller's local identity. Codex treats its local install state as authoritative, so this only affects the upstream \"installed\" flag on catalog entries.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n",
+    "state": "open",
+    "draft": false,
+    "merged": false,
+    "mergeable_state": "dirty",
+    "html_url": "https://github.com/Soju06/codex-lb/pull/2445",
+    "user": {
+      "login": "diegocamara89",
+      "id": 187240496,
+      "profile_url": "https://github.com/diegocamara89",
+      "avatar_url": "https://avatars.githubusercontent.com/u/187240496?v=4"
+    },
+    "labels": [
+      "stale"
+    ],
+    "head": {
+      "ref": "feat/codex-plugin-catalog-passthrough",
+      "sha": "3011550f156d479773c38b5531fb2d3a53eb2590",
+      "repo": {
+        "full_name": "diegocamara89/codex-lb",
+        "description": "Codex/ChatGPT multiple account load balancer & proxy with usage tracking, dashboard, and OpenCode-compatible endpoints"
+      }
+    },
+    "base": {
+      "ref": "main",
+      "sha": "d1fd2f21fa0e0f3b5fcad3af5fada19693cd1fc1",
+      "repo": {
+        "full_name": "Soju06/codex-lb",
+        "description": "Codex/ChatGPT multiple account load balancer & proxy with usage tracking, dashboard, and OpenCode-compatible endpoints"
+      }
+    },
+    "additions": 457,
+    "deletions": 2,
+    "changed_files": 17,
+    "commits": 1,
+    "comments": 4,
+    "created_at": "2026-09-15T20:48:09Z",
+    "updated_at": "2026-10-07T11:28:00Z"
+  },
+  {
+    "id": "UP-PR-2101",
+    "number": 2101,
+    "title": "fix(proxy): add native history and notes routes with account-local ownership",
+    "body": "\n## Summary\n\nNative Codex history and notes calls (`alpha/history/v2/*`, `alpha/notes/v2/*`) have no route through codex-lb, so the extension fails at the proxy. This PR registers the ten authenticated POST routes on the existing Codex control proxy, forwards bodies and native headers unchanged, and keeps each session's account-local history/notes state on one upstream account. Ordinary Responses routing is not changed.\n\n## Type of change\n\n- [x] `fix:` — bug fix (missing routes; no behavior change for existing traffic)\n\nLinked issue: none. Related alternative: #2102 (durable ownership tables + cross-account history fan-out + proxy ciphertext envelope). The two designs are mutually exclusive; this one adds no schema, no migration, no wire-format change, and no new setting.\n\n## OpenSpec\n\n- [x] This PR includes / updates an OpenSpec change\n- [x] This PR touches a codex-faithful path (native request/response shape) and preserves upstream-equivalent behavior: the body, `x-openai-encrypted-tool-arguments`, `x-openai-tool-output-truncation-policy`, and the upstream response are relayed byte-for-byte.\n\nChange directory: `openspec/changes/proxy-native-history-notes-routes/` (new capability `native-history-notes-proxy`, delta on `upstream-proxy-routing`).\n\n## Changes\n\n- `app/modules/proxy/api.py`: ten `POST /backend-api/codex/alpha/{history,notes}/v2/*` routes on `_codex_control_proxy`. For these paths the plaintext body `context.session_id` is read as the affinity identity and cross-account retry is disabled. A body that is not a JSON object gets `400` (same as thread-goal bodies); a JSON object without a usable identity is forwarded once, unpinned — the upstream protocol stays authoritative for payload validation.\n- `app/modules/proxy/affinity.py`: `_sticky_key_for_codex_control_request(..., body_session_id=)` builds a hard `CODEX_SESSION` policy with source `history_session` in its own namespaced key (`_history_session_selection_key`), no legacy raw-row lookup, no cap spillover, seeded from the soft process-session owner (`_codex_session_selection_key(session_id)`). `_CodexSessionSource` now aliases the repository literal instead of duplicating it.\n- `app/modules/proxy/sticky_repository.py`: `_ContinuitySource` gains `\"history_session\"`; it is the single owner of the literal (the test double in `tests/unit/test_proxy_load_balancer_refresh.py` now imports it too).\n- `app/modules/proxy/_service/codex_control.py`: `codex_control_request(body_session_id=, allow_cross_account_retry=)`; with retry disabled the selected account's upstream error is returned as-is and health is recorded on that account.\n- `app/modules/proxy/affinity_observation.py`: request logs label the source as `history_session`.\n\n## Review points from the previous round, and how each was settled\n\n1. **`\"body_session\"` had no producer but granted cap-spillover mobility.** Removed entirely (literal, `legacy_selection_key`, `preferred_owner_sticky_inputs`, and the `bare_session_key` mobility set in `sticky_selection.py` are back to `main`). The only producer is the control route, and it emits `history_session`, which is hard and never spills.\n2. **Marked Responses/compact were reclassified into hard fail-closed ownership.** Dropped. `_history_session_affinity` and the turn-metadata parser are gone; `_sticky_key_for_responses_request`, `_sticky_key_for_compact_request`, and `compact.py` are identical to `main`. Only the ten native routes pin. Quota rotation and #2166 overload rebinding keep working for every session; only the account-local history/notes calls fail loudly when their owner is unavailable. The first native call seeds from the soft process-session owner, so notes land where that session's Responses currently run without changing how Responses are routed. Spec scenarios: \"History-marked Responses keep ordinary soft affinity\", \"First native call follows the process-session owner\", \"History owner is unavailable\". Known limit, stated in the proposal's Non-goals: when Responses rotate across accounts, a native history query sees only the pinned account's store; recording ingest partitions and fanning out is #2102's design, not this one.\n3. **`400` on a body without plaintext `context.session_id` vs today's `405`.** No live capture exists (checked the operator's request logs, container logs, and state directories: the extension has never reached this proxy because it is gated by the model catalog's `use_history_notes_extension`). The shape is settled by the client source instead: codex-rs `ext/history-notes/src/backend.rs` (rust-v0.153.x, same tree as the 0.155 build) always inserts a plaintext `\"context\": {\"session_id\", \"current_agent_name\"}` object into the JSON body and sends `x-openai-encrypted-tool-arguments: true` as a flag header on `history/v2/search_contents`, `notes/v2/search_contents`, `notes/v2/append_to_file`, `notes/v2/write_file` only — its test is literally `marks_encrypted_history_and_notes_arguments_without_changing_the_json_body`. The proxy therefore no longer rejects a JSON object that lacks the identity: it is forwarded once, unpinned, exactly like a thread-goal body without `threadId`. Only a non-JSON-object body gets `400`, matching `_thread_goal_payload_from_request`. The client maps every non-2xx to one generic tool error, so the status choice is invisible to real clients.\n4. **ty red.** `_ContinuitySource` is the single literal owner; `affinity._CodexSessionSource = _ContinuitySource`. ty: 0 diagnostics.\n5. **Overlap with #2102.** Compared in detail. #2102 delivers the same ten routes as a side effect of a pooled-history architecture (2 tables, 5 migrations, a ledger-recovery hook, a 4096-entry process cache, up-to-32-account fan-out, a proxy-minted `codex-lb-context-v1:` ciphertext in the client's `encrypted_output` slot that is rewritten into N native parts on the next Responses turn, replay-safety widening so marked inference rotates, ~60 files / ~4,750 diff lines). Its current head has CI failures (integration-core-3, Rust workspace, contributors attribution). This PR is the minimal design the maintainer said is \"much smaller, which is in its favor if points 3 and 4 are resolved\"; both are resolved above.\n\n## Simplicity\n\nNo new setting, README section, `.env.example` entry, dashboard item, migration, or default change. The feature is zero-config: routes exist, and the only state is a sticky-session row in the existing table.\n\n## Test plan\n\n```\nuv run pytest tests/unit/test_proxy_utils.py -q                          # 1415 passed\nuv run pytest tests/unit/test_proxy_load_balancer_refresh.py tests/unit/test_affinity_observation_source.py -q   # 103 passed, 3 skipped\nuv run pytest tests/integration/test_proxy_api_extended.py -q -k 'native_history or history_session or codex_control_json'   # 16 passed\nuv run pytest tests/integration/test_daybreak_capability_routes.py -q   # 133 passed\nuv run pytest tests/integration/test_proxy_compact.py -q                # 55 passed\nuv run ruff check . && uv run ruff format --check .                      # clean\nuv run ty check                                                          # 0 diagnostics (was 5 on the rebased head)\nmake architecture-check                                                  # all five guards pass\nopenspec validate --type change --strict --no-interactive -- proxy-native-history-notes-routes   # valid (openspec 1.11.0)\nopenspec validate --specs                                                # 65 passed, 0 failed\n```\n\nCoverage: all ten routes preserve body and both native headers (parametrized); missing identity is forwarded once with no session affinity and no failover; malformed body 400; unknown `alpha/notes/v2/*` name stays 405; owner upstream error returns without touching account B; first native call follows the process-session owner and persists the `history_session` row; a history-marked Responses turn still rotates off a paused owner (ownership class unchanged); a native call with a paused owner fails without selecting B and without replacing the stored owner; auth is checked before routing for these paths; unit canaries prove the `history_ingest_requested` marker (header or `client_metadata` carrier) yields the same policy shape as an unmarked turn for both Responses and compact.\n\n## Screenshots / output\n\nRequest shape (from codex-rs `ext/history-notes/src/backend.rs`, forwarded unchanged):\n\n```\nPOST /backend-api/codex/alpha/notes/v2/write_file\nx-openai-tool-output-truncation-policy: {\"Bytes\":4000}\nx-openai-encrypted-tool-arguments: true\ncontent-type: application/json\n\n{\"path\":\"notes.md\",\"contents\":\"...\",\"context\":{\"session_id\":\"<thread-uuid>\",\"current_agent_name\":\"<agent>\"}}\n```\n",
+    "state": "open",
+    "draft": false,
+    "merged": false,
+    "mergeable_state": "unstable",
+    "html_url": "https://github.com/Soju06/codex-lb/pull/2101",
+    "user": {
+      "login": "Komzpa",
+      "id": 810638,
+      "profile_url": "https://github.com/Komzpa",
+      "avatar_url": "https://avatars.githubusercontent.com/u/810638?v=4"
+    },
+    "head": {
+      "ref": "fix/native-history-notes-routes-20260905",
+      "sha": "ed500e80932b3d98047677b0e6c36977b79532d5",
+      "repo": {
+        "full_name": "Komzpa/codex-lb",
+        "description": "Codex/ChatGPT multiple account load balancer & proxy with usage tracking, dashboard, and OpenCode-compatible endpoints"
+      }
+    },
+    "base": {
+      "ref": "main",
+      "sha": "d1fd2f21fa0e0f3b5fcad3af5fada19693cd1fc1",
+      "repo": {
+        "full_name": "Soju06/codex-lb",
+        "description": "Codex/ChatGPT multiple account load balancer & proxy with usage tracking, dashboard, and OpenCode-compatible endpoints"
+      }
+    },
+    "additions": 808,
+    "deletions": 24,
+    "changed_files": 13,
+    "commits": 1,
+    "comments": 6,
+    "created_at": "2026-09-05T10:23:00Z",
+    "updated_at": "2026-09-29T05:07:36Z"
+  },
+  {
+    "id": "UP-PR-2085",
+    "number": 2085,
+    "title": "feat(models): add gpt-6 astra catalog support",
+    "body": "feat(models): add gpt-6 astra catalog support\n\n## Summary\n\n- add `gpt-6-astra` to the bootstrap model catalog with the captured upstream Codex metadata\n- add Astra pricing and aliases for standard, Priority/Fast, Flex/Batch, and long-context usage\n- include Astra in Cursor-style model suffix normalization\n\n## Validation\n\n- `openspec validate --strict add-gpt-6-astra-model-bootstrap`\n- `uv run pytest tests/unit/test_pricing.py tests/unit/test_model_registry.py tests/unit/test_request_policy.py -q`\n- `uv run pytest tests/unit -k \"pricing or model_registry or request_policy\" -q`\n- `uv run ty check`\n- `uv run ruff check . && uv run ruff format --check .`",
+    "state": "open",
+    "draft": false,
+    "merged": false,
+    "mergeable_state": "blocked",
+    "html_url": "https://github.com/Soju06/codex-lb/pull/2085",
+    "user": {
+      "login": "Komzpa",
+      "id": 810638,
+      "profile_url": "https://github.com/Komzpa",
+      "avatar_url": "https://avatars.githubusercontent.com/u/810638?v=4"
+    },
+    "labels": [
+      "documentation",
+      "python"
+    ],
+    "head": {
+      "ref": "feat/gpt-6-astra-bootstrap",
+      "sha": "4f626692cda014167b6548f5d8694be474e6fe82",
+      "repo": {
+        "full_name": "Komzpa/codex-lb",
+        "description": "Codex/ChatGPT multiple account load balancer & proxy with usage tracking, dashboard, and OpenCode-compatible endpoints"
+      }
+    },
+    "base": {
+      "ref": "main",
+      "sha": "9637bdee36744ca65e7cd13ffd47b7e79741f551",
+      "repo": {
+        "full_name": "Soju06/codex-lb",
+        "description": "Codex/ChatGPT multiple account load balancer & proxy with usage tracking, dashboard, and OpenCode-compatible endpoints"
+      }
+    },
+    "additions": 364,
+    "deletions": 8,
+    "changed_files": 11,
+    "commits": 1,
+    "comments": 16,
+    "created_at": "2026-09-04T20:52:11Z",
+    "updated_at": "2026-09-29T05:07:33Z"
+  },
+  {
+    "id": "UP-ISSUE-1467",
+    "number": 1467,
+    "title": "bug: gpt-5.3-codex-spark works on Pro but is missing from /v1/models",
+    "body": "### Pre-flight checklist\n\n- [x] I searched existing issues and confirmed this is not a duplicate.\n- [x] I am running a supported codex-lb version (see Releases).\n- [x] I can reproduce the problem with the steps below.\n\n### codex-lb version\n\n1.21.0\n\n### Deployment method\n\nDocker Compose\n\n### Client used against codex-lb\n\nDirect HTTP (curl / SDK), Other (describe below)\n\n### ChatGPT account plan(s) involved\n\nPro\n\n### Model(s) involved\n\ngpt-5.3-codex-spark\n\n### What happened?\n\nI am using a ChatGPT Pro account, and `gpt-5.3-codex-spark` is available to this account.\n\nA direct OpenAI-compatible request through codex-lb succeeds, and the response confirms that the request was processed by `gpt-5.3-codex-spark`.\n\nHowever, the model is not returned by:\n\n    GET /v1/models\n\nThe API key is configured with:\n\n    Models: All models\n\nThere is also inconsistent behavior in the codex-lb dashboard:\n\n1. Immediately after the first startup and ChatGPT account authorization, `gpt-5.3-codex-spark` was displayed as an available model in the dashboard.\n2. Despite being displayed in the dashboard, it was not returned by the OpenAI-compatible `/v1/models` endpoint.\n3. After restarting the codex-lb server, `gpt-5.3-codex-spark` also disappeared from the list of available models in the dashboard.\n4. Direct requests using `model: gpt-5.3-codex-spark` continue to succeed after the restart.\n\nFor example, this request succeeds:\n\n```http\nPOST /v1/chat/completions\nContent-Type: application/json\nAuthorization: Bearer <CODEX_LB_API_KEY>\n```\n\n```json\n{\n  \"model\": \"gpt-5.3-codex-spark\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Reply with one word: OK\"\n    }\n  ],\n  \"stream\": false\n}\n```\n\nThe response contains:\n\n```json\n{\n  \"object\": \"chat.completion\",\n  \"model\": \"gpt-5.3-codex-spark\",\n  \"choices\": [\n    {\n      \"message\": {\n        \"role\": \"assistant\",\n        \"content\": \"OK\"\n      },\n      \"finish_reason\": \"stop\"\n    }\n  ]\n}\n```\n\nAt the same time, `/v1/models` returns only `gpt-5.6-luna` and does not include `gpt-5.3-codex-spark`.\n\nThis prevents OpenAI-compatible clients that rely on `/v1/models` for model discovery, such as OpenWhispr, from selecting Spark even though inference with the model works.\n\n### What did you expect to happen?\n\nIf the authenticated ChatGPT Pro account can successfully use `gpt-5.3-codex-spark`, the model should:\n\n- be returned by `GET /v1/models`;\n- be displayed in the codex-lb dashboard;\n- remain present in the model catalog after a server restart;\n- be selectable by OpenAI-compatible clients that use `/v1/models` for model discovery.\n\nThe model catalog should be consistent with the models that codex-lb can successfully route requests to.\n\nIf the model is intentionally excluded from `/v1/models`, it should not disappear from the dashboard after restart while direct inference continues to work.\n\n### Steps to reproduce\n\n```markdown\n1. Start codex-lb using Docker Compose with the `ghcr.io/soju06/codex-lb:latest` image.\n\n2. Authenticate a ChatGPT Pro account through Codex OAuth.\n\n3. Create a codex-lb API key and configure it with:\n\n       Models: All models\n\n4. Immediately after the first authorization, observe that `gpt-5.3-codex-spark` is displayed in the dashboard as an available model.\n\n5. Request the OpenAI-compatible model list:\n\n\ncurl --location --request GET \\\n  --url \"http://localhost:2455/v1/models\" \\\n  --header \"Authorization: Bearer <CODEX_LB_API_KEY>\"\n\n\n6. Observe that `gpt-5.3-codex-spark` is missing from the response. In my case, only `gpt-5.6-luna` is returned.\n\n7. Send a direct request using the missing model:\n\n\ncurl --location --request POST \\\n  --url \"http://localhost:2455/v1/chat/completions\" \\\n  --header \"Authorization: Bearer <CODEX_LB_API_KEY>\" \\\n  --header \"Content-Type: application/json\" \\\n  --data-raw '{\n    \"model\": \"gpt-5.3-codex-spark\",\n    \"messages\": [\n      {\n        \"role\": \"user\",\n        \"content\": \"Reply with one word: OK\"\n      }\n    ],\n    \"stream\": false\n  }'\n\n\n8. Observe that the request succeeds and the response contains:\n\n       \"model\": \"gpt-5.3-codex-spark\"\n\n9. Restart codex-lb:\n\n\ndocker compose restart codex-lb\n\n\n10. Open the dashboard again and observe that `gpt-5.3-codex-spark` is no longer displayed as an available model.\n\n11. Repeat the direct `/v1/chat/completions` request and observe that `gpt-5.3-codex-spark` still works.\n```\n\n### Relevant logs\n\n```shell\n\n```\n\n### Configuration / environment\n\n```yaml\nDeployment configuration:\n\n\nservices:\n  codex-lb:\n    image: ghcr.io/soju06/codex-lb:latest\n    container_name: codex-lb\n    restart: unless-stopped\n\n    ports:\n      - \"127.0.0.1:2455:2455\"\n      - \"127.0.0.1:1455:1455\"\n\n    volumes:\n      - codex-lb-data:/var/lib/codex-lb\n\nvolumes:\n  codex-lb-data:\n\n\nAccount configuration:\n\n    ChatGPT plan: Pro\n    Authentication: Codex OAuth\n    API key status: Active\n    API key model restriction: All models\n\nOpenAI-compatible endpoint:\n\n    http://localhost:2455/v1\n\nThe issue is reproducible both through OpenWhispr and through direct cURL/Postman requests.\n```\n\n### Additional context\n\nA successful response from the direct Spark request:\n\n```json\n{\n  \"id\": \"resp_01f6e96f4fe92109016a62eb25fd108191b35502822b12a0c5\",\n  \"object\": \"chat.completion\",\n  \"created\": 1784867619,\n  \"model\": \"gpt-5.3-codex-spark\",\n  \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\": \"assistant\",\n        \"content\": \"OK\"\n      },\n      \"finish_reason\": \"stop\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 13,\n    \"completion_tokens\": 64,\n    \"total_tokens\": 77,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\": 0\n    },\n    \"completion_tokens_details\": {\n      \"reasoning_tokens\": 57\n    }\n  }\n}\n```\n\nRelated issue:\n\nhttps://github.com/Soju06/codex-lb/issues/608\n\nThat issue concerned Spark requests failing on a Plus account while working on a Pro account.\n\nThis report is different: the request succeeds on my Pro account, but the working model is omitted from the OpenAI-compatible `/v1/models` endpoint and disappears from the dashboard model catalog after a server restart.\n\nI can also attach:\n\n- a screenshot showing the API key configured with `Models: All models`;\n- the `/v1/models` response without Spark;\n- the successful direct response from `gpt-5.3-codex-spark`;\n- dashboard screenshots before and after restarting codex-lb.\n\n\n\n<img width=\"1503\" height=\"745\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/d04e9624-be56-462a-a0e7-a4ed20245add\" />\n<img width=\"1920\" height=\"952\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/af1759bb-e42b-4d96-bdfc-5c844b1f8fad\" />",
+    "state": "open",
+    "html_url": "https://github.com/Soju06/codex-lb/issues/1467",
+    "user": {
+      "login": "kostazol",
+      "id": 30263513,
+      "profile_url": "https://github.com/kostazol",
+      "avatar_url": "https://avatars.githubusercontent.com/u/30263513?v=4"
+    },
+    "author_association": "CONTRIBUTOR",
+    "labels": [
+      "bug",
+      "enhancement",
+      "help wanted"
+    ],
+    "assignees": [],
+    "comments": 4,
+    "reactions": {
+      "total_count": 0,
+      "+1": 0,
+      "-1": 0,
+      "laugh": 0,
+      "confused": 0,
+      "heart": 0,
+      "hooray": 0,
+      "rocket": 0,
+      "eyes": 0
+    },
+    "created_at": "2026-07-24T05:46:29Z",
+    "updated_at": "2026-09-28T08:39:29Z",
+    "has_parent": false,
+    "has_children": false,
+    "closed_by_pull_requests": {
+      "total_count": 0,
+      "references": []
+    }
+  },
+  {
+    "id": "UP-PR-2543",
+    "number": 2543,
+    "title": "docs(codex): enable API-key model discovery in setup examples",
+    "body": "## Problem\n\nCodex 0.159.0 treats a custom provider with `env_key` as API-key model\ndiscovery, even with `requires_openai_auth = true`. Without both the discovery\nfeature and an explicit catalog URL, it uses its bundled catalog. A newly\nadvertised model can therefore be missing from the app's picker while\ncodex-lb's native catalog already lists it.\n\n## Changes\n\n- Add `api_key_model_discovery` and explicit native `model_catalog_url` values\n  to the guide and downloadable Codex configuration.\n- Explain the version-specific discovery conditions and how to merge the\n  settings into existing configuration.\n- Keep the installed-Codex E2E fixture's new catalog traffic local and verify\n  its authentication and capability headers before inference routing.\n\nNo server behavior, default model, authentication policy, or capability\nrouting changes.\n\n## Verification\n\n- Existing config-consuming tests: **5 passed** before and after the change,\n  with installed-Codex E2E enabled.\n- Shipped TOML and all five inline TOML blocks parse; discovery fields agree.\n- Real Codex 0.159.0 app-server using the shipped example and an existing\n  deployment returned `gpt-6.1-sol` with `hidden: false`. Negative controls\n  without the settings, and with the feature alone, omitted the model.\n- Ruff check and format check passed for the changed test.\n- `mkdocs build --strict` passed.\n- Full local CI was not run; checks were scoped to this configuration change.\n\n## OpenSpec\n\nSynced `model-catalog-compat` and archived the verified change:\n`openspec/changes/archive/2026-09-30-document-codex-api-key-model-discovery/`.\n\nThe change delta passes strict validation. Repository-wide validation has\n**50 passing / 17 failing specs on both baseline and candidate**. The owning\nspec has the same three pre-existing missing-SHALL/MUST errors; its baseline\nand candidate validation reports are identical. Details and commands are in\nthe archived `verification.md`.\n",
+    "state": "open",
+    "draft": false,
+    "merged": false,
+    "mergeable_state": "clean",
+    "html_url": "https://github.com/Soju06/codex-lb/pull/2543",
+    "user": {
+      "login": "mastertyko",
+      "id": 11311479,
+      "profile_url": "https://github.com/mastertyko",
+      "avatar_url": "https://avatars.githubusercontent.com/u/11311479?v=4"
+    },
+    "labels": [
+      "documentation",
+      "python"
+    ],
+    "head": {
+      "ref": "docs/codex-model-discovery",
+      "sha": "090cf7d315e30bf3a5024d1f9b296044b688b89f",
+      "repo": {
+        "full_name": "mastertyko/codex-lb",
+        "description": "Codex/ChatGPT multiple account load balancer & proxy with usage tracking, dashboard, and OpenCode-compatible endpoints"
+      }
+    },
+    "base": {
+      "ref": "main",
+      "sha": "f8ffbac2099a113fba54dfd8d77774f5bca80ffa",
+      "repo": {
+        "full_name": "Soju06/codex-lb",
+        "description": "Codex/ChatGPT multiple account load balancer & proxy with usage tracking, dashboard, and OpenCode-compatible endpoints"
+      }
+    },
+    "additions": 291,
+    "deletions": 5,
+    "changed_files": 11,
+    "commits": 2,
+    "comments": 1,
+    "created_at": "2026-09-30T06:23:00Z",
+    "updated_at": "2026-09-30T06:41:43Z"
+  }
+]

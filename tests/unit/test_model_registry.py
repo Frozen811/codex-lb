@@ -53,6 +53,7 @@ EXPECTED_GPT56_MODEL_PLANS = {
 }
 
 EXPECTED_BOOTSTRAP_MINIMAL_CLIENT_VERSIONS = {
+    "gpt-6-astra": "0.153.0",
     "gpt-5.6-sol": "0.144.0",
     "gpt-5.6-terra": "0.144.0",
     "gpt-5.6-luna": "0.144.0",
@@ -271,6 +272,8 @@ async def test_prefers_websockets_does_not_use_bootstrap_after_snapshot():
 def test_prefers_websockets_uses_bootstrap_fallback_when_uninitialized():
     registry = ModelRegistry(ttl_seconds=60.0)
 
+    assert registry.prefers_websockets("gpt-6-astra") is True
+    assert registry.prefers_websockets("gpt-6-test") is True
     assert registry.prefers_websockets("gpt-5.6-sol") is True
     assert registry.prefers_websockets("gpt-5.6-terra") is True
     assert registry.prefers_websockets("gpt-5.6-luna") is True
@@ -290,6 +293,21 @@ def test_bootstrap_models_include_representative_upstream_metadata():
     assert set(models) == set(EXPECTED_BOOTSTRAP_MINIMAL_CLIENT_VERSIONS)
     for slug, expected_version in EXPECTED_BOOTSTRAP_MINIMAL_CLIENT_VERSIONS.items():
         assert models[slug].minimal_client_version == expected_version
+
+    astra = models["gpt-6-astra"]
+    assert astra.available_in_plans == EXPECTED_GPT56_MODEL_PLANS | {
+        "enterprise_cbp_trial",
+        "self_serve_business_prolite",
+    }
+    assert astra.priority == 1
+    assert astra.raw["shell_type"] == "unified_exec"
+    assert astra.raw["experimental_supported_tools"] == ["send_user_message_async", "clock"]
+    assert astra.raw["service_tiers"] == [
+        {"id": "priority", "name": "Fast", "description": "2x speed, increased usage"}
+    ]
+    assert astra.raw["multi_agent_version"] == "v2"
+    assert astra.raw["node_repl_auto_review_required"] is True
+    assert astra.raw["supports_search_tool"] is True
 
     sol = models["gpt-5.6-sol"]
     assert sol.display_name == "GPT-5.6-Sol"

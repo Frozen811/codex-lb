@@ -79,7 +79,19 @@ async def test_firewall_middleware_blocks_backend_api_when_ip_not_allowed(async_
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("path", ["/ps/plugins/list", "/plugins/featured"])
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/ps/plugins/list",
+        "/ps/plugins/list/",
+        "/plugins/featured",
+        "/plugins/featured/",
+        "/backend-api/ps/plugins/list",
+        "/backend-api/ps/plugins/list/",
+        "/backend-api/plugins/featured",
+        "/backend-api/plugins/featured/",
+    ],
+)
 async def test_firewall_middleware_blocks_plugin_catalog_when_ip_not_allowed(async_client, path):
     # The catalog passthrough spends pool credentials upstream, so it is a
     # proxy surface: the allowlist must gate it like /backend-api/codex.

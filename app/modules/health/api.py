@@ -17,7 +17,12 @@ from app.core.socket_peer import raw_socket_peer_host
 from app.core.utils.time import utcnow
 from app.db.models import BridgeRingMember
 from app.db.session import get_session
-from app.modules.health.schemas import BridgeRingInfo, HealthCheckResponse, HealthResponse
+from app.modules.health.schemas import (
+    BridgeRingInfo,
+    HealthCheckResponse,
+    HealthResponse,
+    RequestPersistenceActivitySnapshot,
+)
 from app.modules.proxy.ring_membership import RING_STALE_THRESHOLD_SECONDS
 
 router = APIRouter(tags=["health"])
@@ -183,15 +188,19 @@ async def internal_drain_status(request: Request) -> HealthCheckResponse:
         except Exception as exc:
             checks["http_bridge_activity_error"] = type(exc).__name__
 
+    checks["request_persistence_state"] = "unknown"
     if proxy_service is not None and hasattr(proxy_service, "request_persistence_activity_snapshot_nowait"):
         try:
-            persistence_activity = proxy_service.request_persistence_activity_snapshot_nowait()
+            persistence_activity = RequestPersistenceActivitySnapshot.model_validate(
+                proxy_service.request_persistence_activity_snapshot_nowait()
+            )
             checks.update(
                 {
                     key: str(value).lower() if isinstance(value, bool) else str(value)
-                    for key, value in persistence_activity.items()
+                    for key, value in persistence_activity.model_dump().items()
                 }
             )
+            checks["request_persistence_state"] = persistence_activity.state
         except Exception as exc:
             checks["request_persistence_activity_error"] = type(exc).__name__
 

@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.utils.time import utcnow
 from app.db.dialect_sql import is_mysql
 from app.db.models import BridgeRingMember
-from app.db.session import close_session
+from app.db.session import close_session, get_background_session
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -36,7 +36,7 @@ class RingMembershipService:
     ensuring all pods see the same ring view (solving the split-brain problem).
     """
 
-    def __init__(self, session_factory: Callable[[], AsyncSession]) -> None:
+    def __init__(self, session_factory: Callable[[], AsyncSession] | None = None) -> None:
         self._session_factory = session_factory
 
     async def register(self, instance_id: str, *, endpoint_base_url: str | None = None) -> None:
@@ -254,6 +254,10 @@ class RingMembershipService:
 
     @asynccontextmanager
     async def _session(self) -> AsyncIterator[AsyncSession]:
+        if self._session_factory is None:
+            async with get_background_session() as session:
+                yield session
+            return
         session = self._session_factory()
         try:
             yield session

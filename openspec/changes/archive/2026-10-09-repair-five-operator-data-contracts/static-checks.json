@@ -1,0 +1,62 @@
+[
+  {
+    "name": "ruff",
+    "command": "uv run ruff check app/cli.py app/codex_sessions_retag.py app/codex_retag_metadata.py app/db/migrate.py app/db/alembic/env.py app/db/migration_progress.py tests/unit/test_operator_data_batch.py tests/unit/test_codex_sessions_retag.py tests/integration/test_operator_data_batch.py",
+    "exitCode": 0
+  },
+  {
+    "name": "format",
+    "command": "uv run ruff format --check app/cli.py app/codex_sessions_retag.py app/codex_retag_metadata.py app/db/migrate.py app/db/alembic/env.py app/db/migration_progress.py tests/unit/test_operator_data_batch.py tests/unit/test_codex_sessions_retag.py tests/integration/test_operator_data_batch.py",
+    "exitCode": 0
+  },
+  {
+    "name": "types",
+    "command": "uv run ty check app/cli.py app/codex_sessions_retag.py app/codex_retag_metadata.py app/db/migrate.py app/db/alembic/env.py app/db/migration_progress.py tests/unit/test_operator_data_batch.py tests/unit/test_codex_sessions_retag.py tests/integration/test_operator_data_batch.py",
+    "exitCode": 0
+  },
+  {
+    "name": "architecture",
+    "command": "uv run python scripts/check_proxy_architecture.py",
+    "exitCode": 0
+  },
+  {
+    "name": "cancellation",
+    "command": "uv run python scripts/check_cancellation_safety.py",
+    "exitCode": 0
+  },
+  {
+    "name": "timing",
+    "command": "uv run python scripts/check_proxy_timing_seams.py",
+    "exitCode": 0
+  },
+  {
+    "name": "tiers",
+    "command": "uv run python scripts/check_settings_tiers.py",
+    "exitCode": 0
+  },
+  {
+    "name": "topology",
+    "command": "uv run python scripts/check_migration_topology.py",
+    "exitCode": 0
+  },
+  {
+    "name": "simplicity",
+    "command": "uv run python .github/scripts/check_simplicity_budgets.py",
+    "exitCode": 0
+  },
+  {
+    "name": "change",
+    "command": "npx --yes @fission-ai/openspec@1.11.0 validate repair-five-operator-data-contracts --strict",
+    "exitCode": 0
+  },
+  {
+    "name": "docs",
+    "command": "uv run mkdocs build --strict",
+    "exitCode": 0
+  },
+  {
+    "name": "whitespace",
+    "command": "git -c core.safecrlf=false diff --check",
+    "exitCode": 0
+  }
+]

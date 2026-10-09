@@ -1031,14 +1031,39 @@ async def _codex_control_proxy(
         capability_transport_denial = await _required_capability_http_transport_denial(request, api_key)
         if capability_transport_denial is not None:
             return capability_transport_denial
+    payload = await request.body() if request.method.upper() not in {"GET", "HEAD"} else None
+    native_history_notes = path.startswith(("alpha/history/v2/", "alpha/notes/v2/"))
+    body_session_id: str | None = None
+    if native_history_notes and payload is not None:
+        try:
+            native_body = json.loads(payload)
+        except (JSONDecodeError, UnicodeDecodeError):
+            native_body = None
+        if not isinstance(native_body, dict):
+            return _logged_error_json_response(
+                request,
+                400,
+                openai_error(
+                    "invalid_request",
+                    "Native history and notes requests must contain a JSON object",
+                    error_type="invalid_request_error",
+                ),
+            )
+        native_context = native_body.get("context")
+        if isinstance(native_context, dict):
+            session_value = native_context.get("session_id")
+            if isinstance(session_value, str):
+                body_session_id = session_value.strip() or None
     try:
         response = await context.service.codex_control_request(
             path,
             method=request.method,
-            payload=await request.body() if request.method.upper() not in {"GET", "HEAD"} else None,
+            payload=payload,
             query_params=list(request.query_params.multi_items()),
             headers=request.headers,
             codex_session_affinity=True,
+            body_session_id=body_session_id,
+            allow_cross_account_retry=not native_history_notes,
             api_key=api_key,
             privacy_policy=adapter.privacy_policy,
             success_gate=adapter.success_gate,
@@ -1249,6 +1274,9 @@ async def wham_agent_identities_jwks(
 # workspace/*, featured, and the per-plugin detail read before an install --
 # is a GET.
 @plugin_catalog_router.get("/plugins/featured")
+@plugin_catalog_router.get("/plugins/featured/", include_in_schema=False)
+@plugin_catalog_router.get("/backend-api/plugins/featured", include_in_schema=False)
+@plugin_catalog_router.get("/backend-api/plugins/featured/", include_in_schema=False)
 async def codex_plugin_catalog_featured(
     request: Request,
     context: ProxyContext = Depends(get_proxy_context),
@@ -1258,13 +1286,14 @@ async def codex_plugin_catalog_featured(
 
 
 @plugin_catalog_router.get("/ps/plugins/{plugin_path:path}")
+@plugin_catalog_router.get("/backend-api/ps/plugins/{plugin_path:path}", include_in_schema=False)
 async def codex_plugin_catalog(
     request: Request,
     plugin_path: str,
     context: ProxyContext = Depends(get_proxy_context),
     api_key: ApiKeyData | None = Security(validate_proxy_api_key),
 ) -> Response:
-    return await _codex_control_proxy(request, f"ps/plugins/{plugin_path}", context, api_key)
+    return await _codex_control_proxy(request, f"ps/plugins/{plugin_path.rstrip('/')}", context, api_key)
 
 
 @router.post(

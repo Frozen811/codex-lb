@@ -62,6 +62,7 @@ from app.modules.proxy._load_balancer.overload_backoff import (
 )
 from app.modules.proxy._load_balancer.quarantine import quarantine_permanent_failure
 from app.modules.proxy._service.observability import (
+    _is_reasoning_replay_rejection,
     _maybe_log_proxy_request_shape,
     _record_continuity_fail_closed,
     _record_upstream_transport_decision,
@@ -102,6 +103,8 @@ from app.modules.proxy.affinity_observation import AffinityObservation
 from app.modules.proxy.api_key_usage import estimate_api_key_request_usage
 from app.modules.proxy.continuity import resolve_required_account_id
 from app.modules.proxy.helpers import (
+    _QUOTA_CODES,
+    _RATE_LIMIT_CODES,
     _apply_error_metadata,
     _is_account_model_unsupported_error,
     _normalize_error_code,
@@ -118,6 +121,7 @@ from app.modules.proxy.load_balancer import AccountLease, AccountSelection
 from app.modules.proxy.replay_safety import (
     project_responses_input_for_account_neutral_fresh_replay,
     project_responses_input_for_auth_recovery,
+    responses_payload_has_only_encrypted_account_scoped_state,
     responses_payload_is_account_neutral_fresh_replay,
 )
 from app.modules.proxy.selection_errors import USAGE_LIMIT_REACHED, selection_failure_response
@@ -127,6 +131,34 @@ _REQUEST_TRANSPORT_WEBSOCKET = "websocket"
 _HTTP_DOWNSTREAM_TRANSPORT_POLICY_DEFAULT = "smart"
 _HTTP_DOWNSTREAM_TRANSPORT_POLICIES = frozenset({"smart", "always_http", "always_websocket", "pinned"})
 logger = logging.getLogger(__name__)
+
+
+def _failure_is_rate_limit_or_quota_rejection(exc: BaseException) -> bool:
+    if isinstance(exc, _RetryableStreamError):
+        return exc.code in (_RATE_LIMIT_CODES | _QUOTA_CODES)
+    if not isinstance(exc, ProxyResponseError) or exc.status_code != 429 or exc.failure_phase not in (None, "status"):
+        return False
+    error = _parse_openai_error(exc.payload)
+    code = _normalize_error_code(error.code if error else None, error.type if error else None)
+    return code in (_RATE_LIMIT_CODES | _QUOTA_CODES)
+
+
+def _encrypted_content_rejection_code(exc: BaseException) -> str | None:
+    if isinstance(exc, (_RetryableStreamError, _TerminalStreamError)):
+        code, status, message = exc.code, None, str(exc.error.get("message") or "")
+    elif isinstance(exc, ProxyResponseError):
+        error = _parse_openai_error(exc.payload)
+        code = _normalize_error_code(error.code if error else None, error.type if error else None)
+        status, message = exc.status_code, error.message if error else None
+    else:
+        return None
+    if status not in (None, 400):
+        return None
+    if code == "invalid_encrypted_content" or _is_reasoning_replay_rejection(
+        code=code, http_status=status, message=message
+    ):
+        return code
+    return None
 
 
 def _facade() -> Any:
@@ -561,6 +593,8 @@ class _StreamingRetryMixin:
         deferred_capacity_lease: AccountLease | None = None
         preferred_account_id: str | None = None
         payload_replay_required_account_id: str | None = None
+        quota_failover_source_account_id: str | None = None
+        quota_failover_rejection_logged = False
         file_preferred_account_id: str | None = rewritten_file_account_id
         require_preferred_account = False
         last_retryable_stream_error: _RetryableStreamError | None = None
@@ -587,10 +621,16 @@ class _StreamingRetryMixin:
             headers=headers,
             api_key=api_key,
         )
+        quota_only_verified_replay_payload: ResponsesRequest | None = None
+        quota_only_verified_replay_source: ResponsesRequest | None = None
+        if file_preferred_account_id is not None or routing_strategy == "single_account":
+            verified_fresh_replay_payload = None
         if (
             verified_fresh_replay_payload is None
             and turn_state is not None
             and payload.previous_response_id is None
+            and file_preferred_account_id is None
+            and routing_strategy != "single_account"
             and getattr(proxy, "_durable_bridge", None) is not None
         ):
             try:
@@ -609,6 +649,31 @@ class _StreamingRetryMixin:
                 ):
                     if responses_payload_is_account_neutral_fresh_replay(payload.to_replay_safety_payload()):
                         verified_fresh_replay_payload = payload
+                    elif isinstance(payload.input, list):
+                        projected_input = project_responses_input_for_auth_recovery(payload.input)
+                        if projected_input is not None:
+                            projected_payload = payload.model_copy(update={"input": projected_input})
+                            if responses_payload_is_account_neutral_fresh_replay(
+                                projected_payload.to_replay_safety_payload()
+                            ):
+                                quota_only_verified_replay_payload = projected_payload
+                                quota_only_verified_replay_source = payload
+
+        def _activate_verified_quota_replay(account_id: str) -> bool:
+            """Activate the proven projection only after the caller establishes quota loss."""
+            nonlocal verified_fresh_replay_payload, quota_only_verified_replay_payload
+            if (
+                quota_only_verified_replay_payload is None
+                or payload is not quota_only_verified_replay_source
+                or turn_state_owner_account_id != account_id
+                or file_preferred_account_id is not None
+                or payload_replay_required_account_id is not None
+                or routing_strategy == "single_account"
+            ):
+                return False
+            verified_fresh_replay_payload = quota_only_verified_replay_payload
+            quota_only_verified_replay_payload = None
+            return True
 
         async def _release_tracked_stream_lease(lease: AccountLease | None) -> None:
             if lease is None:
@@ -1070,6 +1135,7 @@ class _StreamingRetryMixin:
                 verified_fresh_replay_payload.to_replay_safety_payload()
             ):
                 return False
+            retiring_turn_state_owner = turn_state_owner_account_id is not None
             payload = verified_fresh_replay_payload
             payload_replay_required_account_id = None
             verified_fresh_replay_payload = None
@@ -1080,6 +1146,16 @@ class _StreamingRetryMixin:
             from app.modules.proxy.continuity import without_http_bridge_session_affinity_headers
 
             headers = without_http_bridge_session_affinity_headers(headers)
+            if retiring_turn_state_owner:
+                affinity = _sticky_key_for_responses_request(
+                    payload,
+                    headers,
+                    codex_session_affinity=codex_session_affinity,
+                    openai_cache_affinity=openai_cache_affinity,
+                    openai_cache_affinity_max_age_seconds=settings.openai_cache_affinity_max_age_seconds,
+                    sticky_threads_enabled=settings.sticky_threads_enabled,
+                    api_key=api_key,
+                )
             affinity = replace(affinity, reallocate_sticky=True)
             logger.info(
                 "cross_transport_verified_fresh_replay request_id=%s outcome=%s account_id=%s",
@@ -1971,6 +2047,17 @@ class _StreamingRetryMixin:
                         yield format_sse_event(event)
                         return
                     if (
+                        quota_only_verified_replay_payload is not None
+                        and require_preferred_account
+                        and preferred_account_id is not None
+                        and await proxy._compact_owner_selection_loss_is_quota_caused(preferred_account_id)
+                        and _activate_verified_quota_replay(preferred_account_id)
+                    ):
+                        _move_verified_fresh_replay_from_owner(
+                            account_id=preferred_account_id, outcome="turn_state_quota_owner_unavailable"
+                        )
+                        continue
+                    if (
                         require_preferred_account
                         and preferred_account_id is not None
                         and verified_fresh_replay_payload is not None
@@ -2580,7 +2667,10 @@ class _StreamingRetryMixin:
                                     if (
                                         require_preferred_account
                                         and preferred_account_id == account.id
-                                        and verified_fresh_replay_payload is not None
+                                        and (
+                                            verified_fresh_replay_payload is not None
+                                            or quota_only_verified_replay_payload is not None
+                                        )
                                     )
                                     else preferred_account_id
                                 ),
@@ -2598,11 +2688,39 @@ class _StreamingRetryMixin:
                                     if register_payload_owner:
                                         payload_replay_required_account_id = account.id
                                 except BaseException as exc:
-                                    if register_payload_owner and not (
-                                        isinstance(exc, ProxyResponseError)
-                                        and is_confirmed_pre_dispatch_transport_error(exc)
+                                    if register_payload_owner:
+                                        quota_rejection = _failure_is_rate_limit_or_quota_rejection(exc)
+                                        if quota_rejection and _activate_verified_quota_replay(account.id):
+                                            pass
+                                        elif (
+                                            quota_rejection
+                                            and responses_payload_has_only_encrypted_account_scoped_state(
+                                                payload.to_replay_safety_payload()
+                                            )
+                                        ):
+                                            quota_failover_source_account_id = account.id
+                                        elif not (
+                                            isinstance(exc, ProxyResponseError)
+                                            and is_confirmed_pre_dispatch_transport_error(exc)
+                                        ):
+                                            payload_replay_required_account_id = account.id
+                                    encrypted_rejection_code = _encrypted_content_rejection_code(exc)
+                                    if (
+                                        not quota_failover_rejection_logged
+                                        and quota_failover_source_account_id is not None
+                                        and quota_failover_source_account_id != account.id
+                                        and encrypted_rejection_code is not None
                                     ):
-                                        payload_replay_required_account_id = account.id
+                                        quota_failover_rejection_logged = True
+                                        logger.warning(
+                                            "cross_account_encrypted_reasoning_rejected request_id=%s "
+                                            "source_account_id=%s target_account_id=%s "
+                                            "failover_trigger=previsible_rate_limit_or_quota upstream_code=%s",
+                                            request_id,
+                                            quota_failover_source_account_id,
+                                            account.id,
+                                            encrypted_rejection_code,
+                                        )
                                     raise
                             finally:
                                 close_task = scheduler.create_task(

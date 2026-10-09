@@ -609,3 +609,54 @@ The fork's full-resend shape predicate intentionally uses self-contained call/ou
 Owner-client mixed CR/LF framing and UTF-8 replacement, and source catalog/collaboration forwarding, were independently rechecked in the same exact-five registry batch. Controlled source tests preserve complete client namespaces and forced/allowed choices while filtering unsupported tools. They do not certify a live Codex parent/child session or provider acceptance. See the archived change's verification for exact local checks and inherited traffic-fixture/typing residuals.
 
 The direct WebSocket same-owner resend classifier also checks optional async marker types and nonblank async call IDs before it can authorize an anchor-loss resend. A malformed call in the restated history keeps the original anchor-failure classification (`stream_incomplete` on public v1, `previous_response_not_found` on the native route) and does not reconnect. The account is still available, so relabeling this as owner-unavailable would be misleading. This narrow check retains the existing same-owner account-bound history policy; cross-account replay still uses the stronger complete portability proof.
+
+## Astra labels and plugin catalog URL parity
+
+The [Astra label contract](spec.md#requirement-astra-cursor-labels-use-canonical-request-fields)
+reuses the existing Cursor suffix resolver. For example,
+`gpt-6-astra-extra-high-fast` forwards `gpt-6-astra`, high reasoning and
+priority service tier. Unknown labels remain unchanged. Controlled public
+Responses routes cover canonical model and request fields; this does not
+establish live account entitlement.
+
+The [plugin catalog contract](spec.md#requirement-plugin-catalog-ingress-forwards-equivalent-url-forms)
+supports origin and `/backend-api` base URLs with direct trailing-slash
+forwarding. For example, `/backend-api/plugins/featured/?scope=a&scope=b`
+dispatches one `plugins/featured` read with both query values. Upstream
+installed flags reflect the selected pool account. Read-only methods, proxy
+authentication, capability policy and firewall apply to every alias. Tests
+establish byte/status/query behavior with a synthetic upstream; remote plugin
+installation remains separately unverified.
+
+## Scheduled retry cleanup and failure-detail rewrites
+
+The [scheduled purge contract](spec.md#requirement-retry-circuit-scheduled-purge-fencing)
+protects the complete selected observation, including its nullable failure
+detail. A detail rewrite can intentionally leave its timestamp, admission
+generation and count unchanged. For example, `stream_incomplete` becoming
+`anchor_superseded` between selection and deletion is newer protection that
+the old snapshot cannot authorize removing. NULL transitions follow the
+same rule; unchanged NULL remains eligible for ordinary retention cleanup.
+
+The existing bounded keyset scan advances past fence misses, preserving a
+changed candidate for the current pass while removing independent stale
+rows. It does not renew retention: a later pass observes that row afresh.
+The predicate uses normal SQL equality with SQLAlchemy's `IS NULL` handling,
+so it needs no schema migration or dialect-specific operator.
+
+The local five-entry verification also checks replacement-session quarantine
+ownership, local failure deadlines through completion awaits, exclusive
+half-open return, and raw/native-interpreted incomplete-terminal accounting.
+Real HTTP regressions cover terminal preservation, durable strikes and API
+key settlement. Live backend/provider traffic and upstream overflow or
+deadline-only probe policy acceptance remain separate scopes.
+
+
+## Retained ciphertext quota rejection and file poll ownership
+
+The [ciphertext-only quota exception](spec.md#requirement-pre-visible-quota-rejection-preserves-ciphertext-only-replacement-eligibility) concerns ownership created by this rejected attempt. A coded rejection before any yielded output can try a sibling with the identical known reasoning or compaction item. It does not establish ciphertext portability: a replacement may reject the item, and that error remains visible with a ciphertext-free provenance warning. Unknown encrypted-item extensions and independent resource or continuity owners keep their binding. For example, a retained compaction block plus a new plain question can move after A's pre-visible usage_limit_reached, while the same body with an unresolved file_id remains bound. Ambiguous body failures and code-less burst responses remain outside the exception.
+
+The [file finalization requirement](spec.md#requirement-file-finalization-replay-eligibility-covers-the-entire-poll-operation) applies transport provenance to the whole polling operation. Once A returns retry, a later pre-dispatch refusal cannot relocate finalization. The adapter preserves an explicit replay prohibition instead of rediscovering eligibility from a sanitized message; TLS/body/ambiguous/network failures retain their ordinary restrictions. A first-poll refusal without a pin can still use the existing unary failover loop. No new setting or reservation is introduced.
+
+
+A durably proven bypass body with known redundant reasoning prepares a strict account-neutral projection while retaining the owner's original first attempt. The projection activates only after pre-visible quota evidence, or when the existing owner-status check proves persisted quota loss at selection. Unknown reasoning fields, mismatched prefixes, paused owners, non-quota failures, and existing dispatch ownership retain their binding. Retiring that turn-state owner also re-derives affinity after stripping aliases; preserving the old hard key would prevent the next selection from using the replacement. This projection omits redundant reasoning after retained-answer validation, while the separate ciphertext-only exception forwards its original bytes unchanged.

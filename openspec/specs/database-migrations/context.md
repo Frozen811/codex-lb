@@ -73,6 +73,34 @@ branch. See the [repair context](../../changes/merge-overflow-transport-migratio
 
 Branch A and B each create migration revisions in parallel. After merge, CI detects multiple heads and fails. The resolver adds a merge revision, reruns CI, and proceeds. During deployment, a DB still storing old `013_add_dashboard_settings_routing_strategy` in `alembic_version` is auto-remapped to `20260225_000000_add_dashboard_settings_routing_strategy` before upgrade.
 
+## Revision progress and guarded rollback recovery
+
+Online Alembic runs emit start and executed/failed records for each revision,
+with direction and elapsed seconds. Alembic retains its migration selection,
+version ledger and transaction ownership; temporary iterator instrumentation is
+restored after success or failure. `Executed` describes completion of a step,
+not the commit of an enclosing transaction. No-op runs produce no invented
+revision progress. The migration CLI enables stderr logging and preserves its
+stdout result, for example `current_revision=20261007_000000_add_account_quota_limit`.
+
+These progress records omit SQL, parameters, URLs, descriptions and exception
+messages. Existing outer error diagnostics are separate. A failed revision
+propagates its original exception and prevents later steps from executing.
+
+If a rollback image encounters an unknown ledger revision, the ordinary refusal
+now includes conditional recovery guidance. Metadata-only stamping is applicable
+only after schema/data compatibility is independently verified, all migration
+transactions have ended, and the database backup and matching encryption key
+are recoverable. Use a build containing both recorded and target revisions
+against the same database. Stamping never reverses schema or data, and an older
+build cannot stamp a revision absent from its scripts. After any authorized
+recovery, check migration policy, schema drift and application behavior before
+resuming traffic. The command does not perform these operator decisions for you.
+
+For example, restoring an old image against a newer database still fails. The
+operator can restore its paired snapshot or inspect compatibility from a newer
+build; the diagnostic itself performs no repair or stamp.
+
 ## Existing quota storage during ledger recovery
 
 The [quota recovery contract](spec.md#requirement-quota-restriction-storage-survives-ledger-recovery)

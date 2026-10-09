@@ -370,6 +370,16 @@ codex-lb codex-sessions retag --from openai --to codex-lb --dry-run
 codex-lb codex-sessions retag --from openai --to codex-lb --yes
 ```
 
+Planning reads at most 64 KiB of leading provider metadata per session and reuses grouped SQLite counts. Transcript bytes remain opaque, and malformed or oversized initial metadata fails before mutation. Keep clients closed for the entire write; a partial failure reports the retained backup directory for manual recovery.
+
+Add `--progress-json` to send JSONL phase counts to stderr while keeping the human summary on stdout:
+
+```bash
+codex-lb codex-sessions retag --from openai --to codex-lb --yes --progress-json 2>retag-progress.jsonl
+```
+
+A closed progress reader disables progress and allows successful data work to finish. File/database counts may pause during a large copy or query. The [runtime-portability specification](https://github.com/Frozen811/codex-lb/blob/main/openspec/specs/runtime-portability/spec.md) defines this contract.
+
 | Dry run (Docker) | Apply (Docker) |
 |:---:|:---:|
 | ![retag dry run in Docker](screenshots/codex-session-retag-docker-dry-run.png) | ![retag apply in Docker](screenshots/codex-session-retag-docker-apply.png) |

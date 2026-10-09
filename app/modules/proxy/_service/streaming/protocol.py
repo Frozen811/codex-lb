@@ -20,6 +20,7 @@ class _StreamingServiceProtocol(Protocol):
     _remember_websocket_previous_response_owner: Any
     _resolve_file_account_for_responses: Any
     _resolve_compact_turn_state_owner: Any
+    _compact_owner_selection_loss_is_quota_caused: Any
     _resolve_upstream_route_for_account: Any
     _resolve_websocket_previous_response_owner: Any
     _run_api_key_reservation_heartbeat: Any

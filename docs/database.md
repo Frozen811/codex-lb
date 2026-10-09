@@ -1,5 +1,7 @@
 # Database
 
+Migration behavior is defined by the [database-migrations specification](https://github.com/Frozen811/codex-lb/blob/main/openspec/specs/database-migrations/spec.md).
+
 SQLite is the default database backend and needs no configuration. PostgreSQL and MySQL are optional via `CODEX_LB_DATABASE_URL` (for example `postgresql+asyncpg://codex_lb:codex_lb@127.0.0.1:5432/codex_lb` or `mysql+asyncmy://codex_lb:codex_lb@127.0.0.1:3306/codex_lb`).
 
 ## Data paths
@@ -62,6 +64,10 @@ mysql --defaults-extra-file=/protected/mysql.cnf codex_lb_restore < codex-lb.sql
 Restore into a separate directory/database with its matching key. For SQLite, copy the standalone snapshot as the new `store.db` in an empty directory; do not combine it with old WAL/SHM files. Point `CODEX_LB_DATA_DIR`, the DB URL and any independent key/archive paths at the rehearsal. Start with the backup's original executable version, run `codex-lb-db check`, then verify readiness, dashboard settings, account inventory and credential decryptability without printing credentials. A regenerated or unrelated key fails the default fingerprint check; restore the original key instead of bypassing the guard. Successful readiness alone does not establish that a real upstream account works.
 
 Before upgrading, retain the old executable/image identity and a fresh database/key snapshot. Binary or Helm rollback does not reverse schema/data changes: restore the matching pre-upgrade snapshot with the old executable and a compatible database server major version. Do not point an older executable at a newer database and assume it will downgrade safely. Switching a DB URL to PostgreSQL/MySQL selects a different store; it does not copy SQLite accounts/settings.
+
+Online migrations report revision starts and executed/failed elapsed time on stderr. `Executed` means a step finished; an enclosing transaction may still need to commit. The CLI keeps its existing stdout result. Progress records contain revision identity and direction, omitting SQL, URLs, parameters and exception text.
+
+An unknown-revision failure includes conditional metadata-stamping guidance. Use it only after verifying schema and data compatibility with the rollback image, ending migration transactions, and retaining a recoverable database backup and matching encryption key. Run `codex-lb-db stamp <revision>` from a build containing both the recorded and target revisions against the same database. Stamping changes only the migration ledger; it does not roll back schema or data. An older build cannot stamp an unknown revision. Check migration policy, schema drift and application behavior before resuming traffic.
 
 ## PostgreSQL via Docker Compose
 

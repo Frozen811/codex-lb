@@ -16,6 +16,7 @@ AFFINITY_SOURCES: tuple[str, ...] = (
     "turn_state_header",
     "generated_turn_state",
     "session_header",
+    "history_session",
     "payload",
     "derived",
     "none",
@@ -96,6 +97,8 @@ class AffinityObservation:
             return "turn_state_header"
         if codex_session_source == "session_header":
             return "session_header"
+        if codex_session_source == "history_session":
+            return "history_session"
         # The key is the prompt cache key; the resolver recorded whether the
         # client supplied it or the proxy derived it.
         return policy.prompt_cache_key_source or "derived"

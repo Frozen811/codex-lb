@@ -38,4 +38,22 @@ unknown operations, scoped API-key admission, repeated thread affinity and
 child-thread placement. A loopback HTTP upstream additionally checks raw media
 type and gzip decoding. Encryption-header values in these tests are synthetic;
 no hosted encryption/decryption or account-pool history recovery is claimed.
-Unavailable upstreams retain the existing control error and failover policy.
+Unavailable upstreams return the selected account's control error; native history/notes never retry across accounts.
+
+## Body-session ownership
+
+The [body-session contract](spec.md#requirement-native-body-session-owns-history-and-notes)
+uses the native JSON context identity to keep notes and history account-local.
+For example, a write with `{"context":{"session_id":"task-a"},"path":"notes.md"}`
+retains the same owner when the process header changes. Its first operation can
+inherit an eligible existing soft process-session owner for `task-a`; later
+inference rotation does not move its notes. Header-only GET/POST compatibility
+requests retain their existing affinity and child placement.
+
+Bodies are validated as JSON objects and forwarded as the original bytes.
+Encrypted-argument and output-truncation headers remain opaque. Missing,
+blank or nonstring session values do not manufacture a body-session owner.
+A selected owner's 401, quota error or refresh connection failure cannot send
+the operation to another account. Local API regressions use synthetic headers
+and isolated SQLite; native decryption and pooled history fan-out are outside
+this account-local contract.

@@ -1,0 +1,62 @@
+[
+  {
+    "dialect": "sqlite",
+    "detail_fence": "http_bridge_retry_circuits.last_detail IS NULL",
+    "sql": "DELETE FROM http_bridge_retry_circuits WHERE http_bridge_retry_circuits.session_key_kind = ? AND http_bridge_retry_circuits.session_key_hash = ? AND http_bridge_retry_circuits.api_key_scope = ? AND http_bridge_retry_circuits.updated_at_epoch = ? AND http_bridge_retry_circuits.admission_generation = ? AND http_bridge_retry_circuits.consecutive_failures = ? AND http_bridge_retry_circuits.last_detail IS NULL AND (http_bridge_retry_circuits.last_detail IS NULL OR http_bridge_retry_circuits.last_detail != ?) AND http_bridge_retry_circuits.updated_at_epoch < ? AND (http_bridge_retry_circuits.admission_generation = ? OR http_bridge_retry_circuits.updated_at_epoch < ?)"
+  },
+  {
+    "dialect": "postgresql",
+    "detail_fence": "http_bridge_retry_circuits.last_detail IS NULL",
+    "sql": "DELETE FROM http_bridge_retry_circuits WHERE http_bridge_retry_circuits.session_key_kind = %(session_key_kind_1)s AND http_bridge_retry_circuits.session_key_hash = %(session_key_hash_1)s AND http_bridge_retry_circuits.api_key_scope = %(api_key_scope_1)s AND http_bridge_retry_circuits.updated_at_epoch = %(updated_at_epoch_1)s AND http_bridge_retry_circuits.admission_generation = %(admission_generation_1)s AND http_bridge_retry_circuits.consecutive_failures = %(consecutive_failures_1)s AND http_bridge_retry_circuits.last_detail IS NULL AND (http_bridge_retry_circuits.last_detail IS NULL OR http_bridge_retry_circuits.last_detail != %(last_detail_1)s) AND http_bridge_retry_circuits.updated_at_epoch < %(updated_at_epoch_2)s AND (http_bridge_retry_circuits.admission_generation = %(admission_generation_2)s OR http_bridge_retry_circuits.updated_at_epoch < %(updated_at_epoch_3)s)"
+  },
+  {
+    "dialect": "mysql",
+    "detail_fence": "http_bridge_retry_circuits.last_detail IS NULL",
+    "sql": "DELETE FROM http_bridge_retry_circuits WHERE http_bridge_retry_circuits.session_key_kind = %s AND http_bridge_retry_circuits.session_key_hash = %s AND http_bridge_retry_circuits.api_key_scope = %s AND http_bridge_retry_circuits.updated_at_epoch = %s AND http_bridge_retry_circuits.admission_generation = %s AND http_bridge_retry_circuits.consecutive_failures = %s AND http_bridge_retry_circuits.last_detail IS NULL AND (http_bridge_retry_circuits.last_detail IS NULL OR http_bridge_retry_circuits.last_detail != %s) AND http_bridge_retry_circuits.updated_at_epoch < %s AND (http_bridge_retry_circuits.admission_generation = %s OR http_bridge_retry_circuits.updated_at_epoch < %s)"
+  },
+  {
+    "dialect": "sqlite",
+    "detail_fence": "http_bridge_retry_circuits.last_detail IS NULL",
+    "sql": "DELETE FROM http_bridge_retry_circuits WHERE http_bridge_retry_circuits.session_key_kind = ? AND http_bridge_retry_circuits.session_key_hash = ? AND http_bridge_retry_circuits.api_key_scope = ? AND http_bridge_retry_circuits.updated_at_epoch = ? AND http_bridge_retry_circuits.admission_generation = ? AND http_bridge_retry_circuits.consecutive_failures = ? AND http_bridge_retry_circuits.last_detail IS NULL AND (http_bridge_retry_circuits.last_detail IS NULL OR http_bridge_retry_circuits.last_detail != ?) AND http_bridge_retry_circuits.updated_at_epoch < ? AND (http_bridge_retry_circuits.admission_generation = ? OR http_bridge_retry_circuits.updated_at_epoch < ?)"
+  },
+  {
+    "dialect": "postgresql",
+    "detail_fence": "http_bridge_retry_circuits.last_detail IS NULL",
+    "sql": "DELETE FROM http_bridge_retry_circuits WHERE http_bridge_retry_circuits.session_key_kind = %(session_key_kind_1)s AND http_bridge_retry_circuits.session_key_hash = %(session_key_hash_1)s AND http_bridge_retry_circuits.api_key_scope = %(api_key_scope_1)s AND http_bridge_retry_circuits.updated_at_epoch = %(updated_at_epoch_1)s AND http_bridge_retry_circuits.admission_generation = %(admission_generation_1)s AND http_bridge_retry_circuits.consecutive_failures = %(consecutive_failures_1)s AND http_bridge_retry_circuits.last_detail IS NULL AND (http_bridge_retry_circuits.last_detail IS NULL OR http_bridge_retry_circuits.last_detail != %(last_detail_1)s) AND http_bridge_retry_circuits.updated_at_epoch < %(updated_at_epoch_2)s AND (http_bridge_retry_circuits.admission_generation = %(admission_generation_2)s OR http_bridge_retry_circuits.updated_at_epoch < %(updated_at_epoch_3)s)"
+  },
+  {
+    "dialect": "mysql",
+    "detail_fence": "http_bridge_retry_circuits.last_detail IS NULL",
+    "sql": "DELETE FROM http_bridge_retry_circuits WHERE http_bridge_retry_circuits.session_key_kind = %s AND http_bridge_retry_circuits.session_key_hash = %s AND http_bridge_retry_circuits.api_key_scope = %s AND http_bridge_retry_circuits.updated_at_epoch = %s AND http_bridge_retry_circuits.admission_generation = %s AND http_bridge_retry_circuits.consecutive_failures = %s AND http_bridge_retry_circuits.last_detail IS NULL AND (http_bridge_retry_circuits.last_detail IS NULL OR http_bridge_retry_circuits.last_detail != %s) AND http_bridge_retry_circuits.updated_at_epoch < %s AND (http_bridge_retry_circuits.admission_generation = %s OR http_bridge_retry_circuits.updated_at_epoch < %s)"
+  },
+  {
+    "dialect": "sqlite",
+    "detail_fence": "http_bridge_retry_circuits.last_detail = :last_detail_1",
+    "sql": "DELETE FROM http_bridge_retry_circuits WHERE http_bridge_retry_circuits.session_key_kind = ? AND http_bridge_retry_circuits.session_key_hash = ? AND http_bridge_retry_circuits.api_key_scope = ? AND http_bridge_retry_circuits.updated_at_epoch = ? AND http_bridge_retry_circuits.admission_generation = ? AND http_bridge_retry_circuits.consecutive_failures = ? AND http_bridge_retry_circuits.last_detail = ? AND (http_bridge_retry_circuits.last_detail IS NULL OR http_bridge_retry_circuits.last_detail != ?) AND http_bridge_retry_circuits.updated_at_epoch < ? AND (http_bridge_retry_circuits.admission_generation = ? OR http_bridge_retry_circuits.updated_at_epoch < ?)"
+  },
+  {
+    "dialect": "postgresql",
+    "detail_fence": "http_bridge_retry_circuits.last_detail = :last_detail_1",
+    "sql": "DELETE FROM http_bridge_retry_circuits WHERE http_bridge_retry_circuits.session_key_kind = %(session_key_kind_1)s AND http_bridge_retry_circuits.session_key_hash = %(session_key_hash_1)s AND http_bridge_retry_circuits.api_key_scope = %(api_key_scope_1)s AND http_bridge_retry_circuits.updated_at_epoch = %(updated_at_epoch_1)s AND http_bridge_retry_circuits.admission_generation = %(admission_generation_1)s AND http_bridge_retry_circuits.consecutive_failures = %(consecutive_failures_1)s AND http_bridge_retry_circuits.last_detail = %(last_detail_1)s AND (http_bridge_retry_circuits.last_detail IS NULL OR http_bridge_retry_circuits.last_detail != %(last_detail_2)s) AND http_bridge_retry_circuits.updated_at_epoch < %(updated_at_epoch_2)s AND (http_bridge_retry_circuits.admission_generation = %(admission_generation_2)s OR http_bridge_retry_circuits.updated_at_epoch < %(updated_at_epoch_3)s)"
+  },
+  {
+    "dialect": "mysql",
+    "detail_fence": "http_bridge_retry_circuits.last_detail = :last_detail_1",
+    "sql": "DELETE FROM http_bridge_retry_circuits WHERE http_bridge_retry_circuits.session_key_kind = %s AND http_bridge_retry_circuits.session_key_hash = %s AND http_bridge_retry_circuits.api_key_scope = %s AND http_bridge_retry_circuits.updated_at_epoch = %s AND http_bridge_retry_circuits.admission_generation = %s AND http_bridge_retry_circuits.consecutive_failures = %s AND http_bridge_retry_circuits.last_detail = %s AND (http_bridge_retry_circuits.last_detail IS NULL OR http_bridge_retry_circuits.last_detail != %s) AND http_bridge_retry_circuits.updated_at_epoch < %s AND (http_bridge_retry_circuits.admission_generation = %s OR http_bridge_retry_circuits.updated_at_epoch < %s)"
+  },
+  {
+    "dialect": "sqlite",
+    "detail_fence": "http_bridge_retry_circuits.last_detail = :last_detail_1",
+    "sql": "DELETE FROM http_bridge_retry_circuits WHERE http_bridge_retry_circuits.session_key_kind = ? AND http_bridge_retry_circuits.session_key_hash = ? AND http_bridge_retry_circuits.api_key_scope = ? AND http_bridge_retry_circuits.updated_at_epoch = ? AND http_bridge_retry_circuits.admission_generation = ? AND http_bridge_retry_circuits.consecutive_failures = ? AND http_bridge_retry_circuits.last_detail = ? AND (http_bridge_retry_circuits.last_detail IS NULL OR http_bridge_retry_circuits.last_detail != ?) AND http_bridge_retry_circuits.updated_at_epoch < ? AND (http_bridge_retry_circuits.admission_generation = ? OR http_bridge_retry_circuits.updated_at_epoch < ?)"
+  },
+  {
+    "dialect": "postgresql",
+    "detail_fence": "http_bridge_retry_circuits.last_detail = :last_detail_1",
+    "sql": "DELETE FROM http_bridge_retry_circuits WHERE http_bridge_retry_circuits.session_key_kind = %(session_key_kind_1)s AND http_bridge_retry_circuits.session_key_hash = %(session_key_hash_1)s AND http_bridge_retry_circuits.api_key_scope = %(api_key_scope_1)s AND http_bridge_retry_circuits.updated_at_epoch = %(updated_at_epoch_1)s AND http_bridge_retry_circuits.admission_generation = %(admission_generation_1)s AND http_bridge_retry_circuits.consecutive_failures = %(consecutive_failures_1)s AND http_bridge_retry_circuits.last_detail = %(last_detail_1)s AND (http_bridge_retry_circuits.last_detail IS NULL OR http_bridge_retry_circuits.last_detail != %(last_detail_2)s) AND http_bridge_retry_circuits.updated_at_epoch < %(updated_at_epoch_2)s AND (http_bridge_retry_circuits.admission_generation = %(admission_generation_2)s OR http_bridge_retry_circuits.updated_at_epoch < %(updated_at_epoch_3)s)"
+  },
+  {
+    "dialect": "mysql",
+    "detail_fence": "http_bridge_retry_circuits.last_detail = :last_detail_1",
+    "sql": "DELETE FROM http_bridge_retry_circuits WHERE http_bridge_retry_circuits.session_key_kind = %s AND http_bridge_retry_circuits.session_key_hash = %s AND http_bridge_retry_circuits.api_key_scope = %s AND http_bridge_retry_circuits.updated_at_epoch = %s AND http_bridge_retry_circuits.admission_generation = %s AND http_bridge_retry_circuits.consecutive_failures = %s AND http_bridge_retry_circuits.last_detail = %s AND (http_bridge_retry_circuits.last_detail IS NULL OR http_bridge_retry_circuits.last_detail != %s) AND http_bridge_retry_circuits.updated_at_epoch < %s AND (http_bridge_retry_circuits.admission_generation = %s OR http_bridge_retry_circuits.updated_at_epoch < %s)"
+  }
+]

@@ -1,0 +1,69 @@
+........................................................................ [ 36%]
+...............................................F........................ [ 73%]
+.................s..ssss..........................s                      [100%]
+================================== FAILURES ===================================
+________ test_create_sqlite_pre_migration_backup_preserves_source_mode ________
+tests\unit\test_db_migrate.py:1999: in test_create_sqlite_pre_migration_backup_preserves_source_mode
+    assert backup.stat().st_mode & 0o777 == 0o600
+E   AssertionError: assert (33206 & 511) == 384
+E    +  where 33206 = os.stat_result(st_mode=33206, st_ino=4785074605712877, st_dev=12887176746829527525, st_nlink=1, st_uid=0, st_gid=0, st_size=8192, st_atime=1791519776, st_mtime=1791519776, st_ctime=1791519776).st_mode
+E    +    where os.stat_result(st_mode=33206, st_ino=4785074605712877, st_dev=12887176746829527525, st_nlink=1, st_uid=0, st_gid=0, st_size=8192, st_atime=1791519776, st_mtime=1791519776, st_ctime=1791519776) = stat()
+E    +      where stat = WindowsPath('C:/Users/ext/AppData/Local/Temp/pytest-of-ext/pytest-38/test_create_sqlite_pre_migrati2/store.pre-migrate-20260213T120000Z.db').stat
+============================== warnings summary ===============================
+tests/unit/test_operator_data_batch.py::test_retag_preserves_opaque_transcript_and_counts_only_header
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+tests/unit/test_db_migrate.py::test_raw_usage_window_latest_index_migration_is_idempotent
+  C:\codex-lb\tests\unit\test_db_migrate.py:1591: SAWarning: Skipped unsupported reflection of expression-based index idx_usage_window_account_time
+    index_names = {index["name"] for index in inspect(connection).get_indexes("usage_history")}
+
+tests/unit/test_db_migrate.py::test_raw_usage_window_latest_index_migration_is_idempotent
+  C:\codex-lb\tests\unit\test_db_migrate.py:1591: SAWarning: Skipped unsupported reflection of expression-based index idx_usage_window_account_latest
+    index_names = {index["name"] for index in inspect(connection).get_indexes("usage_history")}
+
+tests/unit/test_db_migrate.py::test_a_ledgerless_database_without_the_marker_still_replays[dropped]
+tests/unit/test_db_migrate.py::test_a_ledgerless_database_without_the_marker_still_replays[truncated]
+  C:\codex-lb\app\db\alembic\versions\20260309_000000_add_additional_usage_history.py:30: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_feature_latest
+    return {str(index["name"]) for index in inspector.get_indexes(table_name) if index.get("name") is not None}
+
+tests/unit/test_db_migrate.py::test_a_ledgerless_database_without_the_marker_still_replays[dropped]
+tests/unit/test_db_migrate.py::test_a_ledgerless_database_without_the_marker_still_replays[truncated]
+  C:\codex-lb\app\db\alembic\versions\20260309_000000_add_additional_usage_history.py:30: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_limit_latest
+    return {str(index["name"]) for index in inspector.get_indexes(table_name) if index.get("name") is not None}
+
+tests/unit/test_db_migrate.py::test_a_ledgerless_database_without_the_marker_still_replays[dropped]
+tests/unit/test_db_migrate.py::test_a_ledgerless_database_without_the_marker_still_replays[truncated]
+  C:\codex-lb\app\db\alembic\versions\20260312_000000_add_additional_usage_quota_key.py:45: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_feature_latest
+    return {str(index["name"]) for index in inspector.get_indexes(table_name) if index.get("name") is not None}
+
+tests/unit/test_db_migrate.py::test_a_ledgerless_database_without_the_marker_still_replays[dropped]
+tests/unit/test_db_migrate.py::test_a_ledgerless_database_without_the_marker_still_replays[truncated]
+  C:\codex-lb\app\db\alembic\versions\20260312_000000_add_additional_usage_quota_key.py:45: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_limit_latest
+    return {str(index["name"]) for index in inspector.get_indexes(table_name) if index.get("name") is not None}
+
+tests/unit/test_db_migrate.py::test_a_ledgerless_database_without_the_marker_still_replays[dropped]
+tests/unit/test_db_migrate.py::test_a_ledgerless_database_without_the_marker_still_replays[truncated]
+  C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\contextlib.py:148: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_feature_latest
+    next(self.gen)
+
+tests/unit/test_db_migrate.py::test_a_ledgerless_database_without_the_marker_still_replays[dropped]
+tests/unit/test_db_migrate.py::test_a_ledgerless_database_without_the_marker_still_replays[truncated]
+  C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\contextlib.py:148: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_limit_latest
+    next(self.gen)
+
+tests/integration/test_request_log_facet_sqlite.py::test_options_avoid_repeated_live_cohort_scans[False]
+tests/integration/test_request_log_facet_sqlite.py::test_options_avoid_repeated_live_cohort_scans[True]
+  tests\integration\test_request_log_facet_sqlite.py:18: PytestWarning: record_property is incompatible with junit_family 'xunit2' (use 'legacy' or 'xunit1')
+    @pytest.mark.asyncio
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+SKIPPED [1] tests\integration\test_migration_serialization.py:103: PostgreSQL-only concurrent migration test
+SKIPPED [1] tests\integration\test_migration_serialization.py:172: PostgreSQL-only advisory migration lock test
+SKIPPED [1] tests\integration\test_migration_serialization.py:187: MySQL-only named migration lock test
+SKIPPED [1] tests\integration\test_migration_serialization.py:202: MySQL-only named migration lock test
+SKIPPED [1] tests\integration\test_migration_serialization.py:220: MySQL-only concurrent migration test
+SKIPPED [1] tests\test_request_logs_options_api.py:657: PostgreSQL-only query plan test
+FAILED tests/unit/test_db_migrate.py::test_create_sqlite_pre_migration_backup_preserves_source_mode
+1 failed, 188 passed, 6 skipped, 17 warnings in 395.37s (0:06:35)

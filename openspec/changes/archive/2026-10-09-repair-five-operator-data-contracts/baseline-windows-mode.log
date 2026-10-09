@@ -1,0 +1,18 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+________ test_create_sqlite_pre_migration_backup_preserves_source_mode ________
+tests\unit\_baseline_db_migrate_operator_data.py:1999: in test_create_sqlite_pre_migration_backup_preserves_source_mode
+    assert backup.stat().st_mode & 0o777 == 0o600
+E   AssertionError: assert (33206 & 511) == 384
+E    +  where 33206 = os.stat_result(st_mode=33206, st_ino=3377699722056087, st_dev=12887176746829527525, st_nlink=1, st_uid=0, st_gid=0, st_size=8192, st_atime=1791519975, st_mtime=1791519975, st_ctime=1791519975).st_mode
+E    +    where os.stat_result(st_mode=33206, st_ino=3377699722056087, st_dev=12887176746829527525, st_nlink=1, st_uid=0, st_gid=0, st_size=8192, st_atime=1791519975, st_mtime=1791519975, st_ctime=1791519975) = stat()
+E    +      where stat = WindowsPath('C:/Users/ext/AppData/Local/Temp/pytest-of-ext/pytest-39/test_create_sqlite_pre_migrati0/store.pre-migrate-20260213T120000Z.db').stat
+============================== warnings summary ===============================
+tests/unit/_baseline_db_migrate_operator_data.py::test_create_sqlite_pre_migration_backup_preserves_source_mode
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/unit/_baseline_db_migrate_operator_data.py::test_create_sqlite_pre_migration_backup_preserves_source_mode
+1 failed, 1 warning in 1.07s

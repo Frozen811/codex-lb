@@ -1,0 +1,17 @@
+.....................................................ssssssss            [100%]
+============================== warnings summary ===============================
+.venv\Lib\site-packages\starlette\testclient.py:53
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+SKIPPED [1] tests\integration\test_shutdown_drains_database_tasks.py:96: POSIX signals required for graceful shutdown testing
+SKIPPED [1] tests\integration\test_shutdown_drains_database_tasks.py:153: POSIX signals required for graceful shutdown testing
+SKIPPED [1] tests\integration\test_shutdown_drains_database_tasks.py:239: POSIX signals required for graceful shutdown testing
+SKIPPED [1] tests\integration\test_graceful_websocket_process_shutdown.py:109: POSIX signal delivery required for process drain testing
+SKIPPED [1] tests\integration\test_graceful_websocket_process_shutdown.py:138: POSIX signal delivery required for process drain testing
+SKIPPED [1] tests\integration\test_graceful_websocket_process_shutdown.py:154: POSIX signal delivery required for process drain testing
+SKIPPED [1] tests\integration\test_graceful_websocket_process_shutdown.py:168: POSIX signal delivery required for process drain testing
+SKIPPED [1] tests\integration\test_graceful_websocket_process_shutdown.py:182: POSIX signal delivery required for process drain testing
+53 passed, 8 skipped, 1 warning in 2.19s

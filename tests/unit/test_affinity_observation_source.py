@@ -89,6 +89,7 @@ def test_every_emitted_source_is_in_the_documented_domain() -> None:
         _source(policy)
         for policy in (
             _AffinityPolicy(),
+            _AffinityPolicy(key="native-history", codex_session_source="history_session"),
             _policy({}),
             _policy({}, payload=_payload_with_cache_key("client-thread-1")),
             _policy({"session_id": "sid-1"}),

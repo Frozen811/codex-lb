@@ -1,0 +1,210 @@
+{
+  "date": "2026-10-09 Europe/Kiev",
+  "base_head": "005c8aa4d06be1d0d2f1ccdb2e0f90b725884f8e",
+  "records": [
+    {
+      "id": "UP-PR-2506",
+      "initial_row": "| [UP-PR-2506](https://github.com/Soju06/codex-lb/pull/2506) | fix(shutdown): let DB-owning background tasks finish before cancelling them | RESOLVED / MERGED IN FORK | НЕ ПРОВЕРЕНО | — |",
+      "url": "https://github.com/Soju06/codex-lb/pull/2506",
+      "title": "fix(shutdown): let DB-owning background tasks finish before cancelling them",
+      "state": "open",
+      "merged": false,
+      "head": "c0227592f22f36f99535a4c6717e2d77bb7847d3",
+      "updated_at": "2026-10-07T11:28:17Z"
+    },
+    {
+      "id": "UP-PR-2255",
+      "initial_row": "| [UP-PR-2255](https://github.com/Soju06/codex-lb/pull/2255) | PR #2255: fix(shutdown): deny WebSocket upgrades during drain with 503 instead of a pre-handshake close | Раздел 12, L1401 | НЕ ПРОВЕРЕНО | — |",
+      "url": "https://github.com/Soju06/codex-lb/pull/2255",
+      "title": "fix(shutdown): deny WebSocket upgrades during drain with 503 instead of a pre-handshake close",
+      "state": "closed",
+      "merged": true,
+      "head": "3a43c33820be091bcee33a46eff2a2721475df59",
+      "updated_at": "2026-09-28T10:29:01Z"
+    },
+    {
+      "id": "UP-PR-2344",
+      "initial_row": "| [UP-PR-2344](https://github.com/Soju06/codex-lb/pull/2344) | PR #2344: feat(health): expose request-persistence ownership during drain | Раздел 12, L1381 | НЕ ПРОВЕРЕНО | — |",
+      "url": "https://github.com/Soju06/codex-lb/pull/2344",
+      "title": "feat(health): expose request-persistence ownership during drain",
+      "state": "open",
+      "merged": false,
+      "head": "7acf3f2636eb5b343cb3ed4210638e7287a2aa0b",
+      "updated_at": "2026-09-23T05:06:46Z"
+    },
+    {
+      "id": "UP-PR-2133",
+      "initial_row": "| [UP-PR-2133](https://github.com/Soju06/codex-lb/pull/2133) | PR #2133: fix(proxy): isolate bridge heartbeat from maintenance | Раздел 12, L1403 | НЕ ПРОВЕРЕНО | — |",
+      "url": "https://github.com/Soju06/codex-lb/pull/2133",
+      "title": "fix(proxy): isolate bridge heartbeat from maintenance",
+      "state": "open",
+      "merged": false,
+      "head": "76ff47a6feeae5e460bb855e73555f740b32c7c2",
+      "updated_at": "2026-09-30T09:49:48Z"
+    },
+    {
+      "id": "UP-PR-2484",
+      "initial_row": "| [UP-PR-2484](https://github.com/Soju06/codex-lb/pull/2484) | PR #2484: perf(usage): cap SQLite bulk usage history reads per account | Раздел 5, L754 | НЕ ПРОВЕРЕНО | — |",
+      "url": "https://github.com/Soju06/codex-lb/pull/2484",
+      "title": "perf(usage): cap SQLite bulk usage history reads per account",
+      "state": "closed",
+      "merged": true,
+      "head": "c18737e3185a3fd9e20331a4e147f3972b1b58e9",
+      "updated_at": "2026-09-28T10:24:17Z"
+    }
+  ],
+  "prior_dirty_files": [
+    {
+      "path": "openspec/changes/archive/2026-10-08-repair-five-catalog-history-contracts/.openspec.yaml",
+      "sha256": "EC3A1B167D0CCDB9F7A3F8F370BA8038FEB637051C90A0B3FBCC5E9CEF45D7A5"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-08-repair-five-catalog-history-contracts/astra-captured-metadata.json",
+      "sha256": "102C47A47C27649FEBDD09B4AFAEE8BEC3632FA96FEAD3E526DA08471A108168"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-08-repair-five-catalog-history-contracts/closure.json",
+      "sha256": "CE4D027036D498A98F76E1A38D24009FA5EE569180C77BADA03ABE3F6D1B5F43"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-08-repair-five-catalog-history-contracts/context.md",
+      "sha256": "A8A2569D60ABAA35697D2FB8909264E012FDBEAE965206F9AA4830552A0618D1"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-08-repair-five-catalog-history-contracts/design.md",
+      "sha256": "729D6C3949F673721F77184F644B6F3AA0ABC697B80E88165D2D209B7B21FE57"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-08-repair-five-catalog-history-contracts/proposal.md",
+      "sha256": "BB9E3C0B0E09150F23E439BD3D00C0D54C71FF6F74A2B03C2F1D52CC32C99155"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-08-repair-five-catalog-history-contracts/source-snapshot.json",
+      "sha256": "773D2D03C97EB7CEC71E48DAB5E7FFFC6F7496007518777D0880F8A38DC5350F"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-08-repair-five-catalog-history-contracts/specs/api-firewall/spec.md",
+      "sha256": "B8D3523ED80F0FBBF114364E1AC0014DE55861DB9482F5C449F17F41CDE0881C"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-08-repair-five-catalog-history-contracts/specs/model-catalog-compat/spec.md",
+      "sha256": "8960C10AFD57ED9B1CA2D85FE26B3FAFBDEB559CC82252F18D518FBC89675981"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-08-repair-five-catalog-history-contracts/specs/native-history-notes-proxy/spec.md",
+      "sha256": "A735EDA2A85D5FD37D7E40C58489FD23276382EEDF42AF618F7B47EEC0A10375"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-08-repair-five-catalog-history-contracts/specs/responses-api-compat/spec.md",
+      "sha256": "F03F3C3BF8C421435FC3846554D115A7F2E099D91671FF56DC2F6AE7766C884E"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-08-repair-five-catalog-history-contracts/tasks.md",
+      "sha256": "9A657F3EED5CB5E9872480E475B474B9C3B45E80BE70ED6C1929CDF87DDF286A"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-08-repair-five-catalog-history-contracts/verification.md",
+      "sha256": "7F94885058DA3714938299A2F67A261051578DCA22B2580FB8CD660F89DF53B9"
+    },
+    {
+      "path": "openspec/specs/api-firewall/context.md",
+      "sha256": "CE96F7266027F086690BAB7FA43A82A8E3499FF01831A5C56C0C74021ECF39F7"
+    },
+    {
+      "path": "tests/integration/test_catalog_history_batch.py",
+      "sha256": "97019AF0378D4162C95034B978FC38688D04F6AE76947E09506F32DF03FD0C52"
+    },
+    {
+      "path": "app/core/middleware/api_firewall.py",
+      "sha256": "1B3E4369CF7B4B96108E3D45DFB1699E25EE7015D6138045BDF1D2CBC0567AA9"
+    },
+    {
+      "path": "app/core/openai/model_registry.py",
+      "sha256": "0C1230098896BDB77EBDAED5872B6341EE9637415DD747690271336EAC577C56"
+    },
+    {
+      "path": "app/modules/proxy/_service/codex_control.py",
+      "sha256": "45231F07B8389EBED5C1277F20FF0A1DD7A57CE305F66659962025C2859467FA"
+    },
+    {
+      "path": "app/modules/proxy/affinity.py",
+      "sha256": "3D94920956E88A1733F18AFA21A559DC0E59F6A92BB99787C29D22C615843A9E"
+    },
+    {
+      "path": "app/modules/proxy/affinity_observation.py",
+      "sha256": "B1B2241FFB7CFAB172FEF522D5D82FD07788DF4AE541FF93CB0210E5704EB096"
+    },
+    {
+      "path": "app/modules/proxy/api.py",
+      "sha256": "4D9C27BF804D93BDF22433B51FF4BAF9539D6DA9576973926F88436B9B312CCE"
+    },
+    {
+      "path": "app/modules/proxy/request_policy.py",
+      "sha256": "F5CE02AB94975037ADF94A08F7F2D02B17D3599525F4FED7323914F80FD96966"
+    },
+    {
+      "path": "app/modules/proxy/sticky_repository.py",
+      "sha256": "2CDCFFF05B4D26296C385E33EB0F6AE22636C40CE425AF20994A63C8247310DD"
+    },
+    {
+      "path": "issues-check.md",
+      "sha256": "B02F3EA88CFB4DE0B84BC6B5BE417AF9FAC5DE71E57EE6479688FA14F791D24B"
+    },
+    {
+      "path": "openspec/specs/api-firewall/spec.md",
+      "sha256": "B5F5E0417470712896B1976C09F3A641103DEC952CC6235A74F5633368FBCEC2"
+    },
+    {
+      "path": "openspec/specs/model-catalog-compat/context.md",
+      "sha256": "1AC483191699D7EF3D7776BEBAD6247F249A7F9EE3592F2D119C3EABA017B48B"
+    },
+    {
+      "path": "openspec/specs/model-catalog-compat/spec.md",
+      "sha256": "9D63BF6970AB7B98AEEFC15C1407E54A227A2A523673522F853B9AE7A3B16795"
+    },
+    {
+      "path": "openspec/specs/native-history-notes-proxy/context.md",
+      "sha256": "2C3CA1F89F9E9BDBDE5F40047CD555D0998866701439B950623D22C0F9083215"
+    },
+    {
+      "path": "openspec/specs/native-history-notes-proxy/spec.md",
+      "sha256": "B2EAC104DCF14CA96F65DF00E168E6BDB7000E5EA3D1B5BFBA629D0E92924078"
+    },
+    {
+      "path": "openspec/specs/responses-api-compat/context.md",
+      "sha256": "82C684B9F18D4FAFF3F6C03A15FD915AE0D3D5FA087507BBE66097B19C9A6015"
+    },
+    {
+      "path": "openspec/specs/responses-api-compat/spec.md",
+      "sha256": "45030D0B5B9498DEB908D05A54FA4D77DD12548E16CE508FE62E5E374520B653"
+    },
+    {
+      "path": "tests/integration/test_api_firewall_middleware.py",
+      "sha256": "0F148899874C05992A9F20DC04F782916C7A2CF94F625C8725BE54EA324D62F5"
+    },
+    {
+      "path": "tests/integration/test_v1_models.py",
+      "sha256": "9670DCF27A6225557DDD2AC7144AA5A3ECCD2C95E529A1C97088571C5BA0C526"
+    },
+    {
+      "path": "tests/unit/test_affinity_observation_source.py",
+      "sha256": "01612E0822422AA712236F454F584B7011A276E975A787E31F3A4679F77A54FC"
+    },
+    {
+      "path": "tests/unit/test_client_setup_examples.py",
+      "sha256": "32C8BBC32C6CFC2D63826E8E86A6D9F5C056853B00F1232CCC31A5AB8E49ED7B"
+    },
+    {
+      "path": "tests/unit/test_model_registry.py",
+      "sha256": "8406F822B0D551B2AEEE091DC44567BB685E0FE6BCAC10F5F4C0D0469C04D2FF"
+    },
+    {
+      "path": "tests/unit/test_proxy_load_balancer_refresh.py",
+      "sha256": "3D21319FD8BEBFE22936B1A407D0BA2EF7298D27DC381550DCD176B0720BDD53"
+    },
+    {
+      "path": "tests/unit/test_request_policy.py",
+      "sha256": "331E0A310EE0E0338B6DA4F597CB29B110202CFE28DF33E7FFA2F21C4F8294C4"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "capabilities": {
+    "bridge-ring-membership": [
+      "Optional maintenance cannot block ring renewal"
+    ],
+    "graceful-shutdown": [
+      "Persistence observation preserves callback ownership",
+      "Interrupted cancellation retains background ownership",
+      "Graceful drain closes WebSocket admission",
+      "Internal drain status reports request-persistence activity"
+    ],
+    "query-caching": [
+      "Projection history reads are bounded per account"
+    ]
+  },
+  "unrelated_requirement_blocks_preserved": true,
+  "all_existing_scenario_names_preserved": true
+}

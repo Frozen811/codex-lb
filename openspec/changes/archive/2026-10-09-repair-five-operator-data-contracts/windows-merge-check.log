@@ -1,0 +1,8 @@
+...                                                                      [100%]
+============================== warnings summary ===============================
+tests/unit/test_operator_data_batch.py::test_retag_subprocess_with_closed_stderr_pipe_exits_successfully
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+3 passed, 1 warning in 23.38s

@@ -12,7 +12,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from hashlib import sha256
-from typing import Literal, TypedDict
+from typing import TypedDict
 from uuid import uuid4
 
 from app.core.metrics.prometheus import (
@@ -28,6 +28,7 @@ from app.core.openai.requests import (
 from app.db.models import StickySessionKind
 from app.modules.api_keys.service import ApiKeyData
 from app.modules.proxy.replay_safety import responses_payload_is_account_neutral_fresh_replay
+from app.modules.proxy.sticky_repository import _ContinuitySource
 from app.modules.proxy.thread_anchors import (
     build_thread_window,
     get_thread_anchor_index,
@@ -36,7 +37,7 @@ from app.modules.proxy.thread_anchors import (
 
 # This typed provenance is a routing capability: callers must never recover it
 # from key text, because a client-controlled turn state can mimic any prefix.
-_CodexSessionSource = Literal["session_header", "thread_header", "turn_state"]
+_CodexSessionSource = _ContinuitySource
 # Request headers are stripped and HTTP forbids CR/LF, while PostgreSQL/SQLite
 # text keys can safely retain LF. This sentinel makes the internal namespace
 # structurally unreachable by every legacy raw header, even if its digest is
@@ -198,6 +199,11 @@ def _codex_session_selection_key(key: str) -> str:
     # sentinel above—not secrecy—provides source separation from raw rows.
     digest = sha256(key.encode()).hexdigest()
     return f"{_CODEX_SELECTION_KEY_PREFIX}:session_header:{digest}"
+
+
+def _history_session_selection_key(key: str) -> str:
+    digest = sha256(key.encode()).hexdigest()
+    return f"{_CODEX_SELECTION_KEY_PREFIX}:history_session:{digest}"
 
 
 def _response_bound_thread_marker_key(thread_selection_key: str) -> str:
@@ -602,7 +608,16 @@ def _sticky_key_for_codex_control_request(
     *,
     codex_session_affinity: bool,
     max_age_seconds: int = 86400,
+    body_session_id: str | None = None,
 ) -> _AffinityPolicy:
+    if body_session_id:
+        return _AffinityPolicy(
+            key=_history_session_selection_key(body_session_id),
+            kind=StickySessionKind.CODEX_SESSION,
+            codex_session_source="history_session",
+            seed_selection_key=_codex_session_selection_key(body_session_id),
+            seed_selection_kind=StickySessionKind.CODEX_SESSION,
+        )
     turn_state_key = _sticky_key_from_turn_state_header(headers)
     if turn_state_key:
         return _AffinityPolicy(

@@ -1,0 +1,35 @@
+................F..FF.........                                           [100%]
+================================== FAILURES ===================================
+______ test_retag_subprocess_with_closed_stderr_pipe_exits_successfully _______
+tests\unit\test_operator_data_batch.py:321: in test_retag_subprocess_with_closed_stderr_pipe_exits_successfully
+    assert process.returncode == 0, output
+E   AssertionError: This command rewrites Codex session metadata, including state_*.sqlite when present.
+E     Close Codex/Codex CLI before continuing to avoid SQLite locks or stale writes.
+E     Using Codex home C:\Users\ext\AppData\Local\Temp\pytest-of-ext\pytest-36\test_retag_subprocess_with_clo0
+E     Retagging Codex sessions from openai to codex-lb
+E     
+E   assert 120 == 0
+E    +  where 120 = <Popen: returncode: 120 args: ['C:\\codex-lb\\.venv\\Scripts\\python.exe', '...>.returncode
+_ test_populated_scim_overflow_parents_round_trip_and_reach_current_head[20260914_000000_add_scim_tokens] _
+tests\integration\test_operator_data_batch.py:63: in test_populated_scim_overflow_parents_round_trip_and_reach_current_head
+    assert migrate.check_migration_policy(url) == []
+E   assert () == []
+E     
+E     Use -v to get more diff
+_ test_populated_scim_overflow_parents_round_trip_and_reach_current_head[20260914_000000_drop_subscription_overflow_schema] _
+tests\integration\test_operator_data_batch.py:63: in test_populated_scim_overflow_parents_round_trip_and_reach_current_head
+    assert migrate.check_migration_policy(url) == []
+E   assert () == []
+E     
+E     Use -v to get more diff
+============================== warnings summary ===============================
+tests/unit/test_operator_data_batch.py::test_retag_preserves_opaque_transcript_and_counts_only_header
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/unit/test_operator_data_batch.py::test_retag_subprocess_with_closed_stderr_pipe_exits_successfully
+FAILED tests/integration/test_operator_data_batch.py::test_populated_scim_overflow_parents_round_trip_and_reach_current_head[20260914_000000_add_scim_tokens]
+FAILED tests/integration/test_operator_data_batch.py::test_populated_scim_overflow_parents_round_trip_and_reach_current_head[20260914_000000_drop_subscription_overflow_schema]
+3 failed, 27 passed, 1 warning in 41.63s

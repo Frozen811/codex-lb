@@ -23,6 +23,8 @@ from app.modules.proxy.request_policy import (
 @pytest.mark.parametrize(
     ("alias", "canonical", "expected_effort", "expected_service_tier"),
     [
+        ("gpt-6-astra-extra-high-fast", "gpt-6-astra", "high", "priority"),
+        ("gpt-6-astra-low-fast", "gpt-6-astra", "low", "priority"),
         ("gpt-5-extra", "gpt-5", "high", None),
         ("gpt-5.1-low", "gpt-5.1", "low", None),
         ("gpt-5.2-medium-fast", "gpt-5.2", "medium", "priority"),

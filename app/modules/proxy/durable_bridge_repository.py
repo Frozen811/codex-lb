@@ -4101,6 +4101,7 @@ class DurableBridgeRepository:
                     HttpBridgeRetryCircuit.updated_at_epoch,
                     HttpBridgeRetryCircuit.admission_generation,
                     HttpBridgeRetryCircuit.consecutive_failures,
+                    HttpBridgeRetryCircuit.last_detail,
                 )
                 .where(candidate_predicate)
                 .order_by(
@@ -4122,6 +4123,7 @@ class DurableBridgeRepository:
                     updated_at_epoch,
                     admission_generation,
                     consecutive_failures,
+                    last_detail,
                 ) in keys:
                     deleted = await self._session.execute(
                         delete(HttpBridgeRetryCircuit)
@@ -4131,6 +4133,7 @@ class DurableBridgeRepository:
                         .where(HttpBridgeRetryCircuit.updated_at_epoch == updated_at_epoch)
                         .where(HttpBridgeRetryCircuit.admission_generation == admission_generation)
                         .where(HttpBridgeRetryCircuit.consecutive_failures == consecutive_failures)
+                        .where(HttpBridgeRetryCircuit.last_detail == last_detail)
                         .where(stale_predicate)
                     )
                     batch_deleted_count += int(getattr(deleted, "rowcount", 0) or 0)

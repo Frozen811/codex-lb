@@ -1,0 +1,37 @@
+{
+  "head": "005c8aa4d06be1d0d2f1ccdb2e0f90b725884f8e",
+  "selected_ids": [
+    "UP-PR-2280",
+    "UP-PR-2276",
+    "UP-PR-1962",
+    "UP-PR-2345",
+    "UP-PR-2278"
+  ],
+  "selected_rows_updated_and_read_back": 5,
+  "other_source_rows_byte_identical": 333,
+  "source_records": 338,
+  "local_closures": 141,
+  "partial": 7,
+  "unverified": 190,
+  "prior_dirty_files_preserved_byte_identically": 110,
+  "shared_paths": [
+    "issues-check.md",
+    "openspec/specs/responses-api-compat/context.md",
+    "openspec/specs/responses-api-compat/spec.md"
+  ],
+  "other_prior_spec_requirement_blocks_preserved": true,
+  "complete_prior_context_preserved_byte_identically_as_prefix": true,
+  "delta_exactly_synced": true,
+  "final_distinct_pass": 281,
+  "no_commit_push_release_deploy": true,
+  "own_rows": [
+    "| [UP-PR-2280](https://github.com/Soju06/codex-lb/pull/2280) | PR #2280: fix(proxy): preserve newer retry state during scheduled cleanup | Раздел 12, L1396 | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | Fixed null-safe last_detail CAS in scheduled purge; 20 new DB +4 retention tests PASS, HEAD red8/control6; mixed batches and all four snapshot fences verified. §77; [verification](openspec/changes/archive/2026-10-09-repair-five-retry-cleanup-contracts/verification.md). Live DB/provider/cross-process/public/cloud/production scope separate. |",
+    "| [UP-PR-2276](https://github.com/Soju06/codex-lb/pull/2276) | PR #2276: fix(proxy): preserve newer quarantine during response cleanup | Раздел 12, L1399 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | Existing session-identity/generation quarantine cleanup independently verified; replacement ownership and failure during completion awaits survive real HTTP races. Existing poison overflow policy unchanged. §77; [verification](openspec/changes/archive/2026-10-09-repair-five-retry-cleanup-contracts/verification.md). Live DB/provider/cross-process/public/cloud/production scope separate. |",
+    "| [UP-PR-1962](https://github.com/Soju06/codex-lb/pull/1962) | PR #1962: fix(proxy): preserve half-open probe ownership during cleanup | Раздел 12, L1425 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | Existing half-open admission/return and replacement-probe ownership independently verified; 4 new missing/zero/negative/elapsed sentinel cases, 40 claim lifecycle cases and focused circuit tests PASS. Upstream deadline-only reclamation/acceptance remains separate. §77; [verification](openspec/changes/archive/2026-10-09-repair-five-retry-cleanup-contracts/verification.md). Live DB/provider/cross-process/public/cloud/production scope separate. |",
+    "| [UP-PR-2345](https://github.com/Soju06/codex-lb/pull/2345) | PR #2345: fix(proxy): preserve local quarantine evidence during completion | Раздел 12, L1380 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | Existing local quarantine provenance/deadlines independently verified: 54 provenance +13 races +2 recovery-origin +12 promotion HTTP cases PASS; first-strike and replacement evidence retained. §77; [verification](openspec/changes/archive/2026-10-09-repair-five-retry-cleanup-contracts/verification.md). Live DB/provider/cross-process/public/cloud/production scope separate. |",
+    "| [UP-PR-2278](https://github.com/Soju06/codex-lb/pull/2278) | PR #2278: fix(proxy): count incomplete responses toward bridge retries | Раздел 12, L1397 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | Existing reason-only incomplete accounting independently verified: 22 new raw/interpreted error/eligibility cases and 6 real HTTP cases PASS; durable strikes, duplicate suppression, unchanged payload and reservation settlement verified. §77; [verification](openspec/changes/archive/2026-10-09-repair-five-retry-cleanup-contracts/verification.md). Live DB/provider/cross-process/public/cloud/production scope separate. |"
+  ],
+  "post_archive_verified": true,
+  "final_junit_unique_pass": 281,
+  "archive_path": "C:\\codex-lb\\openspec\\changes\\archive\\2026-10-09-repair-five-retry-cleanup-contracts"
+}

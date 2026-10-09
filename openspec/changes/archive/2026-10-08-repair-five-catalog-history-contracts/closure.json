@@ -1,0 +1,42 @@
+{
+  "base_head": "005c8aa4d06be1d0d2f1ccdb2e0f90b725884f8e",
+  "initial_worktree": "clean",
+  "selected": [
+    "UP-ISSUE-1467",
+    "UP-PR-2085",
+    "UP-PR-2101",
+    "UP-PR-2445",
+    "UP-PR-2543"
+  ],
+  "source_rows": 338,
+  "other_rows_preserved_byte_for_byte": 333,
+  "other_rows_sha256_before": "73ee15e8481383f34e9f3c62da77482102fa5ffc7cc61549909223d48cdbb9c2",
+  "other_rows_sha256_after": "73ee15e8481383f34e9f3c62da77482102fa5ffc7cc61549909223d48cdbb9c2",
+  "status_distribution": {
+    "ИСПРАВЛЕНО ЛОКАЛЬНО / ЧАСТИЧНО ПРОВЕРЕНО": 3,
+    "ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО": 61,
+    "ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО": 52,
+    "НЕ ПРОВЕРЕНО": 205,
+    "ЛОКАЛЬНО ПРОВЕРЕНО / ЗАКРЫТО": 1,
+    "ИСПРАВЛЕНО ЛОКАЛЬНО / ЗАКРЫТО": 2,
+    "ЗАКРЫТО ЛОКАЛЬНО (CATALOG SCOPE)": 1,
+    "ЧАСТИЧНО ПРОВЕРЕНО": 4,
+    "ЗАКРЫТО ЛОКАЛЬНО": 7,
+    "ЗАКРЫТО ЛОКАЛЬНО (DOC/CONFIG SCOPE)": 1,
+    "ЗАКРЫТО ЛОКАЛЬНО (ACCOUNT-LOCAL SCOPE)": 1
+  },
+  "selected_saved_rows": {
+    "UP-PR-2445": "| [UP-PR-2445](https://github.com/Soju06/codex-lb/pull/2445) | PR #2445: feat(proxy): forward the Codex plugin catalog upstream so chatgpt_base_url can point at codex-lb | Раздел 12, L1368 | ЗАКРЫТО ЛОКАЛЬНО | §74; plugin GET aliases/slashes, status/body/query/pool credentials, POST 405 and firewall; live marketplace/install remains unverified; [verification](openspec/changes/archive/2026-10-08-repair-five-catalog-history-contracts/verification.md) |",
+    "UP-PR-2101": "| [UP-PR-2101](https://github.com/Soju06/codex-lb/pull/2101) | PR #2101: fix(proxy): add native history and notes routes with account-local ownership | Раздел 12, L1414 | ЗАКРЫТО ЛОКАЛЬНО (ACCOUNT-LOCAL SCOPE) | §74; body session hard owner, original bytes/native headers, seed, pause and refresh/401/quota failure fencing; no pooled fan-out or live decryption claim; [verification](openspec/changes/archive/2026-10-08-repair-five-catalog-history-contracts/verification.md) |",
+    "UP-PR-2085": "| [UP-PR-2085](https://github.com/Soju06/codex-lb/pull/2085) | PR #2085: feat(models): add gpt-6 astra catalog support | Раздел 12, L1419 | ЗАКРЫТО ЛОКАЛЬНО | §74; official rust-v0.153.4 Astra bootstrap/capabilities, websocket preference and canonical alias inference on both HTTP routes; live entitlement unverified; [verification](openspec/changes/archive/2026-10-08-repair-five-catalog-history-contracts/verification.md) |",
+    "UP-ISSUE-1467": "| [UP-ISSUE-1467](https://github.com/Soju06/codex-lb/issues/1467) | bug: gpt-5.3-codex-spark works on Pro but is missing from /v1/models | РЕШЕНО | ЗАКРЫТО ЛОКАЛЬНО (CATALOG SCOPE) | §74; existing Spark quota-only repair verified after authoritative refresh, actual SQLite persistence/startup restore and all three catalog APIs; live inference unverified; [verification](openspec/changes/archive/2026-10-08-repair-five-catalog-history-contracts/verification.md) |",
+    "UP-PR-2543": "| [UP-PR-2543](https://github.com/Soju06/codex-lb/pull/2543) | docs(codex): enable API-key model discovery in setup examples | РЕШЕНО В ТЕКУЩЕЙ ВЕТКЕ | ЗАКРЫТО ЛОКАЛЬНО (DOC/CONFIG SCOPE) | §74; existing discovery settings verified in shipped and merged inline TOML; installed-client E2E skipped on Windows because macOS sandbox-exec is required; [verification](openspec/changes/archive/2026-10-08-repair-five-catalog-history-contracts/verification.md) |"
+  },
+  "publication": "No commit/push/PR/merge/release/deploy",
+  "archive": "C:\\codex-lb\\openspec\\changes\\archive\\2026-10-08-repair-five-catalog-history-contracts",
+  "tasks_complete": 8,
+  "delta_requirements_synchronized": 6,
+  "delta_scenarios": 11,
+  "archive_saved_row_readback": "PASS",
+  "registry_sha256_after": "b02f3ea88cfb4de0b84bc6b5be417af9fac5de71e57ee6479688fa14f791d24b"
+}

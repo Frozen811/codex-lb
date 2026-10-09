@@ -644,7 +644,7 @@ Every process-local cache that serves security, authorization, or routing decisi
 
 ### Requirement: Projection history reads are bounded per account
 The dashboard projections history fetch MUST NOT widen every account's
-lookback to the widest account window. On PostgreSQL the bulk usage-history
+lookback to the widest account window. On PostgreSQL and file-backed SQLite the bulk usage-history
 read MUST bound rows per account by that account's own window cutoff, and
 MUST additionally bound each account's rows older than an uncapped recent
 floor to a newest-first per-account row cap supplied by the projections
@@ -690,13 +690,13 @@ account flat at its limit).
 
 #### Scenario: One weekly account does not widen the fetch for short-window accounts
 - **GIVEN** one account with a 7-day window and several accounts with 5-hour windows
-- **WHEN** the projections history fetch runs on PostgreSQL
+- **WHEN** the projections history fetch runs on PostgreSQL or file-backed SQLite
 - **THEN** rows for the 5-hour accounts MUST be bounded by their own cutoff in SQL
 - **AND** each account's resulting history slice MUST equal the slice the shared-floor fetch produced after per-account trimming
 
 #### Scenario: A dense account returns only its newest rows
 - **GIVEN** an account whose in-cutoff usage-history rows exceed the per-account row cap
-- **WHEN** the projections history fetch runs on PostgreSQL
+- **WHEN** the projections history fetch runs on PostgreSQL or file-backed SQLite
 - **THEN** the account's slice MUST be exactly the in-cutoff rows at or after the uncapped recent floor plus the newest cap-many in-cutoff rows older than the floor, ordered oldest-first
 - **AND** accounts whose in-cutoff rows do not exceed the cap MUST return their full trimmed slice unchanged
 
@@ -709,7 +709,7 @@ account flat at its limit).
 
 #### Scenario: A write burst inside an equal-weight window is never truncated
 - **GIVEN** an account that wrote more usage-history rows inside the smoothing or fleet-burn window than the per-account row cap
-- **WHEN** the projections history fetch runs on PostgreSQL
+- **WHEN** the projections history fetch runs on PostgreSQL or file-backed SQLite
 - **THEN** every in-cutoff row at or after the floor MUST be returned
 - **AND** the weekly-pace smoothed values and fleet burn rate MUST equal the values the uncapped fetch would produce
 
@@ -745,10 +745,26 @@ account flat at its limit).
 - **THEN** the plan MUST serve each probe as an Index Only Scan over the covering indexes with no sequential scan of `usage_history`
 
 #### Scenario: SQLite snapshot cache keeps the shared floor
-- **GIVEN** the SQLite backend serves the projections history fetch through its snapshot cache
-- **WHEN** per-account cutoffs, a per-account row cap, and an uncapped recent floor are supplied
-- **THEN** the SQLite read MAY keep the shared floor and MAY ignore the row cap and the floor
-- **AND** per-account trimming in the caller MUST still bound each account's slice
+- **GIVEN** an uncapped SQLite history request
+- **WHEN** the snapshot-cache read is used
+- **THEN** it MAY keep the shared floor and caller trimming MUST still bound each account's slice
+- **AND** a supplied row cap MUST instead use the bounded query path
+
+#### Scenario: Capped SQLite history uses bounded per-account reads
+- **GIVEN** a file-backed SQLite database with dense usage history
+- **WHEN** per-account cutoffs, a per-account row cap and an uncapped recent floor are supplied
+- **THEN** the read MUST seek each account's capped older tail and all recent rows through the existing composite indexes
+- **AND** it MUST NOT load or hash the full older history through the uncapped snapshot cache
+
+#### Scenario: Timestamp ties and the exact floor preserve deterministic slices
+- **WHEN** several older history rows share a timestamp and a row lies exactly at the uncapped recent floor
+- **THEN** the older tail keeps the newest row IDs within the cap and all floor-inclusive recent rows appear exactly once
+- **AND** the slice is ordered oldest-first by timestamp and row ID
+
+#### Scenario: Zero cap omits only the older tail
+- **WHEN** the caller supplies a zero row cap
+- **THEN** rows older than the recent floor are omitted and floor-inclusive recent rows remain available
+- **AND** without a recent floor the account's history slice is empty
 
 ### Requirement: Request-log listing totals are cached and rollup-served
 The request-log listing total MUST be served from a short-TTL per-filter

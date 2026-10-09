@@ -95,7 +95,8 @@ def _is_protected_api_path(path: str) -> bool:
         return True
     # The Codex plugin-catalog passthrough spends pool credentials upstream, so
     # it sits behind the same allowlist as the other proxy surfaces.
-    if path == "/plugins/featured" or path == "/ps/plugins" or path.startswith("/ps/plugins/"):
+    plugin_path = path.removeprefix("/backend-api").rstrip("/")
+    if plugin_path == "/plugins/featured" or plugin_path == "/ps/plugins" or plugin_path.startswith("/ps/plugins/"):
         return True
     return path == "/v1" or path.startswith("/v1/")
 

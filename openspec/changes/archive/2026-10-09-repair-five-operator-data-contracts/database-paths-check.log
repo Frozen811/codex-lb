@@ -1,0 +1,59 @@
+FF........................s                                              [100%]
+================================== FAILURES ===================================
+_ test_populated_scim_overflow_parents_round_trip_and_reach_current_head[20260914_000000_add_scim_tokens] _
+.venv\Lib\site-packages\alembic\script\base.py:207: in _catch_revision_errors
+    yield
+.venv\Lib\site-packages\alembic\script\base.py:257: in walk_revisions
+    for rev in self.revision_map.iterate_revisions(
+.venv\Lib\site-packages\alembic\script\revision.py:807: in iterate_revisions
+    revisions, heads = fn(
+.venv\Lib\site-packages\alembic\script\revision.py:1474: in _collect_upgrade_revisions
+    raise RangeNotAncestorError(lower, upper)
+E   alembic.script.revision.RangeNotAncestorError: Revision 20261007_000000_add_account_quota_limit is not an ancestor of revision base
+
+The above exception was the direct cause of the following exception:
+tests\integration\test_operator_data_batch.py:36: in test_populated_scim_overflow_parents_round_trip_and_reach_current_head
+    assert merge in {revision.revision for revision in graph.walk_revisions(heads[0], "base")}
+                                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\alembic\script\base.py:256: in walk_revisions
+    with self._catch_revision_errors(start=base, end=head):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\contextlib.py:162: in __exit__
+    self.gen.throw(value)
+.venv\Lib\site-packages\alembic\script\base.py:219: in _catch_revision_errors
+    raise util.CommandError(ancestor) from rna
+E   alembic.util.exc.CommandError: Requested range 20261007_000000_add_account_quota_limit:base does not refer to ancestor/descendant revisions along the same branch
+_ test_populated_scim_overflow_parents_round_trip_and_reach_current_head[20260914_000000_drop_subscription_overflow_schema] _
+.venv\Lib\site-packages\alembic\script\base.py:207: in _catch_revision_errors
+    yield
+.venv\Lib\site-packages\alembic\script\base.py:257: in walk_revisions
+    for rev in self.revision_map.iterate_revisions(
+.venv\Lib\site-packages\alembic\script\revision.py:807: in iterate_revisions
+    revisions, heads = fn(
+.venv\Lib\site-packages\alembic\script\revision.py:1474: in _collect_upgrade_revisions
+    raise RangeNotAncestorError(lower, upper)
+E   alembic.script.revision.RangeNotAncestorError: Revision 20261007_000000_add_account_quota_limit is not an ancestor of revision base
+
+The above exception was the direct cause of the following exception:
+tests\integration\test_operator_data_batch.py:36: in test_populated_scim_overflow_parents_round_trip_and_reach_current_head
+    assert merge in {revision.revision for revision in graph.walk_revisions(heads[0], "base")}
+                                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\alembic\script\base.py:256: in walk_revisions
+    with self._catch_revision_errors(start=base, end=head):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\contextlib.py:162: in __exit__
+    self.gen.throw(value)
+.venv\Lib\site-packages\alembic\script\base.py:219: in _catch_revision_errors
+    raise util.CommandError(ancestor) from rna
+E   alembic.util.exc.CommandError: Requested range 20261007_000000_add_account_quota_limit:base does not refer to ancestor/descendant revisions along the same branch
+============================== warnings summary ===============================
+tests/integration/test_operator_data_batch.py::test_populated_scim_overflow_parents_round_trip_and_reach_current_head[20260914_000000_add_scim_tokens]
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+SKIPPED [1] tests\test_request_logs_options_api.py:657: PostgreSQL-only query plan test
+FAILED tests/integration/test_operator_data_batch.py::test_populated_scim_overflow_parents_round_trip_and_reach_current_head[20260914_000000_add_scim_tokens]
+FAILED tests/integration/test_operator_data_batch.py::test_populated_scim_overflow_parents_round_trip_and_reach_current_head[20260914_000000_drop_subscription_overflow_schema]
+2 failed, 24 passed, 1 skipped, 1 warning in 38.19s

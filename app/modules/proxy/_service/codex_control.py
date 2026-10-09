@@ -263,6 +263,8 @@ class _CodexControlMixin:
         query_params: Mapping[str, str] | Sequence[tuple[str, str]],
         headers: Mapping[str, str],
         codex_session_affinity: bool = True,
+        body_session_id: str | None = None,
+        allow_cross_account_retry: bool = True,
         api_key: ApiKeyData | None = None,
         success_gate: Callable[[str, CodexControlResponse], Awaitable[bool]] | None = None,
         privacy_policy: CodexControlRequestPrivacyPolicy = CodexControlRequestPrivacyPolicy.STANDARD,
@@ -284,6 +286,7 @@ class _CodexControlMixin:
         affinity = _sticky_key_for_codex_control_request(
             headers,
             codex_session_affinity=codex_session_affinity,
+            body_session_id=body_session_id,
         )
         selection_model = api_key.enforced_model if api_key is not None else None
         routing_strategy = _routing_strategy(settings)
@@ -354,6 +357,7 @@ class _CodexControlMixin:
                     status_code, error_payload = selection_failure_response(selection)
                     raise ProxyResponseError(status_code, error_payload)
             account_id_value = account.id
+            strict_account_id = None if allow_cross_account_retry else account.id
 
             async def _call_control(target: Account) -> CodexControlResponse:
                 nonlocal route_fallback_used, route_mode, route_pool_id, route_endpoint_id
@@ -426,6 +430,7 @@ class _CodexControlMixin:
                     request_id=request_id,
                     kind=request_kind,
                     select_next_account=_select_control_failover,
+                    strict_account_id=strict_account_id,
                     privacy_policy=effective_privacy_policy,
                 )
                 account_id_value = account.id
@@ -453,6 +458,7 @@ class _CodexControlMixin:
                         deadline=deadline,
                         select_next_account=_select_control_failover,
                         call_next=_call_control,
+                        strict_account_id=strict_account_id,
                         privacy_policy=effective_privacy_policy,
                     )
                     if failover is not None:
@@ -477,6 +483,7 @@ class _CodexControlMixin:
                                 request_id=request_id,
                                 kind=request_kind,
                                 select_next_account=_select_control_failover,
+                                strict_account_id=strict_account_id,
                                 force=True,
                                 privacy_policy=effective_privacy_policy,
                             )
@@ -492,7 +499,7 @@ class _CodexControlMixin:
                             return await _finalize_success(account, response)
                         except ProxyResponseError as retry_exc:
                             await _handle_proxy_error(account, retry_exc)
-                            if retry_exc.status_code == 401:
+                            if retry_exc.status_code == 401 and allow_cross_account_retry:
                                 selection = await proxy._select_account_with_budget(
                                     deadline,
                                     request_id=request_id,

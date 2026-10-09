@@ -7,7 +7,7 @@ import os
 import stat
 import sys
 import time
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from functools import lru_cache
@@ -30,6 +30,7 @@ from app.core.balancer import configure_replica_salt
 from app.core.bootstrap import ensure_auto_bootstrap_token, log_bootstrap_token
 from app.core.clients.http import close_http_client, init_http_client
 from app.core.clients.native_egress import close_discovered_native_egress_client
+from app.core.clock import REAL_SCHEDULER
 from app.core.config.dashboard_overrides import effective_settings
 from app.core.config.key_fingerprint import verify_encryption_key_fingerprint
 from app.core.config.settings import (
@@ -120,6 +121,7 @@ from app.modules.proxy.durable_bridge_repository import (
 )
 from app.modules.proxy.durable_bridge_runtime import http_bridge_owner_process_epoch
 from app.modules.proxy.rate_limit_cache import get_rate_limit_headers_cache
+from app.modules.proxy.ring_maintenance import run_ring_maintenance_phase
 from app.modules.proxy.ring_membership import (
     RING_HEARTBEAT_INTERVAL_SECONDS,
     RING_STALE_GRACE_SECONDS,
@@ -772,6 +774,37 @@ async def lifespan(app: FastAPI):
         logger.warning("Metrics endpoint enabled but prometheus-client is not installed")
 
     heartbeat_stop = asyncio.Event()
+    maintenance_stop = asyncio.Event()
+    maintenance_tasks: list[asyncio.Task[None]] = []
+
+    async def _run_proxy_maintenance(attribute: str) -> None:
+        proxy = getattr(app.state, "proxy_service", None)
+        if proxy is not None:
+            await getattr(proxy, attribute)()
+
+    def _start_ring_maintenance(svc: RingMembershipService, iid: str) -> None:
+        async def _refresh_caps() -> None:
+            await refresh_cap_partition(svc.list_active, iid)
+
+        phases: tuple[tuple[str, Callable[[], Awaitable[None]]], ...] = (
+            ("durable-ownership", lambda: _run_proxy_maintenance("reconcile_durable_http_bridge_ownership")),
+            ("stale-operations", lambda: _run_proxy_maintenance("abandon_stale_http_bridge_operations")),
+            ("idle-sweep", lambda: _run_proxy_maintenance("prune_idle_http_bridge_sessions")),
+            ("cap-partition", _refresh_caps),
+        )
+        for phase, operation in phases:
+            maintenance_tasks.append(
+                asyncio.create_task(
+                    run_ring_maintenance_phase(
+                        operation,
+                        stop=maintenance_stop,
+                        interval_seconds=RING_HEARTBEAT_INTERVAL_SECONDS,
+                        phase=phase,
+                        scheduler=REAL_SCHEDULER,
+                    ),
+                    name=f"bridge-ring-maintenance-{phase}",
+                )
+            )
 
     async def _wait_for_ring_stop(timeout: float) -> bool:
         try:
@@ -815,12 +848,6 @@ async def lifespan(app: FastAPI):
                 await svc.heartbeat(iid, endpoint_base_url=bridge_endpoint_base_url)
             except Exception:
                 logger.warning("Ring heartbeat failed", exc_info=True)
-            if heartbeat_stop.is_set():
-                return
-            await run_http_bridge_heartbeat_maintenance(getattr(app.state, "proxy_service", None))
-            if heartbeat_stop.is_set():
-                return
-            await refresh_cap_partition(svc.list_active, iid)
 
     async def _register_and_heartbeat(svc: RingMembershipService, iid: str) -> None:
         attempt = 0
@@ -839,9 +866,7 @@ async def lifespan(app: FastAPI):
                     return
         if heartbeat_stop.is_set():
             return
-        await refresh_cap_partition(svc.list_active, iid)
-        if heartbeat_stop.is_set():
-            return
+        _start_ring_maintenance(svc, iid)
         await _heartbeat_only(svc, iid)
 
     async def _activate_bridge_membership(svc: RingMembershipService, iid: str) -> None:
@@ -853,7 +878,7 @@ async def lifespan(app: FastAPI):
     ring_service: RingMembershipService | None = None
     instance_id: str | None = None
     heartbeat_task: asyncio.Task[None] | None = None
-    ring_service = RingMembershipService(SessionLocal)
+    ring_service = RingMembershipService()
     instance_id = settings.http_responses_session_bridge_instance_id
     heartbeat_task = asyncio.create_task(_register_and_heartbeat(ring_service, instance_id))
     loop_lag_task: asyncio.Task[None] | None = None
@@ -869,6 +894,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         shutdown_state.commit_shutdown(timeout_seconds=settings.shutdown_drain_timeout_seconds)
+        maintenance_stop.set()
         remaining_drain_seconds = shutdown_state.remaining_drain_timeout_seconds() or 0.0
         drained = await shutdown_state.wait_for_in_flight_drain(timeout_seconds=remaining_drain_seconds)
         # No await separates the timeout result from this cutoff. A slow
@@ -877,6 +903,16 @@ async def lifespan(app: FastAPI):
         shutdown_state.close_control_plane_task_admission()
         if not drained:
             logger.warning("Drain timeout reached, proceeding with shutdown")
+
+        maintenance_drained = True
+        for maintenance_task in maintenance_tasks:
+            try:
+                await stop_task_after_grace(maintenance_task)
+            except Exception:
+                maintenance_drained = False
+                logger.warning(
+                    "Ring maintenance failed during shutdown task=%s", maintenance_task.get_name(), exc_info=True
+                )
 
         proxy_service = getattr(app.state, "proxy_service", None)
         recovery_settlements_drained = True
@@ -891,7 +927,7 @@ async def lifespan(app: FastAPI):
         # An in-flight request can still own a database session after the
         # process-wide drain deadline. It is therefore part of the clean proof
         # even though the later detached drains have their own gates.
-        database_tasks_drained = drained and recovery_settlements_drained
+        database_tasks_drained = drained and recovery_settlements_drained and maintenance_drained
         bridge_sessions_drained = await _close_proxy_http_bridge_sessions_for_shutdown(
             proxy_service,
             mark_draining=recovery_settlements_drained,

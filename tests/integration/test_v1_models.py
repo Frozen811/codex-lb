@@ -12,6 +12,7 @@ from app.modules.proxy import api as proxy_api
 pytestmark = pytest.mark.integration
 
 BOOTSTRAP_MODEL_SLUGS = {
+    "gpt-6-astra",
     "gpt-5.6-sol",
     "gpt-5.6-terra",
     "gpt-5.6-luna",
@@ -52,6 +53,7 @@ EXPECTED_CORE_MODEL_PLANS = {
 }
 
 EXPECTED_BOOTSTRAP_MINIMAL_CLIENT_VERSIONS = {
+    "gpt-6-astra": "0.153.0",
     "gpt-5.6-sol": "0.144.0",
     "gpt-5.6-terra": "0.144.0",
     "gpt-5.6-luna": "0.144.0",
@@ -299,7 +301,7 @@ async def test_backend_codex_models_uses_bootstrap_upstream_metadata(async_clien
     assert set(entries) == set(EXPECTED_BOOTSTRAP_MINIMAL_CLIENT_VERSIONS)
     for slug, expected_version in EXPECTED_BOOTSTRAP_MINIMAL_CLIENT_VERSIONS.items():
         assert entries[slug]["minimal_client_version"] == expected_version
-        assert entries[slug]["shell_type"] == "shell_command"
+        assert entries[slug]["shell_type"] == ("unified_exec" if slug == "gpt-6-astra" else "shell_command")
         assert isinstance(entries[slug]["experimental_supported_tools"], list)
         assert entries[slug]["truncation_policy"]["mode"] in {"bytes", "tokens"}
         assert isinstance(entries[slug]["truncation_policy"]["limit"], int)

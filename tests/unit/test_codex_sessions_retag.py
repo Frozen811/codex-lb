@@ -218,7 +218,6 @@ def test_retag_uses_copy_fallback_when_live_sqlite_cannot_open(monkeypatch: pyte
         return original_connect(path, read_only=read_only, immutable=immutable)
 
     monkeypatch.setattr(codex_sessions_retag, "_connect_sqlite", flaky_connect)
-    monkeypatch.setattr(codex_sessions_retag, "_sqlite_count_provider_rows", lambda _path, _provider, *a, **k: 1)
 
     result = retag_codex_sessions(
         codex_home=codex_home,
@@ -242,7 +241,7 @@ def test_read_only_sqlite_count_uses_non_immutable_uri(monkeypatch: pytest.Monke
 
     monkeypatch.setattr(codex_sessions_retag.sqlite3, "connect", capture_connect)
 
-    assert codex_sessions_retag._sqlite_count_provider_rows(state_db, "openai") == 1
+    assert codex_sessions_retag._sqlite_provider_counts(state_db)["openai"] == 1
     assert calls[0][1] is True
     assert calls[0][0].startswith("file:")
     assert "mode=ro" in calls[0][0]

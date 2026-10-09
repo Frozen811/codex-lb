@@ -414,9 +414,7 @@ class _RequestLogMixin:
         """
         proxy = cast(_RequestLogServiceProtocol, self)
         persistence_tasks = [
-            task
-            for task in (proxy._request_log_tasks | proxy._background_cleanup_tasks)
-            if not task.done() and _is_persistence_task(task)
+            task for task in (proxy._request_log_tasks | proxy._background_cleanup_tasks) if _is_persistence_task(task)
         ]
         api_key_settlements = [
             task
@@ -430,6 +428,9 @@ class _RequestLogMixin:
                 ),
             )
         ]
+        # Registration represents ownership through done callbacks. A done
+        # settlement may still transfer its failed reservation to a fallback;
+        # filtering it out would expose a false drained window.
         pending_count = len(persistence_tasks)
         settlements_count = len(api_key_settlements)
         is_active = pending_count > 0

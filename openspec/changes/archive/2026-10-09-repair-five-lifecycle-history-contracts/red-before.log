@@ -1,0 +1,126 @@
+FFFFFFFF....FF.F                                                         [100%]
+================================== FAILURES ===================================
+______ test_completed_settlement_stays_pending_before_ownership_callback ______
+tests\unit\test_lifecycle_history_batch.py:44: in test_completed_settlement_stays_pending_before_ownership_callback
+    assert snapshots[0]["request_persistence_pending"] == 1
+E   assert 0 == 1
+________ test_interrupted_fallback_stop_retains_database_cleanup_owner ________
+tests\unit\test_lifecycle_history_batch.py:76: in test_interrupted_fallback_stop_retains_database_cleanup_owner
+    assert worker in task_shutdown.undrained_tasks()
+E   AssertionError: assert <Task cancelling name='Task-5' coro=<test_interrupted_fallback_stop_retains_database_cleanup_owner.<locals>.database_w...[Task.task_wakeup()]> cb=[wait_on_shared_future.<locals>.<lambda>() at C:\codex-lb\app\core\utils\shared_future.py:92]> in frozenset()
+E    +  where frozenset() = <function undrained_tasks at 0x000001B259E95260>()
+E    +    where <function undrained_tasks at 0x000001B259E95260> = task_shutdown.undrained_tasks
+------------------------------ Captured log call ------------------------------
+WARNING  app.core.scheduling.task_shutdown:task_shutdown.py:79 Background task still busy 0.0s after stop was requested; cancelling task=test_interrupted_fallback_stop_retains_database_cleanup_owner.<locals>.database_work
+_____ test_internal_status_reports_unknown_for_invalid_observation[None] ______
+tests\integration\test_lifecycle_history_batch.py:33: in test_internal_status_reports_unknown_for_invalid_observation
+    assert checks["request_persistence_state"] == "unknown"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'request_persistence_state'
+_ test_internal_status_reports_unknown_for_invalid_observation[observation1] __
+tests\integration\test_lifecycle_history_batch.py:33: in test_internal_status_reports_unknown_for_invalid_observation
+    assert checks["request_persistence_state"] == "unknown"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'request_persistence_state'
+_ test_internal_status_reports_unknown_for_invalid_observation[observation2] __
+tests\integration\test_lifecycle_history_batch.py:33: in test_internal_status_reports_unknown_for_invalid_observation
+    assert checks["request_persistence_state"] == "unknown"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'request_persistence_state'
+_ test_internal_status_reports_unknown_for_invalid_observation[observation3] __
+tests\integration\test_lifecycle_history_batch.py:33: in test_internal_status_reports_unknown_for_invalid_observation
+    assert checks["request_persistence_state"] == "unknown"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'request_persistence_state'
+______ test_internal_status_reports_unknown_for_invalid_observation[bad] ______
+tests\integration\test_lifecycle_history_batch.py:33: in test_internal_status_reports_unknown_for_invalid_observation
+    assert checks["request_persistence_state"] == "unknown"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'request_persistence_state'
+_ test_internal_status_reports_unknown_for_invalid_observation[observation5] __
+tests\integration\test_lifecycle_history_batch.py:33: in test_internal_status_reports_unknown_for_invalid_observation
+    assert checks["request_persistence_state"] == "unknown"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'request_persistence_state'
+_ test_draining_websocket_upgrade_has_retryable_http_denial[/codex/responses] _
+tests\integration\test_lifecycle_history_batch.py:55: in test_draining_websocket_upgrade_has_retryable_http_denial
+    assert denied.value.json()["error"]["code"] == "proxy_unavailable"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'error'
+_ test_draining_websocket_upgrade_has_retryable_http_denial[/codex/responses/] _
+tests\integration\test_lifecycle_history_batch.py:55: in test_draining_websocket_upgrade_has_retryable_http_denial
+    assert denied.value.json()["error"]["code"] == "proxy_unavailable"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'error'
+________ test_lifespan_heartbeat_survives_blocked_optional_maintenance ________
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\tasks.py:507: in wait_for
+    return await fut
+           ^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\locks.py:213: in wait
+    await fut
+E   asyncio.exceptions.CancelledError
+
+The above exception was the direct cause of the following exception:
+tests\integration\test_lifecycle_history_batch.py:99: in test_lifespan_heartbeat_survives_blocked_optional_maintenance
+    await asyncio.wait_for(maintenance_started.wait(), timeout=2)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\tasks.py:506: in wait_for
+    async with timeouts.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\timeouts.py:116: in __aexit__
+    raise TimeoutError from exc_val
+E   TimeoutError
+------------------------------ Captured log call ------------------------------
+WARNING  app.db.migrate:migrate.py:1000 Dropping the legacy dashboard credential columns (20260912_010000_drop_legacy_dashboard_credentials). Replicas of any earlier release map these columns and load the settings row whole, so their settings reads fail once this commits: stop them before this migration runs, not after. Rollback is supported to the immediately previous release only.
+WARNING  app.db.migrate:migrate.py:1133 Preserving existing accounts.quota_limit_percent while reconciling revision=20261007_000000_add_account_quota_limit
+WARNING  app.main:bootstrap.py:54 
+============================================
+  Dashboard bootstrap token (first-run):
+  [isolated test token redacted]
+
+  Use this token for initial remote setup.
+  It is shared across replicas and stays
+  valid until a password is set.
+============================================
+============================== warnings summary ===============================
+.venv\Lib\site-packages\starlette\testclient.py:53
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\codex-lb\app\db\alembic\versions\20260309_000000_add_additional_usage_history.py:30: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_limit_latest
+    return {str(index["name"]) for index in inspector.get_indexes(table_name) if index.get("name") is not None}
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\codex-lb\app\db\alembic\versions\20260309_000000_add_additional_usage_history.py:30: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_feature_latest
+    return {str(index["name"]) for index in inspector.get_indexes(table_name) if index.get("name") is not None}
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\codex-lb\app\db\alembic\versions\20260312_000000_add_additional_usage_quota_key.py:45: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_limit_latest
+    return {str(index["name"]) for index in inspector.get_indexes(table_name) if index.get("name") is not None}
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\codex-lb\app\db\alembic\versions\20260312_000000_add_additional_usage_quota_key.py:45: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_feature_latest
+    return {str(index["name"]) for index in inspector.get_indexes(table_name) if index.get("name") is not None}
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\contextlib.py:148: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_limit_latest
+    next(self.gen)
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\contextlib.py:148: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_feature_latest
+    next(self.gen)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/unit/test_lifecycle_history_batch.py::test_completed_settlement_stays_pending_before_ownership_callback
+FAILED tests/unit/test_lifecycle_history_batch.py::test_interrupted_fallback_stop_retains_database_cleanup_owner
+FAILED tests/integration/test_lifecycle_history_batch.py::test_internal_status_reports_unknown_for_invalid_observation[None]
+FAILED tests/integration/test_lifecycle_history_batch.py::test_internal_status_reports_unknown_for_invalid_observation[observation1]
+FAILED tests/integration/test_lifecycle_history_batch.py::test_internal_status_reports_unknown_for_invalid_observation[observation2]
+FAILED tests/integration/test_lifecycle_history_batch.py::test_internal_status_reports_unknown_for_invalid_observation[observation3]
+FAILED tests/integration/test_lifecycle_history_batch.py::test_internal_status_reports_unknown_for_invalid_observation[bad]
+FAILED tests/integration/test_lifecycle_history_batch.py::test_internal_status_reports_unknown_for_invalid_observation[observation5]
+FAILED tests/integration/test_lifecycle_history_batch.py::test_draining_websocket_upgrade_has_retryable_http_denial[/codex/responses]
+FAILED tests/integration/test_lifecycle_history_batch.py::test_draining_websocket_upgrade_has_retryable_http_denial[/codex/responses/]
+FAILED tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+11 failed, 5 passed, 7 warnings in 13.66s

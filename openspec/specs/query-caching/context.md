@@ -98,3 +98,11 @@ usage_history(window='primary', account_id='acc_1', recorded_at='2026-03-08T11:0
 ```
 
 `latest_by_account("primary")` should return only the later row while still treating both rows as part of the same logical primary window.
+
+## Verified capped SQLite projection history (2026-10-09)
+
+The [per-account history requirement](spec.md#requirement-projection-history-reads-are-bounded-per-account) applies to file-backed SQLite as well as PostgreSQL. The SQLite capped path already seeks the existing composite indexes per account; it does not load and hash the uncapped historical cache. The genuinely uncapped path keeps its original cache and shared-floor behavior.
+
+For example, cap 3 returns the newest three rows older than a recent floor plus every row at or after that floor. Equal timestamps are ordered by row ID, so tied older samples keep the newest IDs and the final slice remains oldest-first. A row exactly at the floor appears once. Cap zero removes only the older tail; without a recent floor it returns an empty slice.
+
+This protects equal-weight pace consumers during bursts without rewriting the query or adding schema/configuration. SQLite result and query-plan tests verify local bounds; PostgreSQL index-only and external-engine performance evidence remains separate.

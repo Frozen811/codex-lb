@@ -2,6 +2,31 @@
 
 See `openspec/specs/runtime-portability/spec.md` for normative requirements.
 
+## Bounded retag planning and progress
+
+Planning reads a fixed 64 KiB header per session and reuses grouped SQLite
+provider counts. A leading canonical session_meta record or consecutive legacy
+provider records establish the metadata region. The remaining transcript is
+copied as opaque bytes, including CRLF or non-UTF-8 content. An incomplete large
+tail after recognized legacy metadata is preserved; malformed or oversized
+initial metadata fails before backups or writes. Targeted discovery reuses its
+header observations, and a database lacking session identity cannot be broadly
+updated by a targeted command.
+
+For example, a 2 MiB transcript contributes only its leading provider tag to
+planning and summaries. JSONL backups prefer hard links, and rewriting replaces
+the working file so the original linked backup survives. SQLite snapshots and
+the existing mount fallback remain in use. Keep Codex clients stopped throughout
+the operation: multiple file/database updates are not a transaction. A partial
+failure reports its retained backup directory for manual recovery.
+
+Use `--progress-json` to consume phase events on stderr while the human summary
+stays on stdout. Counts describe completed files/databases, so a large backup
+copy or SQL query can take time between events. Closing that pipe disables
+progress without aborting work; the Windows CRT's EINVAL and POSIX broken-pipe
+forms are handled. Other I/O failures still propagate. No progress is required
+for normal command use, and no new settings are introduced.
+
 ## Codex Session Retagging
 
 `codex resume` filters sessions by `model_provider`. Sessions created before

@@ -1,0 +1,120 @@
+........................................................................ [ 25%]
+........................................................................ [ 50%]
+.............................sssss............................ss..sss... [ 76%]
+Traceback (most recent call last):
+  File "C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\shutil.py", line 625, in _rmtree_unsafe
+    os.unlink(fullname)
+    ~~~~~~~~~^^^^^^^^^^
+PermissionError: [WinError 32] ������� �� ����� �������� ������ � �����, ��� ��� ���� ���� ����� ������ ���������: 'C:\\Users\\ext\\AppData\\Local\\Temp\\codex-lb-master-30hn4l9d\\test.db'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\codex-lb\.venv\Scripts\pytest.exe\__main__.py", line 10, in <module>
+    sys.exit(_console_main())
+             ~~~~~~~~~~~~~^^
+  File "C:\codex-lb\.venv\Lib\site-packages\_pytest\config\__init__.py", line 253, in _console_main
+    code = _main(prog=_get_prog_name(sys.argv))
+  File "C:\codex-lb\.venv\Lib\site-packages\_pytest\config\__init__.py", line 229, in _main
+    ret: ExitCode | int = config.hook.pytest_cmdline_main(config=config)
+                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "C:\codex-lb\.venv\Lib\site-packages\pluggy\_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\codex-lb\.venv\Lib\site-packages\pluggy\_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\codex-lb\.venv\Lib\site-packages\pluggy\_callers.py", line 167, in _multicall
+    raise exception
+  File "C:\codex-lb\.venv\Lib\site-packages\pluggy\_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "C:\codex-lb\.venv\Lib\site-packages\_pytest\main.py", line 377, in pytest_cmdline_main
+    return wrap_session(config, _main)
+  File "C:\codex-lb\.venv\Lib\site-packages\_pytest\main.py", line 372, in wrap_session
+    config._ensure_unconfigure()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\codex-lb\.venv\Lib\site-packages\_pytest\config\__init__.py", line 1212, in _ensure_unconfigure
+    self.hook.pytest_unconfigure(config=self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "C:\codex-lb\.venv\Lib\site-packages\pluggy\_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\codex-lb\.venv\Lib\site-packages\pluggy\_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\codex-lb\.venv\Lib\site-packages\pluggy\_callers.py", line 167, in _multicall
+    raise exception
+  File "C:\codex-lb\.venv\Lib\site-packages\pluggy\_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "C:\codex-lb\tests\conftest.py", line 80, in pytest_unconfigure
+    TEST_STORAGE.close()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "C:\codex-lb\tests\runtime.py", line 106, in close
+    self.directory.cleanup()
+    ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\tempfile.py", line 955, in cleanup
+    self._rmtree(self.name, ignore_errors=self._ignore_cleanup_errors)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\tempfile.py", line 935, in _rmtree
+    _shutil.rmtree(name, onexc=onexc)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\shutil.py", line 790, in rmtree
+    return _rmtree_unsafe(path, onexc)
+  File "C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\shutil.py", line 629, in _rmtree_unsafe
+    onexc(os.unlink, fullname, err)
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\tempfile.py", line 910, in onexc
+    _os.unlink(path)
+    ~~~~~~~~~~^^^^^^
+PermissionError: [WinError 32] ������� �� ����� �������� ������ � �����, ��� ��� ���� ���� ����� ������ ���������: 'C:\\Users\\ext\\AppData\\Local\\Temp\\codex-lb-master-30hn4l9d\\test.db'
+...................................................................      [100%]
+============================== warnings summary ===============================
+.venv\Lib\site-packages\starlette\testclient.py:53
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_withholds_clean_shutdown_while_maintenance_cleanup_is_owned
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\codex-lb\app\db\alembic\versions\20260309_000000_add_additional_usage_history.py:30: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_limit_latest
+    return {str(index["name"]) for index in inspector.get_indexes(table_name) if index.get("name") is not None}
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_withholds_clean_shutdown_while_maintenance_cleanup_is_owned
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\codex-lb\app\db\alembic\versions\20260309_000000_add_additional_usage_history.py:30: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_feature_latest
+    return {str(index["name"]) for index in inspector.get_indexes(table_name) if index.get("name") is not None}
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_withholds_clean_shutdown_while_maintenance_cleanup_is_owned
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\codex-lb\app\db\alembic\versions\20260312_000000_add_additional_usage_quota_key.py:45: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_limit_latest
+    return {str(index["name"]) for index in inspector.get_indexes(table_name) if index.get("name") is not None}
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_withholds_clean_shutdown_while_maintenance_cleanup_is_owned
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\codex-lb\app\db\alembic\versions\20260312_000000_add_additional_usage_quota_key.py:45: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_feature_latest
+    return {str(index["name"]) for index in inspector.get_indexes(table_name) if index.get("name") is not None}
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_withholds_clean_shutdown_while_maintenance_cleanup_is_owned
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\contextlib.py:148: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_limit_latest
+    next(self.gen)
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_withholds_clean_shutdown_while_maintenance_cleanup_is_owned
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\contextlib.py:148: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_feature_latest
+    next(self.gen)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+SKIPPED [1] tests\integration\test_usage_repository.py:329: PostgreSQL-only query plan test
+SKIPPED [1] tests\integration\test_usage_repository.py:437: PostgreSQL-only query plan test
+SKIPPED [1] tests\integration\test_usage_repository.py:479: PostgreSQL-only query plan test
+SKIPPED [1] tests\integration\test_usage_repository.py:514: PostgreSQL-only query plan test
+SKIPPED [1] tests\integration\test_usage_repository.py:554: PostgreSQL-only covered-read equality test
+SKIPPED [1] tests\integration\test_usage_repository.py:1486: PostgreSQL-only query plan test
+SKIPPED [1] tests\integration\test_usage_repository.py:1527: PostgreSQL-only query plan test
+SKIPPED [1] tests\integration\test_usage_repository.py:1780: PostgreSQL-only SQL shape test
+SKIPPED [1] tests\integration\test_usage_repository.py:1829: PostgreSQL-only loose scan test
+SKIPPED [1] tests\integration\test_dashboard_overview.py:44: tzset is required to simulate non-UTC local time
+273 passed, 10 skipped, 13 warnings in 81.69s (0:01:21)

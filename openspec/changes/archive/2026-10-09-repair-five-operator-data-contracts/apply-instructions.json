@@ -1,0 +1,74 @@
+{
+  "changeName": "repair-five-operator-data-contracts",
+  "changeDir": "C:\\codex-lb\\openspec\\changes\\repair-five-operator-data-contracts",
+  "schemaName": "spec-driven",
+  "contextFiles": {
+    "proposal": [
+      "C:\\codex-lb\\openspec\\changes\\repair-five-operator-data-contracts\\proposal.md"
+    ],
+    "specs": [
+      "C:\\codex-lb\\openspec\\changes\\repair-five-operator-data-contracts\\specs\\database-migrations\\spec.md",
+      "C:\\codex-lb\\openspec\\changes\\repair-five-operator-data-contracts\\specs\\runtime-portability\\spec.md"
+    ],
+    "design": [
+      "C:\\codex-lb\\openspec\\changes\\repair-five-operator-data-contracts\\design.md"
+    ],
+    "tasks": [
+      "C:\\codex-lb\\openspec\\changes\\repair-five-operator-data-contracts\\tasks.md"
+    ]
+  },
+  "progress": {
+    "total": 8,
+    "complete": 0,
+    "remaining": 8
+  },
+  "tasks": [
+    {
+      "id": "1",
+      "description": "1.1 Implement bounded retag planning and progress for UP-PR-2325; verify public CLI, opaque bytes, grouped counts, malformed headers, backups and closed pipes.",
+      "done": false
+    },
+    {
+      "id": "2",
+      "description": "1.2 Add conditional unknown-revision guidance for UP-PR-2322; verify actual upgrade and stamp failures preserve a disposable SQLite database.",
+      "done": false
+    },
+    {
+      "id": "3",
+      "description": "1.3 Add private online revision progress for UP-PR-2307; verify real success, downgrade, no-op, failure privacy and instrumentation restoration.",
+      "done": false
+    },
+    {
+      "id": "4",
+      "description": "1.4 Verify UP-PR-2518 historical merge and both populated parents through downgrade/re-upgrade, preserving the current graph.",
+      "done": false
+    },
+    {
+      "id": "5",
+      "description": "1.5 Verify UP-PR-2522 facet migration/indexes and actual request-log options/earliest-row behavior; document external dialect residuals.",
+      "done": false
+    },
+    {
+      "id": "6",
+      "description": "2.1 Run focused tests and applicable static/OpenSpec checks; save exact counts, commands and limitations.",
+      "done": false
+    },
+    {
+      "id": "7",
+      "description": "2.2 Sync normative deltas and stable context, verify requirement/scenario coverage and archive only after validation.",
+      "done": false
+    },
+    {
+      "id": "8",
+      "description": "2.3 Update and reread exactly five registry rows, synchronize summary/evidence and verify all unrelated prior dirty files and source rows are preserved.",
+      "done": false
+    }
+  ],
+  "state": "ready",
+  "instruction": "Read context files, work through pending tasks, mark complete as you go.\nPause if you hit blockers or need clarification.",
+  "context": "Process: This repo uses the OpenSpec workflow. Always read AGENTS.md.\nOpenSpec docs: spec.md is requirements-only. Put narrative context in openspec/specs/<capability>/context.md (purpose, rationale, examples, ops notes).\nUser docs: docs/ is a rendered mkdocs site for users; it links back to openspec capabilities and never becomes a second source of truth.\n",
+  "root": {
+    "path": "C:\\codex-lb",
+    "source": "nearest"
+  }
+}

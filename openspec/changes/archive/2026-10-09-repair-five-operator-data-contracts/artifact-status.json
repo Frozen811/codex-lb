@@ -1,0 +1,105 @@
+{
+  "changeName": "repair-five-operator-data-contracts",
+  "schemaName": "spec-driven",
+  "planningHome": {
+    "kind": "repo",
+    "root": "C:\\codex-lb",
+    "changesDir": "C:\\codex-lb\\openspec\\changes",
+    "defaultSchema": "spec-driven"
+  },
+  "changeRoot": "C:\\codex-lb\\openspec\\changes\\repair-five-operator-data-contracts",
+  "artifactPaths": {
+    "proposal": {
+      "outputPath": "proposal.md",
+      "resolvedOutputPath": "C:\\codex-lb\\openspec\\changes\\repair-five-operator-data-contracts\\proposal.md",
+      "existingOutputPaths": [
+        "C:\\codex-lb\\openspec\\changes\\repair-five-operator-data-contracts\\proposal.md"
+      ]
+    },
+    "specs": {
+      "outputPath": "specs/**/*.md",
+      "resolvedOutputPath": "C:\\codex-lb\\openspec\\changes\\repair-five-operator-data-contracts\\specs\\**\\*.md",
+      "existingOutputPaths": [
+        "C:\\codex-lb\\openspec\\changes\\repair-five-operator-data-contracts\\specs\\database-migrations\\spec.md",
+        "C:\\codex-lb\\openspec\\changes\\repair-five-operator-data-contracts\\specs\\runtime-portability\\spec.md"
+      ]
+    },
+    "design": {
+      "outputPath": "design.md",
+      "resolvedOutputPath": "C:\\codex-lb\\openspec\\changes\\repair-five-operator-data-contracts\\design.md",
+      "existingOutputPaths": [
+        "C:\\codex-lb\\openspec\\changes\\repair-five-operator-data-contracts\\design.md"
+      ]
+    },
+    "tasks": {
+      "outputPath": "tasks.md",
+      "resolvedOutputPath": "C:\\codex-lb\\openspec\\changes\\repair-five-operator-data-contracts\\tasks.md",
+      "existingOutputPaths": [
+        "C:\\codex-lb\\openspec\\changes\\repair-five-operator-data-contracts\\tasks.md"
+      ]
+    }
+  },
+  "isPlanningComplete": true,
+  "isComplete": true,
+  "applyRequires": [
+    "tasks"
+  ],
+  "nextSteps": [
+    "All planning artifacts are complete. Run openspec instructions apply --change \"repair-five-operator-data-contracts\" --json to inspect implementation progress."
+  ],
+  "actionContext": {
+    "mode": "repo-local",
+    "sourceOfTruth": "repo",
+    "planningArtifacts": [
+      "proposal",
+      "specs",
+      "design",
+      "tasks"
+    ],
+    "linkedContext": [],
+    "allowedEditRoots": [
+      "C:\\codex-lb"
+    ],
+    "requiresAffectedAreaSelection": false,
+    "constraints": [
+      "Repo-local change artifacts and implementation edits are scoped to this project."
+    ]
+  },
+  "artifacts": [
+    {
+      "id": "proposal",
+      "outputPath": "proposal.md",
+      "status": "done",
+      "requires": []
+    },
+    {
+      "id": "specs",
+      "outputPath": "specs/**/*.md",
+      "status": "done",
+      "requires": [
+        "proposal"
+      ]
+    },
+    {
+      "id": "design",
+      "outputPath": "design.md",
+      "status": "done",
+      "requires": [
+        "proposal"
+      ]
+    },
+    {
+      "id": "tasks",
+      "outputPath": "tasks.md",
+      "status": "done",
+      "requires": [
+        "specs",
+        "design"
+      ]
+    }
+  ],
+  "root": {
+    "path": "C:\\codex-lb",
+    "source": "nearest"
+  }
+}

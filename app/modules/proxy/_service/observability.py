@@ -79,11 +79,10 @@ def _is_reasoning_replay_rejection(
 ) -> bool:
     """Return whether upstream rejected replayed reasoning items with a 400.
 
-    Observation only: a forked thread that replays reasoning ciphertext minted
-    for another account dies on ChatGPT's 400 and is undetectable from ids,
-    so this predicate feeds ``codex_lb_upstream_reasoning_replay_400_total``
-    to size that residual. It never alters classification, account health,
-    or failover. Without an HTTP status (terminal ``error`` /
+    A forked thread replaying reasoning can be rejected with a 400. This
+    predicate feeds ``codex_lb_upstream_reasoning_replay_400_total`` and the
+    narrow request-rejection health exemption. It does not authorize replay
+    or change the upstream envelope. Without an HTTP status (terminal ``error`` /
     ``response.failed`` frames) only the ``invalid_request_error`` code
     qualifies.
     """

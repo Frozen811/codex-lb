@@ -81,6 +81,11 @@ async def stop_task_after_grace(task: asyncio.Task[Any], *, await_cancellation: 
         grace,
         _describe(task),
     )
+    # Own cancellation cleanup before awaiting it. If this stop caller is
+    # interrupted, the still-running worker must remain in the clean-shutdown
+    # proof, even before the post-cancel wait has reached its timeout.
+    _undrained.add(task)
+    task.add_done_callback(_undrained.discard)
     task.cancel()
     try:
         if await_cancellation:
@@ -99,14 +104,12 @@ async def stop_task_after_grace(task: asyncio.Task[Any], *, await_cancellation: 
             DATABASE_TASK_STOP_GRACE_SECONDS,
             _describe(task),
         )
-        _undrained.add(task)
-        task.add_done_callback(_undrained.discard)
     except asyncio.CancelledError:
         if not task.cancelled():
             raise
 
 
 def undrained_tasks() -> frozenset[asyncio.Task[Any]]:
-    """Stopped tasks that were still running after cancellation and its bounded wait."""
+    """Owned fallback cleanup still running, including an interrupted stop wait."""
 
     return frozenset(task for task in _undrained if not task.done())

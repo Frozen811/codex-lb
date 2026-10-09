@@ -1,0 +1,64 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+________ test_lifespan_heartbeat_survives_blocked_optional_maintenance ________
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\tasks.py:507: in wait_for
+    return await fut
+           ^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\locks.py:213: in wait
+    await fut
+E   asyncio.exceptions.CancelledError
+
+The above exception was the direct cause of the following exception:
+tests\integration\test_lifecycle_history_batch.py:103: in test_lifespan_heartbeat_survives_blocked_optional_maintenance
+    await asyncio.wait_for(heartbeat_twice.wait(), timeout=0.5)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\tasks.py:506: in wait_for
+    async with timeouts.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\timeouts.py:116: in __aexit__
+    raise TimeoutError from exc_val
+E   TimeoutError
+------------------------------ Captured log call ------------------------------
+WARNING  app.db.migrate:migrate.py:1000 Dropping the legacy dashboard credential columns (20260912_010000_drop_legacy_dashboard_credentials). Replicas of any earlier release map these columns and load the settings row whole, so their settings reads fail once this commits: stop them before this migration runs, not after. Rollback is supported to the immediately previous release only.
+WARNING  app.db.migrate:migrate.py:1133 Preserving existing accounts.quota_limit_percent while reconciling revision=20261007_000000_add_account_quota_limit
+WARNING  app.main:bootstrap.py:54 
+============================================
+  Dashboard bootstrap token (first-run):
+  [isolated test token redacted]
+
+  Use this token for initial remote setup.
+  It is shared across replicas and stays
+  valid until a password is set.
+============================================
+============================== warnings summary ===============================
+.venv\Lib\site-packages\starlette\testclient.py:53
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\codex-lb\app\db\alembic\versions\20260309_000000_add_additional_usage_history.py:30: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_limit_latest
+    return {str(index["name"]) for index in inspector.get_indexes(table_name) if index.get("name") is not None}
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\codex-lb\app\db\alembic\versions\20260309_000000_add_additional_usage_history.py:30: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_feature_latest
+    return {str(index["name"]) for index in inspector.get_indexes(table_name) if index.get("name") is not None}
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\codex-lb\app\db\alembic\versions\20260312_000000_add_additional_usage_quota_key.py:45: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_limit_latest
+    return {str(index["name"]) for index in inspector.get_indexes(table_name) if index.get("name") is not None}
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\codex-lb\app\db\alembic\versions\20260312_000000_add_additional_usage_quota_key.py:45: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_feature_latest
+    return {str(index["name"]) for index in inspector.get_indexes(table_name) if index.get("name") is not None}
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\contextlib.py:148: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_limit_latest
+    next(self.gen)
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\contextlib.py:148: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_feature_latest
+    next(self.gen)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+1 failed, 7 warnings in 5.49s

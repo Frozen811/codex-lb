@@ -1003,6 +1003,42 @@ def responses_payload_is_account_neutral_fresh_replay(payload: Mapping[str, Json
     return _tools_are_account_neutral(tools)
 
 
+def responses_payload_has_only_encrypted_account_scoped_state(payload: Mapping[str, JsonValue]) -> bool:
+    """Classify a ciphertext-only exception without changing the forwarded body."""
+    input_value = payload.get("input")
+    if not isinstance(input_value, list):
+        return False
+    remainder: list[JsonValue] = []
+    has_ciphertext = False
+    for item in input_value:
+        if not isinstance(item, dict) or item.get("type") not in ("reasoning", "compaction"):
+            remainder.append(item)
+            continue
+        allowed_fields = {"type", "id", "encrypted_content", "status"}
+        if item["type"] == "reasoning":
+            allowed_fields.add("summary")
+        if (
+            not set(item) <= allowed_fields
+            or not _is_nonblank_string(item.get("encrypted_content"))
+            or item.get("status") not in (None, "completed")
+            or (item.get("id") is not None and not isinstance(item["id"], str))
+        ):
+            return False
+        summary = item.get("summary", [])
+        if not isinstance(summary, list) or any(
+            not isinstance(part, dict)
+            or set(part) != {"type", "text"}
+            or part.get("type") != "summary_text"
+            or not isinstance(part.get("text"), str)
+            for part in summary
+        ):
+            return False
+        has_ciphertext = True
+    projected = dict(payload)
+    projected["input"] = remainder
+    return has_ciphertext and responses_payload_is_account_neutral_fresh_replay(projected)
+
+
 def _reasoning_config_is_account_neutral(reasoning: JsonValue | None) -> bool:
     if reasoning is None:
         return True
