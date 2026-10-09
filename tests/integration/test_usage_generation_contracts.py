@@ -93,8 +93,10 @@ async def test_native_wire_usage_and_generation_survive_serialization_and_cleanu
         return text
 
     upstream_calls = []
+    upstream_methods: list[str] = []
 
     async def upstream(request: web.Request) -> web.StreamResponse:
+        upstream_methods.append(request.method)
         if request.method == "GET":
             socket = web.WebSocketResponse()
             await socket.prepare(request)
@@ -154,7 +156,12 @@ async def test_native_wire_usage_and_generation_survive_serialization_and_cleanu
             "Привет",
             " world",
         ]
-        assert f"data: {serialize(frames[4])}\n\n" in response.text
+        expected_json = (
+            serialize(frames[4])
+            if transport == "http"
+            else json.dumps(frames[4], ensure_ascii=False, separators=(",", ":"))
+        )
+        assert f"event: response.output_text.delta\ndata: {expected_json}\n\n" in response.text
         assert await service.drain_persistence_tasks(timeout_seconds=5)
 
         cost = input_cost + 0.02 + 0.0012
@@ -215,6 +222,7 @@ async def test_native_wire_usage_and_generation_survive_serialization_and_cleanu
         assert blocked.status_code == 429
         assert blocked.json()["error"]["code"] == "rate_limit_exceeded"
         assert len(upstream_calls) == 1
+        assert upstream_methods == ["POST" if transport == "http" else "GET"]
 
 
 @pytest.mark.asyncio

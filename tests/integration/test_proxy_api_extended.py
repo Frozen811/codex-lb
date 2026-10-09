@@ -840,6 +840,8 @@ async def test_codex_alpha_search_v1_forwards_to_upstream(async_client, monkeypa
         query_params: list[tuple[str, str]],
         headers: Any,
         codex_session_affinity: bool,
+        body_session_id: str | None,
+        allow_cross_account_retry: bool,
         api_key: Any,
         privacy_policy: Any,
         success_gate: Any,
@@ -852,6 +854,8 @@ async def test_codex_alpha_search_v1_forwards_to_upstream(async_client, monkeypa
                 "payload": payload,
                 "query_params": query_params,
                 "session_id": headers.get("session_id"),
+                "body_session_id": body_session_id,
+                "allow_cross_account_retry": allow_cross_account_retry,
             }
         )
         return core_proxy.CodexControlResponse(
@@ -879,6 +883,8 @@ async def test_codex_alpha_search_v1_forwards_to_upstream(async_client, monkeypa
             "payload": payload,
             "query_params": [("result_count", "5")],
             "session_id": "search-v1-session",
+            "body_session_id": None,
+            "allow_cross_account_retry": True,
         }
     ]
 

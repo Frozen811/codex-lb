@@ -58406,7 +58406,17 @@ async def test_stream_responses_owner_bound_coded_429_surfaces_without_same_acco
     caplog.set_level(logging.INFO, logger="app.modules.proxy.service")
 
     with pytest.raises(proxy_module.ProxyResponseError) as excinfo:
-        await _collect_burst_stream(service, _burst_payload(_BURST_OWNER_BOUND_INPUT))
+        await _collect_burst_stream(
+            service,
+            _burst_payload(_BURST_OWNER_BOUND_INPUT).model_copy(
+                update={
+                    "input": [
+                        *_BURST_OWNER_BOUND_INPUT,
+                        {"type": "function_call_output", "call_id": "call_owner_bound", "output": "retained result"},
+                    ]
+                }
+            ),
+        )
 
     assert excinfo.value.status_code == 429
     # Not a burst: no synthesized Retry-After, no same-account backoff.
