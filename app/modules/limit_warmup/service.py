@@ -20,11 +20,15 @@ from app.core.plan_types import account_plan_matches_allowed, normalize_account_
 from app.core.resilience.toggles import bind_resilience_toggles
 from app.core.upstream_proxy import ResolvedUpstreamRoute, UpstreamProxyRouteError, resolve_upstream_route
 from app.core.usage.pricing import get_pricing_for_model
+from app.core.usage.refresh_policy import USAGE_REFRESH_INTERVAL_SECONDS
 from app.core.utils.time import naive_utc_to_epoch, utcnow
 from app.db.models import Account, AccountLimitWarmup, AccountStatus, DashboardSettings, UsageHistory
+from app.db.snapshot import clone_row
 from app.modules.accounts.auth_manager import AuthManager
 from app.modules.accounts.repository import AccountsRepository
-from app.modules.usage.mappers import usage_history_to_window_row
+from app.modules.usage.authorization import OwnerAuthorization, OwnerAuthorizationKind, load_owner_authorization
+from app.modules.usage.mappers import evaluate_account_usage_limit, usage_history_to_window_row
+from app.modules.usage.repository import UsageRepository
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +81,12 @@ class LimitWarmupSendOutcome:
     error_message: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class _LimitWarmupAuthorization:
+    account: Account | None
+    decision: OwnerAuthorization
+
+
 class LimitWarmupSender(Protocol):
     async def send(self, account: Account, *, model: str, prompt: str) -> LimitWarmupSendResult: ...
 
@@ -111,6 +121,7 @@ class LimitWarmupAttemptsRepository(Protocol):
 class LimitWarmupRequestLogRepository(Protocol):
     async def add_log(
         self,
+        *,
         account_id: str | None,
         request_id: str,
         model: str,
@@ -190,8 +201,6 @@ class StreamingLimitWarmupSender:
                         error_code="account_not_active",
                         error_message=error_message,
                     )
-                access_token = self._encryptor.decrypt(fresh_account.access_token_encrypted)
-                chatgpt_account_id = fresh_account.chatgpt_account_id
         except RefreshError as exc:
             return LimitWarmupSendResult(
                 request_id=request_id,
@@ -213,6 +222,55 @@ class StreamingLimitWarmupSender:
                 upstream_proxy_fail_closed_reason=exc.reason,
             )
 
+        try:
+            authorization = await self._load_fresh_usage_authorization(fresh_account.id)
+        except Exception:
+            logger.warning(
+                "Final limit warm-up usage authorization failed closed",
+                extra={"account_id": fresh_account.id},
+                exc_info=True,
+            )
+            authorization = _LimitWarmupAuthorization(
+                account=None, decision=OwnerAuthorization(OwnerAuthorizationKind.AUTHORIZATION_FAILED)
+            )
+        if authorization.decision.kind is OwnerAuthorizationKind.AUTHORIZATION_FAILED:
+            return LimitWarmupSendResult(
+                request_id=request_id,
+                success=False,
+                latency_ms=_elapsed_ms(started),
+                error_code="account_usage_limit_authorization_failed",
+                error_message="Account usage-limit authorization failed",
+            )
+        fresh_account = authorization.account
+        if (
+            fresh_account is None
+            or not _account_is_safe_candidate(fresh_account)
+            or not fresh_account.limit_warmup_enabled
+        ):
+            if fresh_account is None:
+                error_message = "Account no longer exists"
+            elif not fresh_account.limit_warmup_enabled:
+                error_message = "Limit warm-up is disabled for this account"
+            else:
+                error_message = f"Account status is {fresh_account.status.value}"
+            return LimitWarmupSendResult(
+                request_id=request_id,
+                success=False,
+                latency_ms=_elapsed_ms(started),
+                error_code="account_not_active",
+                error_message=error_message,
+            )
+        if authorization.decision.kind is OwnerAuthorizationKind.USAGE_POLICY_BLOCKED:
+            return LimitWarmupSendResult(
+                request_id=request_id,
+                success=False,
+                latency_ms=_elapsed_ms(started),
+                error_code="account_usage_limit_reached",
+                error_message="Account usage limit reached or usage data unavailable",
+            )
+
+        access_token = self._encryptor.decrypt(fresh_account.access_token_encrypted)
+        chatgpt_account_id = fresh_account.chatgpt_account_id
         payload = ResponsesRequest.model_validate(
             {
                 "model": model,
@@ -310,6 +368,44 @@ class StreamingLimitWarmupSender:
         async with self._accounts_repo_factory() as accounts_repo:
             return await accounts_repo.get_by_id_fresh(account.id)
 
+    async def _load_fresh_usage_authorization(self, account_id: str) -> _LimitWarmupAuthorization:
+        if self._accounts_repo_factory is None:
+            return await self._load_usage_authorization(self._accounts_repo, account_id)
+        async with self._accounts_repo_factory() as accounts_repo:
+            return await self._load_usage_authorization(accounts_repo, account_id)
+
+    @staticmethod
+    async def _load_usage_authorization(
+        accounts_repo: AccountsRepository,
+        account_id: str,
+    ) -> _LimitWarmupAuthorization:
+        account = await accounts_repo.get_by_id_fresh(account_id)
+        if account is None or account.status != AccountStatus.ACTIVE:
+            return _LimitWarmupAuthorization(
+                account=account,
+                decision=OwnerAuthorization(
+                    OwnerAuthorizationKind.OWNER_UNAVAILABLE,
+                    owner_status=account.status if account is not None else None,
+                ),
+            )
+        decision = await load_owner_authorization(
+            UsageRepository(accounts_repo.session),
+            account_id,
+            refresh_interval_seconds=USAGE_REFRESH_INTERVAL_SECONDS,
+            require_active=True,
+        )
+        snapshot = decision.snapshot
+        if snapshot is None:
+            return _LimitWarmupAuthorization(account=None, decision=decision)
+        account = clone_row(account)
+        account.status = snapshot.status
+        account.plan_type = snapshot.plan_type
+        account.usage_limit_enabled = snapshot.enabled
+        account.usage_limit_percent = snapshot.limit_percent
+        account.usage_limit_weekly_percent = snapshot.limit_weekly_percent
+        account.usage_limit_5h_percent = snapshot.limit_5h_percent
+        return _LimitWarmupAuthorization(account=account, decision=decision)
+
     async def _resolve_upstream_route(self, account: Account) -> ResolvedUpstreamRoute | None:
         if self._accounts_repo_factory is not None:
             async with self._accounts_repo_factory() as accounts_repo:
@@ -351,6 +447,8 @@ class LimitWarmupService:
         before_secondary: dict[str, UsageHistory],
         after_primary: dict[str, UsageHistory],
         after_secondary: dict[str, UsageHistory],
+        usage_limit_secondary: dict[str, UsageHistory],
+        usage_limit_monthly: dict[str, UsageHistory],
         previous_plan_types: dict[str, str | None] | None = None,
         refresh_started_at: datetime | None = None,
         usage_refresh_interval_seconds: int = _STAGGER_SLOT_GRACE_SECONDS,
@@ -386,6 +484,16 @@ class LimitWarmupService:
                 continue
             if not account.limit_warmup_enabled:
                 continue
+            limit_state = evaluate_account_usage_limit(
+                account,
+                primary=after_primary.get(account.id),
+                secondary=usage_limit_secondary.get(account.id),
+                monthly=usage_limit_monthly.get(account.id),
+                now=now,
+                refresh_interval_seconds=usage_refresh_interval_seconds,
+            )
+            if limit_state.blocks_account_use:
+                continue
             latest_attempt = latest_attempts.get(account.id)
 
             windows_to_evaluate = list(selected_windows)
@@ -402,15 +510,18 @@ class LimitWarmupService:
                         after_primary=after_primary,
                         after_secondary=after_secondary,
                         min_available_percent=settings.limit_warmup_min_available_percent,
+                        min_used_percent=settings.limit_warmup_exhausted_threshold_percent,
                         reset_evidence=reset_evidence,
                     )
                 if usage_written and candidate is None and window == "secondary":
                     candidate = _build_paid_to_free_transition_candidate(
                         account=account,
                         previous_plan_type=(previous_plan_types or {}).get(account.id),
+                        before_secondary=before_secondary,
                         after_secondary=after_secondary,
                         refresh_started_at=refresh_started_at,
                         min_available_percent=settings.limit_warmup_min_available_percent,
+                        min_used_percent=settings.limit_warmup_exhausted_threshold_percent,
                     )
                 if usage_written and candidate is None and window == "secondary":
                     candidate = _build_initial_free_quota_candidate(
@@ -741,6 +852,7 @@ def _build_candidate(
     after_primary: dict[str, UsageHistory],
     after_secondary: dict[str, UsageHistory],
     min_available_percent: float,
+    min_used_percent: float = 0.0,
     reset_evidence: dict[tuple[str, str], UsageResetEvidence] | None = None,
 ) -> _WarmupCandidate | None:
     before = effective_warmup_usage_entry(
@@ -770,6 +882,9 @@ def _build_candidate(
     ):
         before, after = evidence.before, evidence.after
     if not usage_reset_confirmed(before=before, after=after):
+        return None
+    assert before is not None
+    if before.used_percent < min_used_percent:
         return None
     assert after.reset_at is not None
     candidate_window = "monthly" if after.window == "monthly" else window
@@ -809,9 +924,11 @@ def _build_paid_to_free_transition_candidate(
     *,
     account: Account,
     previous_plan_type: str | None,
+    before_secondary: dict[str, UsageHistory],
     after_secondary: dict[str, UsageHistory],
     refresh_started_at: datetime | None,
     min_available_percent: float,
+    min_used_percent: float,
 ) -> _WarmupCandidate | None:
     normalized_previous_plan = normalize_account_plan_type(previous_plan_type)
     if normalized_previous_plan is None or normalized_previous_plan == "free":
@@ -826,6 +943,11 @@ def _build_paid_to_free_transition_candidate(
     if after.recorded_at < refresh_started_at:
         return None
     if after.used_percent >= 100.0:
+        return None
+    before = before_secondary.get(account.id)
+    if min_used_percent > 0 and (
+        before is None or before.window != "monthly" or before.used_percent < min_used_percent
+    ):
         return None
     available_percent = 100.0 - after.used_percent
     if min_available_percent < 100.0 and available_percent < min_available_percent:

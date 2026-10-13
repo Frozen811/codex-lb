@@ -268,6 +268,14 @@ class _ApiKeyUsageMixin:
                 except ApiKeyInvalidError as exc:
                     raise ProxyAuthError(str(exc)) from exc
 
+        # Lease reacquisition must use the same budget as the persisted
+        # reservation, including conservative defaults for a late anchor.
+        request_state.request_usage_budget = (
+            request_usage_budget
+            if request_usage_budget is not None
+            else ApiKeyRequestUsageBudget(input_tokens=None, output_tokens=None)
+        )
+
     async def _release_websocket_request_state_reservation(
         self,
         request_state: _WebSocketRequestState,

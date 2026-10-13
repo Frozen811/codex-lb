@@ -2517,6 +2517,17 @@ class _HTTPBridgeStreamingMixin:
             durable_lookup = None
             return True
 
+        def dead_client_anchor_error() -> ProxyResponseError:
+            return ProxyResponseError(
+                404,
+                openai_error(
+                    "bridge_previous_response_not_found",
+                    "The account that owns this conversation is no longer available; "
+                    "resend the full conversation history or start a new conversation.",
+                ),
+                local_pre_dispatch_refusal=True,
+            )
+
         async def retire_dead_client_anchor(exc: ProxyResponseError) -> ProxyResponseError | None:
             """Tell the client its anchor is gone instead of asking it to retry forever.
 
@@ -2551,6 +2562,15 @@ class _HTTPBridgeStreamingMixin:
             client_anchor = payload.previous_response_id
             if client_anchor is None or rewritten_file_account_id is not None:
                 return None
+            if (
+                durable_lookup is not None
+                and durable_lookup.continuity_abandoned
+                and durable_lookup.retired_account_id is not None
+            ):
+                # Retired lookups deliberately hide account_id. A subsequent
+                # request with the same client anchor still has positive proof
+                # of retirement, rather than a retryable owner lookup miss.
+                return dead_client_anchor_error()
             retiring_account_id = request_state.preferred_account_id
             if durable_lookup is None or retiring_account_id is None:
                 return None
@@ -2578,15 +2598,7 @@ class _HTTPBridgeStreamingMixin:
                 model_class=_extract_model_class(payload.model) if payload.model else None,
                 owner_check_applied=True,
             )
-            return ProxyResponseError(
-                404,
-                openai_error(
-                    "bridge_previous_response_not_found",
-                    "The account that owns this conversation is no longer available; "
-                    "resend the full conversation history or start a new conversation.",
-                ),
-                local_pre_dispatch_refusal=True,
-            )
+            return dead_client_anchor_error()
 
         def owner_unavailable_allows_account_neutral_replay(exc: ProxyResponseError) -> bool:
             if not _http_bridge_is_previous_response_owner_unavailable(exc):
@@ -2747,6 +2759,9 @@ class _HTTPBridgeStreamingMixin:
             replay_rejection = classify_account_neutral_replay_rejection()
             if replay_rejection is not None:
                 record_account_neutral_replay_rejection(replay_rejection)
+            dead_anchor_error = await retire_dead_client_anchor(owner_unavailable)
+            if dead_anchor_error is not None:
+                raise dead_anchor_error
             raise owner_unavailable
 
         while True:
@@ -4068,6 +4083,11 @@ class _HTTPBridgeStreamingMixin:
                 effective_payload.previous_response_id is not None
                 and _http_bridge_is_explicit_previous_response_rejection(exc)
             )
+            if explicit_previous_response_rejection and exc.local_pre_dispatch_refusal:
+                # A local tombstone rejected this request before publication or
+                # dispatch. Keep its selected refusal; there is no submitted
+                # operation to fence or reset for transparent upstream replay.
+                raise
             if explicit_previous_response_rejection and (
                 request_state.replay_count > 0
                 or request_state.response_event_count > 0

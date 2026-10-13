@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import Field
 
@@ -24,6 +25,7 @@ class ModelSourceModelInput(DashboardModel):
 
 
 class ModelSourceModelResponse(ModelSourceModelInput):
+    is_available: bool = True
     id: int
     source_id: str
     created_at: datetime
@@ -31,6 +33,7 @@ class ModelSourceModelResponse(ModelSourceModelInput):
 
 
 class ModelSourceCreateRequest(DashboardModel):
+    catalog_mode: Literal["manual", "cli_proxy_api"] = "manual"
     name: str = Field(min_length=1, max_length=128)
     base_url: str = Field(min_length=1, max_length=2048)
     api_key: str | None = Field(default=None, min_length=1)
@@ -44,6 +47,7 @@ class ModelSourceCreateRequest(DashboardModel):
 
 
 class ModelSourceUpdateRequest(DashboardModel):
+    catalog_mode: Literal["manual", "cli_proxy_api"] | None = None
     name: str | None = Field(default=None, min_length=1, max_length=128)
     base_url: str | None = Field(default=None, min_length=1, max_length=2048)
     api_key: str | None = Field(default=None, min_length=1)
@@ -58,6 +62,7 @@ class ModelSourceUpdateRequest(DashboardModel):
 
 
 class ModelSourceResponse(DashboardModel):
+    catalog_mode: Literal["manual", "cli_proxy_api"] = "manual"
     id: str
     name: str
     kind: str

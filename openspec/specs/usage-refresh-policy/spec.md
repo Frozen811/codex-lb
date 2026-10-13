@@ -454,13 +454,13 @@ This credit-aware interpretation MUST be shared by proxy account selection and a
 
 ### Requirement: Reset-confirmed limit warm-up
 
-The system SHALL support an optional limit warm-up mechanism that is disabled by default. When enabled globally and for an account, background usage refresh MAY send one minimal upstream Responses request after it confirms that a selected quota window moved into a newly available reset window. Eligibility SHALL depend on a real reset transition and the configured post-reset availability gate, not on whether the previous window was exhausted. The legacy `limit_warmup_exhausted_threshold_percent` setting MUST NOT gate reset-confirmed eligibility.
+The system SHALL support an optional limit warm-up mechanism that is disabled by default. When enabled globally and for an account, background usage refresh MAY send one minimal upstream Responses request after it confirms that a selected quota window moved into a newly available reset window. Eligibility SHALL depend on a real reset transition, the configured post-reset availability gate and an inclusive pre-reset usage floor. The public `limit_warmup_exhausted_threshold_percent` setting SHALL default to zero and SHALL require the reset evidence before sample to meet a configured positive floor. Zero SHALL accept every otherwise eligible confirmed reset.
 
 Background usage refresh MUST complete any applicable blocked-status reconciliation before warm-up evaluation. Candidate evaluation and the sender's fresh preflight check MUST both require the account to be `active`; paused, deactivated, `reauth_required`, `rate_limited`, and `quota_exceeded` accounts MUST NOT receive warm-up traffic. When a reset-confirmed recovery uses persisted transition evidence, warm-up SHALL reuse that same before/after pair so the new account/window/reset tuple enters the ordinary durable deduplication path.
 
 The configured `limit_warmup_cooldown_seconds` SHALL gate only staggered idle warm-up candidates. It MUST NOT suppress a reset-confirmed candidate for a distinct account/window/reset tuple, which remains protected by the durable atomic attempt claim for that tuple.
 
-#### Scenario: Warm-up follows a real reset regardless of prior usage
+#### Scenario: Zero threshold permits a real reset regardless of prior usage
 - **GIVEN** limit warm-up is enabled globally and for an active account
 - **AND** the account's previous usage sample for a selected window reports any usage below or at exhaustion
 - **WHEN** background usage refresh records a newer sample that proves a real reset for that window and satisfies the configured availability gate
@@ -2048,8 +2048,7 @@ When background usage refresh confirms that an opted-in active account changed
 from a recognized paid plan to `free`, and that confirming refresh writes a
 fresh monthly usage sample with a reset deadline and enough available quota for
 the configured warm-up threshold, the system SHALL attempt one long-window
-warm-up for that monthly quota window. Eligibility MUST NOT depend on the usage
-percentage reported before the plan change.
+warm-up for that monthly quota window. With a zero pre-reset usage floor, eligibility MUST NOT depend on the usage percentage reported before the plan change. With a positive floor, a prior monthly observation MUST exist and meet that floor.
 
 The plan-transition exception SHALL apply only to an actual paid-to-Free change
 confirmed by the refresh that wrote the monthly sample. It MUST NOT apply to a
@@ -2067,9 +2066,9 @@ available threshold MAY impose a stricter lower usage limit.
 - **AND** that confirming refresh writes a monthly sample with a reset deadline and enough available quota
 - **THEN** the system attempts one warm-up identified by the account, `monthly` window, and monthly reset deadline
 
-#### Scenario: Previous usage percentage does not gate plan-transition warm-up
+#### Scenario: Zero floor does not gate plan-transition warm-up
 
-- **GIVEN** an active opted-in paid account whose previous selected quota sample was not exhausted
+- **GIVEN** an active opted-in paid account with a zero pre-reset usage floor whose previous selected quota sample was not exhausted
 - **WHEN** background usage refresh confirms its transition to `free` and writes an eligible fresh monthly sample
 - **THEN** the system attempts the monthly warm-up regardless of the previous usage percentage
 
@@ -2544,3 +2543,30 @@ Usage refresh MUST recognize the exact deactivated_workspace code as permanent e
 #### Scenario: Identity has two workspaces
 - **WHEN** refresh rejects one workspace as deactivated and refreshes its sibling successfully
 - **THEN** the rejected workspace remains deactivated and the sibling remains eligible
+
+### Requirement: Reset threshold activation preserves historical settings
+The public reset-confirmed warm-up threshold SHALL accept finite values from zero through 100 inclusive, default to zero and persist in a new active column. The migration SHALL initialize existing active thresholds to zero without modifying historical legacy threshold values or defaults. Dashboard numeric validation SHALL accept explicit zero and reject empty input. Paid-to-Free transition warm-up with a positive floor SHALL require a matching prior monthly observation meeting the floor; missing or wrong-window prior observations SHALL NOT qualify.
+
+#### Scenario: Inclusive usage floor
+- **WHEN** a real reset has before usage 49 or 50 percent and the configured floor is 50 percent
+- **THEN** only the 50 percent reset SHALL qualify.
+
+#### Scenario: Preserved legacy settings
+- **WHEN** a database with a historical legacy threshold is upgraded
+- **THEN** its active threshold SHALL be zero and its legacy value SHALL remain unchanged.
+
+#### Scenario: Paid-to-Free missing monthly baseline
+- **WHEN** a paid-to-Free monthly transition has no prior monthly observation and a positive threshold
+- **THEN** warm-up SHALL be skipped.
+
+#### Scenario: Zero threshold input
+- **WHEN** an operator supplies explicit zero or an empty dashboard threshold input
+- **THEN** zero SHALL be accepted and empty input SHALL be rejected.
+
+#### Scenario: Migration ledger was rewound
+- **WHEN** the active threshold column already exists with the expected non-null floating schema and zero default
+- **THEN** upgrade SHALL preserve its configured values without adding the column again.
+
+#### Scenario: Existing threshold column is incompatible
+- **WHEN** the existing active threshold column is nullable or has an incompatible type or default
+- **THEN** upgrade SHALL fail explicitly without silently accepting the incompatible schema.

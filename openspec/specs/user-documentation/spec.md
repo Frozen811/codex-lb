@@ -225,3 +225,30 @@ Installation command blocks MUST use syntax appropriate to their named shell and
 - **WHEN** a Windows reader follows the checkout example
 - **THEN** the launcher is in a PowerShell block with the checkout prerequisite
 - **AND** the Bash block contains only the Bash launcher
+
+### Requirement: Ordinary Codex provider examples declare standalone search
+
+The ordinary `codex-lb` provider examples in both READMEs, the client guide and downloadable configuration MUST declare `supports_standalone_web_search = true` with the minimum codex-lb version. Documentation MUST distinguish the provider capability from live-search preference and the experimental standalone-search feature flag. Separate Daybreak examples MUST retain their own capability policy.
+
+#### Scenario: Ordinary search examples remain consistent
+- **WHEN** the five ordinary provider examples are parsed as TOML
+- **THEN** all five enable standalone search and retain valid provider configuration
+- **AND** the separate Daybreak provider remains unchanged
+
+#### Scenario: Search setup names separate controls
+- **WHEN** an operator follows the native search guide
+- **THEN** it explains the minimum version, live-search preference and separate experimental flag
+
+### Requirement: Contributor guidance states bounded completion and verification
+
+Repository agent instructions MUST state ownership of the requested scope, preservation of unrelated work, autonomous completion of authorized implementation and validation, and calibration of testing to the changed subsystem. They MUST identify OpenSpec as the behavior source of truth, preserve existing contributor and merge gates, require disposable test storage before application imports, and require regression coverage of affected externally observable request transports. They MUST distinguish local verification from publication and deployment authority.
+
+#### Scenario: Scoped behavior repair
+- **WHEN** an agent follows the repository instructions for a behavior change
+- **THEN** it creates the required OpenSpec artifacts before implementation, validates the affected behavior and synchronizes verified specs
+- **AND** it preserves unrelated work and does not substitute local tests for cloud merge gates
+
+#### Scenario: Affected request paths and isolated storage
+- **WHEN** a change affects HTTP, WebSocket or HTTP-bridge behavior
+- **THEN** the instructions require regression coverage of the affected product paths and applicable aliases
+- **AND** test database configuration precedes imports that initialize application storage

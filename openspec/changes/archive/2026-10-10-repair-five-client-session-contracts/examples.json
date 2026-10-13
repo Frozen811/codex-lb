@@ -1,0 +1,12 @@
+{
+  "ordinary_search_blocks": [
+    "README.md",
+    "README.zh-CN.md",
+    "docs/client-setup.md",
+    "docs/client-setup.md",
+    "docs/examples/codex/config.toml"
+  ],
+  "astra_primary_examples": 5,
+  "gpt_5_6_context_scope": true,
+  "daybreak_capability_preserved": true
+}

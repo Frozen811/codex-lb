@@ -4960,8 +4960,10 @@ def test_only_the_item_done_frame_contributes_an_item_to_the_accumulator() -> No
     # every turn arrives twice -- once empty.
     added = {"id": "msg_1", "type": "message", "role": "assistant", "status": "in_progress", "content": []}
     events = (
-        _sse_block({"type": "response.output_item.added", "item": cast(JsonValue, added)}),
-        _sse_block({"type": "response.output_item.done", "item": _assistant_item("answer", item_id="msg_1")}),
+        _sse_block({"type": "response.output_item.added", "output_index": 0, "item": cast(JsonValue, added)}),
+        _sse_block(
+            {"type": "response.output_item.done", "output_index": 0, "item": _assistant_item("answer", item_id="msg_1")}
+        ),
         _sse_block({"type": "response.completed", "response": {"id": "resp_1"}}),
     )
 
@@ -4998,16 +5000,15 @@ def test_a_frame_with_no_readable_payload_is_skipped_rather_than_failing_the_tur
 
 
 def test_a_malformed_item_frame_does_not_become_a_rebuilt_item() -> None:
-    # The frame's ``item`` is not an object, so there is no item in it. Letting
-    # it through puts a scalar where an input item belongs and costs the turn a
-    # rebuild the rest of its material fully supports.
+    # A malformed lifecycle frame cannot prove complete output. Refuse the
+    # whole reconstruction instead of silently omitting that item.
     events = (
         _sse_block({"type": "response.output_item.done", "item": cast(JsonValue, "not an item")}),
         _sse_block({"type": "response.output_item.done", "item": _assistant_item("answer", item_id="msg_1")}),
         _sse_block({"type": "response.completed", "response": {"id": "resp_1"}}),
     )
 
-    assert _terminal_response_output_items(events) == [_assistant_item("answer", item_id="msg_1")]
+    assert _terminal_response_output_items(events) is None
     rebuilt = _rebuild(
         (
             _TranscriptTurn(
@@ -5020,8 +5021,7 @@ def test_a_malformed_item_frame_does_not_become_a_rebuilt_item() -> None:
         [_user_item("second")],
     )
 
-    assert rebuilt is not None
-    assert rebuilt["input"] == [_user_item("first"), _replayed_assistant_item("answer"), _user_item("second")]
+    assert rebuilt is None
 
 
 @pytest.mark.parametrize("wrong_anchor", ["resp_1", "resp_other", "resp_2 "])

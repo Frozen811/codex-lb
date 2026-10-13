@@ -1,0 +1,27 @@
+{
+  "selected": [
+    "UP-ISSUE-2474",
+    "UP-ISSUE-1471",
+    "UP-ISSUE-2309",
+    "UP-PR-2462",
+    "UP-PR-2461"
+  ],
+  "source_rows": 338,
+  "other_source_rows_byte_preserved": 333,
+  "prior_dirty_files": 430,
+  "unrelated_prior_dirty_files_byte_preserved": 425,
+  "queue": {
+    "partial": 7,
+    "local_closed": 179,
+    "unverified": 150,
+    "not_applicable": 2
+  },
+  "row_readback": {
+    "UP-ISSUE-1471": "| [UP-ISSUE-1471](https://github.com/Soju06/codex-lb/issues/1471) | ci(db): gate long-running migrations with a production-scale duration check | РЕШЕНО | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | §86: missed raw UPDATE/static resolution и fake list benchmark исправлены; lint gate + real disposable PostgreSQL fixture/elapsed budget/timeout/JSON failure artifacts + scheduled/path/manual CI workflow. 3M rows /4 revisions PASS; real PG timeout+cleanup control PASS; 57 distinct pytest PASS, OpenSpec68/68. Hosted PG16/CI/production отдельно; upstream OPEN. [Verification](openspec/changes/archive/2026-10-10-repair-five-migration-contributor-contracts/verification.md). Commit/push/release/deploy не выполнялись. |",
+    "UP-ISSUE-2309": "| [UP-ISSUE-2309](https://github.com/Soju06/codex-lb/issues/2309) | docs: align agent instructions with Astra prompt guidance | РЕШЕНО | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | §86: AGENTS OpenSpec duplication consolidated; exact ownership/evidence readback, autonomous authorized completion, pre-import disposable test storage и affected HTTP/WS/bridge coverage clarified. Conventions/contributor/merge/simplicity gates retained; official prompting sources reviewed. Upstream OPEN; no cloud/publication claim. [Verification](openspec/changes/archive/2026-10-10-repair-five-migration-contributor-contracts/verification.md). Commit/push/release/deploy не выполнялись. |",
+    "UP-ISSUE-2474": "| [UP-ISSUE-2474](https://github.com/Soju06/codex-lb/issues/2474) | Migration graph forks into two heads on main (MultipleHeads): 20260914_000000 collision (#2431 vs #2422) | РЕШЕНО | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | §86: single head и immutable September parents проверены; collision exemption теперь требует exact published pair + convergence, rejects absent merge/new merged collision/third member. 3 populated SQLite paths + 43 static/topology PASS; historical revisions unchanged. [Verification](openspec/changes/archive/2026-10-10-repair-five-migration-contributor-contracts/verification.md). Commit/push/release/deploy не выполнялись. |",
+    "UP-PR-2461": "| [UP-PR-2461](https://github.com/Soju06/codex-lb/pull/2461) | PR #2461: fix(db): converge the SCIM token and subscription-overflow heads | Раздел 12, L1361 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §86: published empty merge проверен из SCIM/overflow/both-parent ledger; merge downgrade сохраняет обе stamps/schema/request row, re-upgrade и current head/drift PASS. Опубликованные IDs и migrations сохранены; local SQLite. [Verification](openspec/changes/archive/2026-10-10-repair-five-migration-contributor-contracts/verification.md). Commit/push/release/deploy не выполнялись. |",
+    "UP-PR-2462": "| [UP-PR-2462](https://github.com/Soju06/codex-lb/pull/2462) | PR #2462: fix(db): repair September migration lineage | Раздел 12, L1360 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §86: single-head repair outcome подтверждён через released merge, без rejected restamp/reparent method. 3 populated starts, downgrade/re-upgrade, canonical head и row/schema preservation PASS. PR upstream closed unmerged; local equivalent behavior, no history rewrite. [Verification](openspec/changes/archive/2026-10-10-repair-five-migration-contributor-contracts/verification.md). Commit/push/release/deploy не выполнялись. |"
+  },
+  "commit_push_pr_merge_release_deploy": false
+}

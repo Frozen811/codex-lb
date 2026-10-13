@@ -118,3 +118,25 @@ encrypted credentials after loss of the ledger. A `+1` target from the quota
 revision's parent ends at the same resolved revision. Missing facet indexes
 still get rebuilt by their pending ancestor before the quota stamp. Ordinary
 installs without the column execute the original additive migration.
+
+## Fork account reserves completed on 2026-10-09
+
+The prior scalar-only partial status is superseded by the completed reserve integration. Shared and duration-matched 5-hour/weekly caps use the canonical fresh-data evaluator; disabled settings retain saved percentages, while removal clears them. Provider remaining stays in provider units; reserved and usable quota are shown separately, and weekly burn remains provider-scaled. A 20% reserve with 54% consumption gives 46% provider remaining and 26% usable quota.
+
+The fork adds a single forward revision on its verified reset-threshold head. Legacy positive scalar values seed the shared policy and zero remains a hard denial. The legacy API updates the shared policy; the reserve API can disable/remove it. Backup carries the shared and override values. MySQL updates use the transaction-held row lock and projection instead of UPDATE RETURNING.
+
+Fresh owner authorization retains strict revoked-credential handling and usable reauth warning behavior for manual warm-up. Selection retries are bounded at eight to let local and persisted invalidation echoes settle, with final current-owner refusal and complete lease cleanup under continuing churn. Foreground ranking ignores unavailable peers when choosing the best health tier but retains their hard-block evidence for canonical backoff fallback.
+
+Code and tests are adapted from NikitaMGrimm's upstream PR #1528 at caf31b77a4ef85047459635e956fdd62f7fbd7ce; aaravrav is credited there for complementary reserve presentation. No old migration or prior archived evidence is rewritten. Local verification is separate from live providers, server backends and publication. See [requirements](spec.md).
+
+## Synthetic migration timing and September lineage
+
+The duration gate combines conservative raw-SQL checks with actual database execution. The static command is stdlib-only and runs in the existing lint path. It resolves literal/annotated assignments, concatenation and statically resolvable f-strings; all possible assigned values are considered. Explicit primary-key range parameters provide a supported batch proof; unrelated LIMIT text, negative predicates and correlated subqueries do not. Arbitrary dynamic SQL and SQLAlchemy expression trees still need actual execution evidence.
+
+Run `uv run python -m scripts.benchmark_migrations --base-ref latest-stable --output timings.json` with `MIGRATION_BENCHMARK_SERVER_URL` identifying a disposable test PostgreSQL server. The runner creates a fresh random database, migrates the baseline schema, generates three million synthetic request logs by default and measures each pending revision through the ordinary runner. Fixture generation and baseline setup are excluded from revision timings. `--rows` and `--budget-seconds` adjust the fixture and the default thirty-second budget without adding application settings. A no-op baseline reports zero seeded rows and no invented timings.
+
+For example, a revision that executes a 200 ms sleep under a 10 ms statement budget fails with a private exception type, the failed revision's elapsed time and a non-zero exit. JSON remains available even on failure, and cleanup removes only the runner's newly created database. A missing server, unknown baseline or cleanup failure remains a failed benchmark. The workflow publishes timing artifacts and a job summary for scheduled, migration-path and manual runs; its checked-in configuration is distinct from an observed hosted run or required branch-protection status.
+
+The September pair remains `20260914_000000_add_scim_tokens` and `20260914_000000_drop_subscription_overflow_schema`, joined by the published `20260918_000000_merge_scim_and_overflow_heads`. The rejected restamping proposal is not needed for single-head behavior and would orphan published ledgers. Only that exact pair after convergence receives the collision exemption. An extra member or a new collision still fails, even after an empty merge. Both-parent ledgers, merge reversal and unrelated populated rows have independent local regression coverage. See [requirements](spec.md).
+
+Synthetic timings depend on hardware, distribution and selected revision range; they do not prove production timing, PostgreSQL 16 hosted behavior or every historical migration's performance. Background data phases belong to the separate open proposal and are not established by this gate.

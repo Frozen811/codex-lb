@@ -1,0 +1,27 @@
+{
+  "selected_ids": [
+    "UP-ISSUE-850",
+    "UP-PR-2497",
+    "UP-ISSUE-2514",
+    "UP-PR-2122",
+    "UP-PR-1528"
+  ],
+  "changed_source_ids": [
+    "UP-ISSUE-850",
+    "UP-PR-2497",
+    "UP-ISSUE-2514",
+    "UP-PR-2122",
+    "UP-PR-1528"
+  ],
+  "unchanged_source_rows": 333,
+  "source_rows_total": 338,
+  "source_queue": {
+    "partial": 8,
+    "closed_local": 150,
+    "unverified": 180
+  },
+  "initial_worktree": "clean",
+  "final_head": "7e3779ffaea1a27c29710a7d496e8fa037131f98",
+  "commits_pushes_deployments": false,
+  "scope": "four local closures; scalar cap repaired, full upstream 1528 partial"
+}

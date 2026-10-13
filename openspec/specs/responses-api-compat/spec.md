@@ -1278,7 +1278,9 @@ string-valued event type only when it is exactly `error` or begins with
 `response.`. Other string-valued event types MUST be dropped before they reach
 the public stream. OpenAI-shaped backend requests with public contract
 enforcement enabled MUST follow the same filtering rule. Native Codex requests
-with public contract enforcement disabled MUST retain upstream vendor events.
+with public contract enforcement disabled MUST retain upstream vendor events,
+except `codex.rate_limits`, which MUST follow the pooled quota projection and
+API-key quota privacy requirements.
 
 #### Scenario: Codex-internal rate-limit event is dropped before response.created
 
@@ -1300,7 +1302,8 @@ with public contract enforcement disabled MUST retain upstream vendor events.
 #### Scenario: Codex-internal events on the Codex CLI route are preserved
 
 - **WHEN** a native `/backend-api/codex/responses` request disables public contract enforcement
-- **THEN** the response stream MUST retain `codex.rate_limits` and `responsesapi.websocket_timing` in upstream order
+- **THEN** the response stream MUST retain `responsesapi.websocket_timing` in upstream order
+- **AND** default `codex.rate_limits` events MUST contain the visible pooled quota snapshot or be omitted when no snapshot is available
 
 ### Requirement: Streamed /v1 responses terminal output is backfilled from item events
 When serving streaming `POST /v1/responses`, if the upstream's terminal `response.completed` or `response.incomplete` event carries `output` as missing or as an empty list, the service MUST reconstruct `output` from the `response.output_item.done` events emitted earlier in the same stream before yielding the terminal SSE event. The reconstructed `output` MUST preserve the `output_index` ordering and the raw item payloads. When the terminal `response.completed` / `response.incomplete` already carries a non-empty `output`, the service MUST forward it unchanged.
@@ -11893,3 +11896,220 @@ A bridge-bypassed full resend with turn-state ownership MUST recover from a pre-
 - **WHEN** the proven owner cannot be selected because of persisted quota state
 - **THEN** the proxy can submit the same validated projection to an eligible replacement
 - **AND** a non-quota selection failure does not activate the projection
+
+
+### Requirement: Aggregate live bridge output is bounded
+
+HTTP bridge live queued output MUST share a fixed 256 MiB process-wide UTF-8 payload budget, including payload retained by producers waiting for queue capacity. An enqueue that cannot reserve its payload MUST fail that downstream operation without retaining another waiting payload. Accepted output MUST remain ordered and precede one terminal `response.failed` followed by end-of-stream. Budget exhaustion MUST preserve the shared upstream reader and unrelated requests, and MUST NOT penalize account health for downstream backpressure. Small bounded failure envelopes are terminal metadata outside this live-output budget.
+
+Dequeuing, detachment, cancellation, producer failure and abandoned-queue reclamation MUST release the corresponding payload reservations. Finish or failure MUST release waiting producer reservations while retaining accepted output until delivered or detached. A continuously blocked delivery MUST end within the existing five-second stall bound or the earlier request deadline, independently of a model's long upstream idle allowance.
+
+#### Scenario: Multiple paused streams exhaust the shared budget
+- **WHEN** combined queued and waiting-producer payload reaches the process budget
+- **THEN** the next payload fails only its downstream operation without another queued or waiting reservation
+- **AND** its accepted prefix precedes one failure and end-of-stream
+- **AND** unrelated requests and the shared reader remain owned and usable
+
+#### Scenario: Cancellation and detach free admission capacity
+- **WHEN** a blocked producer is cancelled or its stream detaches
+- **THEN** its payload reservation is released
+- **AND** a subsequent enqueue can use the released capacity
+
+#### Scenario: Finished and abandoned queues do not leak payload
+- **WHEN** a queue finishes, fails, drains or becomes unreachable
+- **THEN** waiting reservations are released on finish or failure
+- **AND** accepted payload reservations are released on drain, detach or reclamation
+
+#### Scenario: Long upstream idle budget does not extend a delivery stall
+- **WHEN** a downstream queue stays full while the model permits a two-hour upstream idle interval
+- **THEN** delivery fails within five seconds or the earlier request deadline
+- **AND** the shared reader can continue processing a sibling operation
+
+
+### Requirement: Complete durable bridge replay starts at the root
+
+The HTTP bridge SHALL persist each generated root turn in its durable operation ledger before upstream dispatch, including its original input and a null parent. Independent unanchored turns MUST retain distinct operation identities. Registration MUST obey the existing owner, admission, exact-frame size and interruption cleanup fences.
+
+#### Scenario: Root and tool continuation form a complete chain
+- **WHEN** a root response produces a tool call and a continuation supplies its output
+- **THEN** durable replay retains the root input, terminal tool call, continuation output and final answer in order without duplicate echoed tool items
+
+#### Scenario: Independent roots contain identical prompts
+- **WHEN** two unanchored turns supply the same body
+- **THEN** each turn dispatches and records its own operation rather than replaying the first turn
+
+#### Scenario: Root registration or dispatch is refused
+- **WHEN** the owner fence, payload limit or admission fails before a root dispatch
+- **THEN** no upstream request is sent and no newly created submitted operation remains orphaned
+
+#### Scenario: Independently proven output-free root retry
+- **WHEN** existing replay policy independently permits an output-free root retry
+- **THEN** predecessor lifecycle writes are drained and discarded before the retry resets its transcript under the currently fenced session account
+- **AND** an acknowledged predecessor requires its captured response identity, while an unacknowledged predecessor requires an absent response identity and empty spool
+- **AND** parent anchors, completed operations, mismatched response identities and stale owners refuse this reset
+
+### Requirement: Durable replay requires matching complete terminal evidence
+
+A durable transcript SHALL be exposed for reconstruction only when each turn has exactly matching response identity, a complete successful or incomplete terminal outcome and consistent observed output-item lifecycles. Missing done evidence for an observed added item, conflicting output identities, malformed terminal output or a chain crossing authorization scopes MUST fail closed. Item-done output MAY supply terminal material when an upstream terminal omits its output list. Existing byte, item, turn, account-neutrality and parent-chain bounds MUST remain enforced.
+
+#### Scenario: Added output item lacks its done event
+- **WHEN** an event spool terminates while an observed output item has no matching done evidence
+- **THEN** that spool cannot authorize durable reconstruction even if the terminal repeats the item
+
+#### Scenario: Terminal identity or scope does not match
+- **WHEN** a stored terminal names another response or a parent belongs to another API-key scope
+- **THEN** no replay transcript is returned
+
+#### Scenario: Incomplete terminal omits output
+- **WHEN** every observed output item completes and the matching incomplete terminal omits its output field
+- **THEN** the completed items remain available for bounded replay reconstruction
+
+### Requirement: Bridge creation failure retires its owned creator
+
+When a pending HTTP bridge session creation is evicted or failed, the bridge MUST request cancellation of the creator associated with that exact inflight slot before another creation can occupy it. A completed waiter MUST NOT exempt a still-running creator. A different replacement slot, protected handoff or currently executing creator MUST retain its existing task ownership. Existing cleanup MUST release predecessor resources without closing a registered successor or changing its durable ownership.
+
+#### Scenario: Creation failure removes a running predecessor
+- **WHEN** a matching inflight creation fails while its creator is awaiting upstream work
+- **THEN** the predecessor receives cancellation and its slot is removed
+- **AND** a subsequent request can establish a replacement without predecessor dispatch or leaked leases
+
+#### Scenario: Waiter is complete while creator is running
+- **WHEN** the matching waiter has already completed but its creator is still running
+- **THEN** failure still requests cancellation of the creator
+
+#### Scenario: Replacement and handoff ownership remain intact
+- **WHEN** failure targets a superseded slot, a protected handoff or the current creator
+- **THEN** it does not cancel another creator or itself
+
+### Requirement: Late bridge anchors keep admission budgets consistent
+
+Before dispatch of a request whose opaque continuation anchor was added after API-key reservation, the bridge MUST reconcile its persisted reservation using the conservative anchored-input budget. Successful reconciliation MUST retain that same budget in the request's local admission state so subsequent stream-lease acquisition cannot reuse the earlier self-contained estimate. A rejected reconciliation MUST prevent upstream dispatch and release the reservation through the existing settlement lifecycle, preserving the external auth or rate-limit error.
+
+#### Scenario: Late anchor grows the active reservation
+- **WHEN** the bridge adds an opaque anchor to a previously self-contained reserved request
+- **THEN** its active reservation and local admission estimate reflect the anchored budget before upstream send
+
+#### Scenario: Late anchor exceeds the API-key limit
+- **WHEN** the original request fits the key limit but its conservative anchored estimate does not
+- **THEN** the request receives the documented rate-limit envelope without upstream dispatch
+- **AND** the original reservation is released without leaked reserved quota
+
+#### Scenario: Reconciliation fails authentication
+- **WHEN** late-anchor reconciliation finds the API key invalid
+- **THEN** the original auth error is preserved and no upstream request is sent
+
+### Requirement: Native Codex stream quotas describe the pool
+
+Native Codex Responses SSE and WebSocket egress MUST NOT forward an account's
+raw `codex.rate_limits` payload. Default-family events MUST be rebuilt using
+the pooled downstream quota-header snapshot, including its normalized window
+durations, reset timestamps, and credits. HTTP SSE MUST use its response's
+quota-header snapshot; WebSocket egress MUST use the existing aggregate cache.
+Source-routed SSE MUST follow the same rule. The service MUST suppress quota
+events when no aggregate window is available and MUST NOT substitute a global
+aggregate for model-specific or otherwise unrepresented limit families.
+Projection MUST happen after original upstream usage ingestion and MUST NOT
+change normal response lifecycle events or account attribution. Failure to
+read quota metadata on an established WebSocket MUST suppress the quota event
+without interrupting inference; cancellation MUST still propagate.
+
+#### Scenario: A nearly exhausted account serves a pool with capacity
+
+- **GIVEN** the selected account reports 97% weekly usage and pooled downstream headers report 66.5%
+- **WHEN** native Codex receives the Responses stream
+- **THEN** its default quota event reports 66.5% weekly usage and the pooled reset timestamp
+- **AND** the event contains no account-specific plan, credits, or quota metadata
+
+#### Scenario: Unrepresented quota events cannot overwrite the pool
+
+- **WHEN** an upstream quota event belongs to a model-specific family or no pooled window is known
+- **THEN** the downstream stream omits that quota event
+- **AND** response deltas and terminal events remain deliverable
+
+#### Scenario: A quota cache read fails on an established WebSocket
+
+- **WHEN** pooled quota metadata cannot be loaded while handling a quota event
+- **THEN** the event is omitted without forwarding account-specific values
+- **AND** the next response event can still be delivered
+
+
+### Requirement: Dead-owner recovery horizons reflect the owner's status
+
+When an HTTP Responses bridge request has proven its continuity owner unavailable, retirement MUST treat a reset timestamp as evidence of automatic recovery only when the owner is rate-limited or quota-exceeded. A paused, deactivated or confirmed-unusable reauthentication owner MUST NOT be kept solely because a stored reset timestamp falls within the request budget. Retirement MUST retain the account-status lock, conditional status check and expected-owner check, and MUST NOT mutate stored reset metadata. An active or recovered owner MUST NOT be retired.
+
+#### Scenario: Administrative unavailability has an incidental near reset
+- **WHEN** a request encounters a paused or deactivated continuity owner with a reset timestamp inside its budget
+- **THEN** that timestamp does not prevent conditional owner retirement
+- **AND** the stored account status and reset timestamp remain unchanged
+
+#### Scenario: Unusable reauthentication has an incidental near reset
+- **WHEN** selection has proven a reauthentication owner's credentials unusable and its stored reset timestamp is inside the request budget
+- **THEN** the timestamp does not defer conditional retirement
+
+#### Scenario: Quota owner can return within the budget
+- **WHEN** a rate-limited or quota-exceeded owner has a reset timestamp before the recovery deadline
+- **THEN** the owner is retained for existing bounded recovery
+
+#### Scenario: Quota owner has no usable horizon
+- **WHEN** a rate-limited or quota-exceeded owner's reset timestamp is absent or at or after the recovery deadline
+- **THEN** the unavailable owner is eligible for conditional retirement
+
+#### Scenario: Ownership or status changed
+- **WHEN** the expected owner no longer owns the session or its status recovered before retirement
+- **THEN** the current healthy or different owner is preserved
+
+### Requirement: Proven-dead client anchors receive actionable terminal rejection
+
+When an HTTP bridge request carries a client-supplied response anchor owned by an account that cannot return within its budget, the bridge MUST conditionally retire that owner and deliver HTTP 404 `bridge_previous_response_not_found` with a remedy to resend the full conversation history or start a new conversation. The rejection MUST remain unmasked on canonical and equivalent HTTP paths, including trailing slash aliases, and MUST NOT independently authorize raw-HTTP replay. Repeated retirement attempts for the same unavailable owner MUST report the existing retirement without rewriting its marker. An eligible subsequent anchor-free full-history request MUST be able to bind to a healthy account; this MUST NOT make account-owned files or encrypted state portable.
+
+#### Scenario: Client anchor on a dead owner
+- **WHEN** a client resumes a bridged thread using its own anchor on a paused owner
+- **THEN** it receives the actionable 404 instead of a retryable owner-unavailable failure
+
+#### Scenario: Anchor-free recovery on the same thread
+- **WHEN** the client follows the rejection with eligible full history and no anchor on the same thread
+- **THEN** a healthy owner can serve the request
+- **AND** the complete supplied history is preserved
+
+#### Scenario: Duplicate retirement
+- **WHEN** a duplicate request observes the same already-retired unavailable owner
+- **THEN** retirement reports success without rewriting the original scope or timestamp
+
+#### Scenario: Repeated client anchor after retirement
+- **WHEN** the client repeats its anchored request and a durable retirement marker hides the former owner from normal lookup
+- **THEN** the bridge preserves the actionable 404 verdict instead of returning a retryable owner-lookup failure
+- **AND** it neither redispatches the anchor nor rewrites the retirement marker
+
+#### Scenario: File ownership still constrains recovery
+- **WHEN** a request also carries an uploaded file owned by the unavailable account
+- **THEN** recovery does not forward the file through another account
+
+### Requirement: Submit-time abandonment tombstones retire exact proxy anchors
+
+When submission rejects a proxy-injected response anchor after adopting an abandonment tombstone, the bridge MUST retire that exact anchor from matching live and durable continuity carriers while preserving the existing 404 `bridge_previous_response_not_found` refusal. Retirement MUST retain the tombstone guarding incomplete delta requests, preserve successor continuity and leave client-supplied anchors untouched. Cleanup failure MUST NOT replace the selected public refusal; cancellation MUST retain the existing lifecycle cleanup policy.
+
+A local refusal proven to precede request publication and dispatch MUST preserve its selected error through outer recovery handling. It MUST NOT trigger transparent upstream replay or a missing-operation-fence error merely because the original request contained eligible full history.
+
+#### Scenario: First refusal clears both matching carriers
+- **WHEN** a proxy-injected anchor reaches submission after its abandonment tombstone is adopted
+- **THEN** the bridge returns the existing 404 and retires the matching live and durable anchor
+
+#### Scenario: Full resend escapes the tombstone
+- **WHEN** the client resends complete eligible history without an anchor after that retirement
+- **THEN** normal admission can dispatch the complete history without reinjecting the rejected anchor
+
+#### Scenario: Delta-only follow-up remains refused
+- **WHEN** an incomplete delta follows that retirement without a response anchor
+- **THEN** the abandonment tombstone continues refusing context-free dispatch
+
+#### Scenario: A successor is preserved
+- **WHEN** another request advances continuity before retirement finishes
+- **THEN** only the rejected anchor is considered for cleanup and the successor survives
+
+#### Scenario: Client anchor is preserved
+- **WHEN** the request supplied its own anchor rather than receiving proxy injection
+- **THEN** the submit-time proxy-anchor cleanup does not clear or rewrite that client anchor
+
+#### Scenario: Cleanup fails
+- **WHEN** exact-match anchor cleanup encounters a transient failure
+- **THEN** the selected public refusal remains intact and existing bounded cleanup retains its denial fence

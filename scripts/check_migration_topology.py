@@ -93,7 +93,7 @@ RATCHET_PREFIX = "20260911_000000"
 
 # Both revisions reached main independently and may already be stamped in
 # deployed databases. Renaming either would violate Alembic history; the exact
-# pair is joined by 20260914_000002_merge_overflow_retirement_heads. A third
+# pair is joined by 20260918_000000_merge_scim_and_overflow_heads. A third
 # revision in the slot still fails because only this complete id set is exempt.
 MERGED_TIMESTAMP_PREFIX_COLLISIONS = frozenset(
     {
@@ -405,8 +405,7 @@ def check_timestamp_prefix_collisions(revisions: Sequence[Revision], ratchet_pre
         if not _ratcheted((prefix,), ratchet_prefix):
             continue
         group = sorted(group, key=lambda item: item.revision)
-        if frozenset(revision.revision for revision in group) in MERGED_TIMESTAMP_PREFIX_COLLISIONS:
-            continue
+        published_pair = frozenset(revision.revision for revision in group) in MERGED_TIMESTAMP_PREFIX_COLLISIONS
         described = "; ".join(revision.describe() for revision in group)
         forked = not _group_is_chained(group, parents)
         consequence = (
@@ -416,7 +415,7 @@ def check_timestamp_prefix_collisions(revisions: Sequence[Revision], ratchet_pre
             else "they are chained, so filename order no longer tells you the graph order"
         )
         merged_by = _converged_by(group, revisions, parents) if forked else None
-        if merged_by is not None:
+        if published_pair and merged_by is not None:
             # Authored in parallel and it did fork, but a merge revision has since
             # converged them: the graph has one head and nothing fails with
             # MultipleHeads, so there is no longer anything to do. Reporting it

@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 
 from app.core.openai.requests import extract_input_file_ids
 from app.core.types import JsonValue
-from app.core.utils.sse import parse_sse_data_json
+from app.modules.proxy.complete_transcript import materialize_terminal_output
 
 _TOOL_CALL_TYPE_BY_OUTPUT_TYPE = {
     "function_call_output": "function_call",
@@ -1494,7 +1494,7 @@ def project_durable_transcript_for_account_neutral_fresh_replay(
         expected_parent_response_id = cast(str, response_id)
         linked_response_ids.add(cast(str, response_id))
         turn_input = _transcript_turn_input_items(operation)
-        terminal_output = _terminal_response_output_items(events)
+        terminal_output = materialize_terminal_output(events, expected_response_id=cast(str, response_id))
         if turn_input is None or terminal_output is None:
             return None
         # Decremented across the whole walk like the byte bound, and checked
@@ -1905,58 +1905,4 @@ def _transcript_turn_input_items(operation: object) -> list[JsonValue] | None:
 
 
 def _terminal_response_output_items(events: object) -> list[JsonValue] | None:
-    """One turn's answer, or ``None`` when the turn never settled on one.
-
-    A turn is material for the rebuild only when its spool carries a terminal
-    that reports an answer. ``response.failed`` and a transport ``error`` frame
-    are terminals too, and they are deliberately not in that set: admitting one
-    would let a turn the owner account failed be rebuilt as the assistant's
-    reply, which is the one reading of the spool that invents content rather
-    than losing it.
-
-    An abandoned attempt leaves its item frames behind. It ends explicitly at
-    one of those failure terminals, or -- the shape production actually
-    produces -- it dies mid-stream and is recognisable only by the replacement's
-    ``response.created``. Either marker starts the accumulation over, so the
-    abandoned generation cannot be reported as part of this turn's answer.
-
-    Some upstream versions omit ``response.output`` from a ``response.incomplete``
-    terminal while still emitting every ``response.output_item.done`` frame; the
-    accumulated items are complete enough to preserve that turn's context. A
-    terminal carrying no response object at all proves nothing about either, and
-    an answer that is empty is not an answer, so both fail closed as a missing
-    terminal does.
-
-    The spool stores each frame as the upstream wrote it, so the shared SSE field
-    parser reads it: only CR, LF and CRLF end a line, and a multi-line ``data:``
-    field joins with LF. ``str.splitlines`` would additionally break on U+2028,
-    U+2029, NEL, VT, FF and the file/group/record separators, all of which are
-    legal unescaped inside a JSON string -- one of them in a model's answer would
-    leave the turn with no readable terminal and refuse a rebuild the material
-    fully supports.
-    """
-
-    if not isinstance(events, Sequence) or isinstance(events, (str, bytes, bytearray)):
-        return None
-    completed_items: list[JsonValue] = []
-    for event_text in events:
-        if not isinstance(event_text, str):
-            continue
-        event_payload = parse_sse_data_json(event_text)
-        if event_payload is None:
-            continue
-        event_type = event_payload.get("type")
-        if event_type in _ANSWERED_TERMINAL_EVENT_TYPES:
-            response = event_payload.get("response")
-            if not isinstance(response, dict):
-                return None
-            output = response.get("output")
-            settled_items = cast(list[JsonValue], output) if isinstance(output, list) else completed_items
-            return settled_items or None
-        if event_type == _ATTEMPT_START_EVENT_TYPE or event_type in _ABANDONED_TERMINAL_EVENT_TYPES:
-            completed_items.clear()
-        elif event_type == _RESPONSE_OUTPUT_ITEM_DONE_EVENT_TYPE:
-            item = event_payload.get("item")
-            if isinstance(item, dict):
-                completed_items.append(cast(JsonValue, item))
-    return None
+    return materialize_terminal_output(events) or None

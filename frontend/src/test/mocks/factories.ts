@@ -137,6 +137,9 @@ export function createAccountSummary(
 		displayName: "primary@example.com",
 		planType: "plus",
 		routingPolicy: "normal",
+		usageLimitEnabled: false,
+		usageLimitPercent: null,
+		usageLimitState: "disabled",
 		status: "active",
 		securityWorkAuthorized: false,
 		usage: {
@@ -985,7 +988,7 @@ export function createDashboardSettings(
 		limitWarmupModel: "auto",
 		limitWarmupPrompt: "Say OK.",
 		limitWarmupCooldownSeconds: 3600,
-		limitWarmupExhaustedThresholdPercent: 99,
+		limitWarmupExhaustedThresholdPercent: 0,
 		limitWarmupIdleThresholdPercent: 1,
 		limitWarmupMinAvailablePercent: 100,
 		guestAccessEnabled: false,

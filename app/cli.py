@@ -12,7 +12,13 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from app.codex_sessions_retag import RetagProgress, RetagResult, default_codex_home, retag_codex_sessions
+from app.codex_sessions_retag import (
+    ProgressCallback,
+    RetagProgress,
+    RetagResult,
+    default_codex_home,
+    retag_codex_sessions,
+)
 from app.core.ingress_limits import MAX_DECOMPRESSED_RESPONSES_BODY_BYTES
 
 if TYPE_CHECKING:
@@ -74,6 +80,24 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Confirm that Codex/Codex CLI is closed and allow a non-interactive write.",
     )
+
+    for command in ("preview", "repair"):
+        metadata = codex_sessions_subparsers.add_parser(
+            command,
+            help="Inspect session provider mismatches."
+            if command == "preview"
+            else "Repair one session's provider tags.",
+            formatter_class=_CliHelpFormatter,
+        )
+        metadata.add_argument("--codex-home", type=Path, default=None, help="Codex data directory.")
+        metadata.add_argument(
+            "--session-id", "--thread-id", dest="session_id", required=command == "repair", help="Session ID to select."
+        )
+        metadata.add_argument("--json", action="store_true", help="Emit a single JSON result on stdout.")
+        metadata.add_argument("--progress-json", action="store_true", help="Emit JSONL phase progress on stderr.")
+        if command == "repair":
+            metadata.add_argument("--to", dest="target_provider", choices=("openai", "codex-lb"), required=True)
+            metadata.add_argument("--yes", action="store_true", help="Confirm Codex is closed and allow writes.")
 
     admin = subparsers.add_parser(
         "admin",
@@ -181,6 +205,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     if args.command == "codex-sessions":
         if args.codex_sessions_command == "retag":
             _run_codex_sessions_retag(args)
+            return
+        if args.codex_sessions_command in {"preview", "repair"}:
+            _run_codex_session_metadata(args)
             return
         raise SystemExit("codex-sessions requires a subcommand")
 
@@ -350,20 +377,7 @@ def _run_codex_sessions_retag(args: argparse.Namespace) -> None:
     if not args.dry_run:
         _confirm_retag_write(args.yes, progress_json=args.progress_json)
 
-    progress_enabled = args.progress_json
-
-    def report_progress(event: RetagProgress) -> None:
-        nonlocal progress_enabled
-        if progress_enabled:
-            try:
-                print(json.dumps(asdict(event)), file=sys.stderr, flush=True)
-            except OSError as exc:
-                # Windows' CRT reports a closed anonymous pipe as EINVAL.
-                if not isinstance(exc, BrokenPipeError) and not (os.name == "nt" and exc.errno == errno.EINVAL):
-                    raise
-                progress_enabled = False
-                # Avoid a second failed flush during interpreter shutdown.
-                sys.stderr = open(os.devnull, "w")
+    report_progress = _make_retag_progress_callback(args.progress_json)
 
     target_session_id = getattr(args, "session_id", None) or getattr(args, "thread_id", None)
     try:
@@ -374,7 +388,7 @@ def _run_codex_sessions_retag(args: argparse.Namespace) -> None:
             dry_run=args.dry_run,
             session_id=target_session_id,
             progress_logger=lambda message: print(message, flush=True),
-            progress_callback=report_progress if args.progress_json else None,
+            progress_callback=report_progress,
         )
     except sqlite3.OperationalError as exc:
         message = str(exc)
@@ -390,6 +404,73 @@ def _run_codex_sessions_retag(args: argparse.Namespace) -> None:
         raise SystemExit(f"Unable to read or write Codex session files: {exc}") from exc
 
     _print_retag_summary(result)
+
+
+def _make_retag_progress_callback(enabled: bool) -> ProgressCallback | None:
+    progress_enabled = enabled
+
+    def report_progress(event: RetagProgress) -> None:
+        nonlocal progress_enabled
+        if progress_enabled:
+            try:
+                print(json.dumps(asdict(event)), file=sys.stderr, flush=True)
+            except OSError as exc:
+                # Windows' CRT reports a closed anonymous pipe as EINVAL.
+                if not isinstance(exc, BrokenPipeError) and not (os.name == "nt" and exc.errno == errno.EINVAL):
+                    raise
+                progress_enabled = False
+                # Avoid a second failed flush during interpreter shutdown.
+                sys.stderr = open(os.devnull, "w")
+
+    return report_progress if enabled else None
+
+
+def _run_codex_session_metadata(args: argparse.Namespace) -> None:
+    from app.codex_sessions_repair import preview_codex_sessions, repair_codex_session
+
+    home = args.codex_home or default_codex_home()
+    progress = _make_retag_progress_callback(args.progress_json)
+    try:
+        if args.codex_sessions_command == "repair":
+            if args.json and not args.yes:
+                raise ValueError("JSON repair requires --yes confirmation that Codex is closed")
+            if not (args.json and args.yes):
+                _confirm_retag_write(args.yes, progress_json=args.progress_json)
+            result = repair_codex_session(
+                codex_home=home,
+                session_id=args.session_id,
+                target_provider=args.target_provider,
+                progress_callback=progress,
+            )
+            if args.json:
+                print(json.dumps(asdict(result), default=str))
+            else:
+                print(
+                    f"Repaired {result.session_id}: {result.jsonl_files_updated} JSONL files, "
+                    f"{result.sqlite_rows_updated} SQLite rows, {result.tags_skipped} tags skipped"
+                )
+                if result.backup_path is not None:
+                    print(f"Backup: {result.backup_path}")
+        else:
+            if progress is not None:
+                progress(RetagProgress("discovery", 0))
+            sessions = preview_codex_sessions(codex_home=home, session_id=args.session_id)
+            if progress is not None:
+                progress(RetagProgress("complete", len(sessions), len(sessions)))
+            if args.json:
+                print(
+                    json.dumps(
+                        {"sessions": [asdict(session) | {"status": session.status} for session in sessions]},
+                        default=str,
+                    )
+                )
+            else:
+                for session in sessions:
+                    print(f"{session.session_id}: {session.status}")
+                    for tag in (*session.jsonl, *session.sqlite):
+                        print(f"  {tag.path}: {tag.provider}")
+    except (OSError, ValueError, sqlite3.Error) as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 def _confirm_retag_write(yes: bool, *, progress_json: bool = False) -> None:

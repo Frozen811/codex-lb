@@ -1,0 +1,52 @@
+.F.F                                                                     [100%]
+================================== FAILURES ===================================
+_ test_selector_generated_hint_is_terminal_at_websocket_route[30-/backend-api/codex/responses/] _
+tests\integration\test_transport_delivery_routes.py:144: in test_selector_generated_hint_is_terminal_at_websocket_route
+    with client.websocket_connect(path) as websocket:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\testclient.py:123: in __enter__
+    self._raise_on_close(message)
+.venv\Lib\site-packages\starlette\testclient.py:152: in _raise_on_close
+    raise WebSocketDisconnect(code=message.get("code", 1000), reason=message.get("reason", ""))
+E   starlette.websockets.WebSocketDisconnect
+------------------------------ Captured log call ------------------------------
+WARNING  app.main:bootstrap.py:54 
+============================================
+  Dashboard bootstrap token (first-run):
+  DOi3jNws-MCE6eKNuS_HLUM7aYVCvIMXS39V3ns_qiA
+
+  Use this token for initial remote setup.
+  It is shared across replicas and stays
+  valid until a password is set.
+============================================
+WARNING  app.db.session:session.py:525 Cannot record a clean SQLite shutdown without the lifetime lock path=C:\Users\ext\AppData\Local\Temp\codex-lb-master-p6iv2blk\test.db; the next startup will run the integrity check
+_ test_selector_generated_hint_is_terminal_at_websocket_route[300-/backend-api/codex/responses/] _
+tests\integration\test_transport_delivery_routes.py:144: in test_selector_generated_hint_is_terminal_at_websocket_route
+    with client.websocket_connect(path) as websocket:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\testclient.py:123: in __enter__
+    self._raise_on_close(message)
+.venv\Lib\site-packages\starlette\testclient.py:152: in _raise_on_close
+    raise WebSocketDisconnect(code=message.get("code", 1000), reason=message.get("reason", ""))
+E   starlette.websockets.WebSocketDisconnect
+------------------------------ Captured log call ------------------------------
+WARNING  app.main:bootstrap.py:54 
+============================================
+  Dashboard bootstrap token (first-run):
+  iWGOunaHhKYtVCb-f3i_EgVRJ-WxDzBzX5bNqBAL7tU
+
+  Use this token for initial remote setup.
+  It is shared across replicas and stays
+  valid until a password is set.
+============================================
+WARNING  app.db.session:session.py:525 Cannot record a clean SQLite shutdown without the lifetime lock path=C:\Users\ext\AppData\Local\Temp\codex-lb-master-p6iv2blk\test.db; the next startup will run the integrity check
+============================== warnings summary ===============================
+.venv\Lib\site-packages\starlette\testclient.py:53
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/integration/test_transport_delivery_routes.py::test_selector_generated_hint_is_terminal_at_websocket_route[30-/backend-api/codex/responses/]
+FAILED tests/integration/test_transport_delivery_routes.py::test_selector_generated_hint_is_terminal_at_websocket_route[300-/backend-api/codex/responses/]
+2 failed, 2 passed, 11 deselected, 1 warning in 4.06s

@@ -5,7 +5,7 @@ from alembic import command
 from anyio import to_thread
 from sqlalchemy import create_engine, inspect, text
 
-from app.db.migrate import MigrationBootstrapError, _build_alembic_config, run_upgrade
+from app.db.migrate import MigrationBootstrapError, _build_alembic_config, inspect_migration_state, run_upgrade
 
 
 @pytest.mark.integration
@@ -32,7 +32,8 @@ def test_existing_quota_column_survives_rewound_ledger(tmp_path, target: str, mi
                 connection.execute(text("DROP TABLE alembic_version"))
         else:
             command.stamp(_build_alembic_config(url), parent)
-        assert run_upgrade(url, target, bootstrap_legacy=True).current_revision == head
+        expected = inspect_migration_state(url).head_revision if target == "head" else head
+        assert run_upgrade(url, target, bootstrap_legacy=True).current_revision == expected
         with engine.connect() as connection:
             assert connection.execute(
                 text("SELECT quota_limit_percent, access_token_encrypted FROM accounts WHERE id='retained'")

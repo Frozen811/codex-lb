@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from typing import Literal, cast
 from urllib.parse import urlparse
 
 from app.core.crypto import TokenEncryptor
@@ -45,6 +46,7 @@ class ModelSourcesService:
         return await self._repository.list_enabled_sources()
 
     async def create_source(self, payload: ModelSourceCreateRequest) -> ModelSourceResponse:
+        _validate_catalog_mode(payload.catalog_mode, payload.supports_responses)
         model_rows = _model_inputs_to_rows(payload.models)
         row = ModelSource(
             id=f"src_{uuid.uuid4().hex}",
@@ -52,6 +54,7 @@ class ModelSourcesService:
             kind=MODEL_SOURCE_KIND_OPENAI_COMPATIBLE,
             base_url=_normalize_base_url(payload.base_url),
             api_key_encrypted=_encrypt_optional(self._encryptor, payload.api_key),
+            catalog_mode=payload.catalog_mode,
             is_enabled=True,
             health_status=MODEL_SOURCE_HEALTH_UNKNOWN,
             supports_chat_completions=payload.supports_chat_completions,
@@ -98,6 +101,12 @@ class ModelSourcesService:
 
         models_replaced = False
         try:
+            if "catalog_mode" in fields and payload.catalog_mode is not None:
+                row.catalog_mode = payload.catalog_mode
+            _validate_catalog_mode(row.catalog_mode, row.supports_responses)
+            if row.catalog_mode == "cli_proxy_api" and "models" in fields and payload.models is not None:
+                raise ModelSourceValidationError("Switch to manual catalog mode before replacing discovered models")
+            await self._repository.invalidate_catalog(source_id)
             if "models" in fields and payload.models is not None:
                 await self._repository.replace_models(row, _model_inputs_to_rows(payload.models), commit=False)
                 models_replaced = True
@@ -128,6 +137,11 @@ def _normalize_name(value: str) -> str:
     if not name:
         raise ModelSourceValidationError("Model source name is required")
     return name
+
+
+def _validate_catalog_mode(mode: str, supports_responses: bool) -> None:
+    if mode == "cli_proxy_api" and not supports_responses:
+        raise ModelSourceValidationError("cli_proxy_api catalog mode requires supports_responses")
 
 
 def _normalize_base_url(value: str) -> str:
@@ -196,6 +210,7 @@ def _encrypt_optional(encryptor: TokenEncryptor, value: str | None) -> bytes | N
 
 def _to_model_response(row: ModelSourceModel) -> ModelSourceModelResponse:
     return ModelSourceModelResponse(
+        is_available=row.is_available is not False,
         id=row.id,
         source_id=row.source_id,
         model=row.model,
@@ -218,6 +233,7 @@ def _to_model_response(row: ModelSourceModel) -> ModelSourceModelResponse:
 
 def _to_response(row: ModelSource) -> ModelSourceResponse:
     return ModelSourceResponse(
+        catalog_mode=cast(Literal["manual", "cli_proxy_api"], row.catalog_mode or "manual"),
         id=row.id,
         name=row.name,
         kind=row.kind,

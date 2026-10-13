@@ -1,0 +1,8 @@
+...........                                                              [100%]
+============================== warnings summary ===============================
+tests/integration/test_proxy_transient_retry.py::test_stream_model_capacity_without_response_id_surfaces_without_replay
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+11 passed, 124 deselected, 1 warning in 12.19s

@@ -352,7 +352,7 @@ class OauthService:
     # ------------------------------------------------------------------
 
     async def _persist_flow_record(self, record: OAuthFlowRecord) -> None:
-        async with get_background_session() as session:
+        async with sqlite_writer_section(), get_background_session() as session:
             repo = OAuthFlowRepository(session, self._encryptor)
             await repo.purge_expired(terminal_keep=_MAX_RETAINED_TERMINAL_OAUTH_FLOWS)
             await repo.create(record)
@@ -385,7 +385,7 @@ class OauthService:
         non-success write is rejected (``False``) by the monotonic guard when the
         durable row is already ``success`` (a racing winner committed first)."""
 
-        async with get_background_session() as session:
+        async with sqlite_writer_section(), get_background_session() as session:
             repo = OAuthFlowRepository(session, self._encryptor)
             return await repo.set_status(flow_id, status=status, error_message=error_message)
 

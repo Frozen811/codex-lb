@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="11" time="11.369" timestamp="2026-10-09T19:06:54.098394+03:00" hostname="extr3-dekstop"><testcase classname="tests.integration.test_account_operator_contracts" name="test_backup_restores_settings_to_credential_identity" time="1.256"><failure message="AssertionError: [('portable_7912a01e', 'old', None, None), ('portable_7912a01e__copy2', None, None, None)]&#10;assert 'old' is None&#10; +  where 'old' = &lt;app.db.models.Account object at 0x000001F99768DCD0&gt;.alias">tests\integration\test_account_operator_contracts.py:48: in test_backup_restores_settings_to_credential_identity
+    assert account.alias is None, [(a.id,a.alias,a.workspace_id,a.workspace_label) for a in (await session.execute(select(Account))).scalars().all()]
+E   AssertionError: [('portable_7912a01e', 'old', None, None), ('portable_7912a01e__copy2', None, None, None)]
+E   assert 'old' is None
+E    +  where 'old' = &lt;app.db.models.Account object at 0x000001F99768DCD0&gt;.alias</failure></testcase><testcase classname="tests.integration.test_account_operator_contracts" name="test_backup_workspace_metadata_round_trip" time="0.798" /><testcase classname="tests.integration.test_account_operator_contracts" name="test_zero_account_cap_blocks_public_response_dispatch[/v1/responses]" time="0.804" /><testcase classname="tests.integration.test_account_operator_contracts" name="test_zero_account_cap_blocks_public_response_dispatch[/backend-api/codex/responses]" time="1.104" /><testcase classname="tests.integration.test_account_operator_contracts" name="test_paused_cached_credit_visibility_remains_read_only" time="0.977" /><testcase classname="tests.integration.test_account_operator_contracts" name="test_bulk_credits_use_authoritative_remaining_ids_and_keep_partial_counts[False]" time="0.720" /><testcase classname="tests.integration.test_account_operator_contracts" name="test_bulk_credits_use_authoritative_remaining_ids_and_keep_partial_counts[True]" time="0.745" /><testcase classname="tests.integration.test_reset_warmup_threshold_migration" name="test_threshold_migration_preserves_legacy_values_and_reupgrade" time="3.932"><failure message="sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) UNIQUE constraint failed: dashboard_settings.id&#10;[SQL: INSERT INTO dashboard_settings (id, sticky_threads_enabled, prefer_earlier_reset_accounts, totp_required_on_login, api_key_auth_enabled, created_at, updated_at, limit_warmup_exhausted_threshold_percent) VALUES (1,0,0,0,0,'2026-01-01','2026-01-01',77)]&#10;(Background on this error at: https://sqlalche.me/e/20/gkpj)">.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+E   sqlite3.IntegrityError: UNIQUE constraint failed: dashboard_settings.id
+
+The above exception was the direct cause of the following exception:
+tests\integration\test_reset_warmup_threshold_migration.py:24: in test_threshold_migration_preserves_legacy_values_and_reupgrade
+    connection.execute(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1421: in execute
+    return meth(
+.venv\Lib\site-packages\sqlalchemy\sql\elements.py:526: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1643: in _execute_clauseelement
+    ret = self._execute_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+E   sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) UNIQUE constraint failed: dashboard_settings.id
+E   [SQL: INSERT INTO dashboard_settings (id, sticky_threads_enabled, prefer_earlier_reset_accounts, totp_required_on_login, api_key_auth_enabled, created_at, updated_at, limit_warmup_exhausted_threshold_percent) VALUES (1,0,0,0,0,'2026-01-01','2026-01-01',77)]
+E   (Background on this error at: https://sqlalche.me/e/20/gkpj)</failure></testcase><testcase classname="tests.integration.test_reset_warmup_threshold_migration" name="test_threshold_migration_ddl_is_portable[sqlite]" time="0.002" /><testcase classname="tests.integration.test_reset_warmup_threshold_migration" name="test_threshold_migration_ddl_is_portable[postgresql]" time="0.002" /><testcase classname="tests.integration.test_reset_warmup_threshold_migration" name="test_threshold_migration_ddl_is_portable[mysql]" time="0.002" /></testsuite></testsuites>

@@ -1,0 +1,360 @@
+FF..F.FF                                                                 [100%]
+================================== FAILURES ===================================
+_ test_request_path_reset_horizon_depends_on_owner_status[inside-deactivated] _
+
+async_session_factory = <function async_session_factory.<locals>.get_session at 0x000002326CB349A0>
+coordinator = <app.modules.proxy.durable_bridge_coordinator.DurableBridgeSessionCoordinator object at 0x000002326C7A34D0>
+status = <AccountStatus.DEACTIVATED: 'deactivated'>, horizon = 'inside'
+
+    @pytest.mark.parametrize("status", sorted(HARD_OWNER_UNAVAILABLE_STATUSES, key=lambda value: value.value))
+    @pytest.mark.parametrize("horizon", ["absent", "expired", "inside", "deadline", "outside"])
+    async def test_request_path_reset_horizon_depends_on_owner_status(
+        async_session_factory: Callable[[], AsyncSession],
+        coordinator: DurableBridgeSessionCoordinator,
+        status: AccountStatus,
+        horizon: str,
+    ) -> None:
+        deadline = _epoch_in(120)
+        resets = {
+            "absent": None,
+            "expired": deadline - 180,
+            "inside": deadline - 60,
+            "deadline": deadline,
+            "outside": deadline + 3600,
+        }
+        reset_at = resets[horizon]
+        await _add_account(async_session_factory, "owner-reset", status, reset_at=reset_at)
+        session_id = await _claim(coordinator, account_id="owner-reset")
+        quota_status = status in (AccountStatus.RATE_LIMITED, AccountStatus.QUOTA_EXCEEDED)
+        should_retire = not (quota_status and reset_at is not None and reset_at < deadline)
+    
+>       assert (
+            await _retire_now(
+                async_session_factory, session_id=session_id, account_id="owner-reset", deadline_epoch=deadline
+            )
+            is should_retire
+        )
+E       assert False is True
+
+tests\unit\test_durable_bridge_owner_retirement.py:543: AssertionError
+___ test_request_path_reset_horizon_depends_on_owner_status[inside-paused] ____
+
+async_session_factory = <function async_session_factory.<locals>.get_session at 0x000002326CE17F60>
+coordinator = <app.modules.proxy.durable_bridge_coordinator.DurableBridgeSessionCoordinator object at 0x000002326CBB65D0>
+status = <AccountStatus.PAUSED: 'paused'>, horizon = 'inside'
+
+    @pytest.mark.parametrize("status", sorted(HARD_OWNER_UNAVAILABLE_STATUSES, key=lambda value: value.value))
+    @pytest.mark.parametrize("horizon", ["absent", "expired", "inside", "deadline", "outside"])
+    async def test_request_path_reset_horizon_depends_on_owner_status(
+        async_session_factory: Callable[[], AsyncSession],
+        coordinator: DurableBridgeSessionCoordinator,
+        status: AccountStatus,
+        horizon: str,
+    ) -> None:
+        deadline = _epoch_in(120)
+        resets = {
+            "absent": None,
+            "expired": deadline - 180,
+            "inside": deadline - 60,
+            "deadline": deadline,
+            "outside": deadline + 3600,
+        }
+        reset_at = resets[horizon]
+        await _add_account(async_session_factory, "owner-reset", status, reset_at=reset_at)
+        session_id = await _claim(coordinator, account_id="owner-reset")
+        quota_status = status in (AccountStatus.RATE_LIMITED, AccountStatus.QUOTA_EXCEEDED)
+        should_retire = not (quota_status and reset_at is not None and reset_at < deadline)
+    
+>       assert (
+            await _retire_now(
+                async_session_factory, session_id=session_id, account_id="owner-reset", deadline_epoch=deadline
+            )
+            is should_retire
+        )
+E       assert False is True
+
+tests\unit\test_durable_bridge_owner_retirement.py:543: AssertionError
+_ test_request_path_reset_horizon_depends_on_owner_status[inside-reauth_required] _
+
+async_session_factory = <function async_session_factory.<locals>.get_session at 0x000002326CFCDC60>
+coordinator = <app.modules.proxy.durable_bridge_coordinator.DurableBridgeSessionCoordinator object at 0x000002326CEB1CD0>
+status = <AccountStatus.REAUTH_REQUIRED: 'reauth_required'>, horizon = 'inside'
+
+    @pytest.mark.parametrize("status", sorted(HARD_OWNER_UNAVAILABLE_STATUSES, key=lambda value: value.value))
+    @pytest.mark.parametrize("horizon", ["absent", "expired", "inside", "deadline", "outside"])
+    async def test_request_path_reset_horizon_depends_on_owner_status(
+        async_session_factory: Callable[[], AsyncSession],
+        coordinator: DurableBridgeSessionCoordinator,
+        status: AccountStatus,
+        horizon: str,
+    ) -> None:
+        deadline = _epoch_in(120)
+        resets = {
+            "absent": None,
+            "expired": deadline - 180,
+            "inside": deadline - 60,
+            "deadline": deadline,
+            "outside": deadline + 3600,
+        }
+        reset_at = resets[horizon]
+        await _add_account(async_session_factory, "owner-reset", status, reset_at=reset_at)
+        session_id = await _claim(coordinator, account_id="owner-reset")
+        quota_status = status in (AccountStatus.RATE_LIMITED, AccountStatus.QUOTA_EXCEEDED)
+        should_retire = not (quota_status and reset_at is not None and reset_at < deadline)
+    
+>       assert (
+            await _retire_now(
+                async_session_factory, session_id=session_id, account_id="owner-reset", deadline_epoch=deadline
+            )
+            is should_retire
+        )
+E       assert False is True
+
+tests\unit\test_durable_bridge_owner_retirement.py:543: AssertionError
+_ test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[False-paused-/backend-api/codex/responses] _
+
+async_client = <httpx.AsyncClient object at 0x000002326CBAA7B0>
+app_instance = <fastapi.applications.FastAPI object at 0x000002326CBB6490>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000002326CEBF700>
+path = '/backend-api/codex/responses', status = <AccountStatus.PAUSED: 'paused'>
+keyed = False
+
+    @pytest.mark.parametrize("path", PATHS)
+    @pytest.mark.parametrize("status", [AccountStatus.PAUSED, AccountStatus.DEACTIVATED, AccountStatus.REAUTH_REQUIRED])
+    @pytest.mark.parametrize("keyed", [False, True])
+    async def test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers(
+        async_client, app_instance, monkeypatch, path: str, status: AccountStatus, keyed: bool
+    ) -> None:
+        dashboard = bridge._make_dashboard_settings()
+        dashboard.api_key_auth_enabled = keyed
+        bridge._install_proxy_settings(
+            monkeypatch, app_settings=bridge._make_app_settings(enabled=True), dashboard_settings=dashboard
+        )
+        owner_id = await bridge._import_account(async_client, "dead-anchor-owner", "dead-anchor-owner@example.com")
+        healthy_id = await bridge._import_account(async_client, "dead-anchor-healthy", "dead-anchor-healthy@example.com")
+        owner, healthy = await bridge._get_account(owner_id), await bridge._get_account(healthy_id)
+        selected: list[str] = []
+        sockets: list[Any] = []
+        raw_attempts: list[bool] = []
+    
+        async def select_account(self, deadline, **kwargs):
+            del self, deadline
+            if kwargs.get("preferred_account_id") == owner.id:
+                return AccountSelection(
+                    account=None, error_message="Owner unavailable", error_code=CONTINUITY_OWNER_UNAVAILABLE
+                )
+            account = owner if not selected else healthy
+            selected.append(account.id)
+            return AccountSelection(account=account, error_message=None, error_code=None)
+    
+        async def fresh(self, target, *, force=False, timeout_seconds):
+            del self, force, timeout_seconds
+            return target
+    
+        async def connect(*args, **kwargs):
+            del args, kwargs
+            upstream = bridge._FakeBridgeUpstreamWebSocket(f"resp_dead_anchor_{len(sockets)}")
+            sockets.append(upstream)
+            return upstream
+    
+        async def raw(*args, **kwargs):
+            del args, kwargs
+            raw_attempts.append(True)
+            raise AssertionError("dead-anchor refusal must not route to raw HTTP")
+            yield ""  # Preserve the upstream adapter's async-generator protocol.
+    
+        monkeypatch.setattr(proxy_module.ProxyService, "_select_account_with_budget", select_account)
+        monkeypatch.setattr(proxy_module.ProxyService, "_ensure_fresh_with_budget", fresh)
+        monkeypatch.setattr(proxy_module, "connect_responses_websocket", connect)
+        monkeypatch.setattr(proxy_module, "core_stream_responses", raw)
+        service = get_proxy_service_for_app(app_instance)
+        headers = {"session_id": "dead-anchor-session", "thread-id": "dead-anchor-thread"}
+        if keyed:
+            created = await async_client.post("/api/api-keys/", json={"name": "dead-anchor-key"})
+            assert created.status_code == 200, created.text
+            headers["Authorization"] = f"Bearer {created.json()['key']}"
+    
+        def body(history, **extra):
+            return {
+                "model": "gpt-5.1",
+                "instructions": "",
+                "input": history,
+                "prompt_cache_key": "dead-anchor-cache",
+                "stream": True,
+                **extra,
+            }
+    
+        history = [{"role": "user", "content": "first turn"}]
+        try:
+            first = await async_client.post(path, headers=headers, json=body(history))
+            assert first.status_code == 200 and "response.completed" in first.text, first.text
+            dispatched = json.loads(sockets[0].sent_text[0])
+            assert not dispatched.get("previous_response_id")
+            async with SessionLocal() as session:
+                owned = (await session.scalars(select(HttpBridgeSessionRecord))).one()
+                anchor = owned.latest_response_id
+                assert anchor
+            await service.close_all_http_bridge_sessions()
+            reset_at = int(time.time()) + 30
+            async with SessionLocal() as session:
+                await session.execute(
+                    update(Account)
+                    .where(Account.id == owner.id)
+                    .values(status=status, reset_at=reset_at, deactivation_reason="account_auth_invalidated")
+                )
+                await session.commit()
+    
+            denied = await async_client.post(
+                path, headers=headers, json=body([{"role": "user", "content": "continue"}], previous_response_id=anchor)
+            )
+>           assert denied.status_code == 404, denied.text
+E           AssertionError: {"error":{"message":"Previous response owner account is unavailable; retry later.","type":"server_error","code":"previous_response_owner_unavailable"}}
+E           assert 502 == 404
+E            +  where 502 = <Response [502 Bad Gateway]>.status_code
+
+tests\integration\test_dead_anchor_contracts.py:110: AssertionError
+----------------------------- Captured log setup ------------------------------
+WARNING  app.main:bootstrap.py:54 
+============================================
+  Dashboard bootstrap token (first-run):
+  KqHwERb1mSyoOS_9WCzgESjHLoSoh-58RmpqngN-o4g
+
+  Use this token for initial remote setup.
+  It is shared across replicas and stays
+  valid until a password is set.
+============================================
+------------------------------ Captured log call ------------------------------
+WARNING  app.modules.proxy.service:helpers.py:4192 http_bridge_event event=owner_unavailable_replay_rejected bridge_kind=thread_header bridge_key=sha256:98f284445cab account_id=dead-anchor-owner_720dbf70 model=gpt-5.1 pending=None detail=reason=payload_not_full_resend cache_key_family=thread_header model_class=std key_strength=hard owner_check_applied=True error_message=None upstream_close_code=None response_events_seen=None transport_classification=None
+ERROR    app.modules.proxy.api:runtime_logging.py:694 proxy_error_response request_id=1139ec14-8ab4-4c30-80e9-f703184180a3 method=POST path=/backend-api/codex/responses status=502 code="previous_response_owner_unavailable" message="Previous response owner account is unavailable; retry later."
+---------------------------- Captured log teardown ----------------------------
+WARNING  app.db.session:session.py:525 Cannot record a clean SQLite shutdown without the lifetime lock path=C:\Users\ext\AppData\Local\Temp\codex-lb-master-wnfl2jp8\test.db; the next startup will run the integrity check
+_ test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[False-paused-/backend-api/codex/responses/] _
+
+async_client = <httpx.AsyncClient object at 0x000002326EC45D10>
+app_instance = <fastapi.applications.FastAPI object at 0x000002326E3434D0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000002326E3E8830>
+path = '/backend-api/codex/responses/'
+status = <AccountStatus.PAUSED: 'paused'>, keyed = False
+
+    @pytest.mark.parametrize("path", PATHS)
+    @pytest.mark.parametrize("status", [AccountStatus.PAUSED, AccountStatus.DEACTIVATED, AccountStatus.REAUTH_REQUIRED])
+    @pytest.mark.parametrize("keyed", [False, True])
+    async def test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers(
+        async_client, app_instance, monkeypatch, path: str, status: AccountStatus, keyed: bool
+    ) -> None:
+        dashboard = bridge._make_dashboard_settings()
+        dashboard.api_key_auth_enabled = keyed
+        bridge._install_proxy_settings(
+            monkeypatch, app_settings=bridge._make_app_settings(enabled=True), dashboard_settings=dashboard
+        )
+        owner_id = await bridge._import_account(async_client, "dead-anchor-owner", "dead-anchor-owner@example.com")
+        healthy_id = await bridge._import_account(async_client, "dead-anchor-healthy", "dead-anchor-healthy@example.com")
+        owner, healthy = await bridge._get_account(owner_id), await bridge._get_account(healthy_id)
+        selected: list[str] = []
+        sockets: list[Any] = []
+        raw_attempts: list[bool] = []
+    
+        async def select_account(self, deadline, **kwargs):
+            del self, deadline
+            if kwargs.get("preferred_account_id") == owner.id:
+                return AccountSelection(
+                    account=None, error_message="Owner unavailable", error_code=CONTINUITY_OWNER_UNAVAILABLE
+                )
+            account = owner if not selected else healthy
+            selected.append(account.id)
+            return AccountSelection(account=account, error_message=None, error_code=None)
+    
+        async def fresh(self, target, *, force=False, timeout_seconds):
+            del self, force, timeout_seconds
+            return target
+    
+        async def connect(*args, **kwargs):
+            del args, kwargs
+            upstream = bridge._FakeBridgeUpstreamWebSocket(f"resp_dead_anchor_{len(sockets)}")
+            sockets.append(upstream)
+            return upstream
+    
+        async def raw(*args, **kwargs):
+            del args, kwargs
+            raw_attempts.append(True)
+            raise AssertionError("dead-anchor refusal must not route to raw HTTP")
+            yield ""  # Preserve the upstream adapter's async-generator protocol.
+    
+        monkeypatch.setattr(proxy_module.ProxyService, "_select_account_with_budget", select_account)
+        monkeypatch.setattr(proxy_module.ProxyService, "_ensure_fresh_with_budget", fresh)
+        monkeypatch.setattr(proxy_module, "connect_responses_websocket", connect)
+        monkeypatch.setattr(proxy_module, "core_stream_responses", raw)
+        service = get_proxy_service_for_app(app_instance)
+        headers = {"session_id": "dead-anchor-session", "thread-id": "dead-anchor-thread"}
+        if keyed:
+            created = await async_client.post("/api/api-keys/", json={"name": "dead-anchor-key"})
+            assert created.status_code == 200, created.text
+            headers["Authorization"] = f"Bearer {created.json()['key']}"
+    
+        def body(history, **extra):
+            return {
+                "model": "gpt-5.1",
+                "instructions": "",
+                "input": history,
+                "prompt_cache_key": "dead-anchor-cache",
+                "stream": True,
+                **extra,
+            }
+    
+        history = [{"role": "user", "content": "first turn"}]
+        try:
+            first = await async_client.post(path, headers=headers, json=body(history))
+            assert first.status_code == 200 and "response.completed" in first.text, first.text
+            dispatched = json.loads(sockets[0].sent_text[0])
+            assert not dispatched.get("previous_response_id")
+            async with SessionLocal() as session:
+                owned = (await session.scalars(select(HttpBridgeSessionRecord))).one()
+                anchor = owned.latest_response_id
+                assert anchor
+            await service.close_all_http_bridge_sessions()
+            reset_at = int(time.time()) + 30
+            async with SessionLocal() as session:
+                await session.execute(
+                    update(Account)
+                    .where(Account.id == owner.id)
+                    .values(status=status, reset_at=reset_at, deactivation_reason="account_auth_invalidated")
+                )
+                await session.commit()
+    
+            denied = await async_client.post(
+                path, headers=headers, json=body([{"role": "user", "content": "continue"}], previous_response_id=anchor)
+            )
+>           assert denied.status_code == 404, denied.text
+E           AssertionError: {"error":{"message":"Previous response owner account is unavailable; retry later.","type":"server_error","code":"previous_response_owner_unavailable"}}
+E           assert 502 == 404
+E            +  where 502 = <Response [502 Bad Gateway]>.status_code
+
+tests\integration\test_dead_anchor_contracts.py:110: AssertionError
+----------------------------- Captured log setup ------------------------------
+WARNING  app.main:bootstrap.py:54 
+============================================
+  Dashboard bootstrap token (first-run):
+  --2mTqdGdzPfmhHVDMxCup9GYY4Pybj6OxCzJlAJNBk
+
+  Use this token for initial remote setup.
+  It is shared across replicas and stays
+  valid until a password is set.
+============================================
+------------------------------ Captured log call ------------------------------
+WARNING  app.modules.proxy.service:helpers.py:4192 http_bridge_event event=owner_unavailable_replay_rejected bridge_kind=thread_header bridge_key=sha256:98f284445cab account_id=dead-anchor-owner_720dbf70 model=gpt-5.1 pending=None detail=reason=payload_not_full_resend cache_key_family=thread_header model_class=std key_strength=hard owner_check_applied=True error_message=None upstream_close_code=None response_events_seen=None transport_classification=None
+ERROR    app.modules.proxy.api:runtime_logging.py:694 proxy_error_response request_id=31262fea-6d27-46aa-b975-b3e1cc03e4d4 method=POST path=/backend-api/codex/responses/ status=502 code="previous_response_owner_unavailable" message="Previous response owner account is unavailable; retry later."
+---------------------------- Captured log teardown ----------------------------
+WARNING  app.db.session:session.py:525 Cannot record a clean SQLite shutdown without the lifetime lock path=C:\Users\ext\AppData\Local\Temp\codex-lb-master-wnfl2jp8\test.db; the next startup will run the integrity check
+============================== warnings summary ===============================
+tests/unit/test_durable_bridge_owner_retirement.py::test_request_path_reset_horizon_depends_on_owner_status[inside-deactivated]
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/unit/test_durable_bridge_owner_retirement.py::test_request_path_reset_horizon_depends_on_owner_status[inside-deactivated]
+FAILED tests/unit/test_durable_bridge_owner_retirement.py::test_request_path_reset_horizon_depends_on_owner_status[inside-paused]
+FAILED tests/unit/test_durable_bridge_owner_retirement.py::test_request_path_reset_horizon_depends_on_owner_status[inside-reauth_required]
+FAILED tests/integration/test_dead_anchor_contracts.py::test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[False-paused-/backend-api/codex/responses]
+FAILED tests/integration/test_dead_anchor_contracts.py::test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[False-paused-/backend-api/codex/responses/]
+5 failed, 3 passed, 69 deselected, 1 warning in 4.84s

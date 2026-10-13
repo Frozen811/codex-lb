@@ -1,0 +1,6 @@
+Proxy architecture checks passed.
+Cancellation safety checks passed.
+Proxy timing seam checks passed.
+Settings tiers: 98/98, T0=13, T1=51, T2=0, T3=30, T4=4; PASS.
+Migration topology: 275 revisions, single head 20261010_000000_add_source_catalog_discovery; origin/main checked after fetch; PASS.
+Simplicity: README 218/225 lines, 10/10 top-level headings, .env.example 54/60 lines, core-nav 5/5, root entries 0/0; PASS.

@@ -1828,6 +1828,9 @@ async def _fail_http_bridge_inflight_session_creation_helper(
         if getattr(inflight_future, "_http_bridge_handoff", False):
             return False
         service._http_bridge_inflight_sessions.pop(key, None)
+        creator_task = getattr(inflight_future, "_creator_task", None)
+        if creator_task is not None and not creator_task.done() and creator_task is not asyncio.current_task():
+            creator_task.cancel()
         if inflight_future.done():
             return True
         if isinstance(exc, asyncio.CancelledError):

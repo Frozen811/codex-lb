@@ -518,6 +518,56 @@ def _epoch_in(seconds: float) -> int:
     return naive_utc_to_epoch(to_utc_naive(utcnow() + timedelta(seconds=seconds)))
 
 
+@pytest.mark.parametrize("status", sorted(HARD_OWNER_UNAVAILABLE_STATUSES, key=lambda value: value.value))
+@pytest.mark.parametrize("horizon", ["absent", "expired", "inside", "deadline", "outside"])
+async def test_request_path_reset_horizon_depends_on_owner_status(
+    async_session_factory: Callable[[], AsyncSession],
+    coordinator: DurableBridgeSessionCoordinator,
+    status: AccountStatus,
+    horizon: str,
+) -> None:
+    deadline = _epoch_in(120)
+    resets = {
+        "absent": None,
+        "expired": deadline - 180,
+        "inside": deadline - 60,
+        "deadline": deadline,
+        "outside": deadline + 3600,
+    }
+    reset_at = resets[horizon]
+    await _add_account(async_session_factory, "owner-reset", status, reset_at=reset_at)
+    session_id = await _claim(coordinator, account_id="owner-reset")
+    quota_status = status in (AccountStatus.RATE_LIMITED, AccountStatus.QUOTA_EXCEEDED)
+    should_retire = not (quota_status and reset_at is not None and reset_at < deadline)
+
+    assert (
+        await _retire_now(
+            async_session_factory, session_id=session_id, account_id="owner-reset", deadline_epoch=deadline
+        )
+        is should_retire
+    )
+    lookup = await _lookup(coordinator)
+    assert lookup is not None
+    assert lookup.continuity_abandoned is should_retire
+    async with async_session_factory() as session:
+        account = (await session.scalars(select(Account))).one()
+        marker = (await session.scalars(select(HttpBridgeSessionRecord))).one()
+        original_marker = (marker.continuity_abandonment_scope, marker.continuity_abandoned_at)
+        assert account.status == status
+        assert account.reset_at == reset_at
+
+    # A duplicate sees the same authoritative outcome and does not rewrite it.
+    assert (
+        await _retire_now(
+            async_session_factory, session_id=session_id, account_id="owner-reset", deadline_epoch=deadline
+        )
+        is should_retire
+    )
+    async with async_session_factory() as session:
+        marker = (await session.scalars(select(HttpBridgeSessionRecord))).one()
+        assert (marker.continuity_abandonment_scope, marker.continuity_abandoned_at) == original_marker
+
+
 async def test_request_path_retires_an_owner_with_no_recovery_horizon(
     async_session_factory: Callable[[], AsyncSession],
     coordinator: DurableBridgeSessionCoordinator,

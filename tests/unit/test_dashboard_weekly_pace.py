@@ -529,3 +529,13 @@ def test_weekly_pace_calculates_estimated_full_weekly_limit_cost() -> None:
     assert pace.used_cost_usd == 50.0
     # $50.0 / (20.0 / 100.0) = $250.0
     assert pace.estimated_full_weekly_limit_cost_usd == 250.0
+
+
+def test_weekly_pace_reserves_capacity_without_scaling_observed_burn():
+    summary = _summary("capped", used_percent=54, reset_in_hours=60, capacity=1000)
+    history = {"capped": _three_hour_history("capped", final_used_percent=54, hourly_delta=2)}
+    uncapped = _build([summary], history)
+    capped = _build([summary.model_copy(update={"effective_limit_secondary": 80})], history)
+    assert capped.total_full_credits == pytest.approx(800)
+    assert capped.total_actual_remaining_credits == pytest.approx(260)
+    assert capped.burn_rate_recent_credits_per_hour == pytest.approx(uncapped.burn_rate_recent_credits_per_hour)

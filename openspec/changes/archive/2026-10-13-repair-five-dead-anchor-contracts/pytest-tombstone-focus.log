@@ -1,0 +1,8 @@
+....                                                                     [100%]
+============================== warnings summary ===============================
+tests/integration/test_dead_anchor_contracts.py::test_submit_time_tombstone_refusal_releases_carriers_but_guards_deltas[/backend-api/codex/responses]
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+4 passed, 24 deselected, 1 warning in 7.14s

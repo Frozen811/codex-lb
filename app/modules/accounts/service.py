@@ -22,6 +22,10 @@ from app.core.auth import (
     token_expiry_epoch_ms,
 )
 from app.core.auth.refresh import RefreshError
+from app.core.cache.invalidation import (
+    NAMESPACE_ACCOUNT_SELECTION,
+    bump_cache_invalidation_local,
+)
 from app.core.clients.http import lease_http_session
 from app.core.clients.usage import (
     ConsumeRateLimitResetCreditResponse,
@@ -44,7 +48,7 @@ from app.db.session import get_background_session
 from app.modules.accounts.auth_manager import AuthManager
 from app.modules.accounts.deletion import request_account_deletion_run
 from app.modules.accounts.mappers import build_account_summaries, build_account_usage_trends
-from app.modules.accounts.repository import AccountsRepository
+from app.modules.accounts.repository import AccountsRepository, AccountUsageLimitConfiguration
 from app.modules.accounts.schemas import (
     AccountAdditionalQuota,
     AccountAdditionalWindow,
@@ -80,6 +84,7 @@ from app.modules.usage.additional_quota_keys import (
     get_additional_display_label_for_quota_key,
     get_additional_quota_routing_policy,
 )
+from app.modules.usage.mappers import usage_history_to_window_row
 from app.modules.usage.repository import AdditionalUsageRepository, UsageRepository
 from app.modules.usage.updater import AdditionalUsageRepositoryPort, UsageUpdater
 
@@ -500,7 +505,9 @@ class AccountsService:
             opencode_auth_json=opencode_auth_json,
         )
 
-    async def import_account(self, raw: bytes | AuthFile) -> AccountImportResponse:
+    async def import_account(
+        self, raw: bytes | AuthFile, *, restore_account_id: str | None = None
+    ) -> AccountImportResponse:
         if isinstance(raw, AuthFile):
             auth = raw
         else:
@@ -532,7 +539,20 @@ class AccountsService:
             deactivation_reason=None,
         )
 
-        saved = await self._repo.upsert_account_slot(account)
+        if restore_account_id is None:
+            saved = await self._repo.upsert_account_slot(account)
+        else:
+            existing = await self._repo.get_by_id(restore_account_id)
+            if (
+                existing is not None
+                and existing.delete_requested_at is None
+                and (existing.chatgpt_account_id, existing.email, existing.workspace_id, existing.workspace_label)
+                == (account.chatgpt_account_id, account.email, account.workspace_id, account.workspace_label)
+            ):
+                account.id = existing.id
+            saved = await self._repo.upsert_account_slot(
+                account, preserve_unknown_workspace_duplicates=False, preserve_identity_slots=True
+            )
         import_usage_refresh_allowed = await self._import_usage_refresh_allowed(saved)
         if not import_usage_refresh_allowed:
             await self._repo.update_status(
@@ -669,6 +689,33 @@ class AccountsService:
             get_account_selection_cache().invalidate()
         return result
 
+    async def set_usage_limit(
+        self,
+        account_id: str,
+        *,
+        enabled: bool,
+        percent: float | None,
+        update_percent: bool,
+        percent_5h: float | None = None,
+        percent_weekly: float | None = None,
+        update_5h: bool = False,
+        update_weekly: bool = False,
+    ) -> AccountUsageLimitConfiguration | None:
+        result = await self._repo.update_usage_limit(
+            account_id,
+            enabled=enabled,
+            percent=percent,
+            update_percent=update_percent,
+            percent_5h=percent_5h,
+            percent_weekly=percent_weekly,
+            update_5h=update_5h,
+            update_weekly=update_weekly,
+        )
+        if result is not None:
+            get_account_selection_cache().invalidate(propagate=False)
+            await bump_cache_invalidation_local(NAMESPACE_ACCOUNT_SELECTION)
+        return result
+
     async def delete_account(self, account_id: str, *, delete_history: bool = False) -> bool:
         # Fast path: stamp the pending-deletion marker (terminal status, hidden
         # from listings, sticky/bridge cleanup) and return in milliseconds; the
@@ -724,10 +771,17 @@ class AccountsService:
                 email=account.email,
                 alias=account.alias,
                 plan_type=account.plan_type,
+                workspace_id=account.workspace_id,
+                workspace_label=account.workspace_label,
+                seat_type=account.seat_type,
                 status=account.status.value if hasattr(account.status, "value") else str(account.status),
                 routing_policy=getattr(account, "routing_policy", "normal"),
                 limit_warmup=getattr(account, "limit_warmup_enabled", False),
                 quota_limit_percent=account.quota_limit_percent,
+                usage_limit_enabled=bool(account.usage_limit_enabled),
+                usage_limit_percent=account.usage_limit_percent,
+                usage_limit_5h_percent=account.usage_limit_5h_percent,
+                usage_limit_weekly_percent=account.usage_limit_weekly_percent,
                 tokens=tokens,
                 created_at=account.created_at,
             )
@@ -760,17 +814,39 @@ class AccountsService:
                     ),
                     email=item.email,
                     plan_type=item.plan_type,
+                    workspace_id=item.workspace_id,
+                    workspace_label=item.workspace_label,
+                    seat_type=item.seat_type,
                     account_id=item.tokens.account_id,
                 )
-                await self.import_account(auth)
-                if item.alias:
-                    await self.set_account_alias(item.id, item.alias)
-                if item.routing_policy:
-                    await self.set_routing_policy(item.id, item.routing_policy)
-                if item.limit_warmup:
-                    await self.set_limit_warmup_enabled(item.id, True)
+                imported = await self.import_account(auth, restore_account_id=item.id)
+                if "alias" in item.model_fields_set:
+                    await self.set_account_alias(imported.account_id, item.alias)
+                if "routing_policy" in item.model_fields_set:
+                    await self.set_routing_policy(imported.account_id, item.routing_policy)
+                if "limit_warmup" in item.model_fields_set:
+                    await self.set_limit_warmup_enabled(imported.account_id, item.limit_warmup)
                 if "quota_limit_percent" in item.model_fields_set:
-                    await self.set_quota_limit(item.id, item.quota_limit_percent)
+                    await self.set_quota_limit(imported.account_id, item.quota_limit_percent)
+                if item.usage_limit_enabled is not None and not (
+                    item.quota_limit_percent == 0
+                    and not item.usage_limit_enabled
+                    and item.usage_limit_percent is None
+                    and item.usage_limit_5h_percent is None
+                    and item.usage_limit_weekly_percent is None
+                ):
+                    await self.set_usage_limit(
+                        imported.account_id,
+                        enabled=item.usage_limit_enabled,
+                        percent=item.usage_limit_percent,
+                        update_percent="usage_limit_percent" in item.model_fields_set,
+                        percent_5h=item.usage_limit_5h_percent,
+                        percent_weekly=item.usage_limit_weekly_percent,
+                        update_5h="usage_limit_5h_percent" in item.model_fields_set,
+                        update_weekly="usage_limit_weekly_percent" in item.model_fields_set,
+                    )
+                if item.status == "paused":
+                    await self.pause_account(imported.account_id)
                 restored_count += 1
             except Exception as exc:
                 failed_count += 1
@@ -854,8 +930,8 @@ class AccountsService:
         primary_entry = await self._usage_repo.latest_entry_for_account(account_id, window="primary")
         secondary_entry = await self._usage_repo.latest_entry_for_account(account_id, window="secondary")
         return (
-            primary_entry.used_percent if primary_entry is not None else None,
-            secondary_entry.used_percent if secondary_entry is not None else None,
+            usage_history_to_window_row(primary_entry).used_percent if primary_entry is not None else None,
+            usage_history_to_window_row(secondary_entry).used_percent if secondary_entry is not None else None,
         )
 
     async def _send_probe_request(

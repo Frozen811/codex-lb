@@ -1,0 +1,8 @@
+..                                                                       [100%]
+============================== warnings summary ===============================
+tests/integration/test_http_responses_bridge.py::test_backend_responses_goal_restart_keeps_authority_for_same_request_reconnect
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2 passed, 1 warning in 4.20s

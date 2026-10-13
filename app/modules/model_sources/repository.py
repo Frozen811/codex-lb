@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import ColumnElement, and_, delete, or_, select
+from sqlalchemy import ColumnElement, and_, delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -18,8 +18,14 @@ def _enablement_filter(only_disabled: bool) -> ColumnElement[bool]:
     subscription account, which rejects the model outright.
     """
     if only_disabled:
-        return or_(ModelSource.is_enabled.is_(False), ModelSourceModel.is_enabled.is_(False))
-    return and_(ModelSource.is_enabled.is_(True), ModelSourceModel.is_enabled.is_(True))
+        return or_(
+            ModelSource.is_enabled.is_(False),
+            ModelSourceModel.is_enabled.is_(False),
+            ModelSourceModel.is_available.is_(False),
+        )
+    return and_(
+        ModelSource.is_enabled.is_(True), ModelSourceModel.is_enabled.is_(True), ModelSourceModel.is_available.is_(True)
+    )
 
 
 class ModelSourcesRepository:
@@ -118,6 +124,7 @@ class ModelSourcesRepository:
             .where(ModelSource.supports_audio_transcriptions.is_(True))
             .where(ModelSourceModel.model == model)
             .where(ModelSourceModel.is_enabled.is_(True))
+            .where(ModelSourceModel.is_available.is_(True))
             .order_by(ModelSource.name, ModelSource.id)
             .limit(1)
         )
@@ -143,6 +150,7 @@ class ModelSourcesRepository:
             .where(ModelSource.supports_embeddings.is_(True))
             .where(ModelSourceModel.model == model)
             .where(ModelSourceModel.is_enabled.is_(True))
+            .where(ModelSourceModel.is_available.is_(True))
             .order_by(ModelSource.name, ModelSource.id)
             .limit(1)
         )
@@ -193,6 +201,14 @@ class ModelSourcesRepository:
 
     async def refresh_models(self, source: ModelSource) -> None:
         await self._session.refresh(source, attribute_names=["models"])
+
+    async def invalidate_catalog(self, source_id: str) -> None:
+        await self._session.execute(
+            update(ModelSource)
+            .where(ModelSource.id == source_id)
+            .values(catalog_revision=ModelSource.catalog_revision + 1)
+            .execution_options(synchronize_session=False)
+        )
 
     async def commit(self) -> None:
         await self._session.commit()

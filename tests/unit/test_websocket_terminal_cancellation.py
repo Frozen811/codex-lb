@@ -7,7 +7,7 @@ from collections import deque
 from contextlib import asynccontextmanager, suppress
 from types import SimpleNamespace
 from typing import Any, AsyncIterator, cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import anyio
 import pytest
@@ -16,15 +16,26 @@ from fastapi import WebSocket
 from app.core import shutdown as shutdown_state
 from app.core.clients.proxy_websocket import UpstreamWebSocket
 from app.core.clock import REAL_SCHEDULER, Scheduler
+from app.core.usage.account_limits import AccountUsageLimitState
 from app.core.utils.time import utcnow
 from app.db.models import Account
 from app.modules.api_keys.service import ApiKeyData, ApiKeyUsageReservationData
 from app.modules.proxy import service as proxy_service
 from app.modules.proxy._service import request_log as request_log_mixin
 from app.modules.proxy._service.websocket import mixin as websocket_mixin
+from app.modules.proxy.load_balancer import LoadBalancer
+from app.modules.usage.authorization import OwnerAuthorization, OwnerAuthorizationKind
 from tests.simulation.virtual_time import VirtualClock, VirtualScheduler
 
 pytestmark = pytest.mark.unit
+
+
+@pytest.fixture(autouse=True)
+def _usage_policy_available(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def authorize_account_fresh(_self: LoadBalancer, _account_id: str) -> OwnerAuthorization:
+        return OwnerAuthorization(OwnerAuthorizationKind.ALLOWED, AccountUsageLimitState.DISABLED)
+
+    monkeypatch.setattr(LoadBalancer, "authorize_account_fresh", authorize_account_fresh)
 
 
 class _RequestLogsRecorder:
@@ -2290,6 +2301,7 @@ async def test_handle_terminal_upstream_websocket_receive_frameless_drop_neutral
     pending_requests = deque([request_state])
     pending_lock = anyio.Lock()
     upstream = AsyncMock()
+    upstream.archive_received = Mock()
     message = SimpleNamespace(
         kind="close",
         text=None,

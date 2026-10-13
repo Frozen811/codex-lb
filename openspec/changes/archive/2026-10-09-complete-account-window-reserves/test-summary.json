@@ -1,0 +1,34 @@
+{
+  "final-backend": {
+    "passed": 4752,
+    "skipped": 25,
+    "failures": 0
+  },
+  "prior-package": {
+    "passed": 256,
+    "skipped": 0,
+    "failures": 0
+  },
+  "migration-compat": {
+    "passed": 29,
+    "skipped": 0,
+    "failures": 0
+  },
+  "admission-bounds": {
+    "passed": 16,
+    "skipped": 0,
+    "failures": 0
+  },
+  "postgresql": {
+    "passed": 20,
+    "skipped": 2,
+    "failures": 0
+  },
+  "mysql": {
+    "passed": 20,
+    "skipped": 2,
+    "failures": 0
+  },
+  "distinct_sqlite_python_passes": 5017,
+  "frontend_passes": 692
+}

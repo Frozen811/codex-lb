@@ -1,0 +1,90 @@
+name: Migration duration
+
+on:
+  pull_request:
+    paths:
+      - "app/db/**"
+      - "scripts/benchmark_migrations.py"
+      - "scripts/check_migration_durations.py"
+      - "scripts/check_migration_topology.py"
+      - "tests/unit/test_migration_duration_gate.py"
+      - "tests/integration/test_migration_duration_benchmark.py"
+      - ".github/workflows/migration-duration.yml"
+      - "uv.lock"
+  push:
+    branches: [main]
+    paths:
+      - "app/db/**"
+      - "scripts/benchmark_migrations.py"
+      - "scripts/check_migration_durations.py"
+      - "scripts/check_migration_topology.py"
+      - ".github/workflows/migration-duration.yml"
+      - "uv.lock"
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+    inputs:
+      base_ref:
+        description: "Baseline Git ref (latest-stable selects a reachable vX.Y.Z tag)"
+        default: latest-stable
+      rows:
+        description: "Optional synthetic fixture rows (default is owned by the benchmark script)"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: migration-duration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  duration:
+    name: PostgreSQL synthetic migration duration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: codex_test
+          POSTGRES_PASSWORD: codex_test
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U codex_test -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout history and tags
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install frozen dependencies
+        run: uv sync --dev --frozen
+      - name: Check static SQL safety
+        run: uv run --no-sync python scripts/check_migration_durations.py
+      - name: Benchmark pending migrations
+        env:
+          MIGRATION_BENCHMARK_SERVER_URL: postgresql+psycopg://codex_test:codex_test@127.0.0.1:5432/postgres
+          BASE_REF: ${{ inputs.base_ref || 'latest-stable' }}
+          FIXTURE_ROWS: ${{ inputs.rows }}
+        run: |
+          args=(--base-ref "$BASE_REF" --output migration-duration.json --summary "$GITHUB_STEP_SUMMARY")
+          if [[ -n "$FIXTURE_ROWS" ]]; then args+=(--rows "$FIXTURE_ROWS"); fi
+          uv run --no-sync python -m scripts.benchmark_migrations "${args[@]}"
+      - name: Save timings including failed migrations
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: migration-duration
+          path: migration-duration.json
+          if-no-files-found: warn

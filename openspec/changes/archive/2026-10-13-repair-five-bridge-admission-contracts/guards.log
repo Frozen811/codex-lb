@@ -1,0 +1,26 @@
+uv run --no-sync python scripts/check_proxy_architecture.py
+proxy architecture checks passed
+
+uv run --no-sync python scripts/check_cancellation_safety.py
+cancellation safety checks passed
+
+uv run --no-sync python scripts/check_proxy_timing_seams.py
+proxy timing seam checks passed
+
+uv run --no-sync python scripts/check_settings_tiers.py
+settings fields: 98/98; tiers: T0=13, T1=51, T2=0, T3=30, T4=4
+check_settings_tiers: ok
+
+uv run --no-sync python scripts/check_migration_topology.py
+revisions: 275; head: 20261010_000000_add_source_catalog_discovery; ratchet: 20260911_000000; base-ref check: origin/main (+12 revision(s) on this checkout)
+migration topology checks passed
+
+uv run --no-sync python scripts/check_migration_durations.py
+All static migration safety checks passed; runtime duration is not measured.
+
+uv run --no-sync python .github/scripts/check_simplicity_budgets.py
+README lines (all-contributors block excluded): 218/225 OK
+README top-level headings (h1+h2, fenced code excluded): 10/10 OK
+env example lines: 54/60 OK
+core nav items (CORE_NAV_ITEMS): 5/5 OK
+tracked root entries outside allowlist: 0/0 OK

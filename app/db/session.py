@@ -393,7 +393,9 @@ SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSe
 _background_engine: AsyncEngine | None = None
 _background_session_factory: async_sessionmaker[AsyncSession] | None = None
 _sqlite_writer_lock: anyio.Lock | None = None
-_SQLITE_WRITER_SECTION_DEPTH: ContextVar[int] = ContextVar("_SQLITE_WRITER_SECTION_DEPTH", default=0)
+_SQLITE_WRITER_SECTION_OWNER: ContextVar[asyncio.Task[object] | None] = ContextVar(
+    "_SQLITE_WRITER_SECTION_OWNER", default=None
+)
 _sqlite_lifetime_lock: sqlite3.Connection | None = None
 _sqlite_lifetime_lock_path: Path | None = None
 
@@ -758,6 +760,25 @@ async def _reclaim_wedged_sqlite_session(
     # reclamation attempts below, so the deferred bookkeeping close follows
     # those attempts and completion of the original teardown.
     _wedged_teardown_cleanup_tasks.add(abandoned)
+    reclaim = asyncio.create_task(
+        _reclaim_wedged_sqlite_connections(
+            session, abandoned, connections, phase=phase, elapsed_seconds=elapsed_seconds
+        )
+    )
+    _wedged_teardown_cleanup_tasks.add(reclaim)
+    reclaim.add_done_callback(_wedged_teardown_cleanup_tasks.discard)
+    await _shielded(reclaim)
+
+
+async def _reclaim_wedged_sqlite_connections(
+    session: AsyncSession,
+    abandoned: asyncio.Task[object],
+    connections: tuple[Connection, ...],
+    *,
+    phase: str,
+    elapsed_seconds: float,
+) -> None:
+    """Finish reclamation before the caller can propagate cancellation."""
     for connection in connections:
         if connection.closed:
             # The teardown that outlived the bound got far enough to close this
@@ -1076,18 +1097,19 @@ async def sqlite_writer_section() -> AsyncIterator[None]:
     if not _is_sqlite_url(database_url) or _is_sqlite_memory_url(database_url):
         yield
         return
-    depth = _SQLITE_WRITER_SECTION_DEPTH.get()
-    if depth > 0:
+    task = asyncio.current_task()
+    # Context variables are copied into child tasks; admission ownership is not.
+    if task is not None and _SQLITE_WRITER_SECTION_OWNER.get() is task:
         yield
         return
     if _sqlite_writer_lock is None:
         _sqlite_writer_lock = anyio.Lock()
     async with _sqlite_writer_lock:
-        token = _SQLITE_WRITER_SECTION_DEPTH.set(depth + 1)
+        token = _SQLITE_WRITER_SECTION_OWNER.set(task)
         try:
             yield
         finally:
-            _SQLITE_WRITER_SECTION_DEPTH.reset(token)
+            _SQLITE_WRITER_SECTION_OWNER.reset(token)
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:

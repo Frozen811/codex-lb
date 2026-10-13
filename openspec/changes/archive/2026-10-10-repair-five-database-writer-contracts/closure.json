@@ -1,0 +1,42 @@
+{
+  "selected_ids": [
+    "UP-ISSUE-2447",
+    "UP-ISSUE-1949",
+    "UP-ISSUE-1682",
+    "UP-ISSUE-1981",
+    "UP-PR-2460"
+  ],
+  "changed_source_ids": [
+    "UP-ISSUE-1682",
+    "UP-ISSUE-1949",
+    "UP-ISSUE-1981",
+    "UP-ISSUE-2447",
+    "UP-PR-2460"
+  ],
+  "unchanged_source_rows": 333,
+  "source_rows_total": 338,
+  "source_queue": {
+    "closed_local": 156,
+    "partial": 7,
+    "unverified": 175
+  },
+  "initial_dirty_file_count": 221,
+  "byte_preserved_unrelated_dirty_files": 220,
+  "shared_adapted_prior_files": [
+    "issues-check.md"
+  ],
+  "saved_row_readback": {
+    "UP-ISSUE-2447": "| [UP-ISSUE-2447](https://github.com/Soju06/codex-lb/issues/2447) | SQLite database is locked during login/OAuth under concurrent streaming load | РЕШЕНО | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | §81: Limiter/OAuth writes serialized; реальные password login/browser OAuth при занятой SQLite возвращают200. Existing auth/OAuth suites PASS; continuous production streaming отдельно. [verification](openspec/changes/archive/2026-10-10-repair-five-database-writer-contracts/verification.md) |",
+    "UP-ISSUE-1949": "| [UP-ISSUE-1949](https://github.com/Soju06/codex-lb/issues/1949) | bug: encryption-key fingerprint stamp flakes CI on SQLite lock contention | РЕШЕНО | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | §81: Fingerprint session открывается после writer admission, cleanup до release; matching/mismatch/external retry/privacy contracts PASS. Loaded cloud runner и live startup отдельно. [verification](openspec/changes/archive/2026-10-10-repair-five-database-writer-contracts/verification.md) |",
+    "UP-ISSUE-1682": "| [UP-ISSUE-1682](https://github.com/Soju06/codex-lb/issues/1682) | bug: leader lease loss on single-instance SQLite causes a self-sustaining 17-minute `database is locked` stall that blocks leader re-election | РЕШЕНО | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | §81: Reentrancy принадлежит текущей task; child/waiter cancellation и real SQLite rollback→lease acquire/renew/release PASS. Database-clock expiry, heartbeat и watchdog сохранены; historical macOS stall отдельно. [verification](openspec/changes/archive/2026-10-10-repair-five-database-writer-contracts/verification.md) |",
+    "UP-ISSUE-1981": "| [UP-ISSUE-1981](https://github.com/Soju06/codex-lb/issues/1981) | bug: wedged-teardown interrupt fails with \"Cannot operate on a closed database\", then the process holds the SQLite write lock permanently (55 min of datab… | РЕШЕНО | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | §81: В local cancellation/interrupt recovery scope: reclaim cancellation отложена до invalidation/callbacks; closed-driver error, next-writer recovery и late-close drain PASS. Невосстановимый native zombie/live55min incident отдельно. [verification](openspec/changes/archive/2026-10-10-repair-five-database-writer-contracts/verification.md) |",
+    "UP-PR-2460": "| [UP-PR-2460](https://github.com/Soju06/codex-lb/pull/2460) | PR #2460: fix(dashboard-users): take the owner row before the owned-key cascade reads it | Раздел 5, L773 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §81: Existing owner-before-key lock order и activation-before-mutation независимо подтверждены; SQLite API suite и3 native PostgreSQL16 race tests PASS; три Makefile targets уже присутствуют. Cloud CI отдельно. [verification](openspec/changes/archive/2026-10-10-repair-five-database-writer-contracts/verification.md) |"
+  },
+  "final_head": "7e3779ffaea1a27c29710a7d496e8fa037131f98",
+  "branch": "main",
+  "commits_pushes_deployments": false,
+  "sqlite_distinct_passes": 331,
+  "postgres_passes": 3,
+  "windows_uvloop_skips": 2,
+  "unexpected_prior_dirty_changes": []
+}

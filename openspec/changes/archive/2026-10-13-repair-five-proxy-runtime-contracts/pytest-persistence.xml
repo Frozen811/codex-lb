@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="4" time="4.878" timestamp="2026-10-13T09:14:39.328923+03:00" hostname="extr3-dekstop"><testcase classname="tests.integration.test_runtime_persistence_observation" name="test_drain_status_observes_real_http_reservation_after_response_close[/backend-api/codex/responses]" time="1.432"><failure message="AssertionError: assert 'finalized' == 'committed'&#10;  &#10;  - committed&#10;  + finalized">tests\integration\test_runtime_persistence_observation.py:96: in test_drain_status_observes_real_http_reservation_after_response_close
+    assert reservation.status == "committed"
+E   AssertionError: assert 'finalized' == 'committed'
+E     
+E     - committed
+E     + finalized</failure></testcase><testcase classname="tests.integration.test_runtime_persistence_observation" name="test_drain_status_observes_real_http_reservation_after_response_close[/backend-api/codex/responses/]" time="0.963"><failure message="AssertionError: assert 'finalized' == 'committed'&#10;  &#10;  - committed&#10;  + finalized">tests\integration\test_runtime_persistence_observation.py:96: in test_drain_status_observes_real_http_reservation_after_response_close
+    assert reservation.status == "committed"
+E   AssertionError: assert 'finalized' == 'committed'
+E     
+E     - committed
+E     + finalized</failure></testcase><testcase classname="tests.integration.test_runtime_persistence_observation" name="test_drain_status_observes_real_http_reservation_after_response_close[/v1/responses]" time="0.936"><failure message="AssertionError: assert 'finalized' == 'committed'&#10;  &#10;  - committed&#10;  + finalized">tests\integration\test_runtime_persistence_observation.py:96: in test_drain_status_observes_real_http_reservation_after_response_close
+    assert reservation.status == "committed"
+E   AssertionError: assert 'finalized' == 'committed'
+E     
+E     - committed
+E     + finalized</failure></testcase><testcase classname="tests.integration.test_runtime_persistence_observation" name="test_drain_status_observes_real_http_reservation_after_response_close[/v1/responses/]" time="0.991"><failure message="AssertionError: assert 'finalized' == 'committed'&#10;  &#10;  - committed&#10;  + finalized">tests\integration\test_runtime_persistence_observation.py:96: in test_drain_status_observes_real_http_reservation_after_response_close
+    assert reservation.status == "committed"
+E   AssertionError: assert 'finalized' == 'committed'
+E     
+E     - committed
+E     + finalized</failure></testcase></testsuite></testsuites>

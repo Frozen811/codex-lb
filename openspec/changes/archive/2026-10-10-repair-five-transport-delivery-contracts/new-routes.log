@@ -1,0 +1,33 @@
+.F........                                                               [100%]
+================================== FAILURES ===================================
+_ test_budget_overflow_returns_ordered_sse_then_allows_same_session_turn[/backend-api/codex/responses] _
+tests\integration\test_transport_delivery_routes.py:83: in test_budget_overflow_returns_ordered_sse_then_allows_same_session_turn
+    assert [event["type"] for event in events] == [
+E   AssertionError: assert ['codex.keepa...ponse.failed'] == ['response.cr...ponse.failed']
+E     
+E     At index 0 diff: 'codex.keepalive' != 'response.created'
+E     Left contains one more item: 'response.failed'
+E     Use -v to get more diff
+----------------------------- Captured log setup ------------------------------
+WARNING  app.main:bootstrap.py:54 
+============================================
+  Dashboard bootstrap token (first-run):
+  RE9r9RwrS_MtP5MIXZbjsmH0c7xH9dT49Du2B8wEcVA
+
+  Use this token for initial remote setup.
+  It is shared across replicas and stays
+  valid until a password is set.
+============================================
+------------------------------ Captured log call ------------------------------
+WARNING  app.modules.proxy.service:upstream_events.py:432 HTTP bridge downstream consumer exceeded delivery limit request_id=ws_2454ecf6ce40421bb3370f404ef4df13 budget_exhausted=True
+---------------------------- Captured log teardown ----------------------------
+WARNING  app.db.session:session.py:525 Cannot record a clean SQLite shutdown without the lifetime lock path=C:\Users\ext\AppData\Local\Temp\codex-lb-master-7363u407\test.db; the next startup will run the integrity check
+============================== warnings summary ===============================
+tests/integration/test_transport_delivery_routes.py::test_budget_overflow_returns_ordered_sse_then_allows_same_session_turn[/v1/responses]
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/integration/test_transport_delivery_routes.py::test_budget_overflow_returns_ordered_sse_then_allows_same_session_turn[/backend-api/codex/responses]
+1 failed, 9 passed, 1 warning in 9.55s

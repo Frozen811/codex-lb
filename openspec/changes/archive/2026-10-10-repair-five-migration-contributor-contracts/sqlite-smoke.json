@@ -1,0 +1,31 @@
+{
+  "backend": "sqlite",
+  "rows": 50,
+  "baseline": "20260928_020000_add_request_logs_facet_indexes",
+  "budget_seconds": 30.0,
+  "timings": [
+    {
+      "revision": "20261007_000000_add_account_quota_limit",
+      "elapsed_seconds": 0.008314200000313576,
+      "status": "executed"
+    },
+    {
+      "revision": "20261009_000000_activate_reset_warmup_threshold",
+      "elapsed_seconds": 0.006710400000883965,
+      "status": "executed"
+    },
+    {
+      "revision": "20261009_010000_add_account_window_reserves",
+      "elapsed_seconds": 0.023741000000882195,
+      "status": "executed"
+    },
+    {
+      "revision": "20261010_000000_add_source_catalog_discovery",
+      "elapsed_seconds": 0.013958999999886146,
+      "status": "executed"
+    }
+  ],
+  "failure": null,
+  "cleanup_complete": true,
+  "passed": true
+}

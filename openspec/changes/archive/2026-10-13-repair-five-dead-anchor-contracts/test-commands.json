@@ -1,0 +1,44 @@
+[
+  [
+    "uv",
+    "run",
+    "pytest",
+    "tests/unit/test_durable_bridge_owner_retirement.py",
+    "tests/unit/test_durable_bridge_sessions.py",
+    "tests/integration/test_dead_anchor_contracts.py",
+    "-q",
+    "--junitxml=openspec/changes/repair-five-dead-anchor-contracts/pytest-final-owner.xml"
+  ],
+  [
+    "uv",
+    "run",
+    "pytest",
+    "tests/unit/test_proxy_http_bridge.py",
+    "-q",
+    "-k",
+    "tombstone or invalidate_denied or denied_anchor or dead_owner or client_supplied_anchor or file_pin_owner",
+    "--junitxml=openspec/changes/repair-five-dead-anchor-contracts/pytest-final-anchor.xml"
+  ],
+  [
+    "uv",
+    "run",
+    "pytest",
+    "tests/integration/test_http_responses_bridge.py::test_v1_responses_http_bridge_reports_a_client_anchor_on_a_dead_owner_as_not_found",
+    "tests/integration/test_http_responses_bridge.py::test_v1_responses_http_bridge_rebinds_immediately_when_the_owner_cannot_return",
+    "tests/integration/test_http_responses_bridge.py::test_v1_responses_http_bridge_rebinds_after_upstream_previous_response_not_found",
+    "tests/integration/test_http_responses_bridge.py::test_v1_responses_http_bridge_rebinds_after_upstream_invalid_request_previous_response_not_found_param",
+    "tests/integration/test_http_responses_bridge.py::test_v1_responses_http_bridge_stops_reinjecting_an_anchor_upstream_denied",
+    "tests/integration/test_http_responses_bridge.py::test_backend_responses_http_bridge_file_owner_overrides_soft_locality",
+    "tests/integration/test_proxy_responses.py::test_v1_responses_previous_response_not_found_without_http_bridge_returns_stream_incomplete",
+    "tests/integration/test_proxy_responses.py::test_v1_responses_missing_previous_response_owner_fails_closed_before_account_switch",
+    "tests/integration/test_proxy_responses.py::test_v1_responses_previous_response_owner_lookup_failure_without_http_bridge_returns_upstream_unavailable",
+    "tests/integration/test_proxy_websocket_responses.py::test_responses_websocket_replays_client_full_resend_previous_response_miss_without_anchor",
+    "tests/integration/test_proxy_websocket_responses.py::test_v1_responses_websocket_masks_short_previous_response_not_found_without_retry",
+    "tests/integration/test_proxy_websocket_responses.py::test_v1_responses_websocket_masks_invalid_request_previous_response_not_found_without_retry",
+    "tests/integration/test_proxy_websocket_responses.py::test_backend_responses_websocket_masks_short_previous_response_not_found_without_retry",
+    "tests/integration/test_proxy_websocket_responses.py::test_backend_responses_websocket_connect_failure_masks_previous_response_not_found",
+    "tests/integration/test_proxy_websocket_responses.py::test_backend_responses_websocket_never_exposes_raw_previous_response_id_to_client",
+    "-q",
+    "--junitxml=openspec/changes/repair-five-dead-anchor-contracts/pytest-final-transport.xml"
+  ]
+]

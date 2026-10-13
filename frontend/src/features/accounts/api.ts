@@ -15,6 +15,8 @@ import {
   AccountUsageResetConsumeRequestSchema,
   AccountUsageResetConsumeResponseSchema,
   AccountUsageResetCreditsResponseSchema,
+  AccountUsageLimitUpdateRequestSchema,
+  AccountUsageLimitUpdateResponseSchema,
   AccountTrendsResponseSchema,
   AccountProbeRequestSchema,
   AccountProbeResponseSchema,
@@ -32,6 +34,7 @@ import {
 } from "@/features/accounts/schemas";
 import type {
   AccountRoutingPolicy,
+  AccountUsageLimitUpdateRequest,
   AccountUsageResetConsumeRequest,
 } from "@/features/accounts/schemas";
 
@@ -99,6 +102,18 @@ export function updateAccountRoutingPolicy(
   return put(
     `${ACCOUNTS_BASE_PATH}/${encodeURIComponent(accountId)}/routing-policy`,
     AccountRoutingPolicyUpdateResponseSchema,
+    { body: payload },
+  );
+}
+
+export function updateAccountUsageLimit(
+  accountId: string,
+  update: AccountUsageLimitUpdateRequest,
+) {
+  const payload = AccountUsageLimitUpdateRequestSchema.parse(update);
+  return put(
+    `${ACCOUNTS_BASE_PATH}/${encodeURIComponent(accountId)}/usage-limit`,
+    AccountUsageLimitUpdateResponseSchema,
     { body: payload },
   );
 }

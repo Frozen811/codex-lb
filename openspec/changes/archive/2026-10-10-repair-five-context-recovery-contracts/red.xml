@@ -1,0 +1,358 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="13" skipped="0" tests="18" time="8.184" timestamp="2026-10-10T13:15:35.614734+03:00" hostname="extr3-dekstop"><testcase classname="tests.unit.test_context_recovery_contracts" name="test_reconstruction_rejects_incomplete_or_conflicting_terminal_evidence[missing-done]" time="0.028"><failure message="assert RelocatedReplayBody(payload={'input': [{'role': 'user', 'content': 'first'}, {'type': 'message', 'role': 'assistant', ...tent': [{'type': 'output_text', 'text': 'answer'}]}, {'role': 'user', 'content': 'next'}]}, carries_durable_items=True) is None&#10; +  where RelocatedReplayBody(payload={'input': [{'role': 'user', 'content': 'first'}, {'type': 'message', 'role': 'assistant', ...tent': [{'type': 'output_text', 'text': 'answer'}]}, {'role': 'user', 'content': 'next'}]}, carries_durable_items=True) = _project(['data: {&quot;type&quot;: &quot;response.created&quot;, &quot;response&quot;: {&quot;id&quot;: &quot;resp_root&quot;}}\n\n', 'data: {&quot;type&quot;: &quot;response.output_item.adde...&quot;message&quot;, &quot;role&quot;: &quot;assistant&quot;, &quot;status&quot;: &quot;completed&quot;, &quot;content&quot;: [{&quot;type&quot;: &quot;output_text&quot;, &quot;text&quot;: &quot;answer&quot;}]}]}}\n\n'])">defect = 'missing-done'
+
+    @pytest.mark.parametrize(
+        "defect",
+        ["missing-done", "wrong-done-id", "wrong-terminal-id", "null-output", "missing-output-item", "wrong-output"],
+    )
+    def test_reconstruction_rejects_incomplete_or_conflicting_terminal_evidence(defect):
+        answer = _answer()
+        events = [
+            _event("response.created", response={"id": "resp_root"}),
+            _event("response.output_item.added", output_index=0, item={**answer, "status": "in_progress"}),
+        ]
+        if defect != "missing-done":
+            done = {**answer, "id": "msg_other"} if defect == "wrong-done-id" else answer
+            events.append(_event("response.output_item.done", output_index=0, item=done))
+        response = {"id": "resp_other" if defect == "wrong-terminal-id" else "resp_root", "output": [answer]}
+        if defect == "null-output":
+            response["output"] = None
+        elif defect == "missing-output-item":
+            response["output"] = [{**answer, "id": "msg_other"}]
+        elif defect == "wrong-output":
+            response["output"] = [{**answer, "content": [{"type": "output_text", "text": "changed"}]}]
+        events.append(_event("response.completed", response=response))
+    
+&gt;       assert _project(events) is None
+E       assert RelocatedReplayBody(payload={'input': [{'role': 'user', 'content': 'first'}, {'type': 'message', 'role': 'assistant', ...tent': [{'type': 'output_text', 'text': 'answer'}]}, {'role': 'user', 'content': 'next'}]}, carries_durable_items=True) is None
+E        +  where RelocatedReplayBody(payload={'input': [{'role': 'user', 'content': 'first'}, {'type': 'message', 'role': 'assistant', ...tent': [{'type': 'output_text', 'text': 'answer'}]}, {'role': 'user', 'content': 'next'}]}, carries_durable_items=True) = _project(['data: {"type": "response.created", "response": {"id": "resp_root"}}\n\n', 'data: {"type": "response.output_item.adde..."message", "role": "assistant", "status": "completed", "content": [{"type": "output_text", "text": "answer"}]}]}}\n\n'])
+
+tests\unit\test_context_recovery_contracts.py:66: AssertionError</failure></testcase><testcase classname="tests.unit.test_context_recovery_contracts" name="test_reconstruction_rejects_incomplete_or_conflicting_terminal_evidence[wrong-done-id]" time="0.002"><failure message="assert RelocatedReplayBody(payload={'input': [{'role': 'user', 'content': 'first'}, {'type': 'message', 'role': 'assistant', ...tent': [{'type': 'output_text', 'text': 'answer'}]}, {'role': 'user', 'content': 'next'}]}, carries_durable_items=True) is None&#10; +  where RelocatedReplayBody(payload={'input': [{'role': 'user', 'content': 'first'}, {'type': 'message', 'role': 'assistant', ...tent': [{'type': 'output_text', 'text': 'answer'}]}, {'role': 'user', 'content': 'next'}]}, carries_durable_items=True) = _project(['data: {&quot;type&quot;: &quot;response.created&quot;, &quot;response&quot;: {&quot;id&quot;: &quot;resp_root&quot;}}\n\n', 'data: {&quot;type&quot;: &quot;response.output_item.adde...&quot;message&quot;, &quot;role&quot;: &quot;assistant&quot;, &quot;status&quot;: &quot;completed&quot;, &quot;content&quot;: [{&quot;type&quot;: &quot;output_text&quot;, &quot;text&quot;: &quot;answer&quot;}]}]}}\n\n'])">defect = 'wrong-done-id'
+
+    @pytest.mark.parametrize(
+        "defect",
+        ["missing-done", "wrong-done-id", "wrong-terminal-id", "null-output", "missing-output-item", "wrong-output"],
+    )
+    def test_reconstruction_rejects_incomplete_or_conflicting_terminal_evidence(defect):
+        answer = _answer()
+        events = [
+            _event("response.created", response={"id": "resp_root"}),
+            _event("response.output_item.added", output_index=0, item={**answer, "status": "in_progress"}),
+        ]
+        if defect != "missing-done":
+            done = {**answer, "id": "msg_other"} if defect == "wrong-done-id" else answer
+            events.append(_event("response.output_item.done", output_index=0, item=done))
+        response = {"id": "resp_other" if defect == "wrong-terminal-id" else "resp_root", "output": [answer]}
+        if defect == "null-output":
+            response["output"] = None
+        elif defect == "missing-output-item":
+            response["output"] = [{**answer, "id": "msg_other"}]
+        elif defect == "wrong-output":
+            response["output"] = [{**answer, "content": [{"type": "output_text", "text": "changed"}]}]
+        events.append(_event("response.completed", response=response))
+    
+&gt;       assert _project(events) is None
+E       assert RelocatedReplayBody(payload={'input': [{'role': 'user', 'content': 'first'}, {'type': 'message', 'role': 'assistant', ...tent': [{'type': 'output_text', 'text': 'answer'}]}, {'role': 'user', 'content': 'next'}]}, carries_durable_items=True) is None
+E        +  where RelocatedReplayBody(payload={'input': [{'role': 'user', 'content': 'first'}, {'type': 'message', 'role': 'assistant', ...tent': [{'type': 'output_text', 'text': 'answer'}]}, {'role': 'user', 'content': 'next'}]}, carries_durable_items=True) = _project(['data: {"type": "response.created", "response": {"id": "resp_root"}}\n\n', 'data: {"type": "response.output_item.adde..."message", "role": "assistant", "status": "completed", "content": [{"type": "output_text", "text": "answer"}]}]}}\n\n'])
+
+tests\unit\test_context_recovery_contracts.py:66: AssertionError</failure></testcase><testcase classname="tests.unit.test_context_recovery_contracts" name="test_reconstruction_rejects_incomplete_or_conflicting_terminal_evidence[wrong-terminal-id]" time="0.002"><failure message="assert RelocatedReplayBody(payload={'input': [{'role': 'user', 'content': 'first'}, {'type': 'message', 'role': 'assistant', ...tent': [{'type': 'output_text', 'text': 'answer'}]}, {'role': 'user', 'content': 'next'}]}, carries_durable_items=True) is None&#10; +  where RelocatedReplayBody(payload={'input': [{'role': 'user', 'content': 'first'}, {'type': 'message', 'role': 'assistant', ...tent': [{'type': 'output_text', 'text': 'answer'}]}, {'role': 'user', 'content': 'next'}]}, carries_durable_items=True) = _project(['data: {&quot;type&quot;: &quot;response.created&quot;, &quot;response&quot;: {&quot;id&quot;: &quot;resp_root&quot;}}\n\n', 'data: {&quot;type&quot;: &quot;response.output_item.adde...&quot;message&quot;, &quot;role&quot;: &quot;assistant&quot;, &quot;status&quot;: &quot;completed&quot;, &quot;content&quot;: [{&quot;type&quot;: &quot;output_text&quot;, &quot;text&quot;: &quot;answer&quot;}]}]}}\n\n'])">defect = 'wrong-terminal-id'
+
+    @pytest.mark.parametrize(
+        "defect",
+        ["missing-done", "wrong-done-id", "wrong-terminal-id", "null-output", "missing-output-item", "wrong-output"],
+    )
+    def test_reconstruction_rejects_incomplete_or_conflicting_terminal_evidence(defect):
+        answer = _answer()
+        events = [
+            _event("response.created", response={"id": "resp_root"}),
+            _event("response.output_item.added", output_index=0, item={**answer, "status": "in_progress"}),
+        ]
+        if defect != "missing-done":
+            done = {**answer, "id": "msg_other"} if defect == "wrong-done-id" else answer
+            events.append(_event("response.output_item.done", output_index=0, item=done))
+        response = {"id": "resp_other" if defect == "wrong-terminal-id" else "resp_root", "output": [answer]}
+        if defect == "null-output":
+            response["output"] = None
+        elif defect == "missing-output-item":
+            response["output"] = [{**answer, "id": "msg_other"}]
+        elif defect == "wrong-output":
+            response["output"] = [{**answer, "content": [{"type": "output_text", "text": "changed"}]}]
+        events.append(_event("response.completed", response=response))
+    
+&gt;       assert _project(events) is None
+E       assert RelocatedReplayBody(payload={'input': [{'role': 'user', 'content': 'first'}, {'type': 'message', 'role': 'assistant', ...tent': [{'type': 'output_text', 'text': 'answer'}]}, {'role': 'user', 'content': 'next'}]}, carries_durable_items=True) is None
+E        +  where RelocatedReplayBody(payload={'input': [{'role': 'user', 'content': 'first'}, {'type': 'message', 'role': 'assistant', ...tent': [{'type': 'output_text', 'text': 'answer'}]}, {'role': 'user', 'content': 'next'}]}, carries_durable_items=True) = _project(['data: {"type": "response.created", "response": {"id": "resp_root"}}\n\n', 'data: {"type": "response.output_item.adde..."message", "role": "assistant", "status": "completed", "content": [{"type": "output_text", "text": "answer"}]}]}}\n\n'])
+
+tests\unit\test_context_recovery_contracts.py:66: AssertionError</failure></testcase><testcase classname="tests.unit.test_context_recovery_contracts" name="test_reconstruction_rejects_incomplete_or_conflicting_terminal_evidence[null-output]" time="0.002"><failure message="assert RelocatedReplayBody(payload={'input': [{'role': 'user', 'content': 'first'}, {'type': 'message', 'role': 'assistant', ...tent': [{'type': 'output_text', 'text': 'answer'}]}, {'role': 'user', 'content': 'next'}]}, carries_durable_items=True) is None&#10; +  where RelocatedReplayBody(payload={'input': [{'role': 'user', 'content': 'first'}, {'type': 'message', 'role': 'assistant', ...tent': [{'type': 'output_text', 'text': 'answer'}]}, {'role': 'user', 'content': 'next'}]}, carries_durable_items=True) = _project(['data: {&quot;type&quot;: &quot;response.created&quot;, &quot;response&quot;: {&quot;id&quot;: &quot;resp_root&quot;}}\n\n', 'data: {&quot;type&quot;: &quot;response.output_item.adde...&quot;text&quot;: &quot;answer&quot;}]}}\n\n', 'data: {&quot;type&quot;: &quot;response.completed&quot;, &quot;response&quot;: {&quot;id&quot;: &quot;resp_root&quot;, &quot;output&quot;: null}}\n\n'])">defect = 'null-output'
+
+    @pytest.mark.parametrize(
+        "defect",
+        ["missing-done", "wrong-done-id", "wrong-terminal-id", "null-output", "missing-output-item", "wrong-output"],
+    )
+    def test_reconstruction_rejects_incomplete_or_conflicting_terminal_evidence(defect):
+        answer = _answer()
+        events = [
+            _event("response.created", response={"id": "resp_root"}),
+            _event("response.output_item.added", output_index=0, item={**answer, "status": "in_progress"}),
+        ]
+        if defect != "missing-done":
+            done = {**answer, "id": "msg_other"} if defect == "wrong-done-id" else answer
+            events.append(_event("response.output_item.done", output_index=0, item=done))
+        response = {"id": "resp_other" if defect == "wrong-terminal-id" else "resp_root", "output": [answer]}
+        if defect == "null-output":
+            response["output"] = None
+        elif defect == "missing-output-item":
+            response["output"] = [{**answer, "id": "msg_other"}]
+        elif defect == "wrong-output":
+            response["output"] = [{**answer, "content": [{"type": "output_text", "text": "changed"}]}]
+        events.append(_event("response.completed", response=response))
+    
+&gt;       assert _project(events) is None
+E       assert RelocatedReplayBody(payload={'input': [{'role': 'user', 'content': 'first'}, {'type': 'message', 'role': 'assistant', ...tent': [{'type': 'output_text', 'text': 'answer'}]}, {'role': 'user', 'content': 'next'}]}, carries_durable_items=True) is None
+E        +  where RelocatedReplayBody(payload={'input': [{'role': 'user', 'content': 'first'}, {'type': 'message', 'role': 'assistant', ...tent': [{'type': 'output_text', 'text': 'answer'}]}, {'role': 'user', 'content': 'next'}]}, carries_durable_items=True) = _project(['data: {"type": "response.created", "response": {"id": "resp_root"}}\n\n', 'data: {"type": "response.output_item.adde..."text": "answer"}]}}\n\n', 'data: {"type": "response.completed", "response": {"id": "resp_root", "output": null}}\n\n'])
+
+tests\unit\test_context_recovery_contracts.py:66: AssertionError</failure></testcase><testcase classname="tests.unit.test_context_recovery_contracts" name="test_reconstruction_rejects_incomplete_or_conflicting_terminal_evidence[missing-output-item]" time="0.002"><failure message="assert RelocatedReplayBody(payload={'input': [{'role': 'user', 'content': 'first'}, {'type': 'message', 'role': 'assistant', ...tent': [{'type': 'output_text', 'text': 'answer'}]}, {'role': 'user', 'content': 'next'}]}, carries_durable_items=True) is None&#10; +  where RelocatedReplayBody(payload={'input': [{'role': 'user', 'content': 'first'}, {'type': 'message', 'role': 'assistant', ...tent': [{'type': 'output_text', 'text': 'answer'}]}, {'role': 'user', 'content': 'next'}]}, carries_durable_items=True) = _project(['data: {&quot;type&quot;: &quot;response.created&quot;, &quot;response&quot;: {&quot;id&quot;: &quot;resp_root&quot;}}\n\n', 'data: {&quot;type&quot;: &quot;response.output_item.adde...&quot;message&quot;, &quot;role&quot;: &quot;assistant&quot;, &quot;status&quot;: &quot;completed&quot;, &quot;content&quot;: [{&quot;type&quot;: &quot;output_text&quot;, &quot;text&quot;: &quot;answer&quot;}]}]}}\n\n'])">defect = 'missing-output-item'
+
+    @pytest.mark.parametrize(
+        "defect",
+        ["missing-done", "wrong-done-id", "wrong-terminal-id", "null-output", "missing-output-item", "wrong-output"],
+    )
+    def test_reconstruction_rejects_incomplete_or_conflicting_terminal_evidence(defect):
+        answer = _answer()
+        events = [
+            _event("response.created", response={"id": "resp_root"}),
+            _event("response.output_item.added", output_index=0, item={**answer, "status": "in_progress"}),
+        ]
+        if defect != "missing-done":
+            done = {**answer, "id": "msg_other"} if defect == "wrong-done-id" else answer
+            events.append(_event("response.output_item.done", output_index=0, item=done))
+        response = {"id": "resp_other" if defect == "wrong-terminal-id" else "resp_root", "output": [answer]}
+        if defect == "null-output":
+            response["output"] = None
+        elif defect == "missing-output-item":
+            response["output"] = [{**answer, "id": "msg_other"}]
+        elif defect == "wrong-output":
+            response["output"] = [{**answer, "content": [{"type": "output_text", "text": "changed"}]}]
+        events.append(_event("response.completed", response=response))
+    
+&gt;       assert _project(events) is None
+E       assert RelocatedReplayBody(payload={'input': [{'role': 'user', 'content': 'first'}, {'type': 'message', 'role': 'assistant', ...tent': [{'type': 'output_text', 'text': 'answer'}]}, {'role': 'user', 'content': 'next'}]}, carries_durable_items=True) is None
+E        +  where RelocatedReplayBody(payload={'input': [{'role': 'user', 'content': 'first'}, {'type': 'message', 'role': 'assistant', ...tent': [{'type': 'output_text', 'text': 'answer'}]}, {'role': 'user', 'content': 'next'}]}, carries_durable_items=True) = _project(['data: {"type": "response.created", "response": {"id": "resp_root"}}\n\n', 'data: {"type": "response.output_item.adde..."message", "role": "assistant", "status": "completed", "content": [{"type": "output_text", "text": "answer"}]}]}}\n\n'])
+
+tests\unit\test_context_recovery_contracts.py:66: AssertionError</failure></testcase><testcase classname="tests.unit.test_context_recovery_contracts" name="test_reconstruction_rejects_incomplete_or_conflicting_terminal_evidence[wrong-output]" time="0.003"><failure message="assert RelocatedReplayBody(payload={'input': [{'role': 'user', 'content': 'first'}, {'type': 'message', 'role': 'assistant', ...ent': [{'type': 'output_text', 'text': 'changed'}]}, {'role': 'user', 'content': 'next'}]}, carries_durable_items=True) is None&#10; +  where RelocatedReplayBody(payload={'input': [{'role': 'user', 'content': 'first'}, {'type': 'message', 'role': 'assistant', ...ent': [{'type': 'output_text', 'text': 'changed'}]}, {'role': 'user', 'content': 'next'}]}, carries_durable_items=True) = _project(['data: {&quot;type&quot;: &quot;response.created&quot;, &quot;response&quot;: {&quot;id&quot;: &quot;resp_root&quot;}}\n\n', 'data: {&quot;type&quot;: &quot;response.output_item.adde...message&quot;, &quot;role&quot;: &quot;assistant&quot;, &quot;status&quot;: &quot;completed&quot;, &quot;content&quot;: [{&quot;type&quot;: &quot;output_text&quot;, &quot;text&quot;: &quot;changed&quot;}]}]}}\n\n'])">defect = 'wrong-output'
+
+    @pytest.mark.parametrize(
+        "defect",
+        ["missing-done", "wrong-done-id", "wrong-terminal-id", "null-output", "missing-output-item", "wrong-output"],
+    )
+    def test_reconstruction_rejects_incomplete_or_conflicting_terminal_evidence(defect):
+        answer = _answer()
+        events = [
+            _event("response.created", response={"id": "resp_root"}),
+            _event("response.output_item.added", output_index=0, item={**answer, "status": "in_progress"}),
+        ]
+        if defect != "missing-done":
+            done = {**answer, "id": "msg_other"} if defect == "wrong-done-id" else answer
+            events.append(_event("response.output_item.done", output_index=0, item=done))
+        response = {"id": "resp_other" if defect == "wrong-terminal-id" else "resp_root", "output": [answer]}
+        if defect == "null-output":
+            response["output"] = None
+        elif defect == "missing-output-item":
+            response["output"] = [{**answer, "id": "msg_other"}]
+        elif defect == "wrong-output":
+            response["output"] = [{**answer, "content": [{"type": "output_text", "text": "changed"}]}]
+        events.append(_event("response.completed", response=response))
+    
+&gt;       assert _project(events) is None
+E       assert RelocatedReplayBody(payload={'input': [{'role': 'user', 'content': 'first'}, {'type': 'message', 'role': 'assistant', ...ent': [{'type': 'output_text', 'text': 'changed'}]}, {'role': 'user', 'content': 'next'}]}, carries_durable_items=True) is None
+E        +  where RelocatedReplayBody(payload={'input': [{'role': 'user', 'content': 'first'}, {'type': 'message', 'role': 'assistant', ...ent': [{'type': 'output_text', 'text': 'changed'}]}, {'role': 'user', 'content': 'next'}]}, carries_durable_items=True) = _project(['data: {"type": "response.created", "response": {"id": "resp_root"}}\n\n', 'data: {"type": "response.output_item.adde...message", "role": "assistant", "status": "completed", "content": [{"type": "output_text", "text": "changed"}]}]}}\n\n'])
+
+tests\unit\test_context_recovery_contracts.py:66: AssertionError</failure></testcase><testcase classname="tests.unit.test_context_recovery_contracts" name="test_reconstruction_accepts_matching_completed_item_material[False-response.completed]" time="0.002" /><testcase classname="tests.unit.test_context_recovery_contracts" name="test_reconstruction_accepts_matching_completed_item_material[False-response.incomplete]" time="0.002" /><testcase classname="tests.unit.test_context_recovery_contracts" name="test_reconstruction_accepts_matching_completed_item_material[True-response.completed]" time="0.002" /><testcase classname="tests.unit.test_context_recovery_contracts" name="test_reconstruction_accepts_matching_completed_item_material[True-response.incomplete]" time="0.001" /><testcase classname="tests.unit.test_context_recovery_contracts" name="test_reconstruction_does_not_mix_abandoned_attempt_output" time="0.002" /><testcase classname="tests.integration.test_context_recovery_routes" name="test_root_and_child_are_durably_reconstructable_at_http_routes[/backend-api/codex/responses]" time="1.265"><failure message="assert (None is not None)">async_client = &lt;httpx.AsyncClient object at 0x00000123E897E270&gt;
+root_bridge = (&lt;tests.integration.test_http_responses_bridge._FakeBridgeUpstreamWebSocket object at 0x00000123E897EA50&gt;, &lt;app.modules.proxy.service.ProxyService object at 0x00000123E897F0E0&gt;, &lt;app.db.models.Account object at 0x00000123E8CC7610&gt;)
+path = '/backend-api/codex/responses'
+
+    @pytest.mark.parametrize(
+        "path", ["/backend-api/codex/responses", "/backend-api/codex/responses/", "/v1/responses", "/v1/responses/"]
+    )
+    async def test_root_and_child_are_durably_reconstructable_at_http_routes(async_client, root_bridge, path):
+        upstream, service, owner = root_bridge
+        headers = {"x-codex-session-id": "context-chain"}
+        developer = {"role": "developer", "content": [{"type": "input_text", "text": "Remember key-17 = 34620."}]}
+        first_input = [developer, {"role": "user", "content": "Remember the key."}]
+        first = await _collect_sse_events(
+            async_client, path,
+            json_body={"model": "gpt-5.1", "instructions": "Follow the rules.", "input": first_input, "stream": True},
+            headers=headers,
+        )
+        first_response_id = first[-1]["response"]["id"]
+        second = await _collect_sse_events(
+            async_client, path,
+            json_body={"model": "gpt-5.1", "instructions": "Follow the rules.", "previous_response_id": first_response_id,
+                       "input": [{"role": "user", "content": "What was key-17?"}], "stream": True},
+            headers=headers,
+        )
+        await _flush_operations(service)
+        frames = [json.loads(frame) for frame in upstream.sent_text]
+        assert frames[0]["input"] == first_input
+        assert frames[0]["instructions"] == "Follow the rules."
+        transcript = await service._durable_bridge.get_replayable_transcript(response_id=second[-1]["response"]["id"])
+&gt;       assert transcript is not None and len(transcript) == 2
+E       assert (None is not None)
+
+tests\integration\test_context_recovery_routes.py:85: AssertionError</failure></testcase><testcase classname="tests.integration.test_context_recovery_routes" name="test_root_and_child_are_durably_reconstructable_at_http_routes[/backend-api/codex/responses/]" time="1.124"><failure message="assert (None is not None)">async_client = &lt;httpx.AsyncClient object at 0x00000123EA4C9810&gt;
+root_bridge = (&lt;tests.integration.test_http_responses_bridge._FakeBridgeUpstreamWebSocket object at 0x00000123EA4E5590&gt;, &lt;app.modules.proxy.service.ProxyService object at 0x00000123EA4E5BD0&gt;, &lt;app.db.models.Account object at 0x00000123EA4CA350&gt;)
+path = '/backend-api/codex/responses/'
+
+    @pytest.mark.parametrize(
+        "path", ["/backend-api/codex/responses", "/backend-api/codex/responses/", "/v1/responses", "/v1/responses/"]
+    )
+    async def test_root_and_child_are_durably_reconstructable_at_http_routes(async_client, root_bridge, path):
+        upstream, service, owner = root_bridge
+        headers = {"x-codex-session-id": "context-chain"}
+        developer = {"role": "developer", "content": [{"type": "input_text", "text": "Remember key-17 = 34620."}]}
+        first_input = [developer, {"role": "user", "content": "Remember the key."}]
+        first = await _collect_sse_events(
+            async_client, path,
+            json_body={"model": "gpt-5.1", "instructions": "Follow the rules.", "input": first_input, "stream": True},
+            headers=headers,
+        )
+        first_response_id = first[-1]["response"]["id"]
+        second = await _collect_sse_events(
+            async_client, path,
+            json_body={"model": "gpt-5.1", "instructions": "Follow the rules.", "previous_response_id": first_response_id,
+                       "input": [{"role": "user", "content": "What was key-17?"}], "stream": True},
+            headers=headers,
+        )
+        await _flush_operations(service)
+        frames = [json.loads(frame) for frame in upstream.sent_text]
+        assert frames[0]["input"] == first_input
+        assert frames[0]["instructions"] == "Follow the rules."
+        transcript = await service._durable_bridge.get_replayable_transcript(response_id=second[-1]["response"]["id"])
+&gt;       assert transcript is not None and len(transcript) == 2
+E       assert (None is not None)
+
+tests\integration\test_context_recovery_routes.py:85: AssertionError</failure></testcase><testcase classname="tests.integration.test_context_recovery_routes" name="test_root_and_child_are_durably_reconstructable_at_http_routes[/v1/responses]" time="1.113"><failure message="assert (None is not None)">async_client = &lt;httpx.AsyncClient object at 0x00000123EAA1CF50&gt;
+root_bridge = (&lt;tests.integration.test_http_responses_bridge._FakeBridgeUpstreamWebSocket object at 0x00000123EAA1FC50&gt;, &lt;app.modules.proxy.service.ProxyService object at 0x00000123EAA1FD90&gt;, &lt;app.db.models.Account object at 0x00000123EAA1DBD0&gt;)
+path = '/v1/responses'
+
+    @pytest.mark.parametrize(
+        "path", ["/backend-api/codex/responses", "/backend-api/codex/responses/", "/v1/responses", "/v1/responses/"]
+    )
+    async def test_root_and_child_are_durably_reconstructable_at_http_routes(async_client, root_bridge, path):
+        upstream, service, owner = root_bridge
+        headers = {"x-codex-session-id": "context-chain"}
+        developer = {"role": "developer", "content": [{"type": "input_text", "text": "Remember key-17 = 34620."}]}
+        first_input = [developer, {"role": "user", "content": "Remember the key."}]
+        first = await _collect_sse_events(
+            async_client, path,
+            json_body={"model": "gpt-5.1", "instructions": "Follow the rules.", "input": first_input, "stream": True},
+            headers=headers,
+        )
+        first_response_id = first[-1]["response"]["id"]
+        second = await _collect_sse_events(
+            async_client, path,
+            json_body={"model": "gpt-5.1", "instructions": "Follow the rules.", "previous_response_id": first_response_id,
+                       "input": [{"role": "user", "content": "What was key-17?"}], "stream": True},
+            headers=headers,
+        )
+        await _flush_operations(service)
+        frames = [json.loads(frame) for frame in upstream.sent_text]
+        assert frames[0]["input"] == first_input
+        assert frames[0]["instructions"] == "Follow the rules."
+        transcript = await service._durable_bridge.get_replayable_transcript(response_id=second[-1]["response"]["id"])
+&gt;       assert transcript is not None and len(transcript) == 2
+E       assert (None is not None)
+
+tests\integration\test_context_recovery_routes.py:85: AssertionError</failure></testcase><testcase classname="tests.integration.test_context_recovery_routes" name="test_root_and_child_are_durably_reconstructable_at_http_routes[/v1/responses/]" time="1.268"><failure message="assert (None is not None)">async_client = &lt;httpx.AsyncClient object at 0x00000123E9ECA9E0&gt;
+root_bridge = (&lt;tests.integration.test_http_responses_bridge._FakeBridgeUpstreamWebSocket object at 0x00000123E9ECB820&gt;, &lt;app.modules.proxy.service.ProxyService object at 0x00000123EA4CAFD0&gt;, &lt;app.db.models.Account object at 0x00000123EA4CB390&gt;)
+path = '/v1/responses/'
+
+    @pytest.mark.parametrize(
+        "path", ["/backend-api/codex/responses", "/backend-api/codex/responses/", "/v1/responses", "/v1/responses/"]
+    )
+    async def test_root_and_child_are_durably_reconstructable_at_http_routes(async_client, root_bridge, path):
+        upstream, service, owner = root_bridge
+        headers = {"x-codex-session-id": "context-chain"}
+        developer = {"role": "developer", "content": [{"type": "input_text", "text": "Remember key-17 = 34620."}]}
+        first_input = [developer, {"role": "user", "content": "Remember the key."}]
+        first = await _collect_sse_events(
+            async_client, path,
+            json_body={"model": "gpt-5.1", "instructions": "Follow the rules.", "input": first_input, "stream": True},
+            headers=headers,
+        )
+        first_response_id = first[-1]["response"]["id"]
+        second = await _collect_sse_events(
+            async_client, path,
+            json_body={"model": "gpt-5.1", "instructions": "Follow the rules.", "previous_response_id": first_response_id,
+                       "input": [{"role": "user", "content": "What was key-17?"}], "stream": True},
+            headers=headers,
+        )
+        await _flush_operations(service)
+        frames = [json.loads(frame) for frame in upstream.sent_text]
+        assert frames[0]["input"] == first_input
+        assert frames[0]["instructions"] == "Follow the rules."
+        transcript = await service._durable_bridge.get_replayable_transcript(response_id=second[-1]["response"]["id"])
+&gt;       assert transcript is not None and len(transcript) == 2
+E       assert (None is not None)
+
+tests\integration\test_context_recovery_routes.py:85: AssertionError</failure></testcase><testcase classname="tests.integration.test_context_recovery_routes" name="test_independent_identical_roots_do_not_replay_or_merge" time="0.919"><failure message="assert 2 == 0&#10; +  where 2 = len(['{&quot;model&quot;:&quot;gpt-5.1&quot;,&quot;instructions&quot;:&quot;Return OK.&quot;,&quot;input&quot;:[{&quot;role&quot;:&quot;user&quot;,&quot;content&quot;:[{&quot;type&quot;:&quot;input_text&quot;,&quot;text&quot;:&quot;same ...245d7&quot;,&quot;type&quot;:&quot;response.create&quot;,&quot;client_metadata&quot;:{&quot;x-codex-installation-id&quot;:&quot;3f668624-5015-4e1f-8bb2-6b1f68274253&quot;}}'])&#10; +    where ['{&quot;model&quot;:&quot;gpt-5.1&quot;,&quot;instructions&quot;:&quot;Return OK.&quot;,&quot;input&quot;:[{&quot;role&quot;:&quot;user&quot;,&quot;content&quot;:[{&quot;type&quot;:&quot;input_text&quot;,&quot;text&quot;:&quot;same ...245d7&quot;,&quot;type&quot;:&quot;response.create&quot;,&quot;client_metadata&quot;:{&quot;x-codex-installation-id&quot;:&quot;3f668624-5015-4e1f-8bb2-6b1f68274253&quot;}}'] = &lt;tests.integration.test_http_responses_bridge._FakeBridgeUpstreamWebSocket object at 0x00000123EAA9E650&gt;.sent_text&#10; +  and   0 = len([])">async_client = &lt;httpx.AsyncClient object at 0x00000123E8B4FBB0&gt;
+root_bridge = (&lt;tests.integration.test_http_responses_bridge._FakeBridgeUpstreamWebSocket object at 0x00000123EAA9E650&gt;, &lt;app.modules.proxy.service.ProxyService object at 0x00000123E890AE90&gt;, &lt;app.db.models.Account object at 0x00000123E890AD50&gt;)
+
+    async def test_independent_identical_roots_do_not_replay_or_merge(async_client, root_bridge):
+        upstream, service, _ = root_bridge
+        body = {"model": "gpt-5.1", "instructions": "Return OK.", "input": "same prompt", "stream": True}
+        for _ in range(2):
+            await _collect_sse_events(async_client, "/v1/responses", json_body=body)
+        await _flush_operations(service)
+        async with SessionLocal() as session:
+            operations = (await session.scalars(select(HttpBridgeOperationRecord))).all()
+&gt;       assert len(upstream.sent_text) == len(operations) == 2
+E       assert 2 == 0
+E        +  where 2 = len(['{"model":"gpt-5.1","instructions":"Return OK.","input":[{"role":"user","content":[{"type":"input_text","text":"same ...245d7","type":"response.create","client_metadata":{"x-codex-installation-id":"3f668624-5015-4e1f-8bb2-6b1f68274253"}}'])
+E        +    where ['{"model":"gpt-5.1","instructions":"Return OK.","input":[{"role":"user","content":[{"type":"input_text","text":"same ...245d7","type":"response.create","client_metadata":{"x-codex-installation-id":"3f668624-5015-4e1f-8bb2-6b1f68274253"}}'] = &lt;tests.integration.test_http_responses_bridge._FakeBridgeUpstreamWebSocket object at 0x00000123EAA9E650&gt;.sent_text
+E        +  and   0 = len([])
+
+tests\integration\test_context_recovery_routes.py:105: AssertionError</failure></testcase><testcase classname="tests.integration.test_context_recovery_routes" name="test_root_registration_refusal_does_not_dispatch[owner-fenced]" time="0.805"><failure message="assert 200 == 502&#10; +  where 200 = &lt;Response [200 OK]&gt;.status_code">async_client = &lt;httpx.AsyncClient object at 0x00000123EA1FAC30&gt;
+root_bridge = (&lt;tests.integration.test_http_responses_bridge._FakeBridgeUpstreamWebSocket object at 0x00000123EA1FA450&gt;, &lt;app.modules.proxy.service.ProxyService object at 0x00000123EA133ED0&gt;, &lt;app.db.models.Account object at 0x00000123EA133C50&gt;)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000123E805DD30&gt;
+failure = 'owner-fenced'
+
+    @pytest.mark.parametrize("failure", ["owner-fenced", "exception"])
+    async def test_root_registration_refusal_does_not_dispatch(async_client, root_bridge, monkeypatch, failure):
+        upstream, service, _ = root_bridge
+    
+        async def refuse(**kwargs):
+            if failure == "exception":
+                raise RuntimeError("persistence unavailable")
+            return None
+    
+        monkeypatch.setattr(service._durable_bridge, "record_operation", refuse)
+        response = await async_client.post(
+            "/v1/responses", json={"model": "gpt-5.1", "instructions": "Return OK.", "input": "new root", "stream": True}
+        )
+&gt;       assert response.status_code == 502
+E       assert 200 == 502
+E        +  where 200 = &lt;Response [200 OK]&gt;.status_code
+
+tests\integration\test_context_recovery_routes.py:123: AssertionError</failure></testcase><testcase classname="tests.integration.test_context_recovery_routes" name="test_root_registration_refusal_does_not_dispatch[exception]" time="0.847"><failure message="assert 200 == 502&#10; +  where 200 = &lt;Response [200 OK]&gt;.status_code">async_client = &lt;httpx.AsyncClient object at 0x00000123EC45E250&gt;
+root_bridge = (&lt;tests.integration.test_http_responses_bridge._FakeBridgeUpstreamWebSocket object at 0x00000123EC45E8B0&gt;, &lt;app.modules.proxy.service.ProxyService object at 0x00000123EC471A90&gt;, &lt;app.db.models.Account object at 0x00000123EC470690&gt;)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000123EAF267B0&gt;
+failure = 'exception'
+
+    @pytest.mark.parametrize("failure", ["owner-fenced", "exception"])
+    async def test_root_registration_refusal_does_not_dispatch(async_client, root_bridge, monkeypatch, failure):
+        upstream, service, _ = root_bridge
+    
+        async def refuse(**kwargs):
+            if failure == "exception":
+                raise RuntimeError("persistence unavailable")
+            return None
+    
+        monkeypatch.setattr(service._durable_bridge, "record_operation", refuse)
+        response = await async_client.post(
+            "/v1/responses", json={"model": "gpt-5.1", "instructions": "Return OK.", "input": "new root", "stream": True}
+        )
+&gt;       assert response.status_code == 502
+E       assert 200 == 502
+E        +  where 200 = &lt;Response [200 OK]&gt;.status_code
+
+tests\integration\test_context_recovery_routes.py:123: AssertionError</failure></testcase></testsuite></testsuites>

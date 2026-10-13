@@ -1,0 +1,25 @@
+{
+  "changed_source_rows": [
+    "UP-PR-1528"
+  ],
+  "unchanged_source_rows": 337,
+  "original_selected_five": [
+    "UP-ISSUE-850",
+    "UP-PR-1528",
+    "UP-PR-2497",
+    "UP-PR-2122",
+    "UP-ISSUE-2514"
+  ],
+  "all_five_closed_local": true,
+  "queue": {
+    "partial": 7,
+    "closed_local": 151,
+    "unverified": 180
+  },
+  "head": "7e3779ffaea1a27c29710a7d496e8fa037131f98",
+  "unrelated_prior_files_unchanged": 40,
+  "shared_prior_files_adapted": 13,
+  "unexpected_prior_changes": 0,
+  "server_helpers_removed": true,
+  "publication": false
+}

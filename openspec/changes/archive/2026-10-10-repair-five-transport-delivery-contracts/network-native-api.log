@@ -1,0 +1,10 @@
+........................................................................ [ 47%]
+........................................................................ [ 94%]
+.........                                                                [100%]
+============================== warnings summary ===============================
+tests/unit/test_network_recovery.py::test_process_network_failure_classifies_dns_errors[11002]
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+153 passed, 1 warning in 2.18s

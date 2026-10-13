@@ -1,0 +1,43 @@
+
+tests/integration/test_http_responses_bridge.py::test_backend_responses_goal_restart_keeps_authority_for_same_request_reconnect 
+------------------------------- live log setup --------------------------------
+WARNING  app.main:bootstrap.py:54 
+============================================
+  Dashboard bootstrap token (first-run):
+  [redacted test bootstrap token]
+
+  Use this token for initial remote setup.
+  It is shared across replicas and stays
+  valid until a password is set.
+============================================
+-------------------------------- live log call --------------------------------
+INFO     app.main:main.py:858 Registered in bridge ring
+INFO     httpx:_client.py:1740 HTTP Request: POST http://testserver/api/accounts/import "HTTP/1.1 200 OK"
+INFO     httpx:_client.py:1740 HTTP Request: POST http://testserver/api/accounts/import "HTTP/1.1 200 OK"
+INFO     app.modules.proxy.service:observability.py:47 http_bridge_routing stage=admission reason=always_websocket request_id=47bd3b05-d06c-4299-b6d7-791aa7942f1d
+INFO     app.modules.proxy.service:service.py:1782 Proxy account selection start request_id=http_bridge_connect_db2066cf377c4c6ab7bfef1a1b330820 kind=http_bridge request_stage=follow_up model=gpt-5.1 additional_limit=None sticky=True sticky_kind=codex_session reallocate_sticky=False prefer_earlier_reset=False routing_strategy=usage_weighted api_key_present=False api_key_scope_enabled=False scoped_count=None excluded_count=0 preferred_account_id=None remaining_budget=7199.99
+INFO     app.modules.proxy.load_balancer:load_balancer.py:1014 Selected account_id=acc_backend_bridge_reconnect_restart_owner_b907336d strategy=usage_weighted sticky=True model=gpt-5.1
+INFO     app.modules.proxy.service:service.py:2020 Proxy account selection result request_id=http_bridge_connect_db2066cf377c4c6ab7bfef1a1b330820 kind=http_bridge request_stage=follow_up model=gpt-5.1 selected_account_id=acc_backend_bridge_reconnect_restart_owner_b907336d error_code=None error=None scoped_count=None excluded_count=0
+INFO     app.modules.proxy.service:helpers.py:4189 http_bridge_event event=create bridge_kind=session_header bridge_key=sha256:0b6898fc42ea account_id=acc_backend_bridge_reconnect_restart_owner_b907336d model=gpt-5.1 pending=None detail=request_stage=follow_up, preferred_account_id=None, selected_account_id=acc_backend_bridge_reconnect_restart_owner_b907336d, durable_session_id=2c6c42f4-e570-4ade-9f71-705bb5b487de cache_key_family=session_header model_class=std key_strength=hard owner_check_applied=None error_message=None upstream_close_code=None response_events_seen=None transport_classification=None
+WARNING  app.modules.proxy.service:helpers.py:4189 http_bridge_event event=retry_precreated bridge_kind=session_header bridge_key=sha256:0b6898fc42ea account_id=acc_backend_bridge_reconnect_restart_owner_b907336d model=gpt-5.1 pending=1 detail=None cache_key_family=session_header model_class=std key_strength=hard owner_check_applied=None error_message=None upstream_close_code=None response_events_seen=None transport_classification=None
+INFO     app.modules.proxy.service:service.py:1782 Proxy account selection start request_id=47bd3b05-d06c-4299-b6d7-791aa7942f1d kind=http_bridge request_stage=reattach model=gpt-5.1 additional_limit=None sticky=True sticky_kind=codex_session reallocate_sticky=False prefer_earlier_reset=False routing_strategy=usage_weighted api_key_present=False api_key_scope_enabled=False scoped_count=None excluded_count=1 preferred_account_id=None remaining_budget=7199.77
+INFO     app.modules.proxy.load_balancer:sticky_selection.py:935 Legacy Codex session-header owner abandoned for self-contained goal restart account_id=acc_backend_bridge_reconnect_restart_owner_b907336d
+INFO     app.modules.proxy.load_balancer:load_balancer.py:1014 Selected account_id=acc_backend_bridge_reconnect_restart_replacement_0b41ea61 strategy=usage_weighted sticky=True model=gpt-5.1
+INFO     app.modules.proxy.service:service.py:2020 Proxy account selection result request_id=47bd3b05-d06c-4299-b6d7-791aa7942f1d kind=http_bridge request_stage=reattach model=gpt-5.1 selected_account_id=acc_backend_bridge_reconnect_restart_replacement_0b41ea61 error_code=None error=None scoped_count=None excluded_count=1
+WARNING  app.modules.proxy.service:helpers.py:4189 http_bridge_event event=reconnect bridge_kind=session_header bridge_key=sha256:0b6898fc42ea account_id=acc_backend_bridge_reconnect_restart_replacement_0b41ea61 model=gpt-5.1 pending=None detail=selected_account_id=acc_backend_bridge_reconnect_restart_replacement_0b41ea61, durable_session_id=2c6c42f4-e570-4ade-9f71-705bb5b487de cache_key_family=session_header model_class=std key_strength=hard owner_check_applied=None error_message=None upstream_close_code=None response_events_seen=None transport_classification=None
+INFO     app.modules.proxy.api:api.py:8820 responses_stream_heartbeat request_id=47bd3b05-d06c-4299-b6d7-791aa7942f1d route_family=responses stage=initial elapsed_seconds=0.000
+INFO     httpx:_client.py:1740 HTTP Request: POST http://testserver/backend-api/codex/responses "HTTP/1.1 200 OK"
+PASSED                                                                   [100%]
+------------------------------ live log teardown ------------------------------
+INFO     app.modules.proxy.service:helpers.py:4189 http_bridge_event event=close bridge_kind=session_header bridge_key=sha256:0b6898fc42ea account_id=acc_backend_bridge_reconnect_restart_replacement_0b41ea61 model=gpt-5.1 pending=None detail=None cache_key_family=session_header model_class=std key_strength=hard owner_check_applied=None error_message=None upstream_close_code=None response_events_seen=None transport_classification=None
+INFO     app.main:main.py:974 Marked bridge ring membership stale for shutdown
+WARNING  app.db.session:session.py:525 Cannot record a clean SQLite shutdown without the lifetime lock path=C:\Users\ext\AppData\Local\Temp\codex-lb-master-yskoxlih\test.db; the next startup will run the integrity check
+
+
+============================== warnings summary ===============================
+tests/integration/test_http_responses_bridge.py::test_backend_responses_goal_restart_keeps_authority_for_same_request_reconnect
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 1 passed, 1 warning in 1.93s =========================

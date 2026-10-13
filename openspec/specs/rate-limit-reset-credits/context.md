@@ -11,3 +11,9 @@ For example, an operator opens a paused account and sees `2 available` alongside
 No new background network activity is enabled for paused accounts. Both manual consumption paths and automatic redemption remain blocked. Account-bound proxy routing still fails closed; a paused import awaiting a usable proxy route cannot bypass that restriction to inspect credits. Deactivated and reauth-required policies are unchanged, including the existing difference between reauth summary-cache projection and cached-detail invalidation.
 
 The normative contracts are [reset-credit visibility](spec.md), [routing](../account-routing/spec.md), and [upstream proxy routing](../upstream-proxy-routing/spec.md). No schema migration or setting is needed.
+
+## Account operator verification on 2026-10-09
+
+Paused cached count/expiry and selected-account observation stay visible while polling and redemption remain excluded. Bulk consume follows real remaining IDs read through the owning account route; it does not reconstruct the consumed position or create placeholder IDs. Example: cached [later,sooner] becomes authoritative [later] after sooner is consumed. Generation fencing preserves a newer observation. An upstream read failure after a consume retains partial results and proceeds to other eligible accounts.
+
+See [requirements](spec.md). Live providers, server database execution and production remain outside local test evidence.

@@ -30,7 +30,7 @@ def source_models_to_upstream_models(sources: list[ModelSource]) -> list[Upstrea
         if source.kind != MODEL_SOURCE_KIND_OPENAI_COMPATIBLE:
             continue
         for source_model in source.models:
-            if not source_model.is_enabled:
+            if not source_model.is_enabled or source_model.is_available is False:
                 continue
             models.append(_to_upstream_model(source, source_model))
     return models
@@ -175,7 +175,11 @@ def _default_reasoning_level_from_metadata(
 
 def _enabled_source_model(source: ModelSource, model: str) -> ModelSourceModel | None:
     return next(
-        (candidate for candidate in source.models if candidate.model == model and candidate.is_enabled),
+        (
+            candidate
+            for candidate in source.models
+            if candidate.model == model and candidate.is_enabled and candidate.is_available is not False
+        ),
         None,
     )
 

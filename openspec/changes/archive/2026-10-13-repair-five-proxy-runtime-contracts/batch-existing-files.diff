@@ -1,0 +1,783 @@
+--- baseline/app/modules/proxy/api.py
++++ current/app/modules/proxy/api.py
+@@ -291,6 +291,10 @@
+     IMAGE_ROUTE_STREAM_STATE,
+     record_images_route_observability,
+ )
++from app.modules.proxy.rate_limit_events import (
++    hide_upstream_quota_for_api_key_clients as _hide_upstream_quota_for_api_key_clients,
++)
++from app.modules.proxy.rate_limit_events import project_codex_rate_limit_event, rate_limit_headers_for_client
+ from app.modules.proxy.request_policy import (
+     apply_api_key_enforcement,
+     apply_api_key_enforcement_to_chat_payload,
+@@ -2427,13 +2431,6 @@
+     )
+ 
+ 
+-async def _hide_upstream_quota_for_api_key_clients(api_key: ApiKeyData | None) -> bool:
+-    if api_key is None:
+-        return False
+-    settings = await get_settings_cache().get()
+-    return bool(getattr(settings, "hide_upstream_quota_from_api_keys", False))
+-
+-
+ async def _apply_api_key_enforcement_with_fast_mode_policy(
+     payload: ResponsesRequest | ResponsesCompactRequest,
+     api_key: ApiKeyData | None,
+@@ -2464,9 +2461,7 @@
+     context: ProxyContext,
+     api_key: ApiKeyData | None,
+ ) -> dict[str, str]:
+-    if await _hide_upstream_quota_for_api_key_clients(api_key):
+-        return {}
+-    return await context.service.rate_limit_headers()
++    return await rate_limit_headers_for_client(api_key, context.service.rate_limit_headers)
+ 
+ 
+ async def _release_reservation_deferring_cancellation(
+@@ -5716,6 +5711,7 @@
+                     enforce_openai_sdk_contract=enforce_openai_sdk_contract,
+                     native_codex_heartbeat=native_codex_heartbeat,
+                     preserve_native_failure_lifecycle=preserve_native_failure_lifecycle,
++                    codex_rate_limit_headers=rate_limit_headers,
+                 ),
+             )
+             return SourceStreamingResponse(
+@@ -6589,6 +6585,7 @@
+     enforce_openai_sdk_contract: bool = True,
+     native_codex_heartbeat: bool = False,
+     preserve_native_failure_lifecycle: bool = False,
++    codex_rate_limit_headers: Mapping[str, str] | None = None,
+ ) -> AsyncIterator[str]:
+     """Normalize and keep source-routed Responses SSE proxy-timeout friendly.
+ 
+@@ -6609,6 +6606,7 @@
+         enforce_openai_sdk_contract=enforce_openai_sdk_contract,
+         forward_unparseable_data=True,
+         preserve_native_failure_lifecycle=preserve_native_failure_lifecycle,
++        codex_rate_limit_headers=codex_rate_limit_headers,
+     )
+     keepalive_stream = (
+         normalized
+@@ -7216,6 +7214,7 @@
+         error_stream,
+         enforce_openai_sdk_contract=enforce_openai_sdk_contract,
+         preserve_native_failure_lifecycle=preserve_native_failure_lifecycle,
++        codex_rate_limit_headers=rate_limit_headers,
+     )
+     stream = service_stream
+     use_codex_keepalive = native_codex_heartbeat or not enforce_openai_sdk_contract
+@@ -9731,6 +9730,7 @@
+     enforce_openai_sdk_contract: bool = True,
+     forward_unparseable_data: bool = False,
+     preserve_native_failure_lifecycle: bool = False,
++    codex_rate_limit_headers: Mapping[str, str] | None = None,
+ ) -> AsyncIterator[str]:
+     raw_stream = stream
+     stream = _normalize_reasoning_summary_stream(stream)
+@@ -9744,9 +9744,8 @@
+             item events, and synthesize a leading response.created event
+             when the upstream stream's first standard event is not
+             response.created. When False (used for /backend-api/codex/*,
+-            which feeds the Codex CLI), all events including vendor events are
+-            forwarded verbatim and no synthesis happens — the Codex CLI
+-            relies on the upstream's native event shape.
++            which feeds the Codex CLI), preserve native events without synthesis,
++            except account quota events, which use the pooled header snapshot.
+     """
+     terminal_seen = False
+     done_seen = False
+@@ -9894,6 +9893,13 @@
+                         await _close_responses_stream_best_effort(stream, action="native give-up")
+                     return
+             raw_event_type = payload.get("type")
++            if raw_event_type == "codex.rate_limits":
++                if enforce_openai_sdk_contract:
++                    continue
++                pooled_event = project_codex_rate_limit_event(payload, codex_rate_limit_headers or {})
++                if pooled_event is not None:
++                    yield format_sse_event(pooled_event)
++                continue
+             if (
+                 enforce_openai_sdk_contract
+                 and isinstance(raw_event_type, str)
+--- baseline/app/modules/proxy/_service/http_bridge/request_submit.py
++++ current/app/modules/proxy/_service/http_bridge/request_submit.py
+@@ -255,6 +255,7 @@
+     _parse_openai_error,
+ )
+ from app.modules.proxy.load_balancer import (
++    AccountConcurrencyCaps,
+     AccountSelection,
+     effective_account_concurrency_caps,
+     effective_routing_tunables,
+@@ -279,6 +280,13 @@
+     "security work. codex-lb is continuing with normal account selection; the upstream request may still fail until "
+     "an account with Trusted Access for Cyber is marked as security-work-authorized."
+ )
++
++
++@dataclass(frozen=True, slots=True)
++class _HTTPBridgeReacquireSnapshot:
++    concurrency_caps: AccountConcurrencyCaps
++    fair_share_threshold_pct: int
++    routing_tunables: RoutingTunables
+ 
+ 
+ @dataclass(frozen=True, slots=True)
+@@ -1917,17 +1925,16 @@
+             # critical section (issue #1971) — and only when the reacquire can
+             # actually run: a session already holding its lease never depended
+             # on a settings read to admit a turn.
+-            fair_share_threshold_pct, routing_tunables = 0, None
++            reacquire_snapshot = None
+             if needs_stream_lease:
+-                fair_share_threshold_pct, routing_tunables = await self._http_bridge_reacquire_snapshot(session)
++                reacquire_snapshot = await self._http_bridge_reacquire_snapshot(session)
+                 owner_authorization = await self._fresh_http_bridge_owner_authorization(session)
+                 async with session.pending_lock:
+                     await self._ensure_http_bridge_session_stream_lease_locked(
+                         session,
+                         request_state=request_state,
+-                        fair_share_threshold_pct=fair_share_threshold_pct,
++                        snapshot=reacquire_snapshot,
+                         owner_authorization=owner_authorization,
+-                        routing_tunables=routing_tunables,
+                     )
+         except BaseException as exc:
+             # Recovery claims are made before admission. If reacquiring an
+@@ -1986,9 +1993,8 @@
+                 await self._ensure_http_bridge_session_stream_lease_locked(
+                     session,
+                     request_state=request_state,
+-                    fair_share_threshold_pct=fair_share_threshold_pct,
++                    snapshot=reacquire_snapshot,
+                     owner_authorization=owner_authorization,
+-                    routing_tunables=routing_tunables,
+                 )
+                 if session.queued_request_count >= queue_limit:
+                     _log_http_bridge_event(
+@@ -2050,7 +2056,7 @@
+                 request_state,
+                 response_create_gate=session.response_create_gate,
+                 account_id=session.account.id,
+-                routing_tunables=routing_tunables,
++                routing_tunables=reacquire_snapshot.routing_tunables if reacquire_snapshot is not None else None,
+                 surface="http_bridge",
+                 bridge_session=session,
+             )
+@@ -3031,25 +3037,21 @@
+     async def _http_bridge_reacquire_snapshot(
+         self: Any,
+         session: "_HTTPBridgeSession",
+-    ) -> tuple[int, RoutingTunables | None]:
+-        """Resolve the reacquire's settings inputs WITHOUT holding pending_lock.
+-
+-        For a keyed session one cached dashboard row yields both the fair-share
+-        threshold and the routing tunables the lease is judged against (C2-2
+-        routing/overload: the lease TTL). An unkeyed session reads no settings
+-        here, as before: its threshold is ``0`` and the balancer falls back to
+-        the snapshot of its most recent request. The settings-cache refresh
+-        runs a DB query behind a process-global lock; awaiting it while holding
+-        a session's ``pending_lock`` let one stalled query wedge every keyed
+-        submit process-wide (issue #1971). Callers resolve the snapshot first
+-        and pass both values into ``_ensure_http_bridge_session_stream_lease_locked``.
++    ) -> _HTTPBridgeReacquireSnapshot:
++        """Resolve one dashboard row before entering the pending lock.
++
++        Keyed and unkeyed warm sessions use the same effective caps as initial
++        selection. Settings I/O under pending_lock would stall cleanup (#1971).
+         """
+-        if session.key.api_key_id is None:
+-            return 0, None
+         dashboard_settings = await _service_get_settings_cache().get()
+-        return (
+-            _api_key_fair_share_threshold_pct_from_settings(dashboard_settings),
+-            effective_routing_tunables(dashboard_settings),
++        return _HTTPBridgeReacquireSnapshot(
++            concurrency_caps=effective_account_concurrency_caps(dashboard_settings),
++            fair_share_threshold_pct=(
++                _api_key_fair_share_threshold_pct_from_settings(dashboard_settings)
++                if session.key.api_key_id is not None
++                else 0
++            ),
++            routing_tunables=effective_routing_tunables(dashboard_settings),
+         )
+ 
+     async def _fresh_http_bridge_owner_authorization(
+@@ -3072,21 +3074,15 @@
+         self: Any,
+         session: "_HTTPBridgeSession",
+         *,
++        snapshot: _HTTPBridgeReacquireSnapshot | None,
+         request_state: _WebSocketRequestState | None = None,
+-        fair_share_threshold_pct: int | None = None,
+         owner_authorization: OwnerAuthorization,
+-        routing_tunables: RoutingTunables | None = None,
+     ) -> None:
+         """Reacquire the account stream lease for a session idled between turns.
+ 
+-        Callers hold ``session.pending_lock`` and MUST pass both
+-        ``fair_share_threshold_pct`` and ``routing_tunables`` (see
+-        ``_http_bridge_reacquire_snapshot``) computed before acquiring it:
+-        resolving either reads the settings cache, whose refresh runs a DB
+-        query behind a process-global lock — one stalled refresh under
+-        ``pending_lock`` wedged every keyed submit for days (issue #1971).
+-        The ``None`` fallback resolves them inline from one cached row and
+-        exists for lock-free callers only.
++        Callers hold ``session.pending_lock`` and pass a settings snapshot
++        resolved before acquiring it. ``None`` is valid only when no new lease
++        is needed. This helper never reads settings under the lock (#1971).
+ 
+         The lease is released when the
+         session's last in-flight turn detaches, so an idle session does not
+@@ -3116,21 +3112,14 @@
+         _ensure_http_bridge_session_owner_authorized(session, owner_authorization)
+         if session.account_lease is not None or session.closed:
+             return
++        assert snapshot is not None, "stream reacquisition requires a pre-lock settings snapshot"
+         api_key_id = session.key.api_key_id
+-        if api_key_id is None:
+-            fair_share_threshold_pct = 0
+-        elif fair_share_threshold_pct is None:
+-            # Lock-free callers only (see the docstring): one cached row serves
+-            # both inputs.
+-            dashboard_settings = await _service_get_settings_cache().get()
+-            fair_share_threshold_pct = _api_key_fair_share_threshold_pct_from_settings(dashboard_settings)
+-            if routing_tunables is None:
+-                routing_tunables = effective_routing_tunables(dashboard_settings)
+         try:
+             lease = await load_balancer.acquire_account_lease(
+                 session.account.id,
+                 kind="stream",
+-                routing_tunables=routing_tunables,
++                concurrency_caps=snapshot.concurrency_caps,
++                routing_tunables=snapshot.routing_tunables,
+                 # Carry the turn's usage-budget estimate like initial selection
+                 # and reconnect do, so capacity-weighted routing pressure still
+                 # sees large turns on reused warm sessions.
+@@ -3138,7 +3127,7 @@
+                     request_state.request_usage_budget if request_state is not None else None
+                 ),
+                 api_key_id=api_key_id,
+-                api_key_stream_fair_share_threshold_pct=fair_share_threshold_pct,
++                api_key_stream_fair_share_threshold_pct=snapshot.fair_share_threshold_pct,
+             )
+         except ApiKeyFairShareDenialError as denial:
+             raise ProxyResponseError(
+--- baseline/app/modules/proxy/_service/websocket/mixin.py
++++ current/app/modules/proxy/_service/websocket/mixin.py
+@@ -518,6 +518,7 @@
+     OwnerForwardRelayFailure as OwnerForwardRelayFailure,
+ )
+ from app.modules.proxy.load_balancer import AccountLease, AccountSelection, effective_account_concurrency_caps
++from app.modules.proxy.rate_limit_events import project_codex_rate_limit_event, rate_limit_headers_for_client
+ from app.modules.proxy.request_policy import (
+     apply_api_key_enforcement,
+     apply_enforced_service_tier_model_fallback,
+@@ -1124,6 +1125,19 @@
+         clock=clock,
+         observed_at=observed_at,
+     )
++    if parsed_frame.event_type == "codex.rate_limits":
++        # Account attribution/ingestion above retains raw upstream observations.
++        # Optional quota metadata must not interrupt an established inference.
++        try:
++            quota_headers = await rate_limit_headers_for_client(api_key, proxy.rate_limit_headers)
++        except Exception as exc:
++            _facade().logger.warning("Unable to load pooled websocket quota metadata: %s", type(exc).__name__)
++            quota_headers = {}
++        pooled_event = project_codex_rate_limit_event(parsed_frame.payload or {}, quota_headers)
++        if pooled_event is None:
++            upstream_control.suppress_downstream_event = True
++        else:
++            downstream_text = json.dumps(pooled_event, ensure_ascii=True, separators=(",", ":"))
+     suppress_downstream_event = upstream_control.suppress_downstream_event
+     downstream_texts = upstream_control.downstream_texts
+     downstream_sequence_request_state = upstream_control.downstream_sequence_request_state
+--- baseline/app/modules/proxy/_service/websocket/protocol.py
++++ current/app/modules/proxy/_service/websocket/protocol.py
+@@ -1,5 +1,6 @@
+ from __future__ import annotations
+ 
++from collections.abc import Awaitable, Callable
+ from typing import Any, Protocol
+ 
+ from app.core.clock import Clock, Scheduler
+@@ -73,3 +74,6 @@
+     _write_request_log: Any
+     _write_websocket_connect_failure: Any
+     proxy_responses_websocket: Any
++
++    @property
++    def rate_limit_headers(self) -> Callable[[], Awaitable[dict[str, str]]]: ...
+--- baseline/tests/unit/test_http_bridge_idle_leases.py
++++ current/tests/unit/test_http_bridge_idle_leases.py
+@@ -32,6 +32,12 @@
+ 
+ @pytest.fixture(autouse=True)
+ def _usage_policy_available(monkeypatch: pytest.MonkeyPatch) -> None:
++    monkeypatch.setattr(
++        http_bridge_request_submit_module,
++        "_service_get_settings_cache",
++        lambda: SimpleNamespace(get=AsyncMock(return_value=DashboardSettings())),
++    )
++
+     async def authorize_account_fresh(_self: LoadBalancer, _account_id: str) -> OwnerAuthorization:
+         return OwnerAuthorization(OwnerAuthorizationKind.ALLOWED, AccountUsageLimitState.DISABLED)
+ 
+@@ -87,6 +93,16 @@
+     )
+ 
+ 
++def _make_reacquire_snapshot(
++    *, fair_share_threshold_pct: int = 0, routing_tunables: RoutingTunables | None = None
++) -> http_bridge_request_submit_module._HTTPBridgeReacquireSnapshot:
++    return http_bridge_request_submit_module._HTTPBridgeReacquireSnapshot(
++        concurrency_caps=proxy_service.AccountConcurrencyCaps(response_create_limit=4, stream_limit=8),
++        fair_share_threshold_pct=fair_share_threshold_pct,
++        routing_tunables=routing_tunables or RoutingTunables(),
++    )
++
++
+ @pytest.mark.asyncio
+ async def test_idle_session_releases_stream_lease() -> None:
+     mixin = http_bridge_request_submit_module._HTTPBridgeRequestSubmitMixin
+@@ -172,6 +188,7 @@
+         await mixin._ensure_http_bridge_session_stream_lease_locked(
+             fake_self,
+             session,
++            snapshot=_make_reacquire_snapshot(),
+             owner_authorization=OwnerAuthorization(OwnerAuthorizationKind.ALLOWED, AccountUsageLimitState.DISABLED),
+         )
+ 
+@@ -182,7 +199,8 @@
+         estimated_tokens=0.0,
+         api_key_id=None,
+         api_key_stream_fair_share_threshold_pct=0,
+-        routing_tunables=None,
++        concurrency_caps=proxy_service.AccountConcurrencyCaps(response_create_limit=4, stream_limit=8),
++        routing_tunables=RoutingTunables(),
+     )
+ 
+ 
+@@ -218,6 +236,7 @@
+             fake_self,
+             session,
+             request_state=request_state,
++            snapshot=_make_reacquire_snapshot(),
+             owner_authorization=OwnerAuthorization(OwnerAuthorizationKind.ALLOWED, AccountUsageLimitState.DISABLED),
+         )
+ 
+@@ -228,7 +247,8 @@
+         estimated_tokens=expected_tokens,
+         api_key_id=None,
+         api_key_stream_fair_share_threshold_pct=0,
+-        routing_tunables=None,
++        concurrency_caps=proxy_service.AccountConcurrencyCaps(response_create_limit=4, stream_limit=8),
++        routing_tunables=RoutingTunables(),
+     )
+ 
+ 
+@@ -275,6 +295,9 @@
+             await mixin._ensure_http_bridge_session_stream_lease_locked(
+                 fake_self,
+                 hot_session,
++                snapshot=_make_reacquire_snapshot(
++                    fair_share_threshold_pct=50, routing_tunables=RoutingTunables(lease_ttl_seconds=120.0)
++                ),
+                 owner_authorization=OwnerAuthorization(OwnerAuthorizationKind.ALLOWED, AccountUsageLimitState.DISABLED),
+             )
+ 
+@@ -293,6 +316,9 @@
+         await mixin._ensure_http_bridge_session_stream_lease_locked(
+             fake_self,
+             light_session,
++            snapshot=_make_reacquire_snapshot(
++                fair_share_threshold_pct=50, routing_tunables=RoutingTunables(lease_ttl_seconds=120.0)
++            ),
+             owner_authorization=OwnerAuthorization(OwnerAuthorizationKind.ALLOWED, AccountUsageLimitState.DISABLED),
+         )
+ 
+@@ -330,9 +356,8 @@
+         await mixin._ensure_http_bridge_session_stream_lease_locked(
+             fake_self,
+             session,
+-            fair_share_threshold_pct=37,
++            snapshot=_make_reacquire_snapshot(fair_share_threshold_pct=37),
+             owner_authorization=OwnerAuthorization(OwnerAuthorizationKind.ALLOWED, AccountUsageLimitState.DISABLED),
+-            routing_tunables=RoutingTunables(),
+         )
+ 
+     settings_get.assert_not_awaited()
+@@ -432,13 +457,15 @@
+ 
+ 
+ @pytest.mark.asyncio
++@pytest.mark.parametrize("key_id", [None, "key-stall"])
+ async def test_keyed_submit_resolves_fair_share_before_pending_lock(
+     monkeypatch: pytest.MonkeyPatch,
++    key_id: str | None,
+ ) -> None:
+     """Issue #1971: DB-backed admission reads must not hold pending_lock."""
+ 
+     service = proxy_service.ProxyService(cast(Any, nullcontext()))
+-    session = _make_bridge_session(api_key_id="key-stall")
++    session = _make_bridge_session(api_key_id=key_id)
+     lease = _make_lease("l-stall")
+     monkeypatch.setattr(service._load_balancer, "acquire_account_lease", AsyncMock(return_value=lease))
+     monkeypatch.setattr(service._load_balancer, "release_account_lease", AsyncMock())
+@@ -526,6 +553,7 @@
+             await mixin._ensure_http_bridge_session_stream_lease_locked(
+                 fake_self,
+                 session,
++                snapshot=_make_reacquire_snapshot(),
+                 owner_authorization=OwnerAuthorization(OwnerAuthorizationKind.ALLOWED, AccountUsageLimitState.DISABLED),
+             )
+ 
+@@ -565,6 +593,7 @@
+             await mixin._ensure_http_bridge_session_stream_lease_locked(
+                 fake_self,
+                 session,
++                snapshot=_make_reacquire_snapshot(),
+                 owner_authorization=OwnerAuthorization(OwnerAuthorizationKind.ALLOWED, AccountUsageLimitState.DISABLED),
+             )
+ 
+@@ -603,6 +632,7 @@
+             await mixin._ensure_http_bridge_session_stream_lease_locked(
+                 fake_self,
+                 session,
++                snapshot=_make_reacquire_snapshot(),
+                 owner_authorization=OwnerAuthorization(OwnerAuthorizationKind.ALLOWED, AccountUsageLimitState.DISABLED),
+             )
+ 
+@@ -633,6 +663,7 @@
+         await mixin._ensure_http_bridge_session_stream_lease_locked(
+             fake_self,
+             session,
++            snapshot=_make_reacquire_snapshot(),
+             owner_authorization=OwnerAuthorization(OwnerAuthorizationKind.ALLOWED, AccountUsageLimitState.DISABLED),
+         )
+ 
+@@ -705,7 +736,8 @@
+         estimated_tokens=0.0,
+         api_key_id=None,
+         api_key_stream_fair_share_threshold_pct=0,
+-        routing_tunables=None,
++        concurrency_caps=proxy_service.AccountConcurrencyCaps(response_create_limit=4, stream_limit=8),
++        routing_tunables=RoutingTunables(),
+     )
+     prewarm.assert_awaited_once()
+     release_account_lease.assert_awaited_once_with(lease)
+@@ -987,6 +1019,7 @@
+             await mixin._ensure_http_bridge_session_stream_lease_locked(
+                 fake_self,
+                 session,
++                snapshot=_make_reacquire_snapshot(),
+                 owner_authorization=OwnerAuthorization(OwnerAuthorizationKind.OWNER_UNAVAILABLE),
+             )
+ 
+@@ -1136,7 +1169,8 @@
+         estimated_tokens=0.0,
+         api_key_id=None,
+         api_key_stream_fair_share_threshold_pct=0,
+-        routing_tunables=None,
++        concurrency_caps=proxy_service.AccountConcurrencyCaps(response_create_limit=4, stream_limit=8),
++        routing_tunables=RoutingTunables(),
+     )
+     # The admission-failure cleanup settles the lease exactly once.
+     release_account_lease.assert_awaited_once_with(lease)
+@@ -1202,7 +1236,8 @@
+         estimated_tokens=0.0,
+         api_key_id=None,
+         api_key_stream_fair_share_threshold_pct=0,
+-        routing_tunables=None,
++        concurrency_caps=proxy_service.AccountConcurrencyCaps(response_create_limit=4, stream_limit=8),
++        routing_tunables=RoutingTunables(),
+     )
+     release_account_lease.assert_awaited_once_with(lease)
+     assert session.admission_waiter_count == 0
+@@ -1460,7 +1495,8 @@
+         estimated_tokens=0.0,
+         api_key_id=None,
+         api_key_stream_fair_share_threshold_pct=0,
+-        routing_tunables=None,
++        concurrency_caps=proxy_service.AccountConcurrencyCaps(response_create_limit=4, stream_limit=8),
++        routing_tunables=RoutingTunables(),
+     )
+     release_account_lease.assert_awaited_once_with(lease)
+     assert session.admission_waiter_count == 0
+--- baseline/tests/unit/test_proxy_api_responses_contract.py
++++ current/tests/unit/test_proxy_api_responses_contract.py
+@@ -1745,11 +1745,8 @@
+ 
+ 
+ @pytest.mark.asyncio
+-async def test_normalize_public_responses_stream_codex_route_preserves_codex_events() -> None:
+-    """`enforce_openai_sdk_contract=False` (used by /backend-api/codex/*) MUST
+-    forward `codex.*` vendor events verbatim, MUST NOT backfill terminal
+-    output, and MUST NOT synthesize a leading `response.created`. The Codex
+-    CLI consumes the upstream stream natively."""
++async def test_normalize_public_responses_stream_codex_route_omits_unknown_quota_without_synthesis() -> None:
++    """Unknown pool quotas are omitted without changing native failures."""
+     blocks = [
+         block
+         async for block in proxy_api_module._normalize_public_responses_stream(
+@@ -1767,12 +1764,12 @@
+ 
+     payloads = [proxy_api_module._parse_sse_payload(b) for b in blocks]
+     event_types = [p["type"] for p in payloads if p is not None]
+-    # codex.rate_limits MUST be preserved
+-    assert "codex.rate_limits" in event_types
++    # No aggregate is available to publish.
++    assert "codex.rate_limits" not in event_types
+     # response.created MUST NOT be synthesized
+     assert "response.created" not in event_types
+     # Original sequence order preserved
+-    assert event_types == ["codex.rate_limits", "response.failed"]
++    assert event_types == ["response.failed"]
+ 
+ 
+ @pytest.mark.asyncio
+--- baseline/tests/integration/test_proxy_responses.py
++++ current/tests/integration/test_proxy_responses.py
+@@ -1873,7 +1873,6 @@
+     event_types = [event["type"] for event in events]
+     if native:
+         assert event_types == [
+-            "codex.rate_limits",
+             "response.created",
+             "response.output_text.delta",
+             "responsesapi.websocket_timing",
+@@ -1993,7 +1992,8 @@
+         lines = [line async for line in resp.aiter_lines() if line]
+ 
+     event_types = [event["type"] for event in _iter_sse_events(lines)]
+-    assert event_types[0] == "codex.rate_limits"
++    assert "codex.rate_limits" not in event_types
++    assert event_types[0] == "response.completed"
+     assert "response.created" not in event_types
+     assert "response.completed" in event_types
+ 
+@@ -2033,7 +2033,8 @@
+         lines = [line async for line in resp.aiter_lines() if line]
+ 
+     event_types = [event["type"] for event in _iter_sse_events(lines)]
+-    assert event_types[0] == "codex.rate_limits"
++    assert "codex.rate_limits" not in event_types
++    assert event_types[0] == "response.completed"
+     assert "response.created" not in event_types
+     assert "response.completed" in event_types
+ 
+@@ -2073,7 +2074,8 @@
+         lines = [line async for line in resp.aiter_lines() if line]
+ 
+     event_types = [event["type"] for event in _iter_sse_events(lines)]
+-    assert event_types[0] == "codex.rate_limits"
++    assert "codex.rate_limits" not in event_types
++    assert event_types[0] == "response.completed"
+     assert "response.created" not in event_types
+     assert "response.completed" in event_types
+ 
+@@ -2112,7 +2114,8 @@
+         lines = [line async for line in resp.aiter_lines() if line]
+ 
+     event_types = [event["type"] for event in _iter_sse_events(lines)]
+-    assert event_types[0] == "codex.rate_limits"
++    assert "codex.rate_limits" not in event_types
++    assert event_types[0] == "response.completed"
+     assert "response.created" not in event_types
+     assert "response.completed" in event_types
+ 
+--- baseline/tests/integration/test_proxy_api_extended.py
++++ current/tests/integration/test_proxy_api_extended.py
+@@ -3330,7 +3330,7 @@
+     release_upstream.set()
+     remaining = [chunk async for chunk in iterator]
+     joined = "".join(remaining)
+-    assert "codex.rate_limits" in joined
++    assert "codex.rate_limits" not in joined
+     assert "response.created" not in joined
+     assert "resp_codex_src" in joined
+ 
+@@ -3728,7 +3728,7 @@
+     )
+ 
+     event_types = [event.get("type") for event in _sse_data_events(lines)]
+-    assert event_types[0] == "codex.rate_limits"
++    assert "codex.rate_limits" not in event_types
+     assert "codex.keepalive" not in event_types
+     assert "response.created" not in event_types
+     assert "response.completed" in event_types
+--- baseline/openspec/specs/proxy-admission-control/spec.md
++++ current/openspec/specs/proxy-admission-control/spec.md
+@@ -450,11 +450,47 @@
+ 
+ New account selection, account lease acquisition, opportunistic admission, and account-cap error reporting MUST use one dashboard-settings cache snapshot obtained before entering runtime locks. These paths MUST NOT read the database or await the dashboard settings cache while holding a runtime lock.
+ 
++Idle HTTP bridge stream-lease reacquisition MUST honor the effective dashboard cap for both API-key-authenticated and unkeyed sessions, including inheritance, unlimited limits, and replica partitioning. Reacquisition MUST resolve its caps, routing settings, and applicable fair-share threshold from one cache snapshot before acquiring the session pending lock. A submission whose session already owns a stream lease MUST NOT require another settings-cache read for stream-lease admission. A failed or cancelled snapshot read MUST unwind admission ownership without acquiring a lease or leaving the session lock held.
++
+ #### Scenario: Dashboard value overrides startup environment
+ 
+ - **GIVEN** the process environment stream cap differs from the persisted dashboard stream cap
+ - **WHEN** a new stream selection or lease acquisition occurs
+ - **THEN** the persisted cached dashboard cap controls the decision
++
++#### Scenario: Warm turn is not refused by an obsolete startup cap
++
++- **GIVEN** the dashboard permits 128 account streams and the startup default permits eight
++- **AND** eight other streams occupy the account while a warm HTTP bridge is idle
++- **WHEN** the warm bridge receives its next eligible turn
++- **THEN** it acquires a stream lease and dispatches without waiting on the eight-stream startup cap
++- **AND** completing that turn releases only its own lease
++
++#### Scenario: Lowered cap still refuses warm work
++
++- **GIVEN** the effective cached stream cap is lower than the startup value and is fully occupied
++- **WHEN** a warm keyed or unkeyed bridge reacquires a lease
++- **THEN** the existing account-capacity refusal applies and no upstream frame is sent
++- **AND** the refused turn leaves neither a new lease nor an admission waiter behind
++
++#### Scenario: Warm reacquisition observes updated cap semantics
++
++- **WHEN** an idle bridge reacquires after its cached dashboard cap changes
++- **THEN** an explicit zero permits unlimited streams, null inherits startup configuration, and a positive cluster cap uses the current replica share
++- **AND** a previously cached per-session cap does not override the updated settings
++
++#### Scenario: Settings failure leaves session cleanup available
++
++- **GIVEN** a keyed or unkeyed idle bridge needs a new stream lease
++- **WHEN** its settings lookup blocks, fails, or is cancelled
++- **THEN** the session pending lock remains available to other work
++- **AND** failure or cancellation removes the turn's admission waiter without leaking capacity
++
++#### Scenario: Already-leased submissions remain independent of settings availability
++
++- **GIVEN** a bridge session owns a stream lease
++- **WHEN** another turn is submitted while the settings cache is unavailable
++- **THEN** stream-lease admission reuses the held lease without awaiting settings
+ 
+ ### Requirement: Stream recovery reserve remains a selection reserve
+ 
+--- baseline/openspec/specs/proxy-admission-control/context.md
++++ current/openspec/specs/proxy-admission-control/context.md
+@@ -66,3 +66,10 @@
+ A denial's `resets_at` is the earliest reset among contributing account windows: it is the next point at which the pool estimate may change, not a promise that the key will be below its cap after that single reset.
+ 
+ A refusal is local and pre-dispatch. It remains account-neutral even when the direct WebSocket already has an open subscription socket, so denied work cannot feed its own future demand estimate. Existing reservation cleanup remains authoritative for any provisional fixed token or dollar reservation. Demand attribution remains one folded/raw statement over a single fold watermark. A compact per-account cutoff table joins both branches, so large unscoped pools do not create one SQL predicate branch per account; folded demand begins at the first complete quarter-hour inside each quota window, while retained rows in the leading partial slot and the post-watermark tail are read exactly from raw logs. Attribution uses the persisted model field as a positive generation invariant: ordinary nonempty generation models count, while the empty control/thread-goal/realtime model, file-control sentinel models, and raw model-source rows do not. This avoids a growing list of request-kind prefixes; internal warm-up still carries a generation model and remains only in the unattributed denominator. Missing evidence fails open and wakes at most one immediate per-account refresh; the staggered fleet scheduler supplies the remaining evidence without request-triggered fan-out.
++
++
++## Verified runtime repair (2026-10-13)
++
++Warm bridge reacquisition resolves one dashboard row before pending_lock and freezes effective caps, tunables and the keyed fair-share threshold. Owner revalidation remains authoritative at admission and dispatch. Already-held leases bypass settings reads; failed/cancelled snapshots unwind the waiter. For example, cap 128 admits beside eight existing streams despite startup cap 8; an occupied cap of two still refuses. Null inheritance, zero unlimited and replica partitioning use the existing resolver. No new setting or per-session configuration cache is introduced.
++
++See [requirements](spec.md) and community implementations [UP-PR-2561](https://github.com/Soju06/codex-lb/pull/2561) and [UP-PR-2308](https://github.com/Soju06/codex-lb/pull/2308).
+--- baseline/openspec/specs/responses-api-compat/spec.md
++++ current/openspec/specs/responses-api-compat/spec.md
+@@ -1278,7 +1278,9 @@
+ `response.`. Other string-valued event types MUST be dropped before they reach
+ the public stream. OpenAI-shaped backend requests with public contract
+ enforcement enabled MUST follow the same filtering rule. Native Codex requests
+-with public contract enforcement disabled MUST retain upstream vendor events.
++with public contract enforcement disabled MUST retain upstream vendor events,
++except `codex.rate_limits`, which MUST follow the pooled quota projection and
++API-key quota privacy requirements.
+ 
+ #### Scenario: Codex-internal rate-limit event is dropped before response.created
+ 
+@@ -1300,7 +1302,8 @@
+ #### Scenario: Codex-internal events on the Codex CLI route are preserved
+ 
+ - **WHEN** a native `/backend-api/codex/responses` request disables public contract enforcement
+-- **THEN** the response stream MUST retain `codex.rate_limits` and `responsesapi.websocket_timing` in upstream order
++- **THEN** the response stream MUST retain `responsesapi.websocket_timing` in upstream order
++- **AND** default `codex.rate_limits` events MUST contain the visible pooled quota snapshot or be omitted when no snapshot is available
+ 
+ ### Requirement: Streamed /v1 responses terminal output is backfilled from item events
+ When serving streaming `POST /v1/responses`, if the upstream's terminal `response.completed` or `response.incomplete` event carries `output` as missing or as an empty list, the service MUST reconstruct `output` from the `response.output_item.done` events emitted earlier in the same stream before yielding the terminal SSE event. The reconstructed `output` MUST preserve the `output_index` ordering and the raw item payloads. When the terminal `response.completed` / `response.incomplete` already carries a non-empty `output`, the service MUST forward it unchanged.
+@@ -11994,3 +11997,37 @@
+ #### Scenario: Reconciliation fails authentication
+ - **WHEN** late-anchor reconciliation finds the API key invalid
+ - **THEN** the original auth error is preserved and no upstream request is sent
++
++### Requirement: Native Codex stream quotas describe the pool
++
++Native Codex Responses SSE and WebSocket egress MUST NOT forward an account's
++raw `codex.rate_limits` payload. Default-family events MUST be rebuilt using
++the pooled downstream quota-header snapshot, including its normalized window
++durations, reset timestamps, and credits. HTTP SSE MUST use its response's
++quota-header snapshot; WebSocket egress MUST use the existing aggregate cache.
++Source-routed SSE MUST follow the same rule. The service MUST suppress quota
++events when no aggregate window is available and MUST NOT substitute a global
++aggregate for model-specific or otherwise unrepresented limit families.
++Projection MUST happen after original upstream usage ingestion and MUST NOT
++change normal response lifecycle events or account attribution. Failure to
++read quota metadata on an established WebSocket MUST suppress the quota event
++without interrupting inference; cancellation MUST still propagate.
++
++#### Scenario: A nearly exhausted account serves a pool with capacity
++
++- **GIVEN** the selected account reports 97% weekly usage and pooled downstream headers report 66.5%
++- **WHEN** native Codex receives the Responses stream
++- **THEN** its default quota event reports 66.5% weekly usage and the pooled reset timestamp
++- **AND** the event contains no account-specific plan, credits, or quota metadata
++
++#### Scenario: Unrepresented quota events cannot overwrite the pool
++
++- **WHEN** an upstream quota event belongs to a model-specific family or no pooled window is known
++- **THEN** the downstream stream omits that quota event
++- **AND** response deltas and terminal events remain deliverable
++
++#### Scenario: A quota cache read fails on an established WebSocket
++
++- **WHEN** pooled quota metadata cannot be loaded while handling a quota event
++- **THEN** the event is omitted without forwarding account-specific values
++- **AND** the next response event can still be delivered
+--- baseline/openspec/specs/responses-api-compat/context.md
++++ current/openspec/specs/responses-api-compat/context.md
+@@ -688,3 +688,10 @@
+ The [late-anchor budget contract](spec.md#requirement-late-bridge-anchors-keep-admission-budgets-consistent) covers hard-turn advancement and session anchor injection. For example, a small self-contained input can initially reserve 108 input plus 2048 output tokens. Adding an opaque previous-response anchor raises the conservative estimate to 8192 plus 2048. Successful reconciliation retains that budget in request-local state for subsequent stream-lease acquisition. When the key cannot cover it, the request returns its existing 429; a revoked key returns 401. These deliberate pre-dispatch refusals are not persistence failures and do not retire a healthy bridge session. Genuine ledger failures keep their existing fail-closed behavior.
+ 
+ Temporary model capacity still follows the [existing capacity policy](spec.md#requirement-model-capacity-messages-are-retryable-transient-failures) and the accepted output-free replay guards. The original UP-ISSUE-1935 proposal also requests unbounded replay and assurance that a live goal never blocks. Those portions remain unimplemented: ambiguous HTTP sends, visible output and opaque ownership cannot acquire replay permission from a capacity message. Local tests cover conservative quota, refusal cleanup, delayed cancellation, stale handoff recovery and fair rows/chunks transcript draining; live provider/client behavior and production throughput require separate evidence.
++
++
++## Verified runtime repair (2026-10-13)
++
++Native quota events use the same visible pool as downstream headers. HTTP/bridge/source SSE projects after raw upstream ingestion; native WebSocket forwarding resolves the existing aggregate cache after parsing and archival. Projection replaces rather than merges account fields. For example, accounts at 97 and 36 percent weekly usage emit 66.5 percent pooled usage. Unknown pools/families and hidden API-key quotas emit no event. Cache failures omit telemetry while inference continues; cancellation propagates. Public OpenAI streams retain vendor-event filtering. Raw account attribution and normal response lifecycle remain authoritative.
++
++See [requirements](spec.md) and community implementations [UP-PR-2561](https://github.com/Soju06/codex-lb/pull/2561) and [UP-PR-2308](https://github.com/Soju06/codex-lb/pull/2308).
+--- baseline/openspec/specs/api-keys/spec.md
++++ current/openspec/specs/api-keys/spec.md
+@@ -2073,3 +2073,18 @@
+ - **WHEN** one reset succeeds and the other fails
+ - **THEN** the successful key's counters are reset
+ - **AND** the failed key remains selected and its name and error are visible
++
++### Requirement: API-key quota privacy covers native Codex stream events
++
++When `hide_upstream_quota_from_api_keys` is enabled, API-key-authenticated
++Responses SSE and WebSocket streams MUST omit upstream `codex.rate_limits`
++events, including model-specific families. Owner requests without API-key
++authentication MUST continue to receive pooled quota events when available.
++The API key's own self-usage endpoint and limits MUST remain unchanged.
++
++#### Scenario: Hidden headers cannot be bypassed through streaming metadata
++
++- **GIVEN** upstream quotas are hidden from API keys
++- **WHEN** upstream emits a quota event on a native Codex SSE or WebSocket stream
++- **THEN** the API-key client receives neither pooled quota headers nor upstream quota events
++- **AND** normal response events remain available
+--- baseline/openspec/specs/api-keys/context.md
++++ current/openspec/specs/api-keys/context.md
+@@ -63,3 +63,10 @@
+ For example, selecting 30 days on the API-key page fetches both usage totals and the trend with `days=30`, using distinct cache entries and labels. The lifetime inventory and overview retain their lifetime scope. Retention limits the available history; changing the window cannot restore deleted logs.
+ 
+ Bulk reset preserves credentials and request history. If two selected keys are reset and one fails, the failed key's name and error remain visible and that key remains selected for retry. Successful keys leave the selection and their counters refresh through the existing list invalidation.
++
++
++## Verified runtime repair (2026-10-13)
++
++The existing hide_upstream_quota_from_api_keys policy covers native codex.rate_limits events as well as HTTP headers. A hidden-key response still streams content/completion but has neither pooled headers nor raw quota events. Owner requests without API keys can receive known pool snapshots. The key self-usage endpoint retains its own budget semantics. Projection does not reserve or redeem reset credits.
++
++See [requirements](spec.md) and community implementations [UP-PR-2561](https://github.com/Soju06/codex-lb/pull/2561) and [UP-PR-2308](https://github.com/Soju06/codex-lb/pull/2308).

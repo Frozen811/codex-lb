@@ -1,0 +1,70 @@
+--- before/app/modules/proxy/_service/api_key_usage.py
++++ after/app/modules/proxy/_service/api_key_usage.py
+@@ -267,6 +267,14 @@
+                     raise ProxyRateLimitError(message) from exc
+                 except ApiKeyInvalidError as exc:
+                     raise ProxyAuthError(str(exc)) from exc
++
++        # Lease reacquisition must use the same budget as the persisted
++        # reservation, including conservative defaults for a late anchor.
++        request_state.request_usage_budget = (
++            request_usage_budget
++            if request_usage_budget is not None
++            else ApiKeyRequestUsageBudget(input_tokens=None, output_tokens=None)
++        )
+ 
+     async def _release_websocket_request_state_reservation(
+         self,
+--- before/app/modules/proxy/_service/http_bridge/helpers.py
++++ after/app/modules/proxy/_service/http_bridge/helpers.py
+@@ -1828,6 +1828,9 @@
+         if getattr(inflight_future, "_http_bridge_handoff", False):
+             return False
+         service._http_bridge_inflight_sessions.pop(key, None)
++        creator_task = getattr(inflight_future, "_creator_task", None)
++        if creator_task is not None and not creator_task.done() and creator_task is not asyncio.current_task():
++            creator_task.cancel()
+         if inflight_future.done():
+             return True
+         if isinstance(exc, asyncio.CancelledError):
+--- before/app/modules/proxy/_service/http_bridge/request_submit.py
++++ after/app/modules/proxy/_service/http_bridge/request_submit.py
+@@ -1629,6 +1629,8 @@
+                 registration_task = scheduler_for(self).create_task(register_operation_with_receipt())
+                 operation, operation_cancellation = await _await_task_deferring_cancellation(registration_task)
+             except Exception as exc:
++                if isinstance(exc, ProxyResponseError) and exc.local_pre_dispatch_refusal:
++                    raise
+                 session.closed = True
+                 session.upstream_control.reconnect_requested = True
+                 session.upstream_control.retire_after_drain = True
+--- before/tests/unit/test_proxy_http_bridge.py
++++ after/tests/unit/test_proxy_http_bridge.py
+@@ -24431,7 +24431,12 @@
+ 
+     async def create_session(*_: object, **__: object) -> proxy_service._HTTPBridgeSession:
+         create_started.set()
+-        await finish_create.wait()
++        try:
++            await finish_create.wait()
++        except asyncio.CancelledError:
++            # Keep exercising the late-publication fence after cancellation
++            # has been requested by the failed creation slot.
++            await finish_create.wait()
+         return created
+ 
+     monkeypatch.setattr(service, "_prune_http_bridge_sessions_locked", Mock(return_value=[]))
+@@ -38617,7 +38622,12 @@
+ 
+     async def create_session(*_: object, **__: object) -> proxy_service._HTTPBridgeSession:
+         create_started.set()
+-        await finish_create.wait()
++        try:
++            await finish_create.wait()
++        except asyncio.CancelledError:
++            # Cancellation is cooperative; a delayed predecessor must still
++            # leave the winner's registry slot and durable ownership intact.
++            await finish_create.wait()
+         return stale_creator_session
+ 
+     monkeypatch.setattr(service, "_prune_http_bridge_sessions_locked", Mock(return_value=[]))

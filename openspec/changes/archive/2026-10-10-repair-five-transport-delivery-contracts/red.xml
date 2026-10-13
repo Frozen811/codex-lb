@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="8" skipped="0" tests="10" time="1.737" timestamp="2026-10-10T10:09:17.366754+03:00" hostname="extr3-dekstop"><testcase classname="tests.unit.test_transport_delivery_contracts" name="test_multiple_queues_share_the_live_payload_budget" time="0.122"><failure message="Failed: DID NOT RAISE QueueFull">tests\unit\test_transport_delivery_contracts.py:28: in test_multiple_queues_share_the_live_payload_budget
+    with pytest.raises(asyncio.QueueFull):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE QueueFull</failure></testcase><testcase classname="tests.unit.test_transport_delivery_contracts" name="test_waiting_producer_counts_and_releases_its_payload[cancel]" time="0.106"><failure message="Failed: DID NOT RAISE QueueFull">tests\unit\test_transport_delivery_contracts.py:48: in test_waiting_producer_counts_and_releases_its_payload
+    with pytest.raises(asyncio.QueueFull):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE QueueFull</failure></testcase><testcase classname="tests.unit.test_transport_delivery_contracts" name="test_waiting_producer_counts_and_releases_its_payload[close]" time="0.111"><failure message="Failed: DID NOT RAISE QueueFull">tests\unit\test_transport_delivery_contracts.py:48: in test_waiting_producer_counts_and_releases_its_payload
+    with pytest.raises(asyncio.QueueFull):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE QueueFull</failure></testcase><testcase classname="tests.unit.test_transport_delivery_contracts" name="test_waiting_producer_counts_and_releases_its_payload[fail]" time="0.108"><failure message="Failed: DID NOT RAISE QueueFull">tests\unit\test_transport_delivery_contracts.py:48: in test_waiting_producer_counts_and_releases_its_payload
+    with pytest.raises(asyncio.QueueFull):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE QueueFull</failure></testcase><testcase classname="tests.unit.test_transport_delivery_contracts" name="test_waiting_producer_counts_and_releases_its_payload[finish]" time="0.106"><failure message="Failed: DID NOT RAISE QueueFull">tests\unit\test_transport_delivery_contracts.py:48: in test_waiting_producer_counts_and_releases_its_payload
+    with pytest.raises(asyncio.QueueFull):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE QueueFull</failure></testcase><testcase classname="tests.unit.test_transport_delivery_contracts" name="test_oversized_first_event_cannot_escape_the_process_budget" time="0.109"><failure message="Failed: DID NOT RAISE QueueFull">tests\unit\test_transport_delivery_contracts.py:77: in test_oversized_first_event_cannot_escape_the_process_budget
+    with pytest.raises(asyncio.QueueFull):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE QueueFull</failure></testcase><testcase classname="tests.unit.test_transport_delivery_contracts" name="test_rejected_nowait_put_does_not_leak_a_reservation" time="0.104" /><testcase classname="tests.unit.test_transport_delivery_contracts" name="test_abandoned_queue_releases_its_payload" time="0.218" /><testcase classname="tests.unit.test_transport_delivery_contracts" name="test_async_put_reserves_once_then_releases_on_drain" time="0.116"><failure message="Failed: DID NOT RAISE QueueFull">tests\unit\test_transport_delivery_contracts.py:118: in test_async_put_reserves_once_then_releases_on_drain
+    with pytest.raises(asyncio.QueueFull):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE QueueFull</failure></testcase><testcase classname="tests.unit.test_transport_delivery_contracts" name="test_process_budget_failure_retains_prefix_then_terminal_and_sibling_progress" time="0.127"><failure message="assert not True">tests\unit\test_transport_delivery_contracts.py:135: in test_process_budget_failure_retains_prefix_then_terminal_and_sibling_progress
+    assert not await _enqueue_http_bridge_downstream_event(
+E   assert not True</failure></testcase></testsuite></testsuites>

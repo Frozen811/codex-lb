@@ -1,0 +1,102 @@
+............F
+================================== FAILURES ===================================
+_ test_submit_time_tombstone_refusal_releases_carriers_but_guards_deltas[/backend-api/codex/responses] _
+
+async_client = <httpx.AsyncClient object at 0x00000278282FFCB0>
+app_instance = <fastapi.applications.FastAPI object at 0x00000278289802D0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000027826C2ECF0>
+path = '/backend-api/codex/responses'
+
+    @pytest.mark.parametrize("path", PATHS)
+    async def test_submit_time_tombstone_refusal_releases_carriers_but_guards_deltas(
+        async_client, app_instance, monkeypatch, path: str
+    ) -> None:
+        bridge._install_bridge_settings(monkeypatch, enabled=True)
+        owner_id = await bridge._import_account(async_client, "tombstone-owner", "tombstone-owner@example.com")
+        owner = await bridge._get_account(owner_id)
+        upstream = bridge._FakeBridgeUpstreamWebSocket("resp_tombstone")
+        bridge._install_bridge_account_upstream(monkeypatch, account=owner, upstream=upstream)
+        service = get_proxy_service_for_app(app_instance)
+        headers = {"session_id": "tombstone-session", "thread-id": "tombstone-thread"}
+        history = [{"role": "user", "content": "first turn"}]
+    
+        def body(history):
+            return {
+                "model": "gpt-5.1",
+                "instructions": "",
+                "input": history,
+                "prompt_cache_key": "tombstone-cache",
+                "stream": True,
+            }
+    
+        try:
+            first = await async_client.post(path, headers=headers, json=body(history))
+            assert first.status_code == 200 and "response.completed" in first.text
+            async with SessionLocal() as session:
+                record = (await session.scalars(select(HttpBridgeSessionRecord))).one()
+                denied_anchor = record.latest_response_id
+                assert denied_anchor
+            original_submit = service._submit_http_bridge_request
+            captured = []
+    
+            async def late_tombstone(session, **kwargs):
+                if not captured:
+                    request_state = kwargs["request_state"]
+                    assert request_state.proxy_injected_previous_response_id
+                    assert request_state.previous_response_id == denied_anchor
+                    persisted = await service._durable_bridge.persist_retry_circuit(
+                        session_key_kind=session.key.affinity_kind,
+                        session_key_value=session.key.affinity_key,
+                        api_key_id=session.key.api_key_id,
+                        consecutive_failures=0,
+                        cooldown_until_epoch=0,
+                        last_detail="anchor_abandoned",
+                        updated_at_epoch=time.time(),
+                    )
+                    assert persisted is not None
+                    state = retry_circuit_module._HTTPBridgeRetryCircuitState(last_touched_monotonic=time.monotonic())
+                    state.last_detail = "anchor_abandoned"
+                    runtime = cast(Any, service)
+                    async with runtime._http_bridge_retry_circuit_lock:
+                        runtime._http_bridge_retry_circuits[session.key] = state
+                    captured.append(session)
+                return await original_submit(session, **kwargs)
+    
+            monkeypatch.setattr(service, "_submit_http_bridge_request", late_tombstone)
+            history.extend(
+                [
+                    {"role": "assistant", "content": [{"type": "output_text", "text": "OK"}]},
+                    {"role": "user", "content": "second turn"},
+                ]
+            )
+            refusal = await async_client.post(path, headers=headers, json=body(history))
+>           assert refusal.status_code == 404, refusal.text
+E           AssertionError: {"error":{"message":"HTTP response recovery operation fence is unavailable; retry the request.","type":"server_error","code":"bridge_continuity_persistence_failed"}}
+E           assert 502 == 404
+E            +  where 502 = <Response [502 Bad Gateway]>.status_code
+
+tests\integration\test_dead_anchor_contracts.py:244: AssertionError
+----------------------------- Captured log setup ------------------------------
+WARNING  app.main:bootstrap.py:54 
+============================================
+  Dashboard bootstrap token (first-run):
+  uBt97lq4717h-4i7MP0HQiU0qSAk3XK4PFdvvdRWxc4
+
+  Use this token for initial remote setup.
+  It is shared across replicas and stays
+  valid until a password is set.
+============================================
+------------------------------ Captured log call ------------------------------
+ERROR    app.modules.proxy.api:runtime_logging.py:694 proxy_error_response request_id=c79871fa-01f9-48fd-862a-75e059a3ca6e method=POST path=/backend-api/codex/responses status=502 code="bridge_continuity_persistence_failed" message="HTTP response recovery operation fence is unavailable; retry the request."
+---------------------------- Captured log teardown ----------------------------
+WARNING  app.db.session:session.py:525 Cannot record a clean SQLite shutdown without the lifetime lock path=C:\Users\ext\AppData\Local\Temp\codex-lb-master-q7ud3qga\test.db; the next startup will run the integrity check
+============================== warnings summary ===============================
+tests/integration/test_dead_anchor_contracts.py::test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[True-paused-/backend-api/codex/responses]
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/integration/test_dead_anchor_contracts.py::test_submit_time_tombstone_refusal_releases_carriers_but_guards_deltas[/backend-api/codex/responses]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 12 passed, 12 deselected, 1 warning in 25.80s

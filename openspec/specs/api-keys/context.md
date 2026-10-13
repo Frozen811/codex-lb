@@ -63,3 +63,10 @@ The [credit override contract](spec.md#requirement-credit-windows-are-display-on
 For example, selecting 30 days on the API-key page fetches both usage totals and the trend with `days=30`, using distinct cache entries and labels. The lifetime inventory and overview retain their lifetime scope. Retention limits the available history; changing the window cannot restore deleted logs.
 
 Bulk reset preserves credentials and request history. If two selected keys are reset and one fails, the failed key's name and error remain visible and that key remains selected for retry. Successful keys leave the selection and their counters refresh through the existing list invalidation.
+
+
+## Verified runtime repair (2026-10-13)
+
+The existing hide_upstream_quota_from_api_keys policy covers native codex.rate_limits events as well as HTTP headers. A hidden-key response still streams content/completion but has neither pooled headers nor raw quota events. Owner requests without API keys can receive known pool snapshots. The key self-usage endpoint retains its own budget semantics. Projection does not reserve or redeem reset credits.
+
+See [requirements](spec.md) and community implementations [UP-PR-2561](https://github.com/Soju06/codex-lb/pull/2561) and [UP-PR-2308](https://github.com/Soju06/codex-lb/pull/2308).

@@ -1,0 +1,8 @@
+{
+  "app_source_files": 774,
+  "byte_differences": [
+    "app/modules/proxy/_service/http_bridge/request_submit.py"
+  ],
+  "differences_after_newline_normalization": [],
+  "process_test_matches": true
+}

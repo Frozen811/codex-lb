@@ -148,6 +148,7 @@ architecture-check:
 	uv run python scripts/check_proxy_timing_seams.py
 	uv run python scripts/check_settings_tiers.py
 	uv run python scripts/check_migration_topology.py
+	uv run python scripts/check_migration_durations.py
 
 typecheck:
 	uv sync --dev --frozen

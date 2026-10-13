@@ -1,0 +1,92 @@
+bringing up nodes...
+bringing up nodes...
+
+........................................................................ [ 22%]
+.....................................F.................................. [ 45%]
+.............F...F.............F...F.................................... [ 67%]
+........................................................................ [ 90%]
+..............................                                           [100%]
+================================== FAILURES ===================================
+__ test_normalize_public_responses_stream_codex_route_preserves_codex_events __
+[gw0] win32 -- Python 3.13.12 C:\codex-lb\.venv\Scripts\python.exe
+tests\unit\test_proxy_api_responses_contract.py:1771: in test_normalize_public_responses_stream_codex_route_preserves_codex_events
+    assert "codex.rate_limits" in event_types
+E   AssertionError: assert 'codex.rate_limits' in ['response.failed']
+_ test_native_sse_projects_pool_and_honors_privacy[/v1/responses-False-http] __
+[gw0] win32 -- Python 3.13.12 C:\codex-lb\.venv\Scripts\python.exe
+tests\integration\test_proxy_rate_limit_events.py:206: in test_native_sse_projects_pool_and_honors_privacy
+    _assert_downstream(events, hidden=hidden, reset_at=quota_pool.reset_at)
+tests\integration\test_proxy_rate_limit_events.py:123: in _assert_downstream
+    assert len(quotas) == 1
+E   assert 0 == 1
+E    +  where 0 = len([])
+_ test_native_sse_projects_pool_and_honors_privacy[/v1/responses-False-bridge] _
+[gw0] win32 -- Python 3.13.12 C:\codex-lb\.venv\Scripts\python.exe
+tests\integration\test_proxy_rate_limit_events.py:206: in test_native_sse_projects_pool_and_honors_privacy
+    _assert_downstream(events, hidden=hidden, reset_at=quota_pool.reset_at)
+tests\integration\test_proxy_rate_limit_events.py:123: in _assert_downstream
+    assert len(quotas) == 1
+E   assert 0 == 1
+E    +  where 0 = len([])
+_ test_native_sse_projects_pool_and_honors_privacy[/v1/responses/-False-http] _
+[gw0] win32 -- Python 3.13.12 C:\codex-lb\.venv\Scripts\python.exe
+tests\integration\test_proxy_rate_limit_events.py:206: in test_native_sse_projects_pool_and_honors_privacy
+    _assert_downstream(events, hidden=hidden, reset_at=quota_pool.reset_at)
+tests\integration\test_proxy_rate_limit_events.py:123: in _assert_downstream
+    assert len(quotas) == 1
+E   assert 0 == 1
+E    +  where 0 = len([])
+_ test_native_sse_projects_pool_and_honors_privacy[/v1/responses/-False-bridge] _
+[gw0] win32 -- Python 3.13.12 C:\codex-lb\.venv\Scripts\python.exe
+tests\integration\test_proxy_rate_limit_events.py:206: in test_native_sse_projects_pool_and_honors_privacy
+    _assert_downstream(events, hidden=hidden, reset_at=quota_pool.reset_at)
+tests\integration\test_proxy_rate_limit_events.py:123: in _assert_downstream
+    assert len(quotas) == 1
+E   assert 0 == 1
+E    +  where 0 = len([])
+============================== warnings summary ===============================
+.venv\Lib\site-packages\starlette\testclient.py:53
+.venv\Lib\site-packages\starlette\testclient.py:53
+.venv\Lib\site-packages\starlette\testclient.py:53
+.venv\Lib\site-packages\starlette\testclient.py:53
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_withholds_clean_shutdown_while_maintenance_cleanup_is_owned
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\codex-lb\app\db\alembic\versions\20260309_000000_add_additional_usage_history.py:30: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_feature_latest
+    return {str(index["name"]) for index in inspector.get_indexes(table_name) if index.get("name") is not None}
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_withholds_clean_shutdown_while_maintenance_cleanup_is_owned
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\codex-lb\app\db\alembic\versions\20260309_000000_add_additional_usage_history.py:30: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_limit_latest
+    return {str(index["name"]) for index in inspector.get_indexes(table_name) if index.get("name") is not None}
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_withholds_clean_shutdown_while_maintenance_cleanup_is_owned
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\codex-lb\app\db\alembic\versions\20260312_000000_add_additional_usage_quota_key.py:45: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_feature_latest
+    return {str(index["name"]) for index in inspector.get_indexes(table_name) if index.get("name") is not None}
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_withholds_clean_shutdown_while_maintenance_cleanup_is_owned
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\codex-lb\app\db\alembic\versions\20260312_000000_add_additional_usage_quota_key.py:45: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_limit_latest
+    return {str(index["name"]) for index in inspector.get_indexes(table_name) if index.get("name") is not None}
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_withholds_clean_shutdown_while_maintenance_cleanup_is_owned
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\contextlib.py:148: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_feature_latest
+    next(self.gen)
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_withholds_clean_shutdown_while_maintenance_cleanup_is_owned
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\contextlib.py:148: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_limit_latest
+    next(self.gen)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/unit/test_proxy_api_responses_contract.py::test_normalize_public_responses_stream_codex_route_preserves_codex_events
+FAILED tests/integration/test_proxy_rate_limit_events.py::test_native_sse_projects_pool_and_honors_privacy[/v1/responses-False-http]
+FAILED tests/integration/test_proxy_rate_limit_events.py::test_native_sse_projects_pool_and_honors_privacy[/v1/responses-False-bridge]
+FAILED tests/integration/test_proxy_rate_limit_events.py::test_native_sse_projects_pool_and_honors_privacy[/v1/responses/-False-http]
+FAILED tests/integration/test_proxy_rate_limit_events.py::test_native_sse_projects_pool_and_honors_privacy[/v1/responses/-False-bridge]
+5 failed, 313 passed, 16 warnings in 122.82s (0:02:02)

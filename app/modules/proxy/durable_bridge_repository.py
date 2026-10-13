@@ -26,6 +26,7 @@ from app.db.models import (
     HTTP_BRIDGE_TERMINAL_APPEND_PHASE_PENDING,
     HTTP_BRIDGE_TERMINAL_APPEND_PHASE_SETTLED,
     Account,
+    AccountStatus,
     HttpBridgeOperationEvent,
     HttpBridgeOperationEventChunk,
     HttpBridgeOperationRecord,
@@ -38,6 +39,7 @@ from app.db.models import (
 )
 from app.db.session import sqlite_writer_section
 from app.modules.proxy.account_eligibility import HARD_OWNER_UNAVAILABLE_STATUSES
+from app.modules.proxy.complete_transcript import materialize_terminal_output
 from app.modules.proxy.continuity import (
     HTTP_BRIDGE_ACCOUNT_NEUTRAL_REPLAY_KEY_PREFIX,
     HTTP_BRIDGE_ACCOUNT_NEUTRAL_REPLAY_KIND,
@@ -2181,6 +2183,64 @@ class DurableBridgeRepository:
         )
         return _to_operation_snapshot(operation) if operation is not None else None
 
+    async def restart_root_operation_for_replay(
+        self,
+        *,
+        operation_id: str,
+        session_id: str,
+        instance_id: str,
+        owner_epoch: int,
+        account_id: str,
+        model: str,
+        request_text: str,
+        expected_response_id: str | None = None,
+    ) -> bool:
+        """Restart a local root transcript after an independently proven replay."""
+        allowed_states = ("submitted", "unknown") if expected_response_id is None else ("acknowledged", "failed")
+        async with sqlite_writer_section():
+            owner = await self._session.scalar(
+                select(HttpBridgeSessionRecord.id)
+                .where(
+                    HttpBridgeSessionRecord.id == session_id,
+                    HttpBridgeSessionRecord.owner_instance_id == instance_id,
+                    HttpBridgeSessionRecord.owner_epoch == owner_epoch,
+                    HttpBridgeSessionRecord.account_id == account_id,
+                )
+                .with_for_update()
+            )
+            operation = await self._session.scalar(
+                select(HttpBridgeOperationRecord)
+                .where(
+                    HttpBridgeOperationRecord.operation_id == operation_id,
+                    HttpBridgeOperationRecord.session_id == session_id,
+                    HttpBridgeOperationRecord.parent_response_id.is_(None),
+                    HttpBridgeOperationRecord.response_id == expected_response_id,
+                    HttpBridgeOperationRecord.state.in_(allowed_states),
+                )
+                .with_for_update()
+            )
+            if owner is None or operation is None:
+                await self._session.rollback()
+                return False
+            if expected_response_id is None and (
+                operation.event_bytes != 0 or await self._operation_has_spool_material(operation_id)
+            ):
+                await self._session.rollback()
+                return False
+            await self._delete_operation_spool_material((operation_id,))
+            operation.account_id = account_id
+            operation.model = model
+            operation.request_text = request_text
+            operation.state = "submitted"
+            operation.response_id = None
+            operation.event_bytes = 0
+            operation.event_spool_complete = False
+            operation.terminal_append_phase = HTTP_BRIDGE_TERMINAL_APPEND_PHASE_PENDING
+            operation.spool_format = HTTP_BRIDGE_SPOOL_FORMAT_ROWS_V1
+            operation.updated_at = utcnow()
+            await self._session.commit()
+            return True
+
     async def abandon_stale_operations(
         self,
         *,
@@ -2686,6 +2746,7 @@ class DurableBridgeRepository:
         turns: list[DurableBridgeTranscriptTurn] = []
         visited: set[str] = set()
         total_bytes = 0
+        api_key_scope: str | None = None
         current_response_id: str | None = response_id
         while current_response_id is not None:
             if current_response_id in visited or len(turns) >= max_turns:
@@ -2694,6 +2755,10 @@ class DurableBridgeRepository:
             operation = await self.get_operation_by_response_id(response_id=current_response_id)
             if operation is None or operation.request_text is None or not operation.event_spool_complete:
                 return None
+            owner = await self.get_session_by_id(operation.session_id)
+            if owner is None or (api_key_scope is not None and owner.api_key_scope != api_key_scope):
+                return None
+            api_key_scope = owner.api_key_scope
             remaining_event_bytes = max_bytes - total_bytes - len(operation.request_text.encode("utf-8"))
             if remaining_event_bytes < 0:
                 return None
@@ -2701,8 +2766,14 @@ class DurableBridgeRepository:
                 operation_id=operation.operation_id,
                 max_bytes=remaining_event_bytes,
             )
-            if not events or not any(
-                "response.completed" in event or "response.incomplete" in event for event in events
+            if (
+                not events
+                or materialize_terminal_output(
+                    events,
+                    expected_response_id=current_response_id,
+                    expected_terminal_type=f"response.{operation.state}",
+                )
+                is None
             ):
                 return None
             turn_bytes = len(operation.request_text.encode("utf-8")) + sum(
@@ -3817,13 +3888,18 @@ class DurableBridgeRepository:
         """
         if not session_id or not expected_account_id:
             return False
+        quota_statuses = (AccountStatus.RATE_LIMITED, AccountStatus.QUOTA_EXCEEDED)
         owner_status_lock = (
             select(Account.status, Account.reset_at).where(Account.id == expected_account_id).with_for_update()
         )
         unavailable_owner = select(Account.id).where(
             Account.id == expected_account_id,
             Account.status.in_(HARD_OWNER_UNAVAILABLE_STATUSES),
-            or_(Account.reset_at.is_(None), Account.reset_at >= recovery_deadline_epoch),
+            or_(
+                Account.status.not_in(quota_statuses),
+                Account.reset_at.is_(None),
+                Account.reset_at >= recovery_deadline_epoch,
+            ),
         )
         statement = (
             update(HttpBridgeSessionRecord)
@@ -3842,12 +3918,15 @@ class DurableBridgeRepository:
                 await self._session.commit()
                 return False
             owner_reset_at = locked[1]
-            if owner_reset_at is not None and owner_reset_at < recovery_deadline_epoch:
+            if locked[0] in quota_statuses and owner_reset_at is not None and owner_reset_at < recovery_deadline_epoch:
                 # The owner is expected back inside the window the caller is
                 # willing to wait, so waiting keeps the upstream prompt cache
                 # instead of forcing a full resend onto another account.
                 await self._session.commit()
                 return False
+            # A quota reset cannot unpause an account or repair its credentials.
+            # Other unavailable statuses can retain an incidental reset value
+            # from an earlier quota observation; it is not a recovery horizon.
             result = await self._session.execute(statement)
             if (getattr(result, "rowcount", 0) or 0) > 0:
                 await self._session.commit()

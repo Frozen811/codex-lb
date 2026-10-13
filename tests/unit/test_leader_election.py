@@ -77,6 +77,12 @@ def _install(
     # Model the DB RETURNING a full-TTL remaining lease on every affected row.
     if isinstance(session, _FakeSession):
         session._remaining = float(ttl)
+        # These stand-ins have no shared SQLite file. Match admission to their
+        # dialect so PostgreSQL and in-memory concurrency remain under test.
+        import app.db.session as db_session
+
+        fake_url = "sqlite+aiosqlite:///:memory:" if session._dialect_name == "sqlite" else "postgresql+asyncpg://test"
+        monkeypatch.setattr(db_session, "_settings", SimpleNamespace(database_url=fake_url))
 
     @asynccontextmanager
     async def _session_cm():

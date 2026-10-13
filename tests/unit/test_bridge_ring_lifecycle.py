@@ -1416,8 +1416,8 @@ async def test_chunk_operation_replays_exact_events(
             'data: {"type":"response.output_text.delta","delta":"안녕"}\n\n',
         )
         terminal_events = (
-            'data: {"type":"response.completed"}\n\n',
-            'data: {"type":"response.completed"}\n\n',
+            'data: {"type":"response.completed","response":{"id":"resp-chunk-completed","output":[]}}\n\n',
+            'data: {"type":"response.completed","response":{"id":"resp-chunk-completed","output":[]}}\n\n',
         )
         first_chunk = encode_durable_bridge_transcript_chunk(first_events)
         terminal_chunk = encode_durable_bridge_transcript_chunk(terminal_events)
@@ -1597,7 +1597,7 @@ async def test_chunk_writer_persists_batch_and_terminal_atomically(
             session_id=claim.id,
             instance_id="inst-chunk-writer",
             owner_epoch=claim.owner_epoch,
-            event_text='data: {"type":"response.completed"}\n\n',
+            event_text='data: {"type":"response.completed","response":{"id":"resp-chunk-writer","output":[]}}\n\n',
             max_bytes=1024,
             state="completed",
             response_id="resp-chunk-writer",
@@ -1629,7 +1629,7 @@ async def test_chunk_writer_persists_batch_and_terminal_atomically(
         assert [(chunk.first_sequence_number, chunk.event_count) for chunk in chunks] == [(1, 2), (3, 1)]
         assert await repository.get_operation_events(operation_id=operation_id) == [
             *first_events,
-            'data: {"type":"response.completed"}\n\n',
+            'data: {"type":"response.completed","response":{"id":"resp-chunk-writer","output":[]}}\n\n',
         ]
         assert await repository.get_replayable_transcript(response_id="resp-chunk-writer") is not None
         assert encode.await_count == 2

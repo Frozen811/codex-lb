@@ -1,0 +1,60 @@
+{
+  "head": "7e3779ffaea1a27c29710a7d496e8fa037131f98",
+  "selected_ids": [
+    "UP-PR-1084",
+    "UP-PR-1903",
+    "UP-PR-2075",
+    "UP-PR-2457",
+    "UP-PR-2472"
+  ],
+  "changed_source_rows": [
+    "UP-PR-1084",
+    "UP-PR-1903",
+    "UP-PR-2075",
+    "UP-PR-2457",
+    "UP-PR-2472"
+  ],
+  "other_source_rows_byte_identical": 333,
+  "initial_dirty_file_count": 251,
+  "unrelated_dirty_files_byte_identical": 250,
+  "main_spec_context_prefixes_preserved": [
+    "openspec/specs/responses-api-compat/spec.md",
+    "openspec/specs/responses-api-compat/context.md"
+  ],
+  "source_status_counts": {
+    "ИСПРАВЛЕНО ЛОКАЛЬНО / ЧАСТИЧНО ПРОВЕРЕНО": 3,
+    "ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО": 69,
+    "ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО": 64,
+    "НЕ ПРОВЕРЕНО": 170,
+    "ЛОКАЛЬНО ПРОВЕРЕНО / ЗАКРЫТО": 1,
+    "ИСПРАВЛЕНО ЛОКАЛЬНО / ЗАКРЫТО": 2,
+    "ЗАКРЫТО ЛОКАЛЬНО (CATALOG SCOPE)": 1,
+    "ЧАСТИЧНО ПРОВЕРЕНО": 4,
+    "ЗАКРЫТО ЛОКАЛЬНО": 12,
+    "**ЗАКРЫТО ЛОКАЛЬНО (§75)**": 5,
+    "**ЗАКРЫТО ЛОКАЛЬНО (§76)**": 5,
+    "ЗАКРЫТО ЛОКАЛЬНО (DOC/CONFIG SCOPE)": 1,
+    "ЗАКРЫТО ЛОКАЛЬНО (ACCOUNT-LOCAL SCOPE)": 1
+  },
+  "final_test_reports": {
+    "network-native-api.xml": 153,
+    "transport-utils.xml": 38,
+    "bridge-unit.xml": 36,
+    "transport-routes.xml": 8,
+    "bridge-routes.xml": 9,
+    "queue-routes-final.xml": 51
+  },
+  "distinct_final_passes": 295,
+  "nonpasses": 0,
+  "whitespace_check": "PASS",
+  "archive_exists": true,
+  "final_source_sha256": {
+    "app/modules/proxy/_service/http_bridge/queues.py": "af2368ec342b45115fc2b6c7903256d2a371e4559db73fc518440451871cc3d4",
+    "app/modules/proxy/_service/http_bridge/upstream_events.py": "117579be63809f9821d642be26223f4e143a8e8e73a271cf5e2fdb736b681dd3",
+    "tests/unit/test_transport_delivery_contracts.py": "6476f2abcf73727c3a80ccec85dbd2e60f0d8c14ac3c9f112074f30b16246f68",
+    "tests/integration/test_transport_delivery_routes.py": "dab29eb6674bc91a63736e312a7c92d59c6dfe2bf9b28f63da94e237682fe865",
+    "openspec/specs/responses-api-compat/spec.md": "5004f2e39f35e549d6f16040fb5e959ee8f00c95731df93ad22a1ced00022104",
+    "openspec/specs/responses-api-compat/context.md": "ce3e3d10e31154a1ad5aec14ea2ac547d11f5ab18c4c9a8d716919a19a39346e",
+    "issues-check.md": "21e67493a5e424c1b69e29a747eebbc42e5b8587350ce67cb459538099a025c5"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "head": "7e3779ffaea1a27c29710a7d496e8fa037131f98",
+  "selected": [
+    "UP-ISSUE-1304",
+    "UP-ISSUE-1898",
+    "UP-ISSUE-2563",
+    "UP-ISSUE-2574",
+    "UP-ISSUE-2582"
+  ],
+  "changed_source_rows": [
+    "UP-ISSUE-1304",
+    "UP-ISSUE-1898",
+    "UP-ISSUE-2563",
+    "UP-ISSUE-2574",
+    "UP-ISSUE-2582"
+  ],
+  "unchanged_source_rows": 333,
+  "initial_dirty_files": 323,
+  "preserved_unrelated_files": 317,
+  "shared_initially_dirty_paths": [
+    "app/modules/proxy/_service/http_bridge/request_submit.py",
+    "issues-check.md",
+    "openspec/specs/responses-api-compat/context.md",
+    "openspec/specs/responses-api-compat/spec.md",
+    "tests/integration/test_http_responses_bridge.py",
+    "tests/integration/test_proxy_websocket_responses.py"
+  ],
+  "prefixes_preserved": [
+    "openspec/specs/responses-api-compat/spec.md",
+    "openspec/specs/responses-api-compat/context.md"
+  ],
+  "final_runs": {
+    "durable": 1071,
+    "lifecycle": 124,
+    "http-final": 236,
+    "context-surfaces": 31
+  },
+  "distinct_passed": 1462,
+  "unexpected_paths": [],
+  "diff_check": "PASS",
+  "residuals": [
+    "Seven pre-existing retry-claim test failures reproduced with pre-batch request_submit.py",
+    "One HTTP aggregate idle-recovery timeout reproduced with pre-batch request_submit.py",
+    "No native PostgreSQL/MySQL, live provider, distributed, cloud or production validation"
+  ]
+}

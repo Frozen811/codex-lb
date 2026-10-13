@@ -1,0 +1,17 @@
+{
+  "tests.integration.test_account_operator_contracts": 7,
+  "tests.integration.test_account_quota_limit_migration": 9,
+  "tests.integration.test_accounts_api": 22,
+  "tests.integration.test_accounts_backup_and_quota": 2,
+  "tests.integration.test_rate_limit_reset_credits_api": 11,
+  "tests.integration.test_reset_warmup_threshold_migration": 8,
+  "tests.integration.test_settings_api": 98,
+  "tests.unit.test_account_backup_restore": 2,
+  "tests.unit.test_account_operator_contracts": 18,
+  "tests.unit.test_limit_warmup": 86,
+  "tests.unit.test_load_balancer_contract": 34,
+  "tests.unit.test_rate_limit_reset_credits_api": 62,
+  "tests.unit.test_rate_limit_reset_credits_mapper": 8,
+  "tests.unit.test_rate_limit_reset_credits_scheduler": 35,
+  "tests.unit.test_rate_limit_reset_credits_store": 12
+}

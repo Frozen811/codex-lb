@@ -1,0 +1,23 @@
+{
+  "groups": [
+    {
+      "file": "pytest-final-owner.xml",
+      "passed": 149,
+      "errors": 0,
+      "skips": 0
+    },
+    {
+      "file": "pytest-final-anchor.xml",
+      "passed": 54,
+      "errors": 0,
+      "skips": 0
+    },
+    {
+      "file": "pytest-final-transport.xml",
+      "passed": 35,
+      "errors": 0,
+      "skips": 0
+    }
+  ],
+  "distinct_passes": 238
+}

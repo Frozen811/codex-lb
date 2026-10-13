@@ -1,0 +1,369 @@
+--- initial/app/modules/proxy/durable_bridge_repository.py
++++ current/app/modules/proxy/durable_bridge_repository.py
+@@ -26,6 +26,7 @@
+     HTTP_BRIDGE_TERMINAL_APPEND_PHASE_PENDING,
+     HTTP_BRIDGE_TERMINAL_APPEND_PHASE_SETTLED,
+     Account,
++    AccountStatus,
+     HttpBridgeOperationEvent,
+     HttpBridgeOperationEventChunk,
+     HttpBridgeOperationRecord,
+@@ -3887,13 +3888,18 @@
+         """
+         if not session_id or not expected_account_id:
+             return False
++        quota_statuses = (AccountStatus.RATE_LIMITED, AccountStatus.QUOTA_EXCEEDED)
+         owner_status_lock = (
+             select(Account.status, Account.reset_at).where(Account.id == expected_account_id).with_for_update()
+         )
+         unavailable_owner = select(Account.id).where(
+             Account.id == expected_account_id,
+             Account.status.in_(HARD_OWNER_UNAVAILABLE_STATUSES),
+-            or_(Account.reset_at.is_(None), Account.reset_at >= recovery_deadline_epoch),
++            or_(
++                Account.status.not_in(quota_statuses),
++                Account.reset_at.is_(None),
++                Account.reset_at >= recovery_deadline_epoch,
++            ),
+         )
+         statement = (
+             update(HttpBridgeSessionRecord)
+@@ -3912,12 +3918,15 @@
+                 await self._session.commit()
+                 return False
+             owner_reset_at = locked[1]
+-            if owner_reset_at is not None and owner_reset_at < recovery_deadline_epoch:
++            if locked[0] in quota_statuses and owner_reset_at is not None and owner_reset_at < recovery_deadline_epoch:
+                 # The owner is expected back inside the window the caller is
+                 # willing to wait, so waiting keeps the upstream prompt cache
+                 # instead of forcing a full resend onto another account.
+                 await self._session.commit()
+                 return False
++            # A quota reset cannot unpause an account or repair its credentials.
++            # Other unavailable statuses can retain an incidental reset value
++            # from an earlier quota observation; it is not a recovery horizon.
+             result = await self._session.execute(statement)
+             if (getattr(result, "rowcount", 0) or 0) > 0:
+                 await self._session.commit()
+--- initial/app/modules/proxy/_service/http_bridge/streaming.py
++++ current/app/modules/proxy/_service/http_bridge/streaming.py
+@@ -2517,6 +2517,17 @@
+             durable_lookup = None
+             return True
+ 
++        def dead_client_anchor_error() -> ProxyResponseError:
++            return ProxyResponseError(
++                404,
++                openai_error(
++                    "bridge_previous_response_not_found",
++                    "The account that owns this conversation is no longer available; "
++                    "resend the full conversation history or start a new conversation.",
++                ),
++                local_pre_dispatch_refusal=True,
++            )
++
+         async def retire_dead_client_anchor(exc: ProxyResponseError) -> ProxyResponseError | None:
+             """Tell the client its anchor is gone instead of asking it to retry forever.
+ 
+@@ -2551,6 +2562,15 @@
+             client_anchor = payload.previous_response_id
+             if client_anchor is None or rewritten_file_account_id is not None:
+                 return None
++            if (
++                durable_lookup is not None
++                and durable_lookup.continuity_abandoned
++                and durable_lookup.retired_account_id is not None
++            ):
++                # Retired lookups deliberately hide account_id. A subsequent
++                # request with the same client anchor still has positive proof
++                # of retirement, rather than a retryable owner lookup miss.
++                return dead_client_anchor_error()
+             retiring_account_id = request_state.preferred_account_id
+             if durable_lookup is None or retiring_account_id is None:
+                 return None
+@@ -2578,15 +2598,7 @@
+                 model_class=_extract_model_class(payload.model) if payload.model else None,
+                 owner_check_applied=True,
+             )
+-            return ProxyResponseError(
+-                404,
+-                openai_error(
+-                    "bridge_previous_response_not_found",
+-                    "The account that owns this conversation is no longer available; "
+-                    "resend the full conversation history or start a new conversation.",
+-                ),
+-                local_pre_dispatch_refusal=True,
+-            )
++            return dead_client_anchor_error()
+ 
+         def owner_unavailable_allows_account_neutral_replay(exc: ProxyResponseError) -> bool:
+             if not _http_bridge_is_previous_response_owner_unavailable(exc):
+@@ -2747,6 +2759,9 @@
+             replay_rejection = classify_account_neutral_replay_rejection()
+             if replay_rejection is not None:
+                 record_account_neutral_replay_rejection(replay_rejection)
++            dead_anchor_error = await retire_dead_client_anchor(owner_unavailable)
++            if dead_anchor_error is not None:
++                raise dead_anchor_error
+             raise owner_unavailable
+ 
+         while True:
+@@ -4068,6 +4083,11 @@
+                 effective_payload.previous_response_id is not None
+                 and _http_bridge_is_explicit_previous_response_rejection(exc)
+             )
++            if explicit_previous_response_rejection and exc.local_pre_dispatch_refusal:
++                # A local tombstone rejected this request before publication or
++                # dispatch. Keep its selected refusal; there is no submitted
++                # operation to fence or reset for transparent upstream replay.
++                raise
+             if explicit_previous_response_rejection and (
+                 request_state.replay_count > 0
+                 or request_state.response_event_count > 0
+--- initial/app/modules/proxy/_service/http_bridge/request_submit.py
++++ current/app/modules/proxy/_service/http_bridge/request_submit.py
+@@ -1315,6 +1315,7 @@
+                     "bridge_previous_response_not_found",
+                     "The reattached anchor for this session was proven dead; resend the full conversation.",
+                 ),
++                local_pre_dispatch_refusal=request_is_undispatched,
+             )
+         # Persist the recovery checkpoint only after the retry circuit has
+         # admitted this request. A client reconnect suppressed by the
+--- initial/tests/unit/test_durable_bridge_owner_retirement.py
++++ current/tests/unit/test_durable_bridge_owner_retirement.py
+@@ -518,6 +518,56 @@
+     return naive_utc_to_epoch(to_utc_naive(utcnow() + timedelta(seconds=seconds)))
+ 
+ 
++@pytest.mark.parametrize("status", sorted(HARD_OWNER_UNAVAILABLE_STATUSES, key=lambda value: value.value))
++@pytest.mark.parametrize("horizon", ["absent", "expired", "inside", "deadline", "outside"])
++async def test_request_path_reset_horizon_depends_on_owner_status(
++    async_session_factory: Callable[[], AsyncSession],
++    coordinator: DurableBridgeSessionCoordinator,
++    status: AccountStatus,
++    horizon: str,
++) -> None:
++    deadline = _epoch_in(120)
++    resets = {
++        "absent": None,
++        "expired": deadline - 180,
++        "inside": deadline - 60,
++        "deadline": deadline,
++        "outside": deadline + 3600,
++    }
++    reset_at = resets[horizon]
++    await _add_account(async_session_factory, "owner-reset", status, reset_at=reset_at)
++    session_id = await _claim(coordinator, account_id="owner-reset")
++    quota_status = status in (AccountStatus.RATE_LIMITED, AccountStatus.QUOTA_EXCEEDED)
++    should_retire = not (quota_status and reset_at is not None and reset_at < deadline)
++
++    assert (
++        await _retire_now(
++            async_session_factory, session_id=session_id, account_id="owner-reset", deadline_epoch=deadline
++        )
++        is should_retire
++    )
++    lookup = await _lookup(coordinator)
++    assert lookup is not None
++    assert lookup.continuity_abandoned is should_retire
++    async with async_session_factory() as session:
++        account = (await session.scalars(select(Account))).one()
++        marker = (await session.scalars(select(HttpBridgeSessionRecord))).one()
++        original_marker = (marker.continuity_abandonment_scope, marker.continuity_abandoned_at)
++        assert account.status == status
++        assert account.reset_at == reset_at
++
++    # A duplicate sees the same authoritative outcome and does not rewrite it.
++    assert (
++        await _retire_now(
++            async_session_factory, session_id=session_id, account_id="owner-reset", deadline_epoch=deadline
++        )
++        is should_retire
++    )
++    async with async_session_factory() as session:
++        marker = (await session.scalars(select(HttpBridgeSessionRecord))).one()
++        assert (marker.continuity_abandonment_scope, marker.continuity_abandoned_at) == original_marker
++
++
+ async def test_request_path_retires_an_owner_with_no_recovery_horizon(
+     async_session_factory: Callable[[], AsyncSession],
+     coordinator: DurableBridgeSessionCoordinator,
+--- initial/openspec/specs/responses-api-compat/spec.md
++++ current/openspec/specs/responses-api-compat/spec.md
+@@ -12031,3 +12031,85 @@
+ - **WHEN** pooled quota metadata cannot be loaded while handling a quota event
+ - **THEN** the event is omitted without forwarding account-specific values
+ - **AND** the next response event can still be delivered
++
++
++### Requirement: Dead-owner recovery horizons reflect the owner's status
++
++When an HTTP Responses bridge request has proven its continuity owner unavailable, retirement MUST treat a reset timestamp as evidence of automatic recovery only when the owner is rate-limited or quota-exceeded. A paused, deactivated or confirmed-unusable reauthentication owner MUST NOT be kept solely because a stored reset timestamp falls within the request budget. Retirement MUST retain the account-status lock, conditional status check and expected-owner check, and MUST NOT mutate stored reset metadata. An active or recovered owner MUST NOT be retired.
++
++#### Scenario: Administrative unavailability has an incidental near reset
++- **WHEN** a request encounters a paused or deactivated continuity owner with a reset timestamp inside its budget
++- **THEN** that timestamp does not prevent conditional owner retirement
++- **AND** the stored account status and reset timestamp remain unchanged
++
++#### Scenario: Unusable reauthentication has an incidental near reset
++- **WHEN** selection has proven a reauthentication owner's credentials unusable and its stored reset timestamp is inside the request budget
++- **THEN** the timestamp does not defer conditional retirement
++
++#### Scenario: Quota owner can return within the budget
++- **WHEN** a rate-limited or quota-exceeded owner has a reset timestamp before the recovery deadline
++- **THEN** the owner is retained for existing bounded recovery
++
++#### Scenario: Quota owner has no usable horizon
++- **WHEN** a rate-limited or quota-exceeded owner's reset timestamp is absent or at or after the recovery deadline
++- **THEN** the unavailable owner is eligible for conditional retirement
++
++#### Scenario: Ownership or status changed
++- **WHEN** the expected owner no longer owns the session or its status recovered before retirement
++- **THEN** the current healthy or different owner is preserved
++
++### Requirement: Proven-dead client anchors receive actionable terminal rejection
++
++When an HTTP bridge request carries a client-supplied response anchor owned by an account that cannot return within its budget, the bridge MUST conditionally retire that owner and deliver HTTP 404 `bridge_previous_response_not_found` with a remedy to resend the full conversation history or start a new conversation. The rejection MUST remain unmasked on canonical and equivalent HTTP paths, including trailing slash aliases, and MUST NOT independently authorize raw-HTTP replay. Repeated retirement attempts for the same unavailable owner MUST report the existing retirement without rewriting its marker. An eligible subsequent anchor-free full-history request MUST be able to bind to a healthy account; this MUST NOT make account-owned files or encrypted state portable.
++
++#### Scenario: Client anchor on a dead owner
++- **WHEN** a client resumes a bridged thread using its own anchor on a paused owner
++- **THEN** it receives the actionable 404 instead of a retryable owner-unavailable failure
++
++#### Scenario: Anchor-free recovery on the same thread
++- **WHEN** the client follows the rejection with eligible full history and no anchor on the same thread
++- **THEN** a healthy owner can serve the request
++- **AND** the complete supplied history is preserved
++
++#### Scenario: Duplicate retirement
++- **WHEN** a duplicate request observes the same already-retired unavailable owner
++- **THEN** retirement reports success without rewriting the original scope or timestamp
++
++#### Scenario: Repeated client anchor after retirement
++- **WHEN** the client repeats its anchored request and a durable retirement marker hides the former owner from normal lookup
++- **THEN** the bridge preserves the actionable 404 verdict instead of returning a retryable owner-lookup failure
++- **AND** it neither redispatches the anchor nor rewrites the retirement marker
++
++#### Scenario: File ownership still constrains recovery
++- **WHEN** a request also carries an uploaded file owned by the unavailable account
++- **THEN** recovery does not forward the file through another account
++
++### Requirement: Submit-time abandonment tombstones retire exact proxy anchors
++
++When submission rejects a proxy-injected response anchor after adopting an abandonment tombstone, the bridge MUST retire that exact anchor from matching live and durable continuity carriers while preserving the existing 404 `bridge_previous_response_not_found` refusal. Retirement MUST retain the tombstone guarding incomplete delta requests, preserve successor continuity and leave client-supplied anchors untouched. Cleanup failure MUST NOT replace the selected public refusal; cancellation MUST retain the existing lifecycle cleanup policy.
++
++A local refusal proven to precede request publication and dispatch MUST preserve its selected error through outer recovery handling. It MUST NOT trigger transparent upstream replay or a missing-operation-fence error merely because the original request contained eligible full history.
++
++#### Scenario: First refusal clears both matching carriers
++- **WHEN** a proxy-injected anchor reaches submission after its abandonment tombstone is adopted
++- **THEN** the bridge returns the existing 404 and retires the matching live and durable anchor
++
++#### Scenario: Full resend escapes the tombstone
++- **WHEN** the client resends complete eligible history without an anchor after that retirement
++- **THEN** normal admission can dispatch the complete history without reinjecting the rejected anchor
++
++#### Scenario: Delta-only follow-up remains refused
++- **WHEN** an incomplete delta follows that retirement without a response anchor
++- **THEN** the abandonment tombstone continues refusing context-free dispatch
++
++#### Scenario: A successor is preserved
++- **WHEN** another request advances continuity before retirement finishes
++- **THEN** only the rejected anchor is considered for cleanup and the successor survives
++
++#### Scenario: Client anchor is preserved
++- **WHEN** the request supplied its own anchor rather than receiving proxy injection
++- **THEN** the submit-time proxy-anchor cleanup does not clear or rewrite that client anchor
++
++#### Scenario: Cleanup fails
++- **WHEN** exact-match anchor cleanup encounters a transient failure
++- **THEN** the selected public refusal remains intact and existing bounded cleanup retains its denial fence
+--- initial/openspec/specs/responses-api-compat/context.md
++++ current/openspec/specs/responses-api-compat/context.md
+@@ -695,3 +695,14 @@
+ Native quota events use the same visible pool as downstream headers. HTTP/bridge/source SSE projects after raw upstream ingestion; native WebSocket forwarding resolves the existing aggregate cache after parsing and archival. Projection replaces rather than merges account fields. For example, accounts at 97 and 36 percent weekly usage emit 66.5 percent pooled usage. Unknown pools/families and hidden API-key quotas emit no event. Cache failures omit telemetry while inference continues; cancellation propagates. Public OpenAI streams retain vendor-event filtering. Raw account attribution and normal response lifecycle remain authoritative.
+ 
+ See [requirements](spec.md) and community implementations [UP-PR-2561](https://github.com/Soju06/codex-lb/pull/2561) and [UP-PR-2308](https://github.com/Soju06/codex-lb/pull/2308).
++
++
++## Dead owners and late abandonment (2026-10-13)
++
++The [status-aware horizon contract](spec.md#requirement-dead-owner-recovery-horizons-reflect-the-owners-status) distinguishes quota resets from administrative or credential recovery. For example, a paused owner with a stored reset thirty seconds away cannot automatically return when that clock expires; conditional retirement releases its thread. A rate-limited or quota-exceeded owner with the same timestamp remains eligible for existing bounded waiting. This preserves stored status/reset metadata and the existing account lock and expected-owner fence.
++
++The [client-anchor contract](spec.md#requirement-proven-dead-client-anchors-receive-actionable-terminal-rejection) keeps the first and repeated client-anchored requests actionable: HTTP 404 bridge_previous_response_not_found asks for full history or a fresh conversation. A positive durable retirement marker is sufficient evidence even though ordinary lookup deliberately hides the former account. A genuinely missing owner retains its existing refusal. Uploaded files and encrypted reasoning retain their ownership constraints; an anchor-free eligible full resend can bind elsewhere.
++
++The [submit-time tombstone contract](spec.md#requirement-submit-time-abandonment-tombstones-retire-exact-proxy-anchors) handles a remote abandonment verdict arriving after planning. It retires the exact rejected live and durable carrier, preserves the initial 404 through outer recovery, and keeps the tombstone for delta-only refusal until replacement continuity succeeds. The undispatched request has no operation to reset for transparent replay. Successor anchors, client-supplied anchors, existing cleanup retry fences and cancellation ownership remain protected.
++
++The regression evidence uses disposable SQLite, synthetic upstream adapters, all public HTTP bridge paths and slash aliases, both native WebSocket paths and existing raw HTTP controls. Keyed tests enable real API-key enforcement, settle all four reservations and charge only the two successful turns. This does not certify live Desktop/provider behavior, native PostgreSQL/MySQL races, distributed rollout or hosted CI/production. Community reference implementations: [UP-PR-2423](https://github.com/Soju06/codex-lb/pull/2423) and [UP-PR-2467](https://github.com/Soju06/codex-lb/pull/2467).
+--- initial/issues-check.md
++++ current/issues-check.md
+@@ -4,7 +4,9 @@
+ 
+ Этот файл фиксирует доказательства, замечания, исправляющие коммиты и повторные проверки. Нормативные контракты остаются в [openspec/specs](openspec/specs), работа по изменению поведения — в [openspec/changes](openspec/changes). Заявления автора, зелёная сборка образа и наличие теста сами по себе не означают, что проблема решена.
+ 
+-**Последний локальный пакет — §88, 2026-10-13:** ровно пять **UP-PR-2561 /2308 /2112 /UP-ISSUE-2343 /2505** закрыты локально. Исправлены dashboard caps для warm bridge и pooled/privacy quota events; HTTP phase provenance, persistence ownership и graceful scheduler stop независимо проверены. **355 distinct PASS:352 Windows +3 Linux**,0 skips/xfails;Ruff/format/ty,guards/simplicity и strict OpenSpec **68/68 PASS**. [verification](openspec/changes/archive/2026-10-13-repair-five-proxy-runtime-contracts/verification.md). Other333 source rows и481 unrelated initial dirty files сохранены. Queue338:188 local closures,2 НЕ ПРИМЕНИМО,8 partial,140 НЕ ПРОВЕРЕНО. Existing partials,F-045/CI-04,live client/provider/cloud/public/production scopes сохранены. Commit/push/PR/merge/release/deploy не выполнялись.
++**Последний локальный пакет — §89, 2026-10-13:** ровно пять **UP-ISSUE-1921 /1707 /UP-PR-2423 /2467 /UP-DISC-1864** закрыты локально. Исправлены ложный reset horizon, повторный client-anchor502 и submit-time tombstone404→502. **238 distinct PASS,0 skips/xfails**, real SQLite/HTTP paths/slash/API-key settlement и обе native WS routes; Ruff/format/ty,guards/simplicity иstrict OpenSpec68/68 PASS. [Verification](openspec/changes/archive/2026-10-13-repair-five-dead-anchor-contracts/verification.md). Other333 source rows и538 unrelated initial files сохранены побайтно; spec/context prior prefixes сохранены. Queue338:193 local closures,2 НЕ ПРИМЕНИМО,8 partial,135 НЕ ПРОВЕРЕНО. Live provider/Desktop/native server DB/distributed/cloud/public/production и прежние partials/F-045/CI-04 сохраняют свои ограничения. Commit/push/PR/merge/release/deploy не выполнялись.
++
++**Предыдущий локальный пакет — §88, 2026-10-13:** ровно пять **UP-PR-2561 /2308 /2112 /UP-ISSUE-2343 /2505** закрыты локально. Исправлены dashboard caps для warm bridge и pooled/privacy quota events; HTTP phase provenance, persistence ownership и graceful scheduler stop независимо проверены. **355 distinct PASS:352 Windows +3 Linux**,0 skips/xfails;Ruff/format/ty,guards/simplicity и strict OpenSpec **68/68 PASS**. [verification](openspec/changes/archive/2026-10-13-repair-five-proxy-runtime-contracts/verification.md). Other333 source rows и481 unrelated initial dirty files сохранены. Queue338:188 local closures,2 НЕ ПРИМЕНИМО,8 partial,140 НЕ ПРОВЕРЕНО. Existing partials,F-045/CI-04,live client/provider/cloud/public/production scopes сохранены. Commit/push/PR/merge/release/deploy не выполнялись.
+ 
+ **Предыдущий локальный пакет — §87, 2026-10-13:** ровно пять **UP-ISSUE-2090 /1758 /1799 /UP-PR-2303 /UP-ISSUE-1935** обработаны: **четыре закрыты локально, 1935 частично проверена**. Исправлены cancellation failed creator, stale local late-anchor budget и маскировка 429/401 под ledger502; handoff/backlog независимо подтверждены. **287 distinct pytest PASS, 0 skips/xfails**; Ruff/format/ty, guards/simplicity и strict OpenSpec **68/68 PASS**. [verification](openspec/changes/archive/2026-10-13-repair-five-bridge-admission-contracts/verification.md). Other333 source rows и452 unrelated prior dirty files сохранены побайтно. Очередь338:183 local closures,2 НЕ ПРИМЕНИМО,8 partial,145 НЕ ПРОВЕРЕНО. Unbounded goal retry proposal и live provider/cloud/production остаются открытым scope. Commit/push/PR/merge/release/deploy не выполнялись.
+ 
+@@ -417,7 +419,7 @@
+ | [UP-ISSUE-2269](https://github.com/Soju06/codex-lb/issues/2269) | bug: forwarded continuations can lose required conversation history | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
+ | [UP-ISSUE-1950](https://github.com/Soju06/codex-lb/issues/1950) | bug(compact): hosted computer screenshots can still hard-fail compaction and wedge image-heavy threads | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
+ | [UP-ISSUE-1942](https://github.com/Soju06/codex-lb/issues/1942) | bug: Regression: /v1/responses becomes unusable after upgrading from 1.22.0 to 1.24.0 (PR #1943) | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
+-| [UP-ISSUE-1921](https://github.com/Soju06/codex-lb/issues/1921) | bug: existing Codex threads repeatedly fail with invalid previous_response_id | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
++| [UP-ISSUE-1921](https://github.com/Soju06/codex-lb/issues/1921) | bug: existing Codex threads repeatedly fail with invalid previous_response_id | РЕШЕНО | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §89: invalid/stale anchors проверены через raw HTTP, bridge и обе native WS routes; initial/repeated actionable404 и full-history recovery PASS. 238 distinct PASS,0 skips/xfails; live client/provider отдельно. [Verification](openspec/changes/archive/2026-10-13-repair-five-dead-anchor-contracts/verification.md). |
+ | [UP-ISSUE-1895](https://github.com/Soju06/codex-lb/issues/1895) | bug(warmup): /v1/warmup fails with 404 (compact payload) and account probe fails with 400 (max_output_tokens=1) — windows cannot be auto-started | РЕШЕНО | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | F-076, §51: actual HTTP compact404 fallback и Force Probe подтверждены; 2 red-before fake usage cases исправлены. Отсутствующий usage остаётся null, consumer требует completion и закрывает iterator. Same owner, one fallback, non404/EOF/failed/incomplete и pressure=0 PASS. [Verification](openspec/changes/archive/2026-10-05-repair-warmup-fallback-and-reset-evidence/verification.md). |
+ | [UP-ISSUE-986](https://github.com/Soju06/codex-lb/issues/986) | feat: optional sticky account switchover only after compaction boundary | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
+ | [UP-ISSUE-568](https://github.com/Soju06/codex-lb/issues/568) | follow-up: side effects of response.create history slimming (#560) | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
+@@ -521,7 +523,7 @@
+ | [UP-ISSUE-2291](https://github.com/Soju06/codex-lb/issues/2291) | bug: queued transcript batches wait between flushes | РЕШЕНО | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §46: existing loop подтверждён 320-event ten-write burst, bounded fair passes и false/exception isolation без intervening waits. Real SQLite rows_v1/chunks_v2 сохраняют 320 events + один terminal; stale-owner epoch отклонён. Live production speedup отдельно. [Evidence](openspec/changes/archive/2026-10-04-verify-sqlite-history-reports-transcript/verification.md). |
+ | [UP-ISSUE-2029](https://github.com/Soju06/codex-lb/issues/2029) | bug: historical minute-long Codex LB stalls and event-loop starvation remain unresolved | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
+ | [UP-ISSUE-1924](https://github.com/Soju06/codex-lb/issues/1924) | bug(proxy): inline-image 429 can prevent prompt-cache failover | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
+-| [UP-ISSUE-1707](https://github.com/Soju06/codex-lb/issues/1707) | bug: existing Codex thread can remain unusable on dead hard-affinity owner while fresh/side chat works | РЕШЕНО | НЕ ПРОВЕРЕНО | — |
++| [UP-ISSUE-1707](https://github.com/Soju06/codex-lb/issues/1707) | bug: existing Codex thread can remain unusable on dead hard-affinity owner while fresh/side chat works | РЕШЕНО | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §89: исправлен reset horizon для paused/deactivated/confirmed-unusable reauth owners;25 status/horizon units,24 keyed/unkeyed HTTP paths/slash cases PASS. First/repeated404,healthy full-history recovery,4 settled reservations и52 charged tokens. Account-bound files/encrypted state сохраняются; live/distributed отдельно. [Verification](openspec/changes/archive/2026-10-13-repair-five-dead-anchor-contracts/verification.md). |
+ 
+ ### Исходный раздел 14: Новые проблемы, баги, предложения и Pull Requests из оригинального репозитория (Upstream #2497–#2537)
+ 
+@@ -597,7 +599,7 @@
+ | [UP-PR-2403](https://github.com/Soju06/codex-lb/pull/2403) | PR #2403: feat(proxy): classify usage-limit rejections and answer pool-walk exclusion | Раздел 2, L163 | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | §63: usage/burst/capacity exclusion truth tables PASS; unsafe invalid_request_error spec corrected and request-echo route regression PASS. Existing classifier verified. [verification](openspec/changes/archive/2026-10-07-repair-five-upstream-limit-contracts/verification.md). Published `Frozen811/codex-lb:main`, SHA `c50159869`; [CI #79](https://github.com/Frozen811/codex-lb/actions/runs/37662810349) **35/35 PASS**, Windows/release guards/simplicity PASS; [publication](openspec/changes/archive/2026-10-07-repair-five-upstream-limit-contracts/publication.md). Latest verified source `3205f09fa`; [CI #83](https://github.com/Frozen811/codex-lb/actions/runs/37728331547) **35/35 PASS**, all applicable workflows **39/39 PASS**; [resumed publication](openspec/changes/archive/2026-10-08-preserve-ready-websocket-receive-on-handoff/publication.md). Latest final source `5fd5b8141`; [CI #85](https://github.com/Frozen811/codex-lb/actions/runs/37774897114) **35/35 PASS**, applicable workflows **39/39 PASS**; [final publication](openspec/changes/archive/2026-10-08-fail-fast-out-of-scope-hard-affinity-owner/publication.md). |
+ | [UP-PR-2440](https://github.com/Soju06/codex-lb/pull/2440) | PR #2440: fix(proxy): preserve upstream reset metadata in retry health | Раздел 2, L169 | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | §63: non-finite reset parsing fixed; absolute/relative bridge persistence, direct WebSocket metadata and keyed settlement-before-health PASS. Broader #1707/live production remains open. [verification](openspec/changes/archive/2026-10-07-repair-five-upstream-limit-contracts/verification.md). Published `Frozen811/codex-lb:main`, SHA `c50159869`; [CI #79](https://github.com/Frozen811/codex-lb/actions/runs/37662810349) **35/35 PASS**, Windows/release guards/simplicity PASS; [publication](openspec/changes/archive/2026-10-07-repair-five-upstream-limit-contracts/publication.md). Latest verified source `3205f09fa`; [CI #83](https://github.com/Frozen811/codex-lb/actions/runs/37728331547) **35/35 PASS**, all applicable workflows **39/39 PASS**; [resumed publication](openspec/changes/archive/2026-10-08-preserve-ready-websocket-receive-on-handoff/publication.md). Latest final source `5fd5b8141`; [CI #85](https://github.com/Frozen811/codex-lb/actions/runs/37774897114) **35/35 PASS**, applicable workflows **39/39 PASS**; [final publication](openspec/changes/archive/2026-10-08-fail-fast-out-of-scope-hard-affinity-owner/publication.md). |
+ | [UP-PR-2439](https://github.com/Soju06/codex-lb/pull/2439) | PR #2439: fix(proxy): preserve upstream quota reset metadata on terminal errors | Раздел 2, L175 | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | §63: finite client resets and original status-bearing quota terminal after failed replay PASS; malformed reset rendering fixed. Status-less failed replay retains existing fail-closed scope. [verification](openspec/changes/archive/2026-10-07-repair-five-upstream-limit-contracts/verification.md). Published `Frozen811/codex-lb:main`, SHA `c50159869`; [CI #79](https://github.com/Frozen811/codex-lb/actions/runs/37662810349) **35/35 PASS**, Windows/release guards/simplicity PASS; [publication](openspec/changes/archive/2026-10-07-repair-five-upstream-limit-contracts/publication.md). Latest verified source `3205f09fa`; [CI #83](https://github.com/Frozen811/codex-lb/actions/runs/37728331547) **35/35 PASS**, all applicable workflows **39/39 PASS**; [resumed publication](openspec/changes/archive/2026-10-08-preserve-ready-websocket-receive-on-handoff/publication.md). Latest final source `5fd5b8141`; [CI #85](https://github.com/Frozen811/codex-lb/actions/runs/37774897114) **35/35 PASS**, applicable workflows **39/39 PASS**; [final publication](openspec/changes/archive/2026-10-08-fail-fast-out-of-scope-hard-affinity-owner/publication.md). |
+-| [UP-PR-2423](https://github.com/Soju06/codex-lb/pull/2423) | PR #2423 / #1921: fix(proxy): reject a dead client anchor instead of asking for a retry | Раздел 2, L181 | НЕ ПРОВЕРЕНО | — |
++| [UP-PR-2423](https://github.com/Soju06/codex-lb/pull/2423) | PR #2423 / #1921: fix(proxy): reject a dead client anchor instead of asking for a retry | Раздел 2, L181 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §89: expected-owner/healthy/near-quota-reset/idempotence guards PASS; исправлен повторный client anchor, терявший positive retirement verdict и возвращавший502. Actual SQLite marker сохраняется; owner/session suites121 PASS. Upstream merge/native server DB отдельно. [Verification](openspec/changes/archive/2026-10-13-repair-five-dead-anchor-contracts/verification.md). |
+ | [UP-PR-2332](https://github.com/Soju06/codex-lb/pull/2332) | PR #2332: fix(proxy): fail over account-local model rejection | Раздел 3, L427 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §78: existing exact model_not_found проверен через HTTP и 10 WS cases: bounded movable failover, unchanged 404/envelope, health neutrality, hard-owner controls. Локально; provider/cloud отдельно. [verification](openspec/changes/archive/2026-10-09-repair-five-routing-ownership-contracts/verification.md). |
+ | [UP-PR-2469](https://github.com/Soju06/codex-lb/pull/2469) | PR #2469: fix(proxy): preserve routed file failover provenance | Раздел 3, L451 | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | §78: typed replay prohibition больше не теряется в file adapter; поздний poll refusal после retry не переносит finalization. 1 red product case; 4 new poll и 63 existing file/client/unary controls PASS. First-poll unpinned failover сохранён. [verification](openspec/changes/archive/2026-10-09-repair-five-routing-ownership-contracts/verification.md). |
+ | [UP-PR-2451](https://github.com/Soju06/codex-lb/pull/2451) | PR #2451: fix(proxy): refuse remote compaction for model-source models before account selection | Раздел 3, L457 | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | Hidden compact slash aliases fixed; enabled/disabled/assigned-source refusal before native selection/accounting, native success and registry precedence PASS; §70; [verification](openspec/changes/archive/2026-10-08-repair-five-image-compact-terminal-contracts/verification.md). Live provider/other-platform/cloud/production scope separate. |
+@@ -614,7 +616,7 @@
+ | [UP-PR-2486](https://github.com/Soju06/codex-lb/pull/2486) | PR #2486: fix(balancer): admit a hard continuity owner serving its own transient backoff | Раздел 12, L1351 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §78: existing core/sticky/unbound hard-owner backoff admission подтверждён; 4 new active/paused/excluded/cap cases, unchanged counters, pressure cleanup и healthy sibling controls PASS. Persistent holds/caps не обходятся. [verification](openspec/changes/archive/2026-10-09-repair-five-routing-ownership-contracts/verification.md). |
+ | [UP-PR-2473](https://github.com/Soju06/codex-lb/pull/2473) | PR #2473: feat(proxy): add gpt-reserve as an operator-enabled Luna Reserve model | Раздел 12, L1353 | НЕ ПРОВЕРЕНО | — |
+ | [UP-PR-2472](https://github.com/Soju06/codex-lb/pull/2472) | PR #2472: fix(proxy): surface native transport give-up terminals | Раздел 12, L1354 | ЗАКРЫТО ЛОКАЛЬНО | §82: existing native marked-terminal / canonical retry hint / marker+DONE stripping / inner stream и lease cleanup independently PASS. Raw EOF, local refusal и non-native controls сохранены; live helper/provider/cloud отдельно. [verification](openspec/changes/archive/2026-10-10-repair-five-transport-delivery-contracts/verification.md). |
+-| [UP-PR-2467](https://github.com/Soju06/codex-lb/pull/2467) | PR #2467: fix(proxy-responses): retire tombstoned injected anchors | Раздел 12, L1357 | НЕ ПРОВЕРЕНО | — |
++| [UP-PR-2467](https://github.com/Soju06/codex-lb/pull/2467) | PR #2467: fix(proxy-responses): retire tombstoned injected anchors | Раздел 12, L1357 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §89: exact live/durable tombstone cleanup независимо подтверждён; исправлена маскировка local undispatched404 под missing-operation-fence502. Four HTTP paths/slash:404→delta404→full-history200;54 cleanup/successor/file-pin controls PASS. Distributed rollout отдельно. [Verification](openspec/changes/archive/2026-10-13-repair-five-dead-anchor-contracts/verification.md). |
+ | [UP-PR-2464](https://github.com/Soju06/codex-lb/pull/2464) | PR #2464: feat(ui): add compact and fullscreen dashboard account views | Раздел 12, L1358 | НЕ ПРОВЕРЕНО | — |
+ | [UP-PR-2463](https://github.com/Soju06/codex-lb/pull/2463) | PR #2463: feat(api-keys): add estimated usage-share limits | Раздел 12, L1359 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §61: existing estimated usage-share CRUD/attribution/equality/fail-open/public-route enforcement независимо проверен; duplicate implementation не добавлена. Upstream PR approval/merge не заявлены; [verification](openspec/changes/archive/2026-10-07-repair-five-key-quota-contracts/verification.md). |
+ | [UP-PR-2462](https://github.com/Soju06/codex-lb/pull/2462) | PR #2462: fix(db): repair September migration lineage | Раздел 12, L1360 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §86: single-head repair outcome подтверждён через released merge, без rejected restamp/reparent method. 3 populated starts, downgrade/re-upgrade, canonical head и row/schema preservation PASS. PR upstream closed unmerged; local equivalent behavior, no history rewrite. [Verification](openspec/changes/archive/2026-10-10-repair-five-migration-contributor-contracts/verification.md). Commit/push/release/deploy не выполнялись. |
+@@ -702,7 +704,7 @@
+ | [UP-DISC-500](https://github.com/Soju06/codex-lb/discussions/500) | #500: Just created an Opencode plugin for simplified setup on codex-lb | Раздел 11, L1238 | НЕ ПРОВЕРЕНО | — |
+ | [UP-DISC-2232](https://github.com/Soju06/codex-lb/discussions/2232) | #2232: **Title: Does load balancing across multiple Plus accounts still make sense?** | Раздел 11, L1242 | НЕ ПРОВЕРЕНО | — |
+ | [UP-DISC-1998](https://github.com/Soju06/codex-lb/discussions/1998) | #1998: Question: Is there an official migration path from SQLite to PostgreSQL in codex-lb? | Раздел 11, L1245 | НЕ ПРОВЕРЕНО | — |
+-| [UP-DISC-1864](https://github.com/Soju06/codex-lb/discussions/1864) | #1864: Frequent Invalid previous_response_id errors when using Codex with codex-lb | Раздел 11, L1248 | НЕ ПРОВЕРЕНО | — |
++| [UP-DISC-1864](https://github.com/Soju06/codex-lb/discussions/1864) | #1864: Frequent Invalid previous_response_id errors when using Codex with codex-lb | Раздел 11, L1248 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §89: canonical/parameterless invalid-ID normalization,privacy иfull-resend recovery проверены на обеих native WS paths,raw HTTP иbridge controls;35 existing transport cases PASS. Исторические/live incidents вне local certificate. [Verification](openspec/changes/archive/2026-10-13-repair-five-dead-anchor-contracts/verification.md). |
+ | [UP-DISC-1575](https://github.com/Soju06/codex-lb/discussions/1575) | #1575: How can I display the rate option in the codex app? | Раздел 11, L1251 | НЕ ПРОВЕРЕНО | — |
+ | [UP-DISC-1820](https://github.com/Soju06/codex-lb/discussions/1820) | #1820: Is "Dashboard session lifetime" working? | Раздел 11, L1254 | НЕ ПРОВЕРЕНО | — |
+ | [UP-DISC-1593](https://github.com/Soju06/codex-lb/discussions/1593) | #1593: Reauthentication when switching Business accounts: same workspace vs different workspace | Раздел 11, L1257 | НЕ ПРОВЕРЕНО | — |
+@@ -3756,3 +3758,14 @@
+ Ruff/format14 files,scoped ty,architecture/cancellation/timing/settings98/98,topology275/one-head,static migration/simplicity и strict OpenSpec68/68 PASS. Спеки/context синхронизированы; no migration/setting/dependency/UI change. [verification](openspec/changes/archive/2026-10-13-repair-five-proxy-runtime-contracts/verification.md).
+ 
+ Все пять rows updated/read back;other333 source rows и481 unrelated initial dirty files сохранены по hashes. Проверен полный batch diff относительно initial tree;Serena auto-upgrade восстановлен. Queue338:188 local closures,2 НЕ ПРИМЕНИМО,8 partial,140 НЕ ПРОВЕРЕНО. Это local source/runtime scope;original upstream PR state,deployment,live provider/client,hosted CI,public/production и прежние partials/F-045/CI-04 остаются отдельно. Commit/push/PR/merge/release/deploy не выполнялись.
++
++
++## 89. Пять dead-anchor contracts — закрыты локально, 2026-10-13
++
++Ровно пять own rows: **UP-ISSUE-1921, UP-ISSUE-1707, UP-PR-2423, UP-PR-2467, UP-DISC-1864**, исходно НЕ ПРОВЕРЕНО. HEAD `7e3779ffaea1a27c29710a7d496e8fa037131f98`; initial dirty/untracked snapshot543 files. Исправлены три реальных public/repository gaps: reset_at больше не обещает recovery paused/deactivated/confirmed-unusable reauth owners; повторный client anchor сохраняет positive retirement404; submit-time tombstone404 не теряется в missing-operation-fence502.
++
++**238 distinct PASS,0 skips/xfails**:149 owner/session/new-route +54 tombstone/cleanup/file-pin +35 existing transport, без пересечений. Новые53 cases входят в total. ВсеHTTP bridge paths/slash aliases,keyed/unkeyed,first/repeated404→eligible full-history200,4 real settled reservations и52 tokens от двух successful turns проверены. Late tombstone: exact live/durable clear,preserved tombstone,delta404,full resend200. Native WS обоих типов иraw HTTP classification/privacy controls PASS. Existing Starlette/AnyIO deprecation сохранён.
++
++Ruff/format/ty5 Python paths,architecture/cancellation/timing/settings,topology/static migration/simplicity иstrict delta/main OpenSpec68/68 PASS. Three requirements/16 scenarios иcontext synchronized; seven tasks complete before archive. [Verification and raw evidence](openspec/changes/archive/2026-10-13-repair-five-dead-anchor-contracts/verification.md).
++
++Все пять source rows updated/read back; other333 source rows и538 unrelated initial files сохранены по hashes. Serena cache writes restored; main spec/context byte prefixes сохранены. Queue338:193 local closures,2 НЕ ПРИМЕНИМО,8 partial,135 НЕ ПРОВЕРЕНО. Native PostgreSQL/MySQL concurrency,live provider/Desktop,distributed rollout,hosted CI/public/production не заявляются; прежние partials/F-045/CI-04 не закрываются. Commit/push/PR/merge/release/deploy не выполнялись.

@@ -1,18 +1,13 @@
-"""Pure helpers for building a complete HTTP bridge transcript.
-
-The transcript capture and recovery paths are deliberately not imported here.
-Keeping identity, echo comparison, and tool-item de-duplication side-effect
-free lets those later releases share the same rules without changing the
-request path in this schema-only release.
-"""
+"""Pure identity, lifecycle and echo checks for complete HTTP bridge transcripts."""
 
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from typing import cast
 
 from app.core.types import JsonValue
+from app.core.utils.sse import parse_sse_data_json
 
 _TOOL_CALL_TYPES = frozenset({"function_call", "custom_tool_call", "apply_patch_call"})
 _TOOL_OUTPUT_TYPES = frozenset({"function_call_output", "custom_tool_call_output", "apply_patch_call_output"})
@@ -92,6 +87,96 @@ def items_match_for_echo(left: JsonValue, right: JsonValue) -> bool:
         if "status" in left and "status" in right and left_status != right_status:
             return False
     return _canonical_item(left, omit_status=True) == _canonical_item(right, omit_status=True)
+
+
+def materialize_terminal_output(
+    events: object,
+    *,
+    expected_response_id: str | None = None,
+    expected_terminal_type: str | None = None,
+) -> list[JsonValue] | None:
+    """Read a terminal answer only after validating observed item lifecycles."""
+    if not isinstance(events, Sequence) or isinstance(events, (str, bytes, bytearray)):
+        return None
+    added: dict[int, dict[str, str]] = {}
+    done: dict[int, dict[str, JsonValue]] = {}
+    unindexed_done: list[JsonValue] = []
+    attempt_response_id: str | None = None
+    for event_text in events:
+        if not isinstance(event_text, str):
+            return None
+        payload = parse_sse_data_json(event_text)
+        if payload is None:
+            continue
+        event_type = payload.get("type")
+        if not isinstance(event_type, str):
+            return None
+        if event_type in {"response.created", "response.failed", "error"}:
+            added.clear()
+            done.clear()
+            unindexed_done.clear()
+            response = payload.get("response")
+            identifier = response.get("id") if isinstance(response, dict) else None
+            attempt_response_id = identifier if isinstance(identifier, str) else None
+            continue
+        if event_type in {"response.output_item.added", "response.output_item.done"}:
+            item = payload.get("item")
+            if not isinstance(item, dict):
+                return None
+            index = payload.get("output_index")
+            if index is None and event_type == "response.output_item.done" and not added:
+                unindexed_done.append(item)
+                continue
+            if type(index) is not int or index < 0:
+                return None
+            identity = output_item_identity(item)
+            if not output_item_identity_is_valid(identity):
+                return None
+            if event_type == "response.output_item.added":
+                if index in added or index in done:
+                    return None
+                added[index] = identity
+            else:
+                if index in added and not output_item_identities_match(added[index], identity):
+                    return None
+                previous = done.get(index)
+                if previous is not None and previous != item:
+                    return None
+                done[index] = item
+            continue
+        if event_type not in {"response.completed", "response.incomplete"}:
+            continue
+        response = payload.get("response")
+        if not isinstance(response, dict) or added.keys() - done.keys():
+            return None
+        response_id = response.get("id")
+        if (
+            not isinstance(response_id, str)
+            or not response_id.strip()
+            or (expected_response_id is not None and response_id != expected_response_id)
+            or (attempt_response_id is not None and response_id != attempt_response_id)
+            or (expected_terminal_type is not None and event_type != expected_terminal_type)
+        ):
+            return None
+        if "output" not in response:
+            return [done[index] for index in sorted(done)] + unindexed_done
+        output = response["output"]
+        if not isinstance(output, list) or any(not isinstance(item, dict) for item in output):
+            return None
+        for index, completed in done.items():
+            if index >= len(output):
+                return None
+            terminal_item = output[index]
+            if (
+                not isinstance(terminal_item, dict)
+                or not output_item_identities_match(
+                    output_item_identity(completed), output_item_identity(terminal_item)
+                )
+                or not items_match_for_echo(completed, terminal_item)
+            ):
+                return None
+        return output
+    return None
 
 
 def deduplicate_exact_replayed_tool_items(items: Iterable[JsonValue]) -> list[JsonValue] | None:

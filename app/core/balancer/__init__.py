@@ -1,4 +1,5 @@
 from app.core.balancer.logic import (
+    ACCOUNT_USAGE_LIMIT_REACHED_ERROR_CODE,
     ERROR_BACKOFF_THRESHOLD,
     HEALTH_TIER_DRAINING,
     HEALTH_TIER_HEALTHY,
@@ -21,6 +22,7 @@ from app.core.balancer.logic import (
     ResetPreferenceWindow,
     RoutingCost,
     RoutingCostsByAccount,
+    RoutingPoolEvaluation,
     RoutingStrategy,
     SelectionResult,
     TrafficClass,
@@ -29,6 +31,7 @@ from app.core.balancer.logic import (
     calculate_pace_deviation,
     configure_replica_salt,
     evaluate_health_tier,
+    evaluate_routing_pool,
     failover_decision,
     failover_outcome,
     handle_permanent_failure,
@@ -37,6 +40,7 @@ from app.core.balancer.logic import (
     plausible_rate_limit_reset_at,
     pool_usage_exhaustion,
     reauth_reason_blocks_routing,
+    routing_eligible_states,
     select_account,
 )
 
@@ -46,6 +50,7 @@ __all__ = [
     "HEALTH_TIER_DRAINING",
     "HEALTH_TIER_HEALTHY",
     "HEALTH_TIER_PROBING",
+    "ACCOUNT_USAGE_LIMIT_REACHED_ERROR_CODE",
     "ERROR_BACKOFF_THRESHOLD",
     "REAUTH_REQUIRED_FAILURE_CODES",
     "ROUTING_BLOCKED_REAUTH_REASONS",
@@ -64,6 +69,7 @@ __all__ = [
     "PoolWalkBound",
     "ResetPreferenceWindow",
     "RoutingStrategy",
+    "RoutingPoolEvaluation",
     "TrafficClass",
     "SelectionResult",
     "USAGE_LIMIT_REACHED",
@@ -71,6 +77,7 @@ __all__ = [
     "account_status_for_permanent_failure",
     "configure_replica_salt",
     "evaluate_health_tier",
+    "evaluate_routing_pool",
     "failover_decision",
     "failover_outcome",
     "handle_permanent_failure",
@@ -79,5 +86,6 @@ __all__ = [
     "plausible_rate_limit_reset_at",
     "pool_usage_exhaustion",
     "reauth_reason_blocks_routing",
+    "routing_eligible_states",
     "select_account",
 ]

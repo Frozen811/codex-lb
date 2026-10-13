@@ -1,0 +1,43 @@
+{
+  "selected_count": 5,
+  "readback": {
+    "UP-PR-2561": "| [UP-PR-2561](https://github.com/Soju06/codex-lb/pull/2561) | fix(proxy): honor dashboard caps on warm bridge admission | OPEN / DRAFT; updated 2026-10-02T20:32:21Z; head `6c4ed618d3ca` | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §88: frozen pre-lock dashboard caps/tunables/fair-share snapshot;32 HTTP path/alias cases,20 cap/update/partition/failure units and existing lifecycle controls PASS. Live replica/deployment scope external. [verification](openspec/changes/archive/2026-10-13-repair-five-proxy-runtime-contracts/verification.md). |",
+    "UP-PR-2308": "| [UP-PR-2308](https://github.com/Soju06/codex-lb/pull/2308) | PR #2308: fix(proxy): project pooled quotas into Codex rate-limit events | Раздел 12, L1391 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §88: pooled/privacy projection across HTTP,bridge,source SSE and native WS;real SQLite97/36→66.5,raw account ingestion preserved,unknown/cache/cancellation controls PASS. Live Codex/provider scope external. [verification](openspec/changes/archive/2026-10-13-repair-five-proxy-runtime-contracts/verification.md). |",
+    "UP-PR-2112": "| [UP-PR-2112](https://github.com/Soju06/codex-lb/pull/2112) | PR #2112: fix(observability): record HTTP upstream phase timings | Раздел 12, L1412 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §88: existing HTTP phase correction independently verified;30 public route/provenance/Prometheus cases plus cohort controls PASS. Deterministic clocks,not provider latency. [verification](openspec/changes/archive/2026-10-13-repair-five-proxy-runtime-contracts/verification.md). |",
+    "UP-ISSUE-2343": "| [UP-ISSUE-2343](https://github.com/Soju06/codex-lb/issues/2343) | feat(health): expose request-persistence ownership during drain | РЕШЕНО | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §88: real detached reservations on4 HTTP paths remain reserved after response;loopback pending→drained,finalized/logged once;callback handoff and12 invalid-observation controls PASS. Process observation only. [verification](openspec/changes/archive/2026-10-13-repair-five-proxy-runtime-contracts/verification.md). |",
+    "UP-ISSUE-2505": "| [UP-ISSUE-2505](https://github.com/Soju06/codex-lb/issues/2505) | bug: shutdown cancels schedulers and the leader-lease keeper mid-DB-work (SQLite pool CancelledError, unreleased lease, unclean run-state) | RESOLVED / MERGED IN FORK | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §88: existing grace/shutdown independently verified;3 Linux process tests(6 immediate SIGTERM starts+2 DB barriers),grace/keeper/fallback controls PASS. Native server DB/production external. [verification](openspec/changes/archive/2026-10-13-repair-five-proxy-runtime-contracts/verification.md). |"
+  },
+  "other_source_rows_preserved": 333,
+  "initial_dirty_count": 489,
+  "touched_initial_dirty_files": [
+    "app/modules/proxy/_service/http_bridge/request_submit.py",
+    "app/modules/proxy/_service/websocket/mixin.py",
+    "app/modules/proxy/api.py",
+    "issues-check.md",
+    "openspec/specs/responses-api-compat/context.md",
+    "openspec/specs/responses-api-compat/spec.md",
+    "tests/integration/test_proxy_responses.py",
+    "tests/unit/test_http_bridge_idle_leases.py"
+  ],
+  "unrelated_initial_dirty_preserved": 481,
+  "head_unchanged": true,
+  "publication": false,
+  "archive_exists": true,
+  "final_readback_verified": true,
+  "queue_status_counts": {
+    "ИСПРАВЛЕНО ЛОКАЛЬНО / ЧАСТИЧНО ПРОВЕРЕНО": 3,
+    "ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО": 81,
+    "ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО": 74,
+    "НЕ ПРОВЕРЕНО": 140,
+    "ЧАСТИЧНО ПРОВЕРЕНО": 5,
+    "ЗАКРЫТО ЛОКАЛЬНО": 17,
+    "ЛОКАЛЬНО ПРОВЕРЕНО / ЗАКРЫТО": 1,
+    "НЕ ПРИМЕНИМО": 2,
+    "ИСПРАВЛЕНО ЛОКАЛЬНО / ЗАКРЫТО": 2,
+    "ЗАКРЫТО ЛОКАЛЬНО (CATALOG SCOPE)": 1,
+    "**ЗАКРЫТО ЛОКАЛЬНО (§75)**": 5,
+    "**ЗАКРЫТО ЛОКАЛЬНО (§76)**": 5,
+    "ЗАКРЫТО ЛОКАЛЬНО (DOC/CONFIG SCOPE)": 1,
+    "ЗАКРЫТО ЛОКАЛЬНО (ACCOUNT-LOCAL SCOPE)": 1
+  }
+}

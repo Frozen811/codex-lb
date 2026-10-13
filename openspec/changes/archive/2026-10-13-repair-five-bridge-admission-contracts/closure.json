@@ -1,0 +1,40 @@
+{
+  "selected": [
+    "UP-ISSUE-2090",
+    "UP-ISSUE-1758",
+    "UP-ISSUE-1799",
+    "UP-PR-2303",
+    "UP-ISSUE-1935"
+  ],
+  "selected_count": 5,
+  "rows_unchanged": 333,
+  "statuses": {
+    "UP-ISSUE-2090": "ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО",
+    "UP-ISSUE-1758": "ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО",
+    "UP-ISSUE-1799": "ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО",
+    "UP-PR-2303": "ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО",
+    "UP-ISSUE-1935": "ЧАСТИЧНО ПРОВЕРЕНО"
+  },
+  "queue": {
+    "records": 338,
+    "closed_local": 183,
+    "not_applicable": 2,
+    "partial": 8,
+    "unverified": 145
+  },
+  "unrelated_dirty_preserved": 452,
+  "other_initial_files_preserved": 7538,
+  "reconstructed_python_prefixes": [
+    "app/modules/proxy/_service/api_key_usage.py",
+    "app/modules/proxy/_service/http_bridge/helpers.py",
+    "app/modules/proxy/_service/http_bridge/request_submit.py",
+    "tests/unit/test_proxy_http_bridge.py"
+  ],
+  "canonical_byte_prefixes": [
+    "openspec/specs/responses-api-compat/spec.md",
+    "openspec/specs/responses-api-compat/context.md"
+  ],
+  "distinct_tests_passed": 287,
+  "head_unchanged": "7e3779ffaea1a27c29710a7d496e8fa037131f98",
+  "publication_performed": false
+}

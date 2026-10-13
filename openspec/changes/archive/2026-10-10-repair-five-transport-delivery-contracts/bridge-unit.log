@@ -1,0 +1,8 @@
+....................................                                     [100%]
+============================== warnings summary ===============================
+tests/unit/test_proxy_http_bridge.py::test_http_bridge_account_capacity_wait_treats_workspace_spend_cap_as_recoverable
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+36 passed, 1060 deselected, 1 warning in 4.37s

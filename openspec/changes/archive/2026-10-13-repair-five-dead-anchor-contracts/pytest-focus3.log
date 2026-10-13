@@ -1,0 +1,161 @@
+F
+================================== FAILURES ===================================
+_ test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[False-paused-/backend-api/codex/responses] _
+
+async_client = <httpx.AsyncClient object at 0x0000027E535E97F0>
+app_instance = <fastapi.applications.FastAPI object at 0x0000027E52A03750>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000027E52A7BAD0>
+path = '/backend-api/codex/responses', status = <AccountStatus.PAUSED: 'paused'>
+keyed = False
+
+    @pytest.mark.parametrize("path", PATHS)
+    @pytest.mark.parametrize("status", [AccountStatus.PAUSED, AccountStatus.DEACTIVATED, AccountStatus.REAUTH_REQUIRED])
+    @pytest.mark.parametrize("keyed", [False, True])
+    async def test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers(
+        async_client, app_instance, monkeypatch, path: str, status: AccountStatus, keyed: bool
+    ) -> None:
+        dashboard = bridge._make_dashboard_settings()
+        dashboard.api_key_auth_enabled = keyed
+        bridge._install_proxy_settings(
+            monkeypatch, app_settings=bridge._make_app_settings(enabled=True), dashboard_settings=dashboard
+        )
+        owner_id = await bridge._import_account(async_client, "dead-anchor-owner", "dead-anchor-owner@example.com")
+        healthy_id = await bridge._import_account(async_client, "dead-anchor-healthy", "dead-anchor-healthy@example.com")
+        owner, healthy = await bridge._get_account(owner_id), await bridge._get_account(healthy_id)
+        selected: list[str] = []
+        sockets: list[Any] = []
+        raw_attempts: list[bool] = []
+    
+        async def select_account(self, deadline, **kwargs):
+            del self, deadline
+            if kwargs.get("preferred_account_id") == owner.id:
+                return AccountSelection(
+                    account=None, error_message="Owner unavailable", error_code=CONTINUITY_OWNER_UNAVAILABLE
+                )
+            account = owner if not selected else healthy
+            selected.append(account.id)
+            return AccountSelection(account=account, error_message=None, error_code=None)
+    
+        async def fresh(self, target, *, force=False, timeout_seconds):
+            del self, force, timeout_seconds
+            return target
+    
+        async def connect(*args, **kwargs):
+            del args, kwargs
+            upstream = bridge._FakeBridgeUpstreamWebSocket(f"resp_dead_anchor_{len(sockets)}")
+            sockets.append(upstream)
+            return upstream
+    
+        async def raw(*args, **kwargs):
+            del args, kwargs
+            raw_attempts.append(True)
+            raise AssertionError("dead-anchor refusal must not route to raw HTTP")
+            yield ""  # Preserve the upstream adapter's async-generator protocol.
+    
+        monkeypatch.setattr(proxy_module.ProxyService, "_select_account_with_budget", select_account)
+        monkeypatch.setattr(proxy_module.ProxyService, "_ensure_fresh_with_budget", fresh)
+        monkeypatch.setattr(proxy_module, "connect_responses_websocket", connect)
+        monkeypatch.setattr(proxy_module, "core_stream_responses", raw)
+        service = get_proxy_service_for_app(app_instance)
+        headers = {"session_id": "dead-anchor-session", "thread-id": "dead-anchor-thread"}
+        if keyed:
+            created = await async_client.post("/api/api-keys/", json={"name": "dead-anchor-key"})
+            assert created.status_code == 200, created.text
+            headers["Authorization"] = f"Bearer {created.json()['key']}"
+    
+        def body(history, **extra):
+            return {
+                "model": "gpt-5.1",
+                "instructions": "",
+                "input": history,
+                "prompt_cache_key": "dead-anchor-cache",
+                "stream": True,
+                **extra,
+            }
+    
+        history = [{"role": "user", "content": "first turn"}]
+        try:
+            first = await async_client.post(path, headers=headers, json=body(history))
+            assert first.status_code == 200 and "response.completed" in first.text, first.text
+            dispatched = json.loads(sockets[0].sent_text[0])
+            assert not dispatched.get("previous_response_id")
+            async with SessionLocal() as session:
+                owned = (await session.scalars(select(HttpBridgeSessionRecord))).one()
+                anchor = owned.latest_response_id
+                assert anchor
+            await service.close_all_http_bridge_sessions()
+            reset_at = int(time.time()) + 30
+            async with SessionLocal() as session:
+                await session.execute(
+                    update(Account)
+                    .where(Account.id == owner.id)
+                    .values(status=status, reset_at=reset_at, deactivation_reason="account_auth_invalidated")
+                )
+                await session.commit()
+    
+            denied = await async_client.post(
+                path, headers=headers, json=body([{"role": "user", "content": "continue"}], previous_response_id=anchor)
+            )
+            assert denied.status_code == 404, denied.text
+            error = denied.json()["error"]
+            assert error["code"] == "bridge_previous_response_not_found"
+            assert "resend the full conversation history" in error["message"]
+            assert not raw_attempts and len(sockets) == 1
+            async with SessionLocal() as session:
+                retired = (await session.scalars(select(HttpBridgeSessionRecord))).one()
+                assert retired.continuity_abandonment_scope
+                original_marker = (retired.continuity_abandonment_scope, retired.continuity_abandoned_at)
+                persisted_owner = await session.get(Account, owner.id)
+                assert persisted_owner is not None and persisted_owner.status == status
+                assert persisted_owner.reset_at == reset_at
+    
+            repeated = await async_client.post(
+                path, headers=headers, json=body([{"role": "user", "content": "continue"}], previous_response_id=anchor)
+            )
+            assert repeated.status_code == 404, repeated.text
+            assert repeated.json()["error"]["code"] == "bridge_previous_response_not_found"
+            async with SessionLocal() as session:
+                retired = (await session.scalars(select(HttpBridgeSessionRecord))).one()
+                assert (retired.continuity_abandonment_scope, retired.continuity_abandoned_at) == original_marker
+    
+            history.extend([{"role": "assistant", "content": "OK"}, {"role": "user", "content": "continue"}])
+            recovered = await async_client.post(path, headers=headers, json=body(history))
+            assert recovered.status_code == 200 and "response.completed" in recovered.text, recovered.text
+            assert selected[-1] == healthy.id and len(sockets) == 2 and not raw_attempts
+            recovered_wire = json.loads(sockets[-1].sent_text[-1])
+            assert not recovered_wire.get("previous_response_id")
+            assert [item["role"] for item in recovered_wire["input"]] == [item["role"] for item in history]
+>           assert recovered_wire["input"] == history
+E           AssertionError: assert [{'role': 'us...: 'continue'}] == [{'role': 'us...: 'continue'}]
+E             
+E             At index 1 diff: {'role': 'assistant', 'content': [{'type': 'output_text', 'text': 'OK'}]} != {'role': 'assistant', 'content': 'OK'}
+E             Use -v to get more diff
+
+tests\integration\test_dead_anchor_contracts.py:140: AssertionError
+----------------------------- Captured log setup ------------------------------
+WARNING  app.main:bootstrap.py:54 
+============================================
+  Dashboard bootstrap token (first-run):
+  UMp-Kiwtow_I9443UGAXwtj00LxjFoacuuopRrhr1Is
+
+  Use this token for initial remote setup.
+  It is shared across replicas and stays
+  valid until a password is set.
+============================================
+------------------------------ Captured log call ------------------------------
+WARNING  app.modules.proxy.service:helpers.py:4192 http_bridge_event event=owner_unavailable_replay_rejected bridge_kind=thread_header bridge_key=sha256:98f284445cab account_id=dead-anchor-owner_720dbf70 model=gpt-5.1 pending=None detail=reason=payload_not_full_resend cache_key_family=thread_header model_class=std key_strength=hard owner_check_applied=True error_message=None upstream_close_code=None response_events_seen=None transport_classification=None
+WARNING  app.modules.proxy.api:runtime_logging.py:694 proxy_error_response request_id=eff79bac-f204-48d7-8b4a-750ae1652a3a method=POST path=/backend-api/codex/responses status=404 code="bridge_previous_response_not_found" message="The account that owns this conversation is no longer available; resend the full conversation history or start a new conversation."
+WARNING  app.modules.proxy.service:helpers.py:4192 http_bridge_event event=owner_unavailable_replay_rejected bridge_kind=thread_header bridge_key=sha256:98f284445cab account_id=dead-anchor-owner_720dbf70 model=gpt-5.1 pending=None detail=reason=payload_not_full_resend cache_key_family=thread_header model_class=std key_strength=hard owner_check_applied=True error_message=None upstream_close_code=None response_events_seen=None transport_classification=None
+WARNING  app.modules.proxy.api:runtime_logging.py:694 proxy_error_response request_id=503566f7-0d2e-4677-bea4-c092a6ef0342 method=POST path=/backend-api/codex/responses status=404 code="bridge_previous_response_not_found" message="The account that owns this conversation is no longer available; resend the full conversation history or start a new conversation."
+---------------------------- Captured log teardown ----------------------------
+WARNING  app.db.session:session.py:525 Cannot record a clean SQLite shutdown without the lifetime lock path=C:\Users\ext\AppData\Local\Temp\codex-lb-master-6vr4w539\test.db; the next startup will run the integrity check
+============================== warnings summary ===============================
+tests/integration/test_dead_anchor_contracts.py::test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[False-paused-/backend-api/codex/responses]
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/integration/test_dead_anchor_contracts.py::test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[False-paused-/backend-api/codex/responses]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 1 warning in 2.51s

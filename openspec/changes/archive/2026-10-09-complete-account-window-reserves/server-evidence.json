@@ -1,0 +1,26 @@
+[
+  {
+    "backend": "postgresql",
+    "image": "postgres:16",
+    "image_id": "sha256:275447c94b11b151decd1f29877965301d5a77032037c46de93d990f739f00a9",
+    "repo_digests": [
+      "postgres@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d"
+    ],
+    "container_name": "codex-reserve-postgresql-7e41536e",
+    "container_removed": true,
+    "bind": "loopback-only",
+    "test_database": "isolated"
+  },
+  {
+    "backend": "mysql",
+    "image": "mysql:8.4",
+    "image_id": "sha256:8d132912e9d3c985237567595ec2aeae04936044eb1f9336e8e4da2326238b84",
+    "repo_digests": [
+      "mysql@sha256:6ea90827b1100f8f2ae306a539f86d2c264a26ed435a2a9f75551dd5c3aeb242"
+    ],
+    "container_name": "codex-reserve-mysql-7e41536e",
+    "container_removed": true,
+    "bind": "loopback-only",
+    "test_database": "isolated"
+  }
+]

@@ -1,0 +1,5 @@
+The five source rows were unverified at task start. Current upstream snapshots are recorded with titles and head SHAs; these are background evidence, not imported patches or cloud approval.
+
+For example, with a test budget of 10 bytes, queue A retains 6 bytes and a blocked producer retains 4 bytes. Queue B cannot reserve one additional byte. Cancelling the blocked producer immediately frees 4 bytes for queue B. Each queue's accepted prefix still drains in order. Production uses the fixed 256 MiB value and the existing five-second stall bound; no configuration is added.
+
+Windows 1231/1232 are typed host-route loss; 64/121 stay endpoint/account attributed. Native give-up relabels only client egress and closes the lease-owning inner stream. Frameless drops after output forbid replay and per-drop health penalties, while eventless windowed health evidence and explicit protocol failures retain their existing policy. Locally generated no_accounts hints fail fast; genuine upstream recovery and hard-owner constraints remain distinct.

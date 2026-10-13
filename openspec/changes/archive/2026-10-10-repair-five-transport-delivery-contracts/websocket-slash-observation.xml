@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="4" time="4.050" timestamp="2026-10-10T10:22:08.371895+03:00" hostname="extr3-dekstop"><testcase classname="tests.integration.test_transport_delivery_routes" name="test_selector_generated_hint_is_terminal_at_websocket_route[30-/backend-api/codex/responses]" time="0.993" /><testcase classname="tests.integration.test_transport_delivery_routes" name="test_selector_generated_hint_is_terminal_at_websocket_route[30-/backend-api/codex/responses/]" time="0.699"><failure message="starlette.websockets.WebSocketDisconnect">tests\integration\test_transport_delivery_routes.py:144: in test_selector_generated_hint_is_terminal_at_websocket_route
+    with client.websocket_connect(path) as websocket:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\testclient.py:123: in __enter__
+    self._raise_on_close(message)
+.venv\Lib\site-packages\starlette\testclient.py:152: in _raise_on_close
+    raise WebSocketDisconnect(code=message.get("code", 1000), reason=message.get("reason", ""))
+E   starlette.websockets.WebSocketDisconnect</failure></testcase><testcase classname="tests.integration.test_transport_delivery_routes" name="test_selector_generated_hint_is_terminal_at_websocket_route[300-/backend-api/codex/responses]" time="0.912" /><testcase classname="tests.integration.test_transport_delivery_routes" name="test_selector_generated_hint_is_terminal_at_websocket_route[300-/backend-api/codex/responses/]" time="0.686"><failure message="starlette.websockets.WebSocketDisconnect">tests\integration\test_transport_delivery_routes.py:144: in test_selector_generated_hint_is_terminal_at_websocket_route
+    with client.websocket_connect(path) as websocket:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\testclient.py:123: in __enter__
+    self._raise_on_close(message)
+.venv\Lib\site-packages\starlette\testclient.py:152: in _raise_on_close
+    raise WebSocketDisconnect(code=message.get("code", 1000), reason=message.get("reason", ""))
+E   starlette.websockets.WebSocketDisconnect</failure></testcase></testsuite></testsuites>

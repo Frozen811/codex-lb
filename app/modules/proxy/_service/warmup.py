@@ -6,7 +6,7 @@ import sys
 import time
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import aclosing
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, Protocol, cast
 from uuid import uuid4
@@ -19,6 +19,7 @@ from app.core.auth.refresh import (
     refresh_contention_kind,
 )
 from app.core.balancer import reauth_reason_blocks_routing
+from app.core.balancer.logic import ACCOUNT_USAGE_LIMIT_REACHED_ERROR_CODE, ACCOUNT_USAGE_LIMIT_REACHED_ERROR_MESSAGE
 from app.core.clients.proxy import (
     ProxyResponseError,
     UpstreamProxyRouteTrace,
@@ -42,6 +43,9 @@ from app.core.openai.parsing import parse_sse_event
 from app.core.openai.requests import ResponsesCompactRequest, ResponsesRequest
 from app.core.resilience.toggles import bind_resilience_toggles
 from app.core.upstream_proxy import UpstreamProxyRouteError
+from app.core.usage.account_limits import AccountUsageLimitState, evaluate_standard_usage_limit
+from app.core.usage.refresh_policy import USAGE_REFRESH_INTERVAL_SECONDS
+from app.core.usage.types import UsageWindowRow
 from app.db.models import Account, AccountStatus
 from app.modules.api_keys.service import ApiKeyData, ApiKeyUsageReservationData
 from app.modules.proxy._service.support import _call_with_supported_optional_kwargs, _request_log_client_fields
@@ -52,12 +56,15 @@ from app.modules.proxy.request_policy import (
     normalize_upstream_model_alias,
     validate_model_access,
 )
+from app.modules.usage.authorization import OwnerAuthorization, OwnerAuthorizationKind, load_owner_authorization
+from app.modules.usage.mappers import usage_history_to_window_row
 
 logger = logging.getLogger(__name__)
 
 _REQUEST_TRANSPORT_HTTP = "http"
 _WARMUP_MODES = frozenset({"normal", "strict", "force"})
 _WARMUP_SKIP_INELIGIBLE_PRIMARY = "ineligible_primary_usage"
+_WARMUP_USAGE_LIMIT_AUTHORIZATION_FAILED = "account_usage_limit_authorization_failed"
 _WARMUP_MAX_CONCURRENT_SUBMISSIONS = 5
 _CompactResponses = Callable[
     [ResponsesCompactRequest, Mapping[str, str], str, str | None],
@@ -134,8 +141,9 @@ class _WarmupSubmitResult:
 
 @dataclass(frozen=True, slots=True)
 class _WarmupUsageSnapshot:
-    used_percent: float
-    window_minutes: int | None
+    primary: UsageWindowRow | None = None
+    secondary: UsageWindowRow | None = None
+    monthly: UsageWindowRow | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,14 +160,43 @@ class _WarmupAccountSnapshot:
     deactivation_reason: str | None
     reset_at: int | None
     blocked_at: int | None
+    usage_limit_enabled: bool
+    usage_limit_percent: float | None
+    usage_limit_5h_percent: float | None = None
+    usage_limit_weekly_percent: float | None = None
 
 
-def _is_warmup_usage_eligible(entry: _WarmupUsageSnapshot | None) -> bool:
+@dataclass(frozen=True, slots=True)
+class _WarmupAuthorization:
+    account: _WarmupAccountSnapshot | None
+    decision: OwnerAuthorization
+
+
+def _is_warmup_usage_eligible(entry: UsageWindowRow | None) -> bool:
     if entry is None:
         return False
     if entry.window_minutes != 300:
         return False
+    if entry.used_percent is None:
+        return False
     return float(entry.used_percent) <= 0.0
+
+
+def _evaluate_warmup_usage_limit(
+    account: _WarmupAccountSnapshot,
+    usage: _WarmupUsageSnapshot,
+) -> AccountUsageLimitState:
+    return evaluate_standard_usage_limit(
+        enabled=account.usage_limit_enabled,
+        limit_percent=account.usage_limit_percent,
+        limit_weekly_percent=account.usage_limit_weekly_percent,
+        limit_5h_percent=account.usage_limit_5h_percent,
+        plan_type=account.plan_type,
+        primary=usage.primary,
+        secondary=usage.secondary,
+        monthly=usage.monthly,
+        refresh_interval_seconds=USAGE_REFRESH_INTERVAL_SECONDS,
+    )
 
 
 def _snapshot_warmup_account(account: Account) -> _WarmupAccountSnapshot:
@@ -176,6 +213,10 @@ def _snapshot_warmup_account(account: Account) -> _WarmupAccountSnapshot:
         deactivation_reason=account.deactivation_reason,
         reset_at=account.reset_at,
         blocked_at=account.blocked_at,
+        usage_limit_enabled=bool(account.usage_limit_enabled),
+        usage_limit_percent=account.usage_limit_percent,
+        usage_limit_weekly_percent=account.usage_limit_weekly_percent,
+        usage_limit_5h_percent=account.usage_limit_5h_percent,
     )
 
 
@@ -193,6 +234,10 @@ def _materialize_warmup_account(account: _WarmupAccountSnapshot) -> Account:
         deactivation_reason=account.deactivation_reason,
         reset_at=account.reset_at,
         blocked_at=account.blocked_at,
+        usage_limit_enabled=account.usage_limit_enabled,
+        usage_limit_percent=account.usage_limit_percent,
+        usage_limit_weekly_percent=account.usage_limit_weekly_percent,
+        usage_limit_5h_percent=account.usage_limit_5h_percent,
     )
 
 
@@ -211,17 +256,42 @@ class _WarmupMixin:
         proxy = cast(_WarmupServiceProtocol, self)
         async with proxy._repo_factory() as repos:
             all_accounts = await repos.accounts.list_accounts()
-            latest_usage = await repos.usage.latest_by_account(window="primary")
             target_accounts = self._resolve_warmup_target_accounts(
                 [_snapshot_warmup_account(account) for account in all_accounts],
                 api_key=api_key,
             )
-            latest_usage_snapshots = {
-                account_id: _WarmupUsageSnapshot(
-                    used_percent=float(entry.used_percent),
-                    window_minutes=entry.window_minutes,
+            target_account_ids = [account.id for account in target_accounts]
+            latest_primary = await repos.usage.latest_by_account(
+                window="primary",
+                account_ids=target_account_ids,
+            )
+            latest_secondary = await repos.usage.latest_by_account(
+                window="secondary",
+                account_ids=target_account_ids,
+            )
+            latest_monthly = await repos.usage.latest_by_account(
+                window="monthly",
+                account_ids=target_account_ids,
+            )
+            standard_usage_by_account = {
+                account.id: _WarmupUsageSnapshot(
+                    primary=(
+                        usage_history_to_window_row(latest_primary[account.id])
+                        if account.id in latest_primary
+                        else None
+                    ),
+                    secondary=(
+                        usage_history_to_window_row(latest_secondary[account.id])
+                        if account.id in latest_secondary
+                        else None
+                    ),
+                    monthly=(
+                        usage_history_to_window_row(latest_monthly[account.id])
+                        if account.id in latest_monthly
+                        else None
+                    ),
                 )
-                for account_id, entry in latest_usage.items()
+                for account in target_accounts
             }
 
         total_accounts = len(target_accounts)
@@ -238,12 +308,30 @@ class _WarmupMixin:
                 failed=failed,
             )
 
-        eligible_accounts = [
-            account for account in target_accounts if _is_warmup_usage_eligible(latest_usage_snapshots.get(account.id))
+        usage_limit_states = {
+            account.id: _evaluate_warmup_usage_limit(account, standard_usage_by_account[account.id])
+            for account in target_accounts
+        }
+        policy_eligible_accounts = [
+            account for account in target_accounts if not usage_limit_states[account.id].blocks_account_use
         ]
+        eligible_accounts = [
+            account
+            for account in policy_eligible_accounts
+            if _is_warmup_usage_eligible(standard_usage_by_account[account.id].primary)
+        ]
+        policy_eligible_ids = {account.id for account in policy_eligible_accounts}
+        skipped.extend(
+            WarmupSkippedAccountData(
+                account_id=account.id,
+                reason=ACCOUNT_USAGE_LIMIT_REACHED_ERROR_CODE,
+            )
+            for account in target_accounts
+            if account.id not in policy_eligible_ids
+        )
 
         if normalized_mode == "force":
-            accounts_to_submit = target_accounts
+            accounts_to_submit = policy_eligible_accounts
         elif normalized_mode == "strict":
             if len(eligible_accounts) != len(target_accounts):
                 raise ValueError("strict warmup requires every target account to be usage-eligible")
@@ -256,7 +344,7 @@ class _WarmupMixin:
                     account_id=account.id,
                     reason=_WARMUP_SKIP_INELIGIBLE_PRIMARY,
                 )
-                for account in target_accounts
+                for account in policy_eligible_accounts
                 if account.id not in eligible_ids
             )
 
@@ -324,6 +412,7 @@ class _WarmupMixin:
             account
             for account in accounts
             if account.status in (AccountStatus.ACTIVE, AccountStatus.REAUTH_REQUIRED)
+            and (account.status != AccountStatus.REAUTH_REQUIRED or account.deactivation_reason is not None)
             and not reauth_reason_blocks_routing(account.deactivation_reason)
             and not reauth_credentials_are_unavailable(
                 account.status,
@@ -375,13 +464,46 @@ class _WarmupMixin:
         try:
             refresh_timeout = max(1.0, float(with_dashboard_overrides(get_settings()).upstream_connect_timeout_seconds))
             live_account = await proxy._ensure_fresh_with_budget(live_account, timeout_seconds=refresh_timeout)
-            access_token = proxy._encryptor.decrypt(live_account.access_token_encrypted)
-            account_header_id = _header_account_id(live_account.chatgpt_account_id)
             route = await proxy._resolve_upstream_route_for_account(live_account, operation="warmup")
             if route is not None:
                 upstream_proxy_route_mode = route.mode
                 upstream_proxy_pool_id = route.pool_id
                 upstream_proxy_endpoint_id = route.endpoint_id
+            try:
+                authorization = await self._load_fresh_warmup_authorization(live_account.id)
+            except Exception:
+                logger.warning(
+                    "Final public warmup usage authorization failed closed",
+                    extra={"account_id": live_account.id, "request_id": request_id},
+                    exc_info=True,
+                )
+                authorization = _WarmupAuthorization(
+                    account=None,
+                    decision=OwnerAuthorization(OwnerAuthorizationKind.AUTHORIZATION_FAILED),
+                )
+            if authorization.decision.kind is OwnerAuthorizationKind.AUTHORIZATION_FAILED:
+                error_code = _WARMUP_USAGE_LIMIT_AUTHORIZATION_FAILED
+                error_message = "Account usage-limit authorization failed"
+            elif authorization.account is None:
+                error_code = "account_not_found"
+                error_message = "Account no longer exists"
+            elif authorization.decision.kind is OwnerAuthorizationKind.OWNER_UNAVAILABLE:
+                error_code = "account_not_active"
+                error_message = f"Account status is {authorization.account.status.value}"
+            elif authorization.decision.kind is OwnerAuthorizationKind.USAGE_POLICY_BLOCKED:
+                error_code = ACCOUNT_USAGE_LIMIT_REACHED_ERROR_CODE
+                error_message = ACCOUNT_USAGE_LIMIT_REACHED_ERROR_MESSAGE
+            if error_code is not None:
+                return _WarmupSubmitResult(
+                    success=False,
+                    request_id=request_id,
+                    error_code=error_code,
+                    error_message=error_message,
+                )
+            assert authorization.account is not None
+            live_account = _materialize_warmup_account(authorization.account)
+            access_token = proxy._encryptor.decrypt(live_account.access_token_encrypted)
+            account_header_id = _header_account_id(live_account.chatgpt_account_id)
             route_trace = UpstreamProxyRouteTrace()
             payload = ResponsesCompactRequest(
                 model=warmup_model,
@@ -627,3 +749,51 @@ class _WarmupMixin:
                 "usage": usage.model_dump() if usage is not None else None,
             }
         )
+
+    async def _load_fresh_warmup_authorization(self, account_id: str) -> _WarmupAuthorization:
+        proxy = cast(_WarmupServiceProtocol, self)
+        async with proxy._repo_factory() as repos:
+            account = await repos.accounts.get_by_id_fresh(account_id)
+            if (
+                account is None
+                or account.status not in {AccountStatus.ACTIVE, AccountStatus.REAUTH_REQUIRED}
+                or (
+                    account.status == AccountStatus.REAUTH_REQUIRED
+                    and (
+                        account.deactivation_reason is None
+                        or reauth_reason_blocks_routing(account.deactivation_reason)
+                        or reauth_credentials_are_unavailable(
+                            account.status,
+                            stored_access_token_expires_at(account.access_token_encrypted, proxy._encryptor),
+                            now=clock_for(proxy).time(),
+                            deactivation_reason=account.deactivation_reason,
+                        )
+                    )
+                )
+            ):
+                return _WarmupAuthorization(
+                    account=_snapshot_warmup_account(account) if account is not None else None,
+                    decision=OwnerAuthorization(
+                        OwnerAuthorizationKind.OWNER_UNAVAILABLE,
+                        owner_status=account.status if account is not None else None,
+                    ),
+                )
+            decision = await load_owner_authorization(
+                repos.usage,
+                account_id,
+                refresh_interval_seconds=USAGE_REFRESH_INTERVAL_SECONDS,
+                require_active=False,
+            )
+            snapshot = decision.snapshot
+            if snapshot is None:
+                return _WarmupAuthorization(account=None, decision=decision)
+            account_snapshot = replace(
+                _snapshot_warmup_account(account),
+                status=snapshot.status,
+                plan_type=snapshot.plan_type,
+                usage_limit_enabled=snapshot.enabled,
+                usage_limit_percent=snapshot.limit_percent,
+                usage_limit_weekly_percent=snapshot.limit_weekly_percent,
+                usage_limit_5h_percent=snapshot.limit_5h_percent,
+            )
+            return _WarmupAuthorization(account=account_snapshot, decision=decision)

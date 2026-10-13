@@ -1,0 +1,341 @@
+
+tests/integration/test_proxy_websocket_responses.py::test_responses_websocket_close_replay_keeps_context_of_turn_chained_to_empty_prewarm[full-prefix-/v1/responses] 
+-------------------------------- live log call --------------------------------
+WARNING  app.main:bootstrap.py:54 
+============================================
+  Dashboard bootstrap token (first-run):
+  [redacted test bootstrap token]
+
+  Use this token for initial remote setup.
+  It is shared across replicas and stays
+  valid until a password is set.
+============================================
+INFO     app.modules.proxy.service:mixin.py:3777 websocket_client_previous_response_full_resend_retry_prepared request_id=ws_1dcae563f03a439fadc7c51c0886f32d previous_response_id=resp_ws_prewarm input_items=4
+INFO     app.main:main.py:858 Registered in bridge ring
+INFO     app.main:main.py:974 Marked bridge ring membership stale for shutdown
+WARNING  app.db.session:session.py:525 Cannot record a clean SQLite shutdown without the lifetime lock path=C:\Users\ext\AppData\Local\Temp\codex-lb-master-0mckx6nc\test.db; the next startup will run the integrity check
+FAILED                                                                   [ 50%]
+tests/integration/test_proxy_websocket_responses.py::test_responses_websocket_close_replay_keeps_context_of_turn_chained_to_empty_prewarm[full-prefix-/backend-api/codex/responses] 
+-------------------------------- live log call --------------------------------
+WARNING  app.main:bootstrap.py:54 
+============================================
+  Dashboard bootstrap token (first-run):
+  [redacted test bootstrap token]
+
+  Use this token for initial remote setup.
+  It is shared across replicas and stays
+  valid until a password is set.
+============================================
+INFO     app.modules.proxy.service:mixin.py:3777 websocket_client_previous_response_full_resend_retry_prepared request_id=ws_bd994e7790bd4e92a0f6487bb6ab8356 previous_response_id=resp_ws_prewarm input_items=4
+INFO     app.main:main.py:858 Registered in bridge ring
+INFO     app.main:main.py:974 Marked bridge ring membership stale for shutdown
+WARNING  app.db.session:session.py:525 Cannot record a clean SQLite shutdown without the lifetime lock path=C:\Users\ext\AppData\Local\Temp\codex-lb-master-0mckx6nc\test.db; the next startup will run the integrity check
+FAILED                                                                   [100%]
+
+================================== FAILURES ===================================
+_ test_responses_websocket_close_replay_keeps_context_of_turn_chained_to_empty_prewarm[full-prefix-/v1/responses] _
+
+endpoint = '/v1/responses'
+app_instance = <fastapi.applications.FastAPI object at 0x000001E515793390>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001E5157BCA70>
+request_case = 'full-prefix'
+
+    @pytest.mark.parametrize("endpoint", ["/v1/responses", "/backend-api/codex/responses"])
+    @pytest.mark.parametrize("request_case", ["delta", "full-prefix", "changed-prefix"])
+    def test_responses_websocket_close_replay_keeps_context_of_turn_chained_to_empty_prewarm(
+        endpoint,
+        app_instance,
+        monkeypatch,
+        request_case,
+    ):
+        # Codex CLI opens a session with an empty ``generate: false`` prewarm that
+        # carries the tools and developer context, then sends the first turn as
+        # ``previous_response_id`` plus only the new items. If the upstream closes
+        # before accepting that turn, the replay must not drop the anchor: the new
+        # items alone lack everything the prewarm carried.
+        first_upstream = _SequencedUpstreamWebSocket(
+            [],
+            deferred_message_batches=[
+                [
+                    _FakeUpstreamMessage(
+                        "text",
+                        text=json.dumps(
+                            {
+                                "type": "response.created",
+                                "response": {"id": "resp_ws_prewarm", "status": "in_progress"},
+                            },
+                            separators=(",", ":"),
+                        ),
+                    ),
+                    _FakeUpstreamMessage(
+                        "text",
+                        text=json.dumps(
+                            {
+                                "type": "response.completed",
+                                "response": {
+                                    "id": "resp_ws_prewarm",
+                                    "status": "completed",
+                                    "usage": {"input_tokens": 11000, "output_tokens": 0, "total_tokens": 11000},
+                                },
+                            },
+                            separators=(",", ":"),
+                        ),
+                    ),
+                ],
+                [_FakeUpstreamMessage("close")],
+            ],
+        )
+        recovered_upstream = _recovered_upstream("resp_ws_prewarm_replay_unused")
+        connect_count = 0
+    
+        class _FakeSettingsCache:
+            async def get(self):
+                return _websocket_settings()
+    
+        async def allow_firewall(_websocket):
+            return None
+    
+        async def allow_proxy_api_key(_authorization: str | None, *, request: object | None = None):
+            return None
+    
+        async def fake_connect_proxy_websocket(self, headers, **kwargs):
+            del self, headers, kwargs
+            nonlocal connect_count
+            connect_count += 1
+            upstream = first_upstream if connect_count == 1 else recovered_upstream
+            return SimpleNamespace(id="acct_ws_prewarm_replay", codex_installation_id="account-installation"), upstream
+    
+        monkeypatch.setattr(proxy_api_module, "_websocket_firewall_denial_response", allow_firewall)
+        monkeypatch.setattr(proxy_api_module, "validate_proxy_api_key_authorization", allow_proxy_api_key)
+        monkeypatch.setattr(proxy_module, "get_settings_cache", lambda: _FakeSettingsCache())
+        monkeypatch.setattr(proxy_module.ProxyService, "_connect_proxy_websocket", fake_connect_proxy_websocket)
+    
+        prewarm_input = [
+            {"type": "additional_tools", "role": "developer", "tools": [{"type": "custom", "name": "shell"}]},
+            {"role": "developer", "content": [{"type": "input_text", "text": "workspace rules"}]},
+        ]
+        monkeypatch.setattr(
+            LoadBalancer,
+            "authorize_account_fresh",
+            AsyncMock(return_value=OwnerAuthorization(OwnerAuthorizationKind.ALLOWED, owner_status=AccountStatus.ACTIVE)),
+        )
+        turn_delta = [
+            {"role": "user", "content": [{"type": "input_text", "text": "environment context"}]},
+            {"role": "user", "content": [{"type": "input_text", "text": "summarize the notes"}]},
+        ]
+        turn_input = turn_delta
+        if request_case == "full-prefix":
+            turn_input = [*prewarm_input, *turn_delta]
+        elif request_case == "changed-prefix":
+            turn_input = [prewarm_input[0], {"role": "developer", "content": "different workspace rules"}, *turn_delta]
+        monkeypatch.setattr(
+            proxy_module.ProxyService,
+            "_resolve_websocket_previous_response_owner",
+            AsyncMock(return_value="acct_ws_prewarm_replay"),
+        )
+        headers = {
+            "x-codex-turn-metadata": json.dumps(
+                {"request_kind": "prewarm", "turn_id": "turn_prewarm_replay"},
+                separators=(",", ":"),
+            )
+        }
+    
+        with TestClient(app_instance) as client:
+            with client.websocket_connect(endpoint, headers=headers) as websocket:
+                websocket.send_text(
+                    json.dumps(
+                        {
+                            "type": "response.create",
+                            "model": "gpt-5.4",
+                            "instructions": "",
+                            "generate": False,
+                            "input": prewarm_input,
+                            "stream": True,
+                        }
+                    )
+                )
+                assert json.loads(websocket.receive_text())["type"] == "response.created"
+                assert json.loads(websocket.receive_text())["type"] == "response.completed"
+    
+                websocket.send_text(
+                    json.dumps(
+                        {
+                            "type": "response.create",
+                            "model": "gpt-5.4",
+                            "instructions": "",
+                            "previous_response_id": "resp_ws_prewarm",
+                            "input": turn_input,
+                            "stream": True,
+                        }
+                    )
+                )
+                terminal = json.loads(websocket.receive_text())
+                if request_case == "full-prefix":
+>                   assert terminal["type"] == "response.created", terminal
+E                   AssertionError: {'type': 'response.failed', 'response': {'object': 'response', 'status': 'failed', 'error': {'message': 'Upstream websocket closed before response.completed', 'type': 'server_error', 'code': 'stream_incomplete'}, 'incomplete_details': None, ...}}
+E                   assert 'response.failed' == 'response.created'
+E                     
+E                     - response.created
+E                     ?          ^^^ ^
+E                     + response.failed
+E                     ?          ^ ^^
+
+tests\integration\test_proxy_websocket_responses.py:16712: AssertionError
+_ test_responses_websocket_close_replay_keeps_context_of_turn_chained_to_empty_prewarm[full-prefix-/backend-api/codex/responses] _
+
+endpoint = '/backend-api/codex/responses'
+app_instance = <fastapi.applications.FastAPI object at 0x000001E51053F4D0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001E5157C0050>
+request_case = 'full-prefix'
+
+    @pytest.mark.parametrize("endpoint", ["/v1/responses", "/backend-api/codex/responses"])
+    @pytest.mark.parametrize("request_case", ["delta", "full-prefix", "changed-prefix"])
+    def test_responses_websocket_close_replay_keeps_context_of_turn_chained_to_empty_prewarm(
+        endpoint,
+        app_instance,
+        monkeypatch,
+        request_case,
+    ):
+        # Codex CLI opens a session with an empty ``generate: false`` prewarm that
+        # carries the tools and developer context, then sends the first turn as
+        # ``previous_response_id`` plus only the new items. If the upstream closes
+        # before accepting that turn, the replay must not drop the anchor: the new
+        # items alone lack everything the prewarm carried.
+        first_upstream = _SequencedUpstreamWebSocket(
+            [],
+            deferred_message_batches=[
+                [
+                    _FakeUpstreamMessage(
+                        "text",
+                        text=json.dumps(
+                            {
+                                "type": "response.created",
+                                "response": {"id": "resp_ws_prewarm", "status": "in_progress"},
+                            },
+                            separators=(",", ":"),
+                        ),
+                    ),
+                    _FakeUpstreamMessage(
+                        "text",
+                        text=json.dumps(
+                            {
+                                "type": "response.completed",
+                                "response": {
+                                    "id": "resp_ws_prewarm",
+                                    "status": "completed",
+                                    "usage": {"input_tokens": 11000, "output_tokens": 0, "total_tokens": 11000},
+                                },
+                            },
+                            separators=(",", ":"),
+                        ),
+                    ),
+                ],
+                [_FakeUpstreamMessage("close")],
+            ],
+        )
+        recovered_upstream = _recovered_upstream("resp_ws_prewarm_replay_unused")
+        connect_count = 0
+    
+        class _FakeSettingsCache:
+            async def get(self):
+                return _websocket_settings()
+    
+        async def allow_firewall(_websocket):
+            return None
+    
+        async def allow_proxy_api_key(_authorization: str | None, *, request: object | None = None):
+            return None
+    
+        async def fake_connect_proxy_websocket(self, headers, **kwargs):
+            del self, headers, kwargs
+            nonlocal connect_count
+            connect_count += 1
+            upstream = first_upstream if connect_count == 1 else recovered_upstream
+            return SimpleNamespace(id="acct_ws_prewarm_replay", codex_installation_id="account-installation"), upstream
+    
+        monkeypatch.setattr(proxy_api_module, "_websocket_firewall_denial_response", allow_firewall)
+        monkeypatch.setattr(proxy_api_module, "validate_proxy_api_key_authorization", allow_proxy_api_key)
+        monkeypatch.setattr(proxy_module, "get_settings_cache", lambda: _FakeSettingsCache())
+        monkeypatch.setattr(proxy_module.ProxyService, "_connect_proxy_websocket", fake_connect_proxy_websocket)
+    
+        prewarm_input = [
+            {"type": "additional_tools", "role": "developer", "tools": [{"type": "custom", "name": "shell"}]},
+            {"role": "developer", "content": [{"type": "input_text", "text": "workspace rules"}]},
+        ]
+        monkeypatch.setattr(
+            LoadBalancer,
+            "authorize_account_fresh",
+            AsyncMock(return_value=OwnerAuthorization(OwnerAuthorizationKind.ALLOWED, owner_status=AccountStatus.ACTIVE)),
+        )
+        turn_delta = [
+            {"role": "user", "content": [{"type": "input_text", "text": "environment context"}]},
+            {"role": "user", "content": [{"type": "input_text", "text": "summarize the notes"}]},
+        ]
+        turn_input = turn_delta
+        if request_case == "full-prefix":
+            turn_input = [*prewarm_input, *turn_delta]
+        elif request_case == "changed-prefix":
+            turn_input = [prewarm_input[0], {"role": "developer", "content": "different workspace rules"}, *turn_delta]
+        monkeypatch.setattr(
+            proxy_module.ProxyService,
+            "_resolve_websocket_previous_response_owner",
+            AsyncMock(return_value="acct_ws_prewarm_replay"),
+        )
+        headers = {
+            "x-codex-turn-metadata": json.dumps(
+                {"request_kind": "prewarm", "turn_id": "turn_prewarm_replay"},
+                separators=(",", ":"),
+            )
+        }
+    
+        with TestClient(app_instance) as client:
+            with client.websocket_connect(endpoint, headers=headers) as websocket:
+                websocket.send_text(
+                    json.dumps(
+                        {
+                            "type": "response.create",
+                            "model": "gpt-5.4",
+                            "instructions": "",
+                            "generate": False,
+                            "input": prewarm_input,
+                            "stream": True,
+                        }
+                    )
+                )
+                assert json.loads(websocket.receive_text())["type"] == "response.created"
+                assert json.loads(websocket.receive_text())["type"] == "response.completed"
+    
+                websocket.send_text(
+                    json.dumps(
+                        {
+                            "type": "response.create",
+                            "model": "gpt-5.4",
+                            "instructions": "",
+                            "previous_response_id": "resp_ws_prewarm",
+                            "input": turn_input,
+                            "stream": True,
+                        }
+                    )
+                )
+                terminal = json.loads(websocket.receive_text())
+                if request_case == "full-prefix":
+>                   assert terminal["type"] == "response.created", terminal
+E                   AssertionError: {'type': 'response.failed', 'response': {'object': 'response', 'status': 'failed', 'error': {'message': 'Upstream websocket closed before response.completed', 'type': 'server_error', 'code': 'stream_incomplete'}, 'incomplete_details': None, ...}}
+E                   assert 'response.failed' == 'response.created'
+E                     
+E                     - response.created
+E                     ?          ^^^ ^
+E                     + response.failed
+E                     ?          ^ ^^
+
+tests\integration\test_proxy_websocket_responses.py:16712: AssertionError
+============================== warnings summary ===============================
+.venv\Lib\site-packages\starlette\testclient.py:53
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/integration/test_proxy_websocket_responses.py::test_responses_websocket_close_replay_keeps_context_of_turn_chained_to_empty_prewarm[full-prefix-/v1/responses]
+FAILED tests/integration/test_proxy_websocket_responses.py::test_responses_websocket_close_replay_keeps_context_of_turn_chained_to_empty_prewarm[full-prefix-/backend-api/codex/responses]
+================= 2 failed, 4 deselected, 1 warning in 2.93s ==================

@@ -1,0 +1,43 @@
+{
+  "initial_dirty_paths": 292,
+  "intentionally_extended_prior_paths": [
+    "app/db/models.py",
+    "app/modules/proxy/api.py",
+    "issues-check.md",
+    "tests/integration/test_account_window_reserve_migration.py",
+    "tests/unit/test_proxy_websocket_model_source_guard.py"
+  ],
+  "unrelated_prior_paths_preserved": 287,
+  "unrelated_hash_mismatches": [],
+  "source_rows": 338,
+  "changed_source_rows": [
+    "UP-ISSUE-2290",
+    "UP-ISSUE-2318",
+    "UP-PR-1905",
+    "UP-PR-2305",
+    "UP-PR-2324"
+  ],
+  "unchanged_source_rows": 333,
+  "final_statuses": {
+    "ИСПРАВЛЕНО ЛОКАЛЬНО / ЧАСТИЧНО ПРОВЕРЕНО": 3,
+    "ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО": 72,
+    "ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО": 64,
+    "НЕ ПРОВЕРЕНО": 165,
+    "ЛОКАЛЬНО ПРОВЕРЕНО / ЗАКРЫТО": 1,
+    "НЕ ПРИМЕНИМО": 2,
+    "ИСПРАВЛЕНО ЛОКАЛЬНО / ЗАКРЫТО": 2,
+    "ЗАКРЫТО ЛОКАЛЬНО (CATALOG SCOPE)": 1,
+    "ЧАСТИЧНО ПРОВЕРЕНО": 4,
+    "ЗАКРЫТО ЛОКАЛЬНО": 12,
+    "**ЗАКРЫТО ЛОКАЛЬНО (§75)**": 5,
+    "**ЗАКРЫТО ЛОКАЛЬНО (§76)**": 5,
+    "ЗАКРЫТО ЛОКАЛЬНО (DOC/CONFIG SCOPE)": 1,
+    "ЗАКРЫТО ЛОКАЛЬНО (ACCOUNT-LOCAL SCOPE)": 1
+  },
+  "main_spec_context_prefixes_preserved": {
+    "spec.md": true,
+    "context.md": true
+  },
+  "models_and_proxy_initial_hash_reconstruction": "PASS; independently checked before closure",
+  "commit_push_pr_merge_release_deploy": "not performed"
+}

@@ -1,0 +1,47 @@
+{
+  "selected_ids": [
+    "UP-ISSUE-1921",
+    "UP-ISSUE-1707",
+    "UP-PR-2423",
+    "UP-PR-2467",
+    "UP-DISC-1864"
+  ],
+  "source_rows": 338,
+  "changed_source_rows": [
+    "UP-ISSUE-1921",
+    "UP-ISSUE-1707",
+    "UP-PR-2423",
+    "UP-PR-2467",
+    "UP-DISC-1864"
+  ],
+  "unchanged_source_rows": 333,
+  "selected_row_readback": {
+    "UP-ISSUE-1921": "| [UP-ISSUE-1921](https://github.com/Soju06/codex-lb/issues/1921) | bug: existing Codex threads repeatedly fail with invalid previous_response_id | РЕШЕНО | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §89: invalid/stale anchors проверены через raw HTTP, bridge и обе native WS routes; initial/repeated actionable404 и full-history recovery PASS. 238 distinct PASS,0 skips/xfails; live client/provider отдельно. [Verification](openspec/changes/archive/2026-10-13-repair-five-dead-anchor-contracts/verification.md). |",
+    "UP-ISSUE-1707": "| [UP-ISSUE-1707](https://github.com/Soju06/codex-lb/issues/1707) | bug: existing Codex thread can remain unusable on dead hard-affinity owner while fresh/side chat works | РЕШЕНО | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §89: исправлен reset horizon для paused/deactivated/confirmed-unusable reauth owners;25 status/horizon units,24 keyed/unkeyed HTTP paths/slash cases PASS. First/repeated404,healthy full-history recovery,4 settled reservations и52 charged tokens. Account-bound files/encrypted state сохраняются; live/distributed отдельно. [Verification](openspec/changes/archive/2026-10-13-repair-five-dead-anchor-contracts/verification.md). |",
+    "UP-PR-2423": "| [UP-PR-2423](https://github.com/Soju06/codex-lb/pull/2423) | PR #2423 / #1921: fix(proxy): reject a dead client anchor instead of asking for a retry | Раздел 2, L181 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §89: expected-owner/healthy/near-quota-reset/idempotence guards PASS; исправлен повторный client anchor, терявший positive retirement verdict и возвращавший502. Actual SQLite marker сохраняется; owner/session suites121 PASS. Upstream merge/native server DB отдельно. [Verification](openspec/changes/archive/2026-10-13-repair-five-dead-anchor-contracts/verification.md). |",
+    "UP-PR-2467": "| [UP-PR-2467](https://github.com/Soju06/codex-lb/pull/2467) | PR #2467: fix(proxy-responses): retire tombstoned injected anchors | Раздел 12, L1357 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §89: exact live/durable tombstone cleanup независимо подтверждён; исправлена маскировка local undispatched404 под missing-operation-fence502. Four HTTP paths/slash:404→delta404→full-history200;54 cleanup/successor/file-pin controls PASS. Distributed rollout отдельно. [Verification](openspec/changes/archive/2026-10-13-repair-five-dead-anchor-contracts/verification.md). |",
+    "UP-DISC-1864": "| [UP-DISC-1864](https://github.com/Soju06/codex-lb/discussions/1864) | #1864: Frequent Invalid previous_response_id errors when using Codex with codex-lb | Раздел 11, L1248 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §89: canonical/parameterless invalid-ID normalization,privacy иfull-resend recovery проверены на обеих native WS paths,raw HTTP иbridge controls;35 existing transport cases PASS. Исторические/live incidents вне local certificate. [Verification](openspec/changes/archive/2026-10-13-repair-five-dead-anchor-contracts/verification.md). |"
+  },
+  "initial_files": 543,
+  "unchanged_initial_files": 538,
+  "allowed_changed_initial_files": [
+    "app/modules/proxy/_service/http_bridge/request_submit.py",
+    "app/modules/proxy/durable_bridge_repository.py",
+    "issues-check.md",
+    "openspec/specs/responses-api-compat/context.md",
+    "openspec/specs/responses-api-compat/spec.md"
+  ],
+  "canonical_prefixes_preserved": true,
+  "head": "7e3779ffaea1a27c29710a7d496e8fa037131f98",
+  "publication": false,
+  "raw_unchanged_source_rows": 333,
+  "queue": {
+    "source_rows": 338,
+    "local_closed": 193,
+    "not_applicable": 2,
+    "partial": 8,
+    "unverified": 135
+  },
+  "archived": "openspec/changes/archive/2026-10-13-repair-five-dead-anchor-contracts",
+  "post_archive_preservation": true
+}

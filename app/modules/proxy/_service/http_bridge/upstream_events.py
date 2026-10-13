@@ -101,6 +101,7 @@ from app.modules.proxy._service.http_bridge.queues import (
     _HTTP_BRIDGE_DOWNSTREAM_STALL_TIMEOUT_SECONDS,
     _http_bridge_event_payload_size,
     _HTTPBridgeEventQueue,
+    _HTTPBridgePayloadBudgetExceeded,
 )
 from app.modules.proxy._service.http_bridge.retry_circuit import (
     _HTTP_BRIDGE_RETRY_CIRCUIT_ANCHOR_ABANDONED_DETAIL,
@@ -426,10 +427,12 @@ async def _enqueue_http_bridge_downstream_event(
         return True
     except asyncio.QueueShutDown:
         return False
-    except asyncio.TimeoutError:
+    except (asyncio.TimeoutError, _HTTPBridgePayloadBudgetExceeded) as exc:
+        budget_exhausted = isinstance(exc, _HTTPBridgePayloadBudgetExceeded)
         logger.warning(
-            "HTTP bridge downstream consumer stalled exceeding queue limit request_id=%s",
+            "HTTP bridge downstream consumer exceeded delivery limit request_id=%s budget_exhausted=%s",
             getattr(request_state, "request_id", None),
+            budget_exhausted,
         )
         if request_state is not None:
             request_state.failure_phase_override = "downstream"
@@ -438,8 +441,10 @@ async def _enqueue_http_bridge_downstream_event(
                 queue.fail(
                     format_sse_event(
                         response_failed_event(
-                            "stream_idle_timeout",
-                            "Downstream consumer did not drain buffered output within the delivery timeout",
+                            "stream_incomplete" if budget_exhausted else "stream_idle_timeout",
+                            "Downstream live output exceeded the process payload budget"
+                            if budget_exhausted
+                            else "Downstream consumer did not drain buffered output within the delivery timeout",
                             response_id=request_state.response_id or request_state.request_id,
                         )
                     )

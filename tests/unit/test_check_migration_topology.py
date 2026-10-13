@@ -199,6 +199,42 @@ def test_revision_id_must_match_its_filename(checker: ModuleType, tmp_path: Path
     )
 
 
+def test_published_collision_without_convergence_is_rejected(checker: ModuleType, tmp_path: Path) -> None:
+    versions = tmp_path / "versions"
+    base = _linear_fixture(checker, versions)
+    _write_revision(versions, "20260914_000000_add_scim_tokens", base)
+    _write_revision(versions, "20260914_000000_drop_subscription_overflow_schema", base)
+    report = checker.check_timestamp_prefix_collisions(checker.load_graph(versions))
+    assert any("alembic_timestamp_prefix_collision" in message for message in report.errors)
+
+
+def test_new_collision_is_not_grandfathered_by_any_merge(checker: ModuleType, tmp_path: Path) -> None:
+    versions = tmp_path / "versions"
+    base = _linear_fixture(checker, versions)
+    left = "20261010_000000_left"
+    right = "20261010_000000_right"
+    _write_revision(versions, left, base)
+    _write_revision(versions, right, base)
+    _write_revision(versions, "20261010_010000_merge", (left, right))
+    report = checker.check_timestamp_prefix_collisions(checker.load_graph(versions))
+    assert any("alembic_timestamp_prefix_collision" in message for message in report.errors)
+
+
+def test_third_revision_in_published_slot_is_rejected(checker: ModuleType, tmp_path: Path) -> None:
+    versions = tmp_path / "versions"
+    base = _linear_fixture(checker, versions)
+    members = (
+        "20260914_000000_add_scim_tokens",
+        "20260914_000000_drop_subscription_overflow_schema",
+        "20260914_000000_intruder",
+    )
+    for member in members:
+        _write_revision(versions, member, base)
+    _write_revision(versions, "20261010_010000_merge", members)
+    report = checker.check_timestamp_prefix_collisions(checker.load_graph(versions))
+    assert any("alembic_timestamp_prefix_collision" in message for message in report.errors)
+
+
 def test_revision_id_format_is_enforced_for_every_revision(checker: ModuleType, tmp_path: Path) -> None:
     versions = tmp_path / "versions"
     head = _linear_fixture(checker, versions)
@@ -427,7 +463,12 @@ def test_base_ref_revisions_reads_the_graph_out_of_git(checker: ModuleType) -> N
     base_revisions = checker.base_ref_revisions("HEAD")
     assert base_revisions is not None
     from_git = {revision.revision: revision.down_revisions for revision in base_revisions}
-    from_disk = {revision.revision: revision.down_revisions for revision in checker.load_graph(VERSIONS_DIR)}
+    # Additive uncommitted revisions are absent from HEAD by definition.
+    from_disk = {
+        revision.revision: revision.down_revisions
+        for revision in checker.load_graph(VERSIONS_DIR)
+        if revision.revision in from_git
+    }
     assert from_git == from_disk
     assert "__init__" not in from_git
 

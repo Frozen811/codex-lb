@@ -1,0 +1,393 @@
+FFFFFFF                                                                  [100%]
+================================== FAILURES ===================================
+____________ test_preview_json_is_read_only_and_uses_indexed_path _____________
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1965: in _parse_known_args2
+    namespace, args = self._parse_known_args(args, namespace, intermixed)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2197: in _parse_known_args
+    positionals_end_index = consume_positionals(start_index)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2172: in consume_positionals
+    take_action(action, args)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2026: in take_action
+    argument_values = self._get_values(action, argument_strings)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2556: in _get_values
+    self._check_value(action, value[0])
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2606: in _check_value
+    raise ArgumentError(action, msg % args)
+E   argparse.ArgumentError: argument codex_sessions_command: invalid choice: 'preview' (choose from retag)
+
+During handling of the above exception, another exception occurred:
+tests\unit\test_codex_session_metadata_cli.py:47: in test_preview_json_is_read_only_and_uses_indexed_path
+    _run(home, "preview", "--json")
+tests\unit\test_codex_session_metadata_cli.py:36: in _run
+    cli.main(["codex-sessions", command, "--codex-home", str(home), "--session-id", "selected", *options])
+app\cli.py:179: in main
+    args = _parse_args(argv)
+           ^^^^^^^^^^^^^^^^^
+app\cli.py:175: in _parse_args
+    return parser.parse_args(argv)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1926: in parse_args
+    args, argv = self.parse_known_args(args, namespace)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1936: in parse_known_args
+    return self._parse_known_args2(args, namespace, intermixed=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1965: in _parse_known_args2
+    namespace, args = self._parse_known_args(args, namespace, intermixed)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2197: in _parse_known_args
+    positionals_end_index = consume_positionals(start_index)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2172: in consume_positionals
+    take_action(action, args)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2041: in take_action
+    action(self, namespace, argument_values, option_string)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1286: in __call__
+    subnamespace, arg_strings = subparser.parse_known_args(arg_strings, None)
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1936: in parse_known_args
+    return self._parse_known_args2(args, namespace, intermixed=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1967: in _parse_known_args2
+    self.error(str(err))
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2686: in error
+    self.exit(2, _('%(prog)s: error: %(message)s\n') % args)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2673: in exit
+    _sys.exit(status)
+E   SystemExit: 2
+---------------------------- Captured stderr call -----------------------------
+usage: pytest codex-sessions [-h] {retag} ...
+pytest codex-sessions: error: argument codex_sessions_command: invalid choice: 'preview' (choose from retag)
+______ test_confirmed_repair_preserves_tail_config_and_unrelated_session ______
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1965: in _parse_known_args2
+    namespace, args = self._parse_known_args(args, namespace, intermixed)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2197: in _parse_known_args
+    positionals_end_index = consume_positionals(start_index)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2172: in consume_positionals
+    take_action(action, args)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2026: in take_action
+    argument_values = self._get_values(action, argument_strings)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2556: in _get_values
+    self._check_value(action, value[0])
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2606: in _check_value
+    raise ArgumentError(action, msg % args)
+E   argparse.ArgumentError: argument codex_sessions_command: invalid choice: 'repair' (choose from retag)
+
+During handling of the above exception, another exception occurred:
+tests\unit\test_codex_session_metadata_cli.py:58: in test_confirmed_repair_preserves_tail_config_and_unrelated_session
+    _run(home, "repair", "--to", "codex-lb", "--yes", "--json", "--progress-json")
+tests\unit\test_codex_session_metadata_cli.py:36: in _run
+    cli.main(["codex-sessions", command, "--codex-home", str(home), "--session-id", "selected", *options])
+app\cli.py:179: in main
+    args = _parse_args(argv)
+           ^^^^^^^^^^^^^^^^^
+app\cli.py:175: in _parse_args
+    return parser.parse_args(argv)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1926: in parse_args
+    args, argv = self.parse_known_args(args, namespace)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1936: in parse_known_args
+    return self._parse_known_args2(args, namespace, intermixed=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1965: in _parse_known_args2
+    namespace, args = self._parse_known_args(args, namespace, intermixed)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2197: in _parse_known_args
+    positionals_end_index = consume_positionals(start_index)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2172: in consume_positionals
+    take_action(action, args)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2041: in take_action
+    action(self, namespace, argument_values, option_string)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1286: in __call__
+    subnamespace, arg_strings = subparser.parse_known_args(arg_strings, None)
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1936: in parse_known_args
+    return self._parse_known_args2(args, namespace, intermixed=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1967: in _parse_known_args2
+    self.error(str(err))
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2686: in error
+    self.exit(2, _('%(prog)s: error: %(message)s\n') % args)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2673: in exit
+    _sys.exit(status)
+E   SystemExit: 2
+---------------------------- Captured stderr call -----------------------------
+usage: pytest codex-sessions [-h] {retag} ...
+pytest codex-sessions: error: argument codex_sessions_command: invalid choice: 'repair' (choose from retag)
+_______________ test_repair_requires_confirmation_before_writes _______________
+tests\unit\test_codex_session_metadata_cli.py:81: in test_repair_requires_confirmation_before_writes
+    with pytest.raises(SystemExit, match="--yes"):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: '--yes'
+E     Actual message: '2'
+---------------------------- Captured stderr call -----------------------------
+usage: pytest codex-sessions [-h] {retag} ...
+pytest codex-sessions: error: argument codex_sessions_command: invalid choice: 'repair' (choose from retag)
+________________ test_repair_updates_only_selected_sqlite_row _________________
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1965: in _parse_known_args2
+    namespace, args = self._parse_known_args(args, namespace, intermixed)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2197: in _parse_known_args
+    positionals_end_index = consume_positionals(start_index)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2172: in consume_positionals
+    take_action(action, args)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2026: in take_action
+    argument_values = self._get_values(action, argument_strings)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2556: in _get_values
+    self._check_value(action, value[0])
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2606: in _check_value
+    raise ArgumentError(action, msg % args)
+E   argparse.ArgumentError: argument codex_sessions_command: invalid choice: 'repair' (choose from retag)
+
+During handling of the above exception, another exception occurred:
+tests\unit\test_codex_session_metadata_cli.py:88: in test_repair_updates_only_selected_sqlite_row
+    _run(home, "repair", "--to", "codex-lb", "--yes", "--json")
+tests\unit\test_codex_session_metadata_cli.py:36: in _run
+    cli.main(["codex-sessions", command, "--codex-home", str(home), "--session-id", "selected", *options])
+app\cli.py:179: in main
+    args = _parse_args(argv)
+           ^^^^^^^^^^^^^^^^^
+app\cli.py:175: in _parse_args
+    return parser.parse_args(argv)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1926: in parse_args
+    args, argv = self.parse_known_args(args, namespace)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1936: in parse_known_args
+    return self._parse_known_args2(args, namespace, intermixed=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1965: in _parse_known_args2
+    namespace, args = self._parse_known_args(args, namespace, intermixed)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2197: in _parse_known_args
+    positionals_end_index = consume_positionals(start_index)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2172: in consume_positionals
+    take_action(action, args)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2041: in take_action
+    action(self, namespace, argument_values, option_string)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1286: in __call__
+    subnamespace, arg_strings = subparser.parse_known_args(arg_strings, None)
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1936: in parse_known_args
+    return self._parse_known_args2(args, namespace, intermixed=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1967: in _parse_known_args2
+    self.error(str(err))
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2686: in error
+    self.exit(2, _('%(prog)s: error: %(message)s\n') % args)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2673: in exit
+    _sys.exit(status)
+E   SystemExit: 2
+---------------------------- Captured stderr call -----------------------------
+usage: pytest codex-sessions [-h] {retag} ...
+pytest codex-sessions: error: argument codex_sessions_command: invalid choice: 'repair' (choose from retag)
+__________ test_unsupported_provider_is_reported_and_refused[other] ___________
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1965: in _parse_known_args2
+    namespace, args = self._parse_known_args(args, namespace, intermixed)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2197: in _parse_known_args
+    positionals_end_index = consume_positionals(start_index)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2172: in consume_positionals
+    take_action(action, args)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2026: in take_action
+    argument_values = self._get_values(action, argument_strings)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2556: in _get_values
+    self._check_value(action, value[0])
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2606: in _check_value
+    raise ArgumentError(action, msg % args)
+E   argparse.ArgumentError: argument codex_sessions_command: invalid choice: 'preview' (choose from retag)
+
+During handling of the above exception, another exception occurred:
+tests\unit\test_codex_session_metadata_cli.py:104: in test_unsupported_provider_is_reported_and_refused
+    _run(home, "preview", "--json")
+tests\unit\test_codex_session_metadata_cli.py:36: in _run
+    cli.main(["codex-sessions", command, "--codex-home", str(home), "--session-id", "selected", *options])
+app\cli.py:179: in main
+    args = _parse_args(argv)
+           ^^^^^^^^^^^^^^^^^
+app\cli.py:175: in _parse_args
+    return parser.parse_args(argv)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1926: in parse_args
+    args, argv = self.parse_known_args(args, namespace)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1936: in parse_known_args
+    return self._parse_known_args2(args, namespace, intermixed=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1965: in _parse_known_args2
+    namespace, args = self._parse_known_args(args, namespace, intermixed)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2197: in _parse_known_args
+    positionals_end_index = consume_positionals(start_index)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2172: in consume_positionals
+    take_action(action, args)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2041: in take_action
+    action(self, namespace, argument_values, option_string)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1286: in __call__
+    subnamespace, arg_strings = subparser.parse_known_args(arg_strings, None)
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1936: in parse_known_args
+    return self._parse_known_args2(args, namespace, intermixed=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1967: in _parse_known_args2
+    self.error(str(err))
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2686: in error
+    self.exit(2, _('%(prog)s: error: %(message)s\n') % args)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2673: in exit
+    _sys.exit(status)
+E   SystemExit: 2
+---------------------------- Captured stderr call -----------------------------
+usage: pytest codex-sessions [-h] {retag} ...
+pytest codex-sessions: error: argument codex_sessions_command: invalid choice: 'preview' (choose from retag)
+_____________ test_unsupported_provider_is_reported_and_refused[] _____________
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1965: in _parse_known_args2
+    namespace, args = self._parse_known_args(args, namespace, intermixed)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2197: in _parse_known_args
+    positionals_end_index = consume_positionals(start_index)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2172: in consume_positionals
+    take_action(action, args)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2026: in take_action
+    argument_values = self._get_values(action, argument_strings)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2556: in _get_values
+    self._check_value(action, value[0])
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2606: in _check_value
+    raise ArgumentError(action, msg % args)
+E   argparse.ArgumentError: argument codex_sessions_command: invalid choice: 'preview' (choose from retag)
+
+During handling of the above exception, another exception occurred:
+tests\unit\test_codex_session_metadata_cli.py:104: in test_unsupported_provider_is_reported_and_refused
+    _run(home, "preview", "--json")
+tests\unit\test_codex_session_metadata_cli.py:36: in _run
+    cli.main(["codex-sessions", command, "--codex-home", str(home), "--session-id", "selected", *options])
+app\cli.py:179: in main
+    args = _parse_args(argv)
+           ^^^^^^^^^^^^^^^^^
+app\cli.py:175: in _parse_args
+    return parser.parse_args(argv)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1926: in parse_args
+    args, argv = self.parse_known_args(args, namespace)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1936: in parse_known_args
+    return self._parse_known_args2(args, namespace, intermixed=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1965: in _parse_known_args2
+    namespace, args = self._parse_known_args(args, namespace, intermixed)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2197: in _parse_known_args
+    positionals_end_index = consume_positionals(start_index)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2172: in consume_positionals
+    take_action(action, args)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2041: in take_action
+    action(self, namespace, argument_values, option_string)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1286: in __call__
+    subnamespace, arg_strings = subparser.parse_known_args(arg_strings, None)
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1936: in parse_known_args
+    return self._parse_known_args2(args, namespace, intermixed=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1967: in _parse_known_args2
+    self.error(str(err))
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2686: in error
+    self.exit(2, _('%(prog)s: error: %(message)s\n') % args)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2673: in exit
+    _sys.exit(status)
+E   SystemExit: 2
+---------------------------- Captured stderr call -----------------------------
+usage: pytest codex-sessions [-h] {retag} ...
+pytest codex-sessions: error: argument codex_sessions_command: invalid choice: 'preview' (choose from retag)
+__________ test_unsupported_provider_is_reported_and_refused[OPENAI] __________
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1965: in _parse_known_args2
+    namespace, args = self._parse_known_args(args, namespace, intermixed)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2197: in _parse_known_args
+    positionals_end_index = consume_positionals(start_index)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2172: in consume_positionals
+    take_action(action, args)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2026: in take_action
+    argument_values = self._get_values(action, argument_strings)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2556: in _get_values
+    self._check_value(action, value[0])
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2606: in _check_value
+    raise ArgumentError(action, msg % args)
+E   argparse.ArgumentError: argument codex_sessions_command: invalid choice: 'preview' (choose from retag)
+
+During handling of the above exception, another exception occurred:
+tests\unit\test_codex_session_metadata_cli.py:104: in test_unsupported_provider_is_reported_and_refused
+    _run(home, "preview", "--json")
+tests\unit\test_codex_session_metadata_cli.py:36: in _run
+    cli.main(["codex-sessions", command, "--codex-home", str(home), "--session-id", "selected", *options])
+app\cli.py:179: in main
+    args = _parse_args(argv)
+           ^^^^^^^^^^^^^^^^^
+app\cli.py:175: in _parse_args
+    return parser.parse_args(argv)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1926: in parse_args
+    args, argv = self.parse_known_args(args, namespace)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1936: in parse_known_args
+    return self._parse_known_args2(args, namespace, intermixed=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1965: in _parse_known_args2
+    namespace, args = self._parse_known_args(args, namespace, intermixed)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2197: in _parse_known_args
+    positionals_end_index = consume_positionals(start_index)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2172: in consume_positionals
+    take_action(action, args)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2041: in take_action
+    action(self, namespace, argument_values, option_string)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1286: in __call__
+    subnamespace, arg_strings = subparser.parse_known_args(arg_strings, None)
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1936: in parse_known_args
+    return self._parse_known_args2(args, namespace, intermixed=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:1967: in _parse_known_args2
+    self.error(str(err))
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2686: in error
+    self.exit(2, _('%(prog)s: error: %(message)s\n') % args)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\argparse.py:2673: in exit
+    _sys.exit(status)
+E   SystemExit: 2
+---------------------------- Captured stderr call -----------------------------
+usage: pytest codex-sessions [-h] {retag} ...
+pytest codex-sessions: error: argument codex_sessions_command: invalid choice: 'preview' (choose from retag)
+============================== warnings summary ===============================
+tests/unit/test_codex_session_metadata_cli.py::test_preview_json_is_read_only_and_uses_indexed_path
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/unit/test_codex_session_metadata_cli.py::test_preview_json_is_read_only_and_uses_indexed_path
+FAILED tests/unit/test_codex_session_metadata_cli.py::test_confirmed_repair_preserves_tail_config_and_unrelated_session
+FAILED tests/unit/test_codex_session_metadata_cli.py::test_repair_requires_confirmation_before_writes
+FAILED tests/unit/test_codex_session_metadata_cli.py::test_repair_updates_only_selected_sqlite_row
+FAILED tests/unit/test_codex_session_metadata_cli.py::test_unsupported_provider_is_reported_and_refused[other]
+FAILED tests/unit/test_codex_session_metadata_cli.py::test_unsupported_provider_is_reported_and_refused[]
+FAILED tests/unit/test_codex_session_metadata_cli.py::test_unsupported_provider_is_reported_and_refused[OPENAI]
+7 failed, 1 warning in 2.18s

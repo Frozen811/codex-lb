@@ -225,6 +225,8 @@ async def test_idle_warmup_cycle_claim_survives_deadline_motion(db_setup, monkey
                 before_secondary={},
                 after_secondary={},
                 refresh_started_at=now - timedelta(seconds=122),
+                usage_limit_secondary={},
+                usage_limit_monthly={},
             )
         assert len(sender.calls) == cycle + 1
     async with SessionLocal() as database:

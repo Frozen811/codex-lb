@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="13" time="29.306" timestamp="2026-10-13T10:09:14.511766+03:00" hostname="extr3-dekstop"><testcase classname="tests.integration.test_dead_anchor_contracts" name="test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[False-paused-/backend-api/codex/responses]" time="2.011" /><testcase classname="tests.integration.test_dead_anchor_contracts" name="test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[False-paused-/backend-api/codex/responses/]" time="1.489" /><testcase classname="tests.integration.test_dead_anchor_contracts" name="test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[False-paused-/v1/responses]" time="1.494" /><testcase classname="tests.integration.test_dead_anchor_contracts" name="test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[False-paused-/v1/responses/]" time="2.396" /><testcase classname="tests.integration.test_dead_anchor_contracts" name="test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[False-deactivated-/backend-api/codex/responses]" time="1.694" /><testcase classname="tests.integration.test_dead_anchor_contracts" name="test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[False-deactivated-/backend-api/codex/responses/]" time="1.870" /><testcase classname="tests.integration.test_dead_anchor_contracts" name="test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[False-deactivated-/v1/responses]" time="1.937" /><testcase classname="tests.integration.test_dead_anchor_contracts" name="test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[False-deactivated-/v1/responses/]" time="1.625" /><testcase classname="tests.integration.test_dead_anchor_contracts" name="test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[False-reauth_required-/backend-api/codex/responses]" time="2.119" /><testcase classname="tests.integration.test_dead_anchor_contracts" name="test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[False-reauth_required-/backend-api/codex/responses/]" time="1.496" /><testcase classname="tests.integration.test_dead_anchor_contracts" name="test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[False-reauth_required-/v1/responses]" time="1.585" /><testcase classname="tests.integration.test_dead_anchor_contracts" name="test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[False-reauth_required-/v1/responses/]" time="2.008" /><testcase classname="tests.integration.test_dead_anchor_contracts" name="test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[True-paused-/backend-api/codex/responses]" time="6.922"><failure message="AssertionError: API-key reservations failed to settle&#10;assert 9343.2059595 &lt; 9343.1994489&#10; +  where 9343.2059595 = &lt;built-in function monotonic&gt;()&#10; +    where &lt;built-in function monotonic&gt; = time.monotonic">async_client = &lt;httpx.AsyncClient object at 0x000001E647D79010&gt;
+app_instance = &lt;fastapi.applications.FastAPI object at 0x000001E649A9DD10&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001E647F9C910&gt;
+path = '/backend-api/codex/responses', status = &lt;AccountStatus.PAUSED: 'paused'&gt;
+keyed = True
+
+    @pytest.mark.parametrize("path", PATHS)
+    @pytest.mark.parametrize("status", [AccountStatus.PAUSED, AccountStatus.DEACTIVATED, AccountStatus.REAUTH_REQUIRED])
+    @pytest.mark.parametrize("keyed", [False, True])
+    async def test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers(
+        async_client, app_instance, monkeypatch, path: str, status: AccountStatus, keyed: bool
+    ) -&gt; None:
+        dashboard = bridge._make_dashboard_settings()
+        dashboard.api_key_auth_enabled = keyed
+        bridge._install_proxy_settings(
+            monkeypatch, app_settings=bridge._make_app_settings(enabled=True), dashboard_settings=dashboard
+        )
+        owner_id = await bridge._import_account(async_client, "dead-anchor-owner", "dead-anchor-owner@example.com")
+        healthy_id = await bridge._import_account(async_client, "dead-anchor-healthy", "dead-anchor-healthy@example.com")
+        owner, healthy = await bridge._get_account(owner_id), await bridge._get_account(healthy_id)
+        selected: list[str] = []
+        sockets: list[Any] = []
+        raw_attempts: list[bool] = []
+    
+        async def select_account(self, deadline, **kwargs):
+            del self, deadline
+            if kwargs.get("preferred_account_id") == owner.id:
+                return AccountSelection(
+                    account=None, error_message="Owner unavailable", error_code=CONTINUITY_OWNER_UNAVAILABLE
+                )
+            account = owner if not selected else healthy
+            selected.append(account.id)
+            return AccountSelection(account=account, error_message=None, error_code=None)
+    
+        async def fresh(self, target, *, force=False, timeout_seconds):
+            del self, force, timeout_seconds
+            return target
+    
+        async def connect(*args, **kwargs):
+            del args, kwargs
+            upstream = bridge._FakeBridgeUpstreamWebSocket(f"resp_dead_anchor_{len(sockets)}")
+            sockets.append(upstream)
+            return upstream
+    
+        async def raw(*args, **kwargs):
+            del args, kwargs
+            raw_attempts.append(True)
+            raise AssertionError("dead-anchor refusal must not route to raw HTTP")
+            yield ""  # Preserve the upstream adapter's async-generator protocol.
+    
+        monkeypatch.setattr(proxy_module.ProxyService, "_select_account_with_budget", select_account)
+        monkeypatch.setattr(proxy_module.ProxyService, "_ensure_fresh_with_budget", fresh)
+        monkeypatch.setattr(proxy_module, "connect_responses_websocket", connect)
+        monkeypatch.setattr(proxy_module, "core_stream_responses", raw)
+        service = get_proxy_service_for_app(app_instance)
+        headers = {"session_id": "dead-anchor-session", "thread-id": "dead-anchor-thread"}
+        if keyed:
+            created = await async_client.post(
+                "/api/api-keys/",
+                json={
+                    "name": "dead-anchor-key",
+                    "limits": [{"limitType": "total_tokens", "limitWindow": "weekly", "maxValue": 200000}],
+                },
+            )
+            assert created.status_code == 200, created.text
+            headers["Authorization"] = f"Bearer {created.json()['key']}"
+    
+        def body(history, **extra):
+            return {
+                "model": "gpt-5.1",
+                "instructions": "",
+                "input": history,
+                "prompt_cache_key": "dead-anchor-cache",
+                "stream": True,
+                **extra,
+            }
+    
+        history = [{"role": "user", "content": "first turn"}]
+        try:
+            first = await async_client.post(path, headers=headers, json=body(history))
+            assert first.status_code == 200 and "response.completed" in first.text, first.text
+            dispatched = json.loads(sockets[0].sent_text[0])
+            assert not dispatched.get("previous_response_id")
+            async with SessionLocal() as session:
+                owned = (await session.scalars(select(HttpBridgeSessionRecord))).one()
+                anchor = owned.latest_response_id
+                assert anchor
+            await service.close_all_http_bridge_sessions()
+            reset_at = int(time.time()) + 30
+            async with SessionLocal() as session:
+                await session.execute(
+                    update(Account)
+                    .where(Account.id == owner.id)
+                    .values(status=status, reset_at=reset_at, deactivation_reason="account_auth_invalidated")
+                )
+                await session.commit()
+    
+            denied = await async_client.post(
+                path, headers=headers, json=body([{"role": "user", "content": "continue"}], previous_response_id=anchor)
+            )
+            assert denied.status_code == 404, denied.text
+            error = denied.json()["error"]
+            assert error["code"] == "bridge_previous_response_not_found"
+            assert "resend the full conversation history" in error["message"]
+            assert not raw_attempts and len(sockets) == 1
+            async with SessionLocal() as session:
+                retired = (await session.scalars(select(HttpBridgeSessionRecord))).one()
+                assert retired.continuity_abandonment_scope
+                original_marker = (retired.continuity_abandonment_scope, retired.continuity_abandoned_at)
+                persisted_owner = await session.get(Account, owner.id)
+                assert persisted_owner is not None and persisted_owner.status == status
+                assert persisted_owner.reset_at == reset_at
+    
+            repeated = await async_client.post(
+                path, headers=headers, json=body([{"role": "user", "content": "continue"}], previous_response_id=anchor)
+            )
+            assert repeated.status_code == 404, repeated.text
+            assert repeated.json()["error"]["code"] == "bridge_previous_response_not_found"
+            async with SessionLocal() as session:
+                retired = (await session.scalars(select(HttpBridgeSessionRecord))).one()
+                assert (retired.continuity_abandonment_scope, retired.continuity_abandoned_at) == original_marker
+    
+            history.extend(
+                [
+                    {"role": "assistant", "content": [{"type": "output_text", "text": "OK"}]},
+                    {"role": "user", "content": "continue"},
+                ]
+            )
+            recovered = await async_client.post(path, headers=headers, json=body(history))
+            assert recovered.status_code == 200 and "response.completed" in recovered.text, recovered.text
+            assert selected[-1] == healthy.id and len(sockets) == 2 and not raw_attempts
+            recovered_wire = json.loads(sockets[-1].sent_text[-1])
+            assert not recovered_wire.get("previous_response_id")
+            assert [item["role"] for item in recovered_wire["input"]] == [item["role"] for item in history]
+            assert recovered_wire["input"] == history
+        finally:
+            await service.close_all_http_bridge_sessions()
+        if keyed:
+            deadline = time.monotonic() + 5
+            while True:
+                async with SessionLocal() as session:
+                    reservations = list((await session.scalars(select(ApiKeyUsageReservation))).all())
+                if reservations and all(row.status != "reserved" for row in reservations):
+                    break
+&gt;               assert time.monotonic() &lt; deadline, "API-key reservations failed to settle"
+E               AssertionError: API-key reservations failed to settle
+E               assert 9343.2059595 &lt; 9343.1994489
+E                +  where 9343.2059595 = &lt;built-in function monotonic&gt;()
+E                +    where &lt;built-in function monotonic&gt; = time.monotonic
+
+tests\integration\test_dead_anchor_contracts.py:161: AssertionError</failure></testcase></testsuite></testsuites>

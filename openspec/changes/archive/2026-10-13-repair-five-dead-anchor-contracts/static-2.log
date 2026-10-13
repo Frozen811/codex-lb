@@ -1,0 +1,13 @@
+error[unresolved-attribute]: Object of type `ProxyService` has no attribute `_http_bridge_retry_circuit_lock`
+   --> tests\integration\test_dead_anchor_contracts.py:209:28
+    |
+209 |                 async with service._http_bridge_retry_circuit_lock:
+    |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Object of type `ProxyService` has no attribute `_http_bridge_retry_circuits`
+   --> tests\integration\test_dead_anchor_contracts.py:210:21
+    |
+210 |                     service._http_bridge_retry_circuits[session.key] = state
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Found 2 diagnostics

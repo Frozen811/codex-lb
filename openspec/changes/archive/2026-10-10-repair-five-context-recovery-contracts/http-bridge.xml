@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="54" time="57.414" timestamp="2026-10-10T13:22:50.205029+03:00" hostname="extr3-dekstop"><testcase classname="tests.integration.test_http_responses_bridge" name="test_http_bridge_routing_hint_is_first_handshake_only" time="1.279" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_fails_over_confirmed_proxy_connect_before_dispatch" time="0.973" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_codex_session_uses_extended_idle_ttl" time="0.721" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_creation_honors_prefer_earlier_reset" time="0.705" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_codex_prewarm_dashboard_on_beats_env_off" time="1.147" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_codex_prewarm_dashboard_off_beats_env_on" time="0.947" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_codex_session_prewarms_first_request" time="1.066" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_codex_session_does_not_prewarm_by_default" time="0.923" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_non_owner_instance_falls_back_to_local_session" time="0.696" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_non_owner_prompt_cache_rebinds_locally_when_gateway_safe_mode_disabled" time="0.960" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_missing_turn_state_alias_with_previous_response_id_fails_closed" time="0.481" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_stale_previous_response_alias_same_model_fails_closed" time="0.587" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_previous_response_alias_rejects_service_tier_provenance_mismatch" time="0.971" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_replayed_turn_state_alias_preserves_owner_without_rekeying_session" time="0.802" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_forwards_hard_continuation_with_canonical_prompt_cache_key" time="1.160" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_waits_for_inflight_recreation_on_missing_turn_state_alias" time="0.538" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_generated_turn_state_fails_closed_without_local_alias" time="0.776" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_turn_state_alias_respects_api_key_isolation" time="0.773" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_closes_disallowed_session_before_owner_mismatch_retry" time="0.468" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_preserves_prior_turn_state_aliases" time="0.739" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_close_waits_for_turn_state_index_lock" time="1.056" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_allows_unstable_request_key_even_on_non_owner_instance" time="0.814" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_reconnect_uses_last_upstream_turn_state" time="0.686" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_session_id_reconnect_keeps_upstream_turn_state" time="0.665" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_reconnect_uses_refreshed_api_key_assignments_for_reused_session" time="0.722" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_reconnect_fails_when_reader_cancel_times_out" time="0.880" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_prefers_evicting_prompt_cache_session_before_codex_session" time="0.755" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_get_or_create_http_bridge_session_honors_passed_prompt_cache_idle_ttl" time="0.659" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_reuses_upstream_websocket_and_preserves_previous_response_id" time="1.126" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_revalidates_usage_limit_before_second_turn[shared-limit]" time="1.007" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_revalidates_usage_limit_before_second_turn[window-override]" time="1.334" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_owner_authorization_failure_is_stable[non_streaming]" time="0.967" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_owner_authorization_failure_is_stable[streaming]" time="0.993" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_usage_limit_rejects_only_overlapping_new_turn" time="0.998" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_http_bridge_policy_change_during_dispatch_wait_rejects_unsent_turn[scalar]" time="1.059" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_http_bridge_policy_change_during_dispatch_wait_rejects_unsent_turn[window-override]" time="1.304" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_http_bridge_policy_read_interruption_preserves_overlapping_turn[reached]" time="1.278" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_http_bridge_policy_read_interruption_preserves_overlapping_turn[failed]" time="1.157" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_http_bridge_policy_read_interruption_preserves_overlapping_turn[stalled_reached]" time="1.046" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_http_bridge_policy_read_interruption_preserves_overlapping_turn[stalled_failed]" time="1.098" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_reuses_quota_admitted_spark_then_rejects_current_plan_change" time="1.529" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_forks_incompatible_prompt_cache_waiter_without_retiring_creator" time="1.212" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_forwarded_priority_prompt_cache_mismatch_forks_on_canonical_owner" time="1.310" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_forwarded_recovery_uses_durable_owner_and_strips_stale_affinity" time="1.243" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_injects_interrupted_custom_tool_output_on_followup" time="1.484" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_size_guard_covers_injected_interrupted_tool_outputs" time="1.425" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_injected_interrupted_outputs_update_stored_input_context" time="1.330" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_trims_replayed_apply_patch_previous_response_prefix" time="1.223" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_v1_responses_http_bridge_trims_replayed_tool_search_previous_response_prefix" time="1.310" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_backend_responses_http_bridge_lite_request_omits_synthesized_tools" time="1.242" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_backend_responses_http_bridge_reuses_upstream_websocket_and_preserves_previous_response_id" time="1.145" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_backend_responses_http_bridge_prefers_codex_session_header_over_prompt_cache_key" time="1.285" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_backend_responses_goal_restart_bypasses_live_bridge_and_retires_unavailable_legacy_owner" time="1.560" /><testcase classname="tests.integration.test_http_responses_bridge" name="test_backend_responses_goal_restart_keeps_authority_for_same_request_reconnect" time="2.403"><failure message="assert 502 == 200&#10; +  where 502 = &lt;Response [502 Bad Gateway]&gt;.status_code">async_client = &lt;httpx.AsyncClient object at 0x000001C4A9013290&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001C4A6FE4C90&gt;
+
+    @pytest.mark.asyncio
+    async def test_backend_responses_goal_restart_keeps_authority_for_same_request_reconnect(
+        async_client,
+        monkeypatch,
+    ):
+        _install_bridge_settings(monkeypatch, enabled=True)
+        owner_id = await _import_account(
+            async_client,
+            "acc_backend_bridge_reconnect_restart_owner",
+            "backend-bridge-reconnect-restart-owner@example.com",
+        )
+        replacement_id = await _import_account(
+            async_client,
+            "acc_backend_bridge_reconnect_restart_replacement",
+            "backend-bridge-reconnect-restart-replacement@example.com",
+        )
+        owner = await _get_account(owner_id)
+        replacement = await _get_account(replacement_id)
+        owner_chatgpt_account_id = cast(str, owner.chatgpt_account_id)
+        replacement_chatgpt_account_id = cast(str, replacement.chatgpt_account_id)
+        raw_session = "backend-bridge-reconnect-restart-session"
+        selection_key = _codex_session_selection_key(raw_session)
+        async with SessionLocal() as session:
+            await StickySessionsRepository(session).upsert(
+                raw_session,
+                owner.id,
+                kind=proxy_module.StickySessionKind.CODEX_SESSION,
+            )
+    
+        class _OwnerBecomesUnavailableBeforeResponse(_FakeBridgeUpstreamWebSocket):
+            async def send_text(self, text: str) -&gt; None:
+                self.sent_text.append(text)
+                async with SessionLocal() as session:
+                    await session.execute(
+                        update(Account).where(Account.id == owner.id).values(status=AccountStatus.QUOTA_EXCEEDED)
+                    )
+                    await session.commit()
+                await self._messages.put(_FakeUpstreamMessage("close", close_code=1000))
+    
+        owner_upstream = _OwnerBecomesUnavailableBeforeResponse("resp_bridge_reconnect_restart_owner")
+        replacement_upstream = _FakeBridgeUpstreamWebSocket("resp_bridge_reconnect_restart_replacement")
+        connected_account_ids: list[str] = []
+    
+        async def fake_ensure_fresh_with_budget(self, target, *, force=False, timeout_seconds):
+            del self, force, timeout_seconds
+            return target
+    
+        async def fake_connect_responses_websocket(
+            headers,
+            access_token,
+            account_id_header,
+            *,
+            base_url=None,
+            session=None,
+        ):
+            del headers, access_token, base_url, session
+            connected_account_ids.append(account_id_header)
+            if account_id_header == owner_chatgpt_account_id:
+                return owner_upstream
+            assert account_id_header == replacement_chatgpt_account_id
+            return replacement_upstream
+    
+        monkeypatch.setattr(proxy_module.ProxyService, "_ensure_fresh_with_budget", fake_ensure_fresh_with_budget)
+        monkeypatch.setattr(proxy_module, "connect_responses_websocket", fake_connect_responses_websocket)
+    
+&gt;       restart_events = await _collect_sse_events(
+            async_client,
+            "/backend-api/codex/responses",
+            headers={"session_id": raw_session},
+            json_body={
+                "model": "gpt-5.1",
+                "instructions": "Continue the existing task.",
+                "input": [
+                    {
+                        "role": "developer",
+                        "content": (
+                            '&lt;codex_internal_context source="goal"&gt;\nContinue working toward the active thread goal.'
+                        ),
+                    },
+                    {"role": "user", "content": [{"type": "input_text", "text": "continue"}]},
+                ],
+                "stream": True,
+            },
+        )
+
+tests\integration\test_http_responses_bridge.py:7245: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+async_client = &lt;httpx.AsyncClient object at 0x000001C4A9013290&gt;
+path = '/backend-api/codex/responses'
+json_body = {'model': 'gpt-5.1', 'instructions': 'Continue the existing task.', 'input': [{'role': 'developer', 'content': '&lt;codex... the active thread goal.'}, {'role': 'user', 'content': [{'type': 'input_text', 'text': 'continue'}]}], 'stream': True}
+headers = {'session_id': 'backend-bridge-reconnect-restart-session'}
+
+    async def _collect_sse_events(
+        async_client,
+        path: str,
+        *,
+        json_body: dict,
+        headers: dict[str, str] | None = None,
+    ) -&gt; list[dict]:
+        async with async_client.stream("POST", path, json=json_body, headers=headers) as response:
+&gt;           assert response.status_code == 200
+E           assert 502 == 200
+E            +  where 502 = &lt;Response [502 Bad Gateway]&gt;.status_code
+
+tests\integration\test_http_responses_bridge.py:124: AssertionError</failure></testcase></testsuite></testsuites>

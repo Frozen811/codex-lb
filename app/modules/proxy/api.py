@@ -45,6 +45,7 @@ from app.core.auth.dependencies import (
     validate_usage_api_key,
 )
 from app.core.auth.refresh import RefreshError
+from app.core.balancer import ACCOUNT_USAGE_LIMIT_REACHED_ERROR_CODE
 from app.core.cache.invalidation import NAMESPACE_RESET_CREDITS, bump_cache_invalidation_local
 from app.core.clients.files import FileProxyError
 from app.core.clients.proxy import (
@@ -290,6 +291,10 @@ from app.modules.proxy.images_observability import (
     IMAGE_ROUTE_STREAM_STATE,
     record_images_route_observability,
 )
+from app.modules.proxy.rate_limit_events import (
+    hide_upstream_quota_for_api_key_clients as _hide_upstream_quota_for_api_key_clients,
+)
+from app.modules.proxy.rate_limit_events import project_codex_rate_limit_event, rate_limit_headers_for_client
 from app.modules.proxy.request_policy import (
     apply_api_key_enforcement,
     apply_api_key_enforcement_to_chat_payload,
@@ -335,7 +340,7 @@ from app.modules.proxy.schemas import (
     WarmupSkippedAccount,
     WarmupSubmittedAccount,
 )
-from app.modules.proxy.selection_errors import USAGE_LIMIT_REACHED
+from app.modules.proxy.selection_errors import USAGE_LIMIT_REACHED, selection_failure_response
 from app.modules.proxy.source_admission import try_claim as try_claim_source_admission
 from app.modules.proxy.source_dispatch import (
     ABANDON_CLIENT_DISCONNECTED_BEFORE_BODY,
@@ -2426,13 +2431,6 @@ async def _build_codex_usage_payload_for_api_key(api_key: ApiKeyData) -> RateLim
     )
 
 
-async def _hide_upstream_quota_for_api_key_clients(api_key: ApiKeyData | None) -> bool:
-    if api_key is None:
-        return False
-    settings = await get_settings_cache().get()
-    return bool(getattr(settings, "hide_upstream_quota_from_api_keys", False))
-
-
 async def _apply_api_key_enforcement_with_fast_mode_policy(
     payload: ResponsesRequest | ResponsesCompactRequest,
     api_key: ApiKeyData | None,
@@ -2463,9 +2461,7 @@ async def _rate_limit_headers_for_request(
     context: ProxyContext,
     api_key: ApiKeyData | None,
 ) -> dict[str, str]:
-    if await _hide_upstream_quota_for_api_key_clients(api_key):
-        return {}
-    return await context.service.rate_limit_headers()
+    return await rate_limit_headers_for_client(api_key, context.service.rate_limit_headers)
 
 
 async def _release_reservation_deferring_cancellation(
@@ -5151,13 +5147,14 @@ async def _select_responses_model_source_with_continuity(
     """Select a source unless recorded subscription continuity owns the anchor.
 
     Returns ``(selection, continuity_suppressed)``. ``continuity_suppressed``
-    is ``True`` only when an enabled source claimed the model but a recorded
-    subscription owner for ``previous_response_id`` pinned the turn to a
-    subscription account instead. Callers use it to tell that case apart from
+    is ``True`` when a source, including an unavailable one, claimed the model
+    but recorded subscription continuity pinned the turn to a native account.
+    Callers use it to tell that case apart from
     a genuine lookup miss: only a genuine miss may consult the disabled-source
     denial, because a continuity-suppressed turn already has a subscription
     anchor that must keep being served.
     """
+    turn_state = request.headers.get("x-codex-turn-state") or request.headers.get("turn-state")
     source_selection = await _select_responses_model_source(
         payload.model,
         api_key,
@@ -5165,8 +5162,19 @@ async def _select_responses_model_source_with_continuity(
         require_streaming=require_streaming,
     )
     if source_selection is None:
-        return None, False
-    turn_state = request.headers.get("x-codex-turn-state") or request.headers.get("turn-state")
+        if payload.previous_response_id is None and not turn_state:
+            return None, False
+        if _source_probe_is_guaranteed_miss(api_key, payload.model, raw_model=raw_model):
+            return None, False
+        unavailable_selection = await _select_responses_model_source(
+            payload.model,
+            api_key,
+            raw_model=raw_model,
+            require_streaming=require_streaming,
+            only_disabled=True,
+        )
+        if unavailable_selection is None:
+            return None, False
     if payload.previous_response_id is None and not turn_state:
         return source_selection, False
     owner_account_id: str | None = None
@@ -5309,9 +5317,19 @@ async def _disabled_model_source_denial(
     if selection is None:
         return None
     source, matched_model = selection
+    unavailable = any(
+        candidate.model == matched_model and candidate.is_available is False for candidate in source.models
+    )
     # The source name is operator-facing configuration, not a client-visible
     # identifier, so the envelope names the model and the condition only.
     reason = "is disabled" if not source.is_enabled else "has that model disabled"
+    if source.is_enabled and unavailable:
+        error = openai_error(
+            "model_source_unavailable",
+            f"The model '{matched_model}' is unavailable in its source catalog.",
+            error_type="upstream_error",
+        )
+        return _logged_error_json_response(request, 503, error, headers=headers)
     error = openai_error(
         "model_source_disabled",
         f"The model '{matched_model}' is served by an OpenAI-compatible model source that {reason}. "
@@ -5693,6 +5711,7 @@ async def _source_responses_response(
                     enforce_openai_sdk_contract=enforce_openai_sdk_contract,
                     native_codex_heartbeat=native_codex_heartbeat,
                     preserve_native_failure_lifecycle=preserve_native_failure_lifecycle,
+                    codex_rate_limit_headers=rate_limit_headers,
                 ),
             )
             return SourceStreamingResponse(
@@ -6566,6 +6585,7 @@ async def _wrap_source_responses_public_stream(
     enforce_openai_sdk_contract: bool = True,
     native_codex_heartbeat: bool = False,
     preserve_native_failure_lifecycle: bool = False,
+    codex_rate_limit_headers: Mapping[str, str] | None = None,
 ) -> AsyncIterator[str]:
     """Normalize and keep source-routed Responses SSE proxy-timeout friendly.
 
@@ -6586,6 +6606,7 @@ async def _wrap_source_responses_public_stream(
         enforce_openai_sdk_contract=enforce_openai_sdk_contract,
         forward_unparseable_data=True,
         preserve_native_failure_lifecycle=preserve_native_failure_lifecycle,
+        codex_rate_limit_headers=codex_rate_limit_headers,
     )
     keepalive_stream = (
         normalized
@@ -7193,6 +7214,7 @@ async def _stream_responses(
         error_stream,
         enforce_openai_sdk_contract=enforce_openai_sdk_contract,
         preserve_native_failure_lifecycle=preserve_native_failure_lifecycle,
+        codex_rate_limit_headers=rate_limit_headers,
     )
     stream = service_stream
     use_codex_keepalive = native_codex_heartbeat or not enforce_openai_sdk_contract
@@ -9334,16 +9356,12 @@ async def _opportunistic_admission_denial(
     )
     if selection.account is not None:
         return None
-    if selection.error_code == USAGE_LIMIT_REACHED:
+    if selection.error_code in {USAGE_LIMIT_REACHED, ACCOUNT_USAGE_LIMIT_REACHED_ERROR_CODE}:
+        status_code, error_payload = selection_failure_response(selection)
         return _logged_error_json_response(
             request,
-            429,
-            openai_error(
-                USAGE_LIMIT_REACHED,
-                selection.error_message or "Usage limit reached",
-                error_type=USAGE_LIMIT_REACHED,
-                resets_at=selection.resets_at,
-            ),
+            status_code,
+            error_payload,
         )
     message = selection.error_message or "opportunistic burn window closed"
     if not message.startswith("opportunistic burn window closed"):
@@ -9712,6 +9730,7 @@ async def _normalize_public_responses_stream(
     enforce_openai_sdk_contract: bool = True,
     forward_unparseable_data: bool = False,
     preserve_native_failure_lifecycle: bool = False,
+    codex_rate_limit_headers: Mapping[str, str] | None = None,
 ) -> AsyncIterator[str]:
     raw_stream = stream
     stream = _normalize_reasoning_summary_stream(stream)
@@ -9725,9 +9744,8 @@ async def _normalize_public_responses_stream(
             item events, and synthesize a leading response.created event
             when the upstream stream's first standard event is not
             response.created. When False (used for /backend-api/codex/*,
-            which feeds the Codex CLI), all events including vendor events are
-            forwarded verbatim and no synthesis happens — the Codex CLI
-            relies on the upstream's native event shape.
+            which feeds the Codex CLI), preserve native events without synthesis,
+            except account quota events, which use the pooled header snapshot.
     """
     terminal_seen = False
     done_seen = False
@@ -9875,6 +9893,13 @@ async def _normalize_public_responses_stream(
                         await _close_responses_stream_best_effort(stream, action="native give-up")
                     return
             raw_event_type = payload.get("type")
+            if raw_event_type == "codex.rate_limits":
+                if enforce_openai_sdk_contract:
+                    continue
+                pooled_event = project_codex_rate_limit_event(payload, codex_rate_limit_headers or {})
+                if pooled_event is not None:
+                    yield format_sse_event(pooled_event)
+                continue
             if (
                 enforce_openai_sdk_contract
                 and isinstance(raw_event_type, str)

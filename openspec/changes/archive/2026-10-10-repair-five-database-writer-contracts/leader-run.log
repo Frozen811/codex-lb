@@ -1,0 +1,125 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.12, pytest-9.1.1, pluggy-1.6.0 -- C:\codex-lb\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+hypothesis profile 'local' -> deadline=None, max_examples=50, database=DirectoryBasedExampleDatabase(WindowsPath('.hypothesis/examples/master'))
+rootdir: C:\codex-lb
+configfile: pyproject.toml
+plugins: anyio-4.15.1, hypothesis-6.168.3, asyncio-1.4.0, cov-7.1.0, timeout-2.4.0, xdist-3.8.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+timeout: 10.0s
+timeout method: thread
+timeout func_only: False
+collecting ... collected 45 items
+
+tests/unit/test_leader_election.py::test_try_acquire_returns_true_when_disabled PASSED [  2%]
+tests/unit/test_leader_election.py::test_try_acquire_uses_database_clock_sql_on_postgres_dialect PASSED [  4%]
+tests/unit/test_leader_election.py::test_renew_uses_current_statement_clock_on_postgres PASSED [  6%]
+tests/unit/test_leader_election.py::test_renew_guards_on_unexpired_lease_on_sqlite PASSED [  8%]
+tests/unit/test_leader_election.py::test_renew_after_expiry_demotes_and_does_not_extend PASSED [ 11%]
+tests/unit/test_leader_election.py::test_sqlite_renew_delayed_past_expiry_matches_zero_rows_on_real_db PASSED [ 13%]
+tests/unit/test_leader_election.py::test_acquire_deadline_reflects_full_remaining_after_lock_delay PASSED [ 15%]
+tests/unit/test_leader_election.py::test_acquire_deadline_does_not_outrun_db_expiry_on_real_db PASSED [ 17%]
+tests/unit/test_leader_election.py::test_renew_deadline_reflects_full_remaining_after_lock_delay PASSED [ 20%]
+tests/unit/test_leader_election.py::test_drain_renewal_guards_on_unexpired_lease PASSED [ 22%]
+tests/unit/test_leader_election.py::test_try_acquire_uses_execution_time_clock_upsert_on_sqlite_dialect PASSED [ 24%]
+tests/unit/test_leader_election.py::test_dialect_selection_ignores_database_url_text PASSED [ 26%]
+tests/unit/test_leader_election.py::test_try_acquire_loses_on_rowcount_zero PASSED [ 28%]
+tests/unit/test_leader_election.py::test_try_acquire_defaults_to_non_leader_on_error PASSED [ 31%]
+tests/unit/test_leader_election.py::test_try_acquire_preserves_held_lease_on_transient_error PASSED [ 33%]
+tests/unit/test_leader_election.py::test_try_acquire_demotes_on_transient_error_after_lease_expiry PASSED [ 35%]
+tests/unit/test_leader_election.py::test_try_acquire_demotes_on_no_row_even_when_commit_fails PASSED [ 37%]
+tests/unit/test_leader_election.py::test_renew_demotes_on_rowcount_zero PASSED [ 40%]
+tests/unit/test_leader_election.py::test_renew_demotes_on_rowcount_zero_even_when_commit_fails PASSED [ 42%]
+tests/unit/test_leader_election.py::test_acquire_deadline_anchored_after_statement_not_after_commit PASSED [ 44%]
+tests/unit/test_leader_election.py::test_renew_extends_on_rowcount_one PASSED [ 46%]
+tests/unit/test_leader_election.py::test_renew_returns_false_when_not_leader_without_db_access PASSED [ 48%]
+tests/unit/test_leader_election.py::test_release_deletes_own_row_and_demotes PASSED [ 51%]
+tests/unit/test_leader_election.py::test_release_swallows_errors PASSED  [ 53%]
+tests/unit/test_leader_election.py::test_renew_lease_row_swallows_database_locked_at_debug PASSED [ 55%]
+tests/unit/test_leader_election.py::test_renew_lease_row_still_warns_on_non_lock_error PASSED [ 57%]
+tests/unit/test_leader_election.py::test_release_swallows_database_locked_at_debug PASSED [ 60%]
+tests/unit/test_leader_election.py::test_run_if_leader_skips_body_when_not_leader PASSED [ 62%]
+tests/unit/test_leader_election.py::test_run_if_leader_returns_body_result PASSED [ 64%]
+tests/unit/test_leader_election.py::test_run_if_leader_demotes_when_renewal_hangs PASSED [ 66%]
+tests/unit/test_leader_election.py::test_run_if_leader_demotes_when_renewal_cancellation_hangs FAILED [ 68%]
+tests/unit/test_leader_election.py::test_run_if_leader_preserved_acquire_does_not_extend_local_deadline +++++++++++++++++++++++++++++++++++ Timeout +++++++++++++++++++++++++++++++++++
+~~~~~~~~~~~~~~~~~~~~~~~~~ Stack of MainThread (19176) ~~~~~~~~~~~~~~~~~~~~~~~~~
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\codex-lb\.venv\Scripts\pytest.exe\__main__.py", line 10, in <module>
+    sys.exit(_console_main())
+  File "C:\codex-lb\.venv\Lib\site-packages\_pytest\config\__init__.py", line 253, in _console_main
+    code = _main(prog=_get_prog_name(sys.argv))
+  File "C:\codex-lb\.venv\Lib\site-packages\_pytest\config\__init__.py", line 229, in _main
+    ret: ExitCode | int = config.hook.pytest_cmdline_main(config=config)
+  File "C:\codex-lb\.venv\Lib\site-packages\pluggy\_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "C:\codex-lb\.venv\Lib\site-packages\pluggy\_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "C:\codex-lb\.venv\Lib\site-packages\pluggy\_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "C:\codex-lb\.venv\Lib\site-packages\_pytest\main.py", line 377, in pytest_cmdline_main
+    return wrap_session(config, _main)
+  File "C:\codex-lb\.venv\Lib\site-packages\_pytest\main.py", line 330, in wrap_session
+    session.exitstatus = doit(config, session) or 0
+  File "C:\codex-lb\.venv\Lib\site-packages\_pytest\main.py", line 384, in _main
+    config.hook.pytest_runtestloop(session=session)
+  File "C:\codex-lb\.venv\Lib\site-packages\pluggy\_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "C:\codex-lb\.venv\Lib\site-packages\pluggy\_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "C:\codex-lb\.venv\Lib\site-packages\pluggy\_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "C:\codex-lb\.venv\Lib\site-packages\_pytest\main.py", line 408, in pytest_runtestloop
+    item.config.hook.pytest_runtest_protocol(item=item, nextitem=nextitem)
+  File "C:\codex-lb\.venv\Lib\site-packages\pluggy\_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "C:\codex-lb\.venv\Lib\site-packages\pluggy\_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "C:\codex-lb\.venv\Lib\site-packages\pluggy\_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "C:\codex-lb\.venv\Lib\site-packages\_pytest\runner.py", line 118, in pytest_runtest_protocol
+    runtestprotocol(item, nextitem=nextitem)
+  File "C:\codex-lb\.venv\Lib\site-packages\_pytest\runner.py", line 139, in runtestprotocol
+    reports.append(call_and_report(item, "call", log))
+  File "C:\codex-lb\.venv\Lib\site-packages\_pytest\runner.py", line 249, in call_and_report
+    call = CallInfo.from_call(
+  File "C:\codex-lb\.venv\Lib\site-packages\_pytest\runner.py", line 361, in from_call
+    result: TResult | None = func()
+  File "C:\codex-lb\.venv\Lib\site-packages\_pytest\runner.py", line 250, in <lambda>
+    lambda: runtest_hook(item=item, **kwds),
+  File "C:\codex-lb\.venv\Lib\site-packages\pluggy\_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "C:\codex-lb\.venv\Lib\site-packages\pluggy\_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "C:\codex-lb\.venv\Lib\site-packages\pluggy\_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "C:\codex-lb\.venv\Lib\site-packages\_pytest\runner.py", line 184, in pytest_runtest_call
+    item.runtest()
+  File "C:\codex-lb\.venv\Lib\site-packages\pytest_asyncio\plugin.py", line 569, in runtest
+    super().runtest()
+  File "C:\codex-lb\.venv\Lib\site-packages\_pytest\python.py", line 1707, in runtest
+    self.ihook.pytest_pyfunc_call(pyfuncitem=self)
+  File "C:\codex-lb\.venv\Lib\site-packages\pluggy\_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "C:\codex-lb\.venv\Lib\site-packages\pluggy\_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "C:\codex-lb\.venv\Lib\site-packages\pluggy\_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "C:\codex-lb\.venv\Lib\site-packages\_pytest\python.py", line 167, in pytest_pyfunc_call
+    result = testfunction(**testargs)
+  File "C:\codex-lb\.venv\Lib\site-packages\pytest_asyncio\plugin.py", line 905, in inner
+    runner.run(coro, context=context)
+  File "C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+  File "C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\base_events.py", line 712, in run_until_complete
+    self.run_forever()
+  File "C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\base_events.py", line 683, in run_forever
+    self._run_once()
+  File "C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\base_events.py", line 2012, in _run_once
+    event_list = self._selector.select(timeout)
+  File "C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\windows_events.py", line 446, in select
+    self._poll(timeout)
+  File "C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\windows_events.py", line 775, in _poll
+    status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
++++++++++++++++++++++++++++++++++++ Timeout +++++++++++++++++++++++++++++++++++

@@ -1,0 +1,1312 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="7" skipped="0" tests="7" time="27.709" timestamp="2026-10-10T15:32:00.085300+03:00" hostname="extr3-dekstop"><testcase classname="tests.unit.test_bridge_retry_claim_lifecycle" name="test_cancelled_submit_recovers_committed_claim_receipt[False-False]" time="4.079"><failure message="TimeoutError">fut = &lt;coroutine object Event.wait at 0x00000144CBB420A0&gt;, timeout = 3
+
+    async def wait_for(fut, timeout):
+        """Wait for the single Future or coroutine to complete, with timeout.
+    
+        Coroutine will be wrapped in Task.
+    
+        Returns result of the Future or coroutine.  When a timeout occurs,
+        it cancels the task and raises TimeoutError.  To avoid the task
+        cancellation, wrap it in shield().
+    
+        If the wait is cancelled, the task is also cancelled.
+    
+        If the task suppresses the cancellation and returns a value instead,
+        that value is returned.
+    
+        This function is a coroutine.
+        """
+        # The special case for timeout &lt;= 0 is for the following case:
+        #
+        # async def test_waitfor():
+        #     func_started = False
+        #
+        #     async def func():
+        #         nonlocal func_started
+        #         func_started = True
+        #
+        #     try:
+        #         await asyncio.wait_for(func(), 0)
+        #     except asyncio.TimeoutError:
+        #         assert not func_started
+        #     else:
+        #         assert False
+        #
+        # asyncio.run(test_waitfor())
+    
+    
+        if timeout is not None and timeout &lt;= 0:
+            fut = ensure_future(fut)
+    
+            if fut.done():
+                return fut.result()
+    
+            await _cancel_and_wait(fut)
+            try:
+                return fut.result()
+            except exceptions.CancelledError as exc:
+                raise TimeoutError from exc
+    
+        async with timeouts.timeout(timeout):
+&gt;           return await fut
+                   ^^^^^^^^^
+
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\tasks.py:507: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;asyncio.locks.Event object at 0x00000144CBA67E70 [unset]&gt;
+
+    async def wait(self):
+        """Block until the internal flag is true.
+    
+        If the internal flag is true on entry, return True
+        immediately.  Otherwise, block until another task calls
+        set() to set the flag to true, then return True.
+        """
+        if self._value:
+            return True
+    
+        fut = self._get_loop().create_future()
+        self._waiters.append(fut)
+        try:
+&gt;           await fut
+E           asyncio.exceptions.CancelledError
+
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\locks.py:213: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000144CA249FD0&gt;
+coordinator = &lt;app.modules.proxy.durable_bridge_coordinator.DurableBridgeSessionCoordinator object at 0x00000144CA296660&gt;
+async_client = &lt;httpx.AsyncClient object at 0x00000144CBAC9550&gt;
+cancel_release = False, existing_row = False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("cancel_release", [False, True])
+    @pytest.mark.parametrize("existing_row", [False, True, "local_only"])
+    async def test_cancelled_submit_recovers_committed_claim_receipt(
+        monkeypatch, coordinator, async_client, cancel_release, existing_row
+    ):
+        service = proxy_service.ProxyService(cast(Any, nullcontext()))
+        service._durable_bridge = coordinator
+        session = _make_bridge_session(key_value="claim-cancellation-source")
+        service._http_bridge_sessions[session.key] = session
+        if existing_row is True:
+            await coordinator.persist_retry_circuit(
+                session_key_kind=session.key.affinity_kind,
+                session_key_value=session.key.affinity_key,
+                api_key_id=None,
+                consecutive_failures=2,
+                cooldown_until_epoch=0.0,
+                last_detail="clean_close",
+                updated_at_epoch=time.time(),
+            )
+        elif existing_row == "local_only":
+            cast(Any, service)._http_bridge_retry_circuits[session.key] = retry_circuit._HTTPBridgeRetryCircuitState(
+                consecutive_failures=2,
+                last_touched_monotonic=time.monotonic(),
+                last_failure_monotonic=time.monotonic(),
+            )
+        assert await service._load_http_bridge_retry_circuit(session)
+        captured, generation = await service._http_bridge_retry_circuit_generation(session)
+        assert captured
+        request = _make_eventless_http_bridge_owner(request_id="cancelled-claim-owner")
+        request.previous_response_id = None
+        request.proxy_injected_previous_response_id = False
+        request.skip_request_log = True
+        request.started_at = time.monotonic()
+        request.response_create_gate_acquired = False
+        request.response_create_gate = None
+        request.response_create_sent_at = None
+        cast(Any, session.upstream).send_text = AsyncMock()
+        request.verified_stale_anchor_replay = True
+        request.verified_stale_anchor_retry_circuit_generation_captured = True
+        request.verified_stale_anchor_retry_circuit_key = session.key
+        request.verified_stale_anchor_retry_circuit_generation = generation
+        committed = asyncio.Event()
+        deliver = asyncio.Event()
+        released = asyncio.Event()
+        return_release = asyncio.Event()
+        claim = coordinator.claim_retry_circuit_generation
+    
+        async def delayed_receipt(**kwargs):
+            receipt = await claim(**kwargs)
+            assert receipt is not None
+            committed.set()
+            await deliver.wait()
+            return receipt
+    
+        monkeypatch.setattr(coordinator, "claim_retry_circuit_generation", delayed_receipt)
+        if cancel_release:
+            release = coordinator.release_retry_circuit_claim
+    
+            async def delayed_release(**kwargs):
+                result = await release(**kwargs)
+                released.set()
+                await return_release.wait()
+                return result
+    
+            monkeypatch.setattr(coordinator, "release_retry_circuit_claim", delayed_release)
+        task = asyncio.create_task(
+            service._submit_http_bridge_request(
+                session,
+                request_state=request,
+                text_data='{"type":"response.create","model":"gpt-5.4","input":"hello"}',
+                queue_limit=8,
+            )
+        )
+        try:
+&gt;           await asyncio.wait_for(committed.wait(), timeout=3)
+
+tests\unit\test_bridge_retry_claim_lifecycle.py:183: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\tasks.py:506: in wait_for
+    async with timeouts.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;Timeout [expired]&gt;
+exc_type = &lt;class 'asyncio.exceptions.CancelledError'&gt;
+exc_val = CancelledError(), exc_tb = &lt;traceback object at 0x00000144CB9AC4C0&gt;
+
+    async def __aexit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -&gt; Optional[bool]:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() &lt;= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+&gt;                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\timeouts.py:116: TimeoutError</failure></testcase><testcase classname="tests.unit.test_bridge_retry_claim_lifecycle" name="test_cancelled_submit_recovers_committed_claim_receipt[False-True]" time="3.757"><failure message="TimeoutError">fut = &lt;coroutine object Event.wait at 0x00000144CC0AE5E0&gt;, timeout = 3
+
+    async def wait_for(fut, timeout):
+        """Wait for the single Future or coroutine to complete, with timeout.
+    
+        Coroutine will be wrapped in Task.
+    
+        Returns result of the Future or coroutine.  When a timeout occurs,
+        it cancels the task and raises TimeoutError.  To avoid the task
+        cancellation, wrap it in shield().
+    
+        If the wait is cancelled, the task is also cancelled.
+    
+        If the task suppresses the cancellation and returns a value instead,
+        that value is returned.
+    
+        This function is a coroutine.
+        """
+        # The special case for timeout &lt;= 0 is for the following case:
+        #
+        # async def test_waitfor():
+        #     func_started = False
+        #
+        #     async def func():
+        #         nonlocal func_started
+        #         func_started = True
+        #
+        #     try:
+        #         await asyncio.wait_for(func(), 0)
+        #     except asyncio.TimeoutError:
+        #         assert not func_started
+        #     else:
+        #         assert False
+        #
+        # asyncio.run(test_waitfor())
+    
+    
+        if timeout is not None and timeout &lt;= 0:
+            fut = ensure_future(fut)
+    
+            if fut.done():
+                return fut.result()
+    
+            await _cancel_and_wait(fut)
+            try:
+                return fut.result()
+            except exceptions.CancelledError as exc:
+                raise TimeoutError from exc
+    
+        async with timeouts.timeout(timeout):
+&gt;           return await fut
+                   ^^^^^^^^^
+
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\tasks.py:507: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;asyncio.locks.Event object at 0x00000144CBC07530 [unset]&gt;
+
+    async def wait(self):
+        """Block until the internal flag is true.
+    
+        If the internal flag is true on entry, return True
+        immediately.  Otherwise, block until another task calls
+        set() to set the flag to true, then return True.
+        """
+        if self._value:
+            return True
+    
+        fut = self._get_loop().create_future()
+        self._waiters.append(fut)
+        try:
+&gt;           await fut
+E           asyncio.exceptions.CancelledError
+
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\locks.py:213: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000144C4628750&gt;
+coordinator = &lt;app.modules.proxy.durable_bridge_coordinator.DurableBridgeSessionCoordinator object at 0x00000144CB7A5A90&gt;
+async_client = &lt;httpx.AsyncClient object at 0x00000144CC05A710&gt;
+cancel_release = True, existing_row = False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("cancel_release", [False, True])
+    @pytest.mark.parametrize("existing_row", [False, True, "local_only"])
+    async def test_cancelled_submit_recovers_committed_claim_receipt(
+        monkeypatch, coordinator, async_client, cancel_release, existing_row
+    ):
+        service = proxy_service.ProxyService(cast(Any, nullcontext()))
+        service._durable_bridge = coordinator
+        session = _make_bridge_session(key_value="claim-cancellation-source")
+        service._http_bridge_sessions[session.key] = session
+        if existing_row is True:
+            await coordinator.persist_retry_circuit(
+                session_key_kind=session.key.affinity_kind,
+                session_key_value=session.key.affinity_key,
+                api_key_id=None,
+                consecutive_failures=2,
+                cooldown_until_epoch=0.0,
+                last_detail="clean_close",
+                updated_at_epoch=time.time(),
+            )
+        elif existing_row == "local_only":
+            cast(Any, service)._http_bridge_retry_circuits[session.key] = retry_circuit._HTTPBridgeRetryCircuitState(
+                consecutive_failures=2,
+                last_touched_monotonic=time.monotonic(),
+                last_failure_monotonic=time.monotonic(),
+            )
+        assert await service._load_http_bridge_retry_circuit(session)
+        captured, generation = await service._http_bridge_retry_circuit_generation(session)
+        assert captured
+        request = _make_eventless_http_bridge_owner(request_id="cancelled-claim-owner")
+        request.previous_response_id = None
+        request.proxy_injected_previous_response_id = False
+        request.skip_request_log = True
+        request.started_at = time.monotonic()
+        request.response_create_gate_acquired = False
+        request.response_create_gate = None
+        request.response_create_sent_at = None
+        cast(Any, session.upstream).send_text = AsyncMock()
+        request.verified_stale_anchor_replay = True
+        request.verified_stale_anchor_retry_circuit_generation_captured = True
+        request.verified_stale_anchor_retry_circuit_key = session.key
+        request.verified_stale_anchor_retry_circuit_generation = generation
+        committed = asyncio.Event()
+        deliver = asyncio.Event()
+        released = asyncio.Event()
+        return_release = asyncio.Event()
+        claim = coordinator.claim_retry_circuit_generation
+    
+        async def delayed_receipt(**kwargs):
+            receipt = await claim(**kwargs)
+            assert receipt is not None
+            committed.set()
+            await deliver.wait()
+            return receipt
+    
+        monkeypatch.setattr(coordinator, "claim_retry_circuit_generation", delayed_receipt)
+        if cancel_release:
+            release = coordinator.release_retry_circuit_claim
+    
+            async def delayed_release(**kwargs):
+                result = await release(**kwargs)
+                released.set()
+                await return_release.wait()
+                return result
+    
+            monkeypatch.setattr(coordinator, "release_retry_circuit_claim", delayed_release)
+        task = asyncio.create_task(
+            service._submit_http_bridge_request(
+                session,
+                request_state=request,
+                text_data='{"type":"response.create","model":"gpt-5.4","input":"hello"}',
+                queue_limit=8,
+            )
+        )
+        try:
+&gt;           await asyncio.wait_for(committed.wait(), timeout=3)
+
+tests\unit\test_bridge_retry_claim_lifecycle.py:183: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\tasks.py:506: in wait_for
+    async with timeouts.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;Timeout [expired]&gt;
+exc_type = &lt;class 'asyncio.exceptions.CancelledError'&gt;
+exc_val = CancelledError(), exc_tb = &lt;traceback object at 0x00000144CC0D3080&gt;
+
+    async def __aexit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -&gt; Optional[bool]:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() &lt;= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+&gt;                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\timeouts.py:116: TimeoutError</failure></testcase><testcase classname="tests.unit.test_bridge_retry_claim_lifecycle" name="test_cancelled_submit_recovers_committed_claim_receipt[True-False]" time="3.704"><failure message="TimeoutError">fut = &lt;coroutine object Event.wait at 0x00000144CC59BE60&gt;, timeout = 3
+
+    async def wait_for(fut, timeout):
+        """Wait for the single Future or coroutine to complete, with timeout.
+    
+        Coroutine will be wrapped in Task.
+    
+        Returns result of the Future or coroutine.  When a timeout occurs,
+        it cancels the task and raises TimeoutError.  To avoid the task
+        cancellation, wrap it in shield().
+    
+        If the wait is cancelled, the task is also cancelled.
+    
+        If the task suppresses the cancellation and returns a value instead,
+        that value is returned.
+    
+        This function is a coroutine.
+        """
+        # The special case for timeout &lt;= 0 is for the following case:
+        #
+        # async def test_waitfor():
+        #     func_started = False
+        #
+        #     async def func():
+        #         nonlocal func_started
+        #         func_started = True
+        #
+        #     try:
+        #         await asyncio.wait_for(func(), 0)
+        #     except asyncio.TimeoutError:
+        #         assert not func_started
+        #     else:
+        #         assert False
+        #
+        # asyncio.run(test_waitfor())
+    
+    
+        if timeout is not None and timeout &lt;= 0:
+            fut = ensure_future(fut)
+    
+            if fut.done():
+                return fut.result()
+    
+            await _cancel_and_wait(fut)
+            try:
+                return fut.result()
+            except exceptions.CancelledError as exc:
+                raise TimeoutError from exc
+    
+        async with timeouts.timeout(timeout):
+&gt;           return await fut
+                   ^^^^^^^^^
+
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\tasks.py:507: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;asyncio.locks.Event object at 0x00000144CBC06F30 [unset]&gt;
+
+    async def wait(self):
+        """Block until the internal flag is true.
+    
+        If the internal flag is true on entry, return True
+        immediately.  Otherwise, block until another task calls
+        set() to set the flag to true, then return True.
+        """
+        if self._value:
+            return True
+    
+        fut = self._get_loop().create_future()
+        self._waiters.append(fut)
+        try:
+&gt;           await fut
+E           asyncio.exceptions.CancelledError
+
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\locks.py:213: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000144C9D8E530&gt;
+coordinator = &lt;app.modules.proxy.durable_bridge_coordinator.DurableBridgeSessionCoordinator object at 0x00000144CBB0FCE0&gt;
+async_client = &lt;httpx.AsyncClient object at 0x00000144CC4FB4D0&gt;
+cancel_release = False, existing_row = True
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("cancel_release", [False, True])
+    @pytest.mark.parametrize("existing_row", [False, True, "local_only"])
+    async def test_cancelled_submit_recovers_committed_claim_receipt(
+        monkeypatch, coordinator, async_client, cancel_release, existing_row
+    ):
+        service = proxy_service.ProxyService(cast(Any, nullcontext()))
+        service._durable_bridge = coordinator
+        session = _make_bridge_session(key_value="claim-cancellation-source")
+        service._http_bridge_sessions[session.key] = session
+        if existing_row is True:
+            await coordinator.persist_retry_circuit(
+                session_key_kind=session.key.affinity_kind,
+                session_key_value=session.key.affinity_key,
+                api_key_id=None,
+                consecutive_failures=2,
+                cooldown_until_epoch=0.0,
+                last_detail="clean_close",
+                updated_at_epoch=time.time(),
+            )
+        elif existing_row == "local_only":
+            cast(Any, service)._http_bridge_retry_circuits[session.key] = retry_circuit._HTTPBridgeRetryCircuitState(
+                consecutive_failures=2,
+                last_touched_monotonic=time.monotonic(),
+                last_failure_monotonic=time.monotonic(),
+            )
+        assert await service._load_http_bridge_retry_circuit(session)
+        captured, generation = await service._http_bridge_retry_circuit_generation(session)
+        assert captured
+        request = _make_eventless_http_bridge_owner(request_id="cancelled-claim-owner")
+        request.previous_response_id = None
+        request.proxy_injected_previous_response_id = False
+        request.skip_request_log = True
+        request.started_at = time.monotonic()
+        request.response_create_gate_acquired = False
+        request.response_create_gate = None
+        request.response_create_sent_at = None
+        cast(Any, session.upstream).send_text = AsyncMock()
+        request.verified_stale_anchor_replay = True
+        request.verified_stale_anchor_retry_circuit_generation_captured = True
+        request.verified_stale_anchor_retry_circuit_key = session.key
+        request.verified_stale_anchor_retry_circuit_generation = generation
+        committed = asyncio.Event()
+        deliver = asyncio.Event()
+        released = asyncio.Event()
+        return_release = asyncio.Event()
+        claim = coordinator.claim_retry_circuit_generation
+    
+        async def delayed_receipt(**kwargs):
+            receipt = await claim(**kwargs)
+            assert receipt is not None
+            committed.set()
+            await deliver.wait()
+            return receipt
+    
+        monkeypatch.setattr(coordinator, "claim_retry_circuit_generation", delayed_receipt)
+        if cancel_release:
+            release = coordinator.release_retry_circuit_claim
+    
+            async def delayed_release(**kwargs):
+                result = await release(**kwargs)
+                released.set()
+                await return_release.wait()
+                return result
+    
+            monkeypatch.setattr(coordinator, "release_retry_circuit_claim", delayed_release)
+        task = asyncio.create_task(
+            service._submit_http_bridge_request(
+                session,
+                request_state=request,
+                text_data='{"type":"response.create","model":"gpt-5.4","input":"hello"}',
+                queue_limit=8,
+            )
+        )
+        try:
+&gt;           await asyncio.wait_for(committed.wait(), timeout=3)
+
+tests\unit\test_bridge_retry_claim_lifecycle.py:183: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\tasks.py:506: in wait_for
+    async with timeouts.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;Timeout [expired]&gt;
+exc_type = &lt;class 'asyncio.exceptions.CancelledError'&gt;
+exc_val = CancelledError(), exc_tb = &lt;traceback object at 0x00000144CC087A00&gt;
+
+    async def __aexit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -&gt; Optional[bool]:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() &lt;= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+&gt;                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\timeouts.py:116: TimeoutError</failure></testcase><testcase classname="tests.unit.test_bridge_retry_claim_lifecycle" name="test_cancelled_submit_recovers_committed_claim_receipt[True-True]" time="3.702"><failure message="TimeoutError">fut = &lt;coroutine object Event.wait at 0x00000144CDA0AC00&gt;, timeout = 3
+
+    async def wait_for(fut, timeout):
+        """Wait for the single Future or coroutine to complete, with timeout.
+    
+        Coroutine will be wrapped in Task.
+    
+        Returns result of the Future or coroutine.  When a timeout occurs,
+        it cancels the task and raises TimeoutError.  To avoid the task
+        cancellation, wrap it in shield().
+    
+        If the wait is cancelled, the task is also cancelled.
+    
+        If the task suppresses the cancellation and returns a value instead,
+        that value is returned.
+    
+        This function is a coroutine.
+        """
+        # The special case for timeout &lt;= 0 is for the following case:
+        #
+        # async def test_waitfor():
+        #     func_started = False
+        #
+        #     async def func():
+        #         nonlocal func_started
+        #         func_started = True
+        #
+        #     try:
+        #         await asyncio.wait_for(func(), 0)
+        #     except asyncio.TimeoutError:
+        #         assert not func_started
+        #     else:
+        #         assert False
+        #
+        # asyncio.run(test_waitfor())
+    
+    
+        if timeout is not None and timeout &lt;= 0:
+            fut = ensure_future(fut)
+    
+            if fut.done():
+                return fut.result()
+    
+            await _cancel_and_wait(fut)
+            try:
+                return fut.result()
+            except exceptions.CancelledError as exc:
+                raise TimeoutError from exc
+    
+        async with timeouts.timeout(timeout):
+&gt;           return await fut
+                   ^^^^^^^^^
+
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\tasks.py:507: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;asyncio.locks.Event object at 0x00000144CDA1F770 [unset]&gt;
+
+    async def wait(self):
+        """Block until the internal flag is true.
+    
+        If the internal flag is true on entry, return True
+        immediately.  Otherwise, block until another task calls
+        set() to set the flag to true, then return True.
+        """
+        if self._value:
+            return True
+    
+        fut = self._get_loop().create_future()
+        self._waiters.append(fut)
+        try:
+&gt;           await fut
+E           asyncio.exceptions.CancelledError
+
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\locks.py:213: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000144CC02ABA0&gt;
+coordinator = &lt;app.modules.proxy.durable_bridge_coordinator.DurableBridgeSessionCoordinator object at 0x00000144CC546AD0&gt;
+async_client = &lt;httpx.AsyncClient object at 0x00000144CC58C050&gt;
+cancel_release = True, existing_row = True
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("cancel_release", [False, True])
+    @pytest.mark.parametrize("existing_row", [False, True, "local_only"])
+    async def test_cancelled_submit_recovers_committed_claim_receipt(
+        monkeypatch, coordinator, async_client, cancel_release, existing_row
+    ):
+        service = proxy_service.ProxyService(cast(Any, nullcontext()))
+        service._durable_bridge = coordinator
+        session = _make_bridge_session(key_value="claim-cancellation-source")
+        service._http_bridge_sessions[session.key] = session
+        if existing_row is True:
+            await coordinator.persist_retry_circuit(
+                session_key_kind=session.key.affinity_kind,
+                session_key_value=session.key.affinity_key,
+                api_key_id=None,
+                consecutive_failures=2,
+                cooldown_until_epoch=0.0,
+                last_detail="clean_close",
+                updated_at_epoch=time.time(),
+            )
+        elif existing_row == "local_only":
+            cast(Any, service)._http_bridge_retry_circuits[session.key] = retry_circuit._HTTPBridgeRetryCircuitState(
+                consecutive_failures=2,
+                last_touched_monotonic=time.monotonic(),
+                last_failure_monotonic=time.monotonic(),
+            )
+        assert await service._load_http_bridge_retry_circuit(session)
+        captured, generation = await service._http_bridge_retry_circuit_generation(session)
+        assert captured
+        request = _make_eventless_http_bridge_owner(request_id="cancelled-claim-owner")
+        request.previous_response_id = None
+        request.proxy_injected_previous_response_id = False
+        request.skip_request_log = True
+        request.started_at = time.monotonic()
+        request.response_create_gate_acquired = False
+        request.response_create_gate = None
+        request.response_create_sent_at = None
+        cast(Any, session.upstream).send_text = AsyncMock()
+        request.verified_stale_anchor_replay = True
+        request.verified_stale_anchor_retry_circuit_generation_captured = True
+        request.verified_stale_anchor_retry_circuit_key = session.key
+        request.verified_stale_anchor_retry_circuit_generation = generation
+        committed = asyncio.Event()
+        deliver = asyncio.Event()
+        released = asyncio.Event()
+        return_release = asyncio.Event()
+        claim = coordinator.claim_retry_circuit_generation
+    
+        async def delayed_receipt(**kwargs):
+            receipt = await claim(**kwargs)
+            assert receipt is not None
+            committed.set()
+            await deliver.wait()
+            return receipt
+    
+        monkeypatch.setattr(coordinator, "claim_retry_circuit_generation", delayed_receipt)
+        if cancel_release:
+            release = coordinator.release_retry_circuit_claim
+    
+            async def delayed_release(**kwargs):
+                result = await release(**kwargs)
+                released.set()
+                await return_release.wait()
+                return result
+    
+            monkeypatch.setattr(coordinator, "release_retry_circuit_claim", delayed_release)
+        task = asyncio.create_task(
+            service._submit_http_bridge_request(
+                session,
+                request_state=request,
+                text_data='{"type":"response.create","model":"gpt-5.4","input":"hello"}',
+                queue_limit=8,
+            )
+        )
+        try:
+&gt;           await asyncio.wait_for(committed.wait(), timeout=3)
+
+tests\unit\test_bridge_retry_claim_lifecycle.py:183: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\tasks.py:506: in wait_for
+    async with timeouts.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;Timeout [expired]&gt;
+exc_type = &lt;class 'asyncio.exceptions.CancelledError'&gt;
+exc_val = CancelledError(), exc_tb = &lt;traceback object at 0x00000144CDA1BFC0&gt;
+
+    async def __aexit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -&gt; Optional[bool]:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() &lt;= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+&gt;                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\timeouts.py:116: TimeoutError</failure></testcase><testcase classname="tests.unit.test_bridge_retry_claim_lifecycle" name="test_cancelled_submit_recovers_committed_claim_receipt[local_only-False]" time="3.863"><failure message="TimeoutError">fut = &lt;coroutine object Event.wait at 0x00000144CDC8AB20&gt;, timeout = 3
+
+    async def wait_for(fut, timeout):
+        """Wait for the single Future or coroutine to complete, with timeout.
+    
+        Coroutine will be wrapped in Task.
+    
+        Returns result of the Future or coroutine.  When a timeout occurs,
+        it cancels the task and raises TimeoutError.  To avoid the task
+        cancellation, wrap it in shield().
+    
+        If the wait is cancelled, the task is also cancelled.
+    
+        If the task suppresses the cancellation and returns a value instead,
+        that value is returned.
+    
+        This function is a coroutine.
+        """
+        # The special case for timeout &lt;= 0 is for the following case:
+        #
+        # async def test_waitfor():
+        #     func_started = False
+        #
+        #     async def func():
+        #         nonlocal func_started
+        #         func_started = True
+        #
+        #     try:
+        #         await asyncio.wait_for(func(), 0)
+        #     except asyncio.TimeoutError:
+        #         assert not func_started
+        #     else:
+        #         assert False
+        #
+        # asyncio.run(test_waitfor())
+    
+    
+        if timeout is not None and timeout &lt;= 0:
+            fut = ensure_future(fut)
+    
+            if fut.done():
+                return fut.result()
+    
+            await _cancel_and_wait(fut)
+            try:
+                return fut.result()
+            except exceptions.CancelledError as exc:
+                raise TimeoutError from exc
+    
+        async with timeouts.timeout(timeout):
+&gt;           return await fut
+                   ^^^^^^^^^
+
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\tasks.py:507: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;asyncio.locks.Event object at 0x00000144CC580890 [unset]&gt;
+
+    async def wait(self):
+        """Block until the internal flag is true.
+    
+        If the internal flag is true on entry, return True
+        immediately.  Otherwise, block until another task calls
+        set() to set the flag to true, then return True.
+        """
+        if self._value:
+            return True
+    
+        fut = self._get_loop().create_future()
+        self._waiters.append(fut)
+        try:
+&gt;           await fut
+E           asyncio.exceptions.CancelledError
+
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\locks.py:213: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000144CC4DF8C0&gt;
+coordinator = &lt;app.modules.proxy.durable_bridge_coordinator.DurableBridgeSessionCoordinator object at 0x00000144CA283550&gt;
+async_client = &lt;httpx.AsyncClient object at 0x00000144CBB0F6F0&gt;
+cancel_release = False, existing_row = 'local_only'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("cancel_release", [False, True])
+    @pytest.mark.parametrize("existing_row", [False, True, "local_only"])
+    async def test_cancelled_submit_recovers_committed_claim_receipt(
+        monkeypatch, coordinator, async_client, cancel_release, existing_row
+    ):
+        service = proxy_service.ProxyService(cast(Any, nullcontext()))
+        service._durable_bridge = coordinator
+        session = _make_bridge_session(key_value="claim-cancellation-source")
+        service._http_bridge_sessions[session.key] = session
+        if existing_row is True:
+            await coordinator.persist_retry_circuit(
+                session_key_kind=session.key.affinity_kind,
+                session_key_value=session.key.affinity_key,
+                api_key_id=None,
+                consecutive_failures=2,
+                cooldown_until_epoch=0.0,
+                last_detail="clean_close",
+                updated_at_epoch=time.time(),
+            )
+        elif existing_row == "local_only":
+            cast(Any, service)._http_bridge_retry_circuits[session.key] = retry_circuit._HTTPBridgeRetryCircuitState(
+                consecutive_failures=2,
+                last_touched_monotonic=time.monotonic(),
+                last_failure_monotonic=time.monotonic(),
+            )
+        assert await service._load_http_bridge_retry_circuit(session)
+        captured, generation = await service._http_bridge_retry_circuit_generation(session)
+        assert captured
+        request = _make_eventless_http_bridge_owner(request_id="cancelled-claim-owner")
+        request.previous_response_id = None
+        request.proxy_injected_previous_response_id = False
+        request.skip_request_log = True
+        request.started_at = time.monotonic()
+        request.response_create_gate_acquired = False
+        request.response_create_gate = None
+        request.response_create_sent_at = None
+        cast(Any, session.upstream).send_text = AsyncMock()
+        request.verified_stale_anchor_replay = True
+        request.verified_stale_anchor_retry_circuit_generation_captured = True
+        request.verified_stale_anchor_retry_circuit_key = session.key
+        request.verified_stale_anchor_retry_circuit_generation = generation
+        committed = asyncio.Event()
+        deliver = asyncio.Event()
+        released = asyncio.Event()
+        return_release = asyncio.Event()
+        claim = coordinator.claim_retry_circuit_generation
+    
+        async def delayed_receipt(**kwargs):
+            receipt = await claim(**kwargs)
+            assert receipt is not None
+            committed.set()
+            await deliver.wait()
+            return receipt
+    
+        monkeypatch.setattr(coordinator, "claim_retry_circuit_generation", delayed_receipt)
+        if cancel_release:
+            release = coordinator.release_retry_circuit_claim
+    
+            async def delayed_release(**kwargs):
+                result = await release(**kwargs)
+                released.set()
+                await return_release.wait()
+                return result
+    
+            monkeypatch.setattr(coordinator, "release_retry_circuit_claim", delayed_release)
+        task = asyncio.create_task(
+            service._submit_http_bridge_request(
+                session,
+                request_state=request,
+                text_data='{"type":"response.create","model":"gpt-5.4","input":"hello"}',
+                queue_limit=8,
+            )
+        )
+        try:
+&gt;           await asyncio.wait_for(committed.wait(), timeout=3)
+
+tests\unit\test_bridge_retry_claim_lifecycle.py:183: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\tasks.py:506: in wait_for
+    async with timeouts.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;Timeout [expired]&gt;
+exc_type = &lt;class 'asyncio.exceptions.CancelledError'&gt;
+exc_val = CancelledError(), exc_tb = &lt;traceback object at 0x00000144CC07F100&gt;
+
+    async def __aexit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -&gt; Optional[bool]:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() &lt;= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+&gt;                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\timeouts.py:116: TimeoutError</failure></testcase><testcase classname="tests.unit.test_bridge_retry_claim_lifecycle" name="test_cancelled_submit_recovers_committed_claim_receipt[local_only-True]" time="3.911"><failure message="TimeoutError">fut = &lt;coroutine object Event.wait at 0x00000144CB574D60&gt;, timeout = 3
+
+    async def wait_for(fut, timeout):
+        """Wait for the single Future or coroutine to complete, with timeout.
+    
+        Coroutine will be wrapped in Task.
+    
+        Returns result of the Future or coroutine.  When a timeout occurs,
+        it cancels the task and raises TimeoutError.  To avoid the task
+        cancellation, wrap it in shield().
+    
+        If the wait is cancelled, the task is also cancelled.
+    
+        If the task suppresses the cancellation and returns a value instead,
+        that value is returned.
+    
+        This function is a coroutine.
+        """
+        # The special case for timeout &lt;= 0 is for the following case:
+        #
+        # async def test_waitfor():
+        #     func_started = False
+        #
+        #     async def func():
+        #         nonlocal func_started
+        #         func_started = True
+        #
+        #     try:
+        #         await asyncio.wait_for(func(), 0)
+        #     except asyncio.TimeoutError:
+        #         assert not func_started
+        #     else:
+        #         assert False
+        #
+        # asyncio.run(test_waitfor())
+    
+    
+        if timeout is not None and timeout &lt;= 0:
+            fut = ensure_future(fut)
+    
+            if fut.done():
+                return fut.result()
+    
+            await _cancel_and_wait(fut)
+            try:
+                return fut.result()
+            except exceptions.CancelledError as exc:
+                raise TimeoutError from exc
+    
+        async with timeouts.timeout(timeout):
+&gt;           return await fut
+                   ^^^^^^^^^
+
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\tasks.py:507: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;asyncio.locks.Event object at 0x00000144CA2B22D0 [unset]&gt;
+
+    async def wait(self):
+        """Block until the internal flag is true.
+    
+        If the internal flag is true on entry, return True
+        immediately.  Otherwise, block until another task calls
+        set() to set the flag to true, then return True.
+        """
+        if self._value:
+            return True
+    
+        fut = self._get_loop().create_future()
+        self._waiters.append(fut)
+        try:
+&gt;           await fut
+E           asyncio.exceptions.CancelledError
+
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\locks.py:213: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000144CD96FD90&gt;
+coordinator = &lt;app.modules.proxy.durable_bridge_coordinator.DurableBridgeSessionCoordinator object at 0x00000144CC584140&gt;
+async_client = &lt;httpx.AsyncClient object at 0x00000144CB497AD0&gt;
+cancel_release = True, existing_row = 'local_only'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("cancel_release", [False, True])
+    @pytest.mark.parametrize("existing_row", [False, True, "local_only"])
+    async def test_cancelled_submit_recovers_committed_claim_receipt(
+        monkeypatch, coordinator, async_client, cancel_release, existing_row
+    ):
+        service = proxy_service.ProxyService(cast(Any, nullcontext()))
+        service._durable_bridge = coordinator
+        session = _make_bridge_session(key_value="claim-cancellation-source")
+        service._http_bridge_sessions[session.key] = session
+        if existing_row is True:
+            await coordinator.persist_retry_circuit(
+                session_key_kind=session.key.affinity_kind,
+                session_key_value=session.key.affinity_key,
+                api_key_id=None,
+                consecutive_failures=2,
+                cooldown_until_epoch=0.0,
+                last_detail="clean_close",
+                updated_at_epoch=time.time(),
+            )
+        elif existing_row == "local_only":
+            cast(Any, service)._http_bridge_retry_circuits[session.key] = retry_circuit._HTTPBridgeRetryCircuitState(
+                consecutive_failures=2,
+                last_touched_monotonic=time.monotonic(),
+                last_failure_monotonic=time.monotonic(),
+            )
+        assert await service._load_http_bridge_retry_circuit(session)
+        captured, generation = await service._http_bridge_retry_circuit_generation(session)
+        assert captured
+        request = _make_eventless_http_bridge_owner(request_id="cancelled-claim-owner")
+        request.previous_response_id = None
+        request.proxy_injected_previous_response_id = False
+        request.skip_request_log = True
+        request.started_at = time.monotonic()
+        request.response_create_gate_acquired = False
+        request.response_create_gate = None
+        request.response_create_sent_at = None
+        cast(Any, session.upstream).send_text = AsyncMock()
+        request.verified_stale_anchor_replay = True
+        request.verified_stale_anchor_retry_circuit_generation_captured = True
+        request.verified_stale_anchor_retry_circuit_key = session.key
+        request.verified_stale_anchor_retry_circuit_generation = generation
+        committed = asyncio.Event()
+        deliver = asyncio.Event()
+        released = asyncio.Event()
+        return_release = asyncio.Event()
+        claim = coordinator.claim_retry_circuit_generation
+    
+        async def delayed_receipt(**kwargs):
+            receipt = await claim(**kwargs)
+            assert receipt is not None
+            committed.set()
+            await deliver.wait()
+            return receipt
+    
+        monkeypatch.setattr(coordinator, "claim_retry_circuit_generation", delayed_receipt)
+        if cancel_release:
+            release = coordinator.release_retry_circuit_claim
+    
+            async def delayed_release(**kwargs):
+                result = await release(**kwargs)
+                released.set()
+                await return_release.wait()
+                return result
+    
+            monkeypatch.setattr(coordinator, "release_retry_circuit_claim", delayed_release)
+        task = asyncio.create_task(
+            service._submit_http_bridge_request(
+                session,
+                request_state=request,
+                text_data='{"type":"response.create","model":"gpt-5.4","input":"hello"}',
+                queue_limit=8,
+            )
+        )
+        try:
+&gt;           await asyncio.wait_for(committed.wait(), timeout=3)
+
+tests\unit\test_bridge_retry_claim_lifecycle.py:183: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\tasks.py:506: in wait_for
+    async with timeouts.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;Timeout [expired]&gt;
+exc_type = &lt;class 'asyncio.exceptions.CancelledError'&gt;
+exc_val = CancelledError(), exc_tb = &lt;traceback object at 0x00000144CB6C5B40&gt;
+
+    async def __aexit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -&gt; Optional[bool]:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() &lt;= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+&gt;                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\timeouts.py:116: TimeoutError</failure></testcase><testcase classname="tests.unit.test_bridge_retry_claim_lifecycle" name="test_cancelled_claim_cannot_wait_forever_on_local_key_lock" time="3.727"><failure message="TimeoutError">fut = &lt;coroutine object Event.wait at 0x00000144CC164200&gt;, timeout = 3
+
+    async def wait_for(fut, timeout):
+        """Wait for the single Future or coroutine to complete, with timeout.
+    
+        Coroutine will be wrapped in Task.
+    
+        Returns result of the Future or coroutine.  When a timeout occurs,
+        it cancels the task and raises TimeoutError.  To avoid the task
+        cancellation, wrap it in shield().
+    
+        If the wait is cancelled, the task is also cancelled.
+    
+        If the task suppresses the cancellation and returns a value instead,
+        that value is returned.
+    
+        This function is a coroutine.
+        """
+        # The special case for timeout &lt;= 0 is for the following case:
+        #
+        # async def test_waitfor():
+        #     func_started = False
+        #
+        #     async def func():
+        #         nonlocal func_started
+        #         func_started = True
+        #
+        #     try:
+        #         await asyncio.wait_for(func(), 0)
+        #     except asyncio.TimeoutError:
+        #         assert not func_started
+        #     else:
+        #         assert False
+        #
+        # asyncio.run(test_waitfor())
+    
+    
+        if timeout is not None and timeout &lt;= 0:
+            fut = ensure_future(fut)
+    
+            if fut.done():
+                return fut.result()
+    
+            await _cancel_and_wait(fut)
+            try:
+                return fut.result()
+            except exceptions.CancelledError as exc:
+                raise TimeoutError from exc
+    
+        async with timeouts.timeout(timeout):
+&gt;           return await fut
+                   ^^^^^^^^^
+
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\tasks.py:507: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;asyncio.locks.Event object at 0x00000144CC0D91F0 [unset]&gt;
+
+    async def wait(self):
+        """Block until the internal flag is true.
+    
+        If the internal flag is true on entry, return True
+        immediately.  Otherwise, block until another task calls
+        set() to set the flag to true, then return True.
+        """
+        if self._value:
+            return True
+    
+        fut = self._get_loop().create_future()
+        self._waiters.append(fut)
+        try:
+&gt;           await fut
+E           asyncio.exceptions.CancelledError
+
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\locks.py:213: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000144CBEB3BD0&gt;
+coordinator = &lt;app.modules.proxy.durable_bridge_coordinator.DurableBridgeSessionCoordinator object at 0x00000144CDC8B4D0&gt;
+async_client = &lt;httpx.AsyncClient object at 0x00000144CC1C7570&gt;
+
+    @pytest.mark.asyncio
+    async def test_cancelled_claim_cannot_wait_forever_on_local_key_lock(monkeypatch, coordinator, async_client):
+        service = proxy_service.ProxyService(cast(Any, nullcontext()))
+        service._durable_bridge = coordinator
+        session = _make_bridge_session(key_value="claim-key-lock-timeout")
+        service._http_bridge_sessions[session.key] = session
+        cast(Any, session.upstream).send_text = AsyncMock()
+        request = _make_eventless_http_bridge_owner(request_id="bounded-key-lock-owner")
+        request.started_at = time.monotonic()
+        request.skip_request_log = True
+        request.response_create_gate_acquired = False
+        request.response_create_gate = None
+        request.response_create_sent_at = None
+        request.verified_stale_anchor_replay = True
+        request.verified_stale_anchor_retry_circuit_generation_captured = True
+        request.verified_stale_anchor_retry_circuit_key = session.key
+        request.verified_stale_anchor_retry_circuit_generation = None
+        key_lock = await service._acquire_http_bridge_retry_circuit_key_lock(session.key)
+        entered = asyncio.Event()
+        claim = service._claim_http_bridge_retry_circuit_generation
+    
+        async def observe_claim(**kwargs):
+            entered.set()
+            return await claim(**kwargs)
+    
+        monkeypatch.setattr(service, "_claim_http_bridge_retry_circuit_generation", observe_claim)
+        monkeypatch.setattr(request_submit, "_HTTP_BRIDGE_RETRY_CIRCUIT_CLAIM_TIMEOUT_SECONDS", 0.05)
+        task = asyncio.create_task(
+            service._submit_http_bridge_request(
+                session,
+                request_state=request,
+                text_data='{"type":"response.create","model":"gpt-5.4","input":"hello"}',
+                queue_limit=8,
+            )
+        )
+        try:
+&gt;           await asyncio.wait_for(entered.wait(), timeout=3)
+
+tests\unit\test_bridge_retry_claim_lifecycle.py:272: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\tasks.py:506: in wait_for
+    async with timeouts.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;Timeout [expired]&gt;
+exc_type = &lt;class 'asyncio.exceptions.CancelledError'&gt;
+exc_val = CancelledError(), exc_tb = &lt;traceback object at 0x00000144CBC59840&gt;
+
+    async def __aexit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -&gt; Optional[bool]:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() &lt;= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+&gt;                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\timeouts.py:116: TimeoutError</failure></testcase></testsuite></testsuites>

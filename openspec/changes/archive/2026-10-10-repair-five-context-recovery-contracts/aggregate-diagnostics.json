@@ -1,0 +1,9 @@
+{
+  "observed_failed": [
+    "tests/integration/test_http_responses_bridge.py::test_v1_responses_http_bridge_slims_historical_inline_artifacts_and_succeeds",
+    "tests/integration/test_http_responses_bridge.py::test_v1_responses_http_bridge_stream_failure_remains_valid_sse[created-then-close]",
+    "tests/integration/test_http_responses_bridge.py::test_v1_responses_http_bridge_ambiguous_send_failure_does_not_restart_reader"
+  ],
+  "current_stalled_at": "tests/integration/test_http_responses_bridge.py::test_v1_responses_http_bridge_idle_recovery_hands_reader_to_replacement",
+  "baseline_last": "tests/integration/test_http_responses_bridge.py::test_v1_responses_http_bridge_idle_recovery_hands_reader_to_replacement +++++++++++++++++++++++++++++++++++ Timeout +++++++++++++++++++++++++++++++++++"
+}

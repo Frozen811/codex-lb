@@ -94,7 +94,7 @@ async def test_settings_api_get_and_update(async_client):
     assert payload["limitWarmupModel"] == "auto"
     assert payload["limitWarmupPrompt"] == "Say OK."
     assert payload["limitWarmupCooldownSeconds"] == 3600
-    assert payload["limitWarmupExhaustedThresholdPercent"] == 99.0
+    assert payload["limitWarmupExhaustedThresholdPercent"] == 0.0
     assert payload["limitWarmupIdleThresholdPercent"] == 1.0
     assert payload["limitWarmupMinAvailablePercent"] == 100.0
     assert payload["weeklyPaceWorkingDays"] == "0,1,2,3,4,5,6"

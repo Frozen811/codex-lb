@@ -1,0 +1,268 @@
+FFFFFFFFFFFF....FFFFFFFFFFFFFF                                           [100%]
+================================== FAILURES ===================================
+_ test_http_bridge_reacquire_honors_dashboard_stream_cap[dashboard-128-unkeyed-/v1/responses] _
+tests\integration\test_http_bridge_reacquire_caps.py:98: in test_http_bridge_reacquire_honors_dashboard_stream_cap
+    assert second.status_code == 200, second.text
+E   AssertionError: {"error":{"message":"Account stream capacity is exhausted; wait for active streams to finish.","type":"rate_limit_error","code":"account_stream_cap"}}
+E   assert 429 == 200
+E    +  where 429 = <Response [429 Too Many Requests]>.status_code
+_ test_http_bridge_reacquire_honors_dashboard_stream_cap[dashboard-128-unkeyed-/backend-api/codex/responses] _
+tests\integration\test_http_bridge_reacquire_caps.py:98: in test_http_bridge_reacquire_honors_dashboard_stream_cap
+    assert second.status_code == 200, second.text
+E   AssertionError: {"error":{"message":"Account stream capacity is exhausted; wait for active streams to finish.","type":"rate_limit_error","code":"account_stream_cap"}}
+E   assert 429 == 200
+E    +  where 429 = <Response [429 Too Many Requests]>.status_code
+_ test_http_bridge_reacquire_honors_dashboard_stream_cap[dashboard-128-keyed-/v1/responses] _
+tests\integration\test_http_bridge_reacquire_caps.py:98: in test_http_bridge_reacquire_honors_dashboard_stream_cap
+    assert second.status_code == 200, second.text
+E   AssertionError: {"error":{"message":"Account stream capacity is exhausted; wait for active streams to finish.","type":"rate_limit_error","code":"account_stream_cap"}}
+E   assert 429 == 200
+E    +  where 429 = <Response [429 Too Many Requests]>.status_code
+_ test_http_bridge_reacquire_honors_dashboard_stream_cap[dashboard-128-keyed-/backend-api/codex/responses] _
+tests\integration\test_http_bridge_reacquire_caps.py:98: in test_http_bridge_reacquire_honors_dashboard_stream_cap
+    assert second.status_code == 200, second.text
+E   AssertionError: {"error":{"message":"Account stream capacity is exhausted; wait for active streams to finish.","type":"rate_limit_error","code":"account_stream_cap"}}
+E   assert 429 == 200
+E    +  where 429 = <Response [429 Too Many Requests]>.status_code
+_ test_http_bridge_reacquire_honors_dashboard_stream_cap[unlimited-unkeyed-/v1/responses] _
+tests\integration\test_http_bridge_reacquire_caps.py:98: in test_http_bridge_reacquire_honors_dashboard_stream_cap
+    assert second.status_code == 200, second.text
+E   AssertionError: {"error":{"message":"Account stream capacity is exhausted; wait for active streams to finish.","type":"rate_limit_error","code":"account_stream_cap"}}
+E   assert 429 == 200
+E    +  where 429 = <Response [429 Too Many Requests]>.status_code
+_ test_http_bridge_reacquire_honors_dashboard_stream_cap[unlimited-unkeyed-/backend-api/codex/responses] _
+tests\integration\test_http_bridge_reacquire_caps.py:98: in test_http_bridge_reacquire_honors_dashboard_stream_cap
+    assert second.status_code == 200, second.text
+E   AssertionError: {"error":{"message":"Account stream capacity is exhausted; wait for active streams to finish.","type":"rate_limit_error","code":"account_stream_cap"}}
+E   assert 429 == 200
+E    +  where 429 = <Response [429 Too Many Requests]>.status_code
+_ test_http_bridge_reacquire_honors_dashboard_stream_cap[unlimited-keyed-/v1/responses] _
+tests\integration\test_http_bridge_reacquire_caps.py:98: in test_http_bridge_reacquire_honors_dashboard_stream_cap
+    assert second.status_code == 200, second.text
+E   AssertionError: {"error":{"message":"Account stream capacity is exhausted; wait for active streams to finish.","type":"rate_limit_error","code":"account_stream_cap"}}
+E   assert 429 == 200
+E    +  where 429 = <Response [429 Too Many Requests]>.status_code
+_ test_http_bridge_reacquire_honors_dashboard_stream_cap[unlimited-keyed-/backend-api/codex/responses] _
+tests\integration\test_http_bridge_reacquire_caps.py:98: in test_http_bridge_reacquire_honors_dashboard_stream_cap
+    assert second.status_code == 200, second.text
+E   AssertionError: {"error":{"message":"Account stream capacity is exhausted; wait for active streams to finish.","type":"rate_limit_error","code":"account_stream_cap"}}
+E   assert 429 == 200
+E    +  where 429 = <Response [429 Too Many Requests]>.status_code
+_ test_http_bridge_reacquire_honors_dashboard_stream_cap[lower-cap-unkeyed-/v1/responses] _
+tests\integration\test_http_bridge_reacquire_caps.py:102: in test_http_bridge_reacquire_honors_dashboard_stream_cap
+    assert second.status_code == 429, second.text
+E   AssertionError: event: response.created
+E     data: {"type":"response.created","response":{"id":"resp_bridge_2","object":"response","status":"in_progress"}}
+E     
+E     event: response.output_text.delta
+E     data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"OK"}
+E     
+E     event: response.completed
+E     data: {"type":"response.completed","response":{"id":"resp_bridge_2","object":"response","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"OK"}]}],"usage":{"input_tokens":24,"output_tokens":2,"total_tokens":26,"input_tokens_details":{"cached_tokens":20},"output_tokens_details":{"reasoning_tokens":0}}}}
+E     
+E     
+E   assert 200 == 429
+E    +  where 200 = <Response [200 OK]>.status_code
+_ test_http_bridge_reacquire_honors_dashboard_stream_cap[lower-cap-unkeyed-/backend-api/codex/responses] _
+tests\integration\test_http_bridge_reacquire_caps.py:102: in test_http_bridge_reacquire_honors_dashboard_stream_cap
+    assert second.status_code == 429, second.text
+E   AssertionError: event: codex.keepalive
+E     data: {"type":"codex.keepalive"}
+E     
+E     event: response.created
+E     data: {"type":"response.created","response":{"id":"resp_bridge_2","object":"response","status":"in_progress"}}
+E     
+E     event: response.output_text.delta
+E     data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"OK"}
+E     
+E     event: response.completed
+E     data: {"type":"response.completed","response":{"id":"resp_bridge_2","object":"response","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"OK"}]}],"usage":{"input_tokens":24,"output_tokens":2,"total_tokens":26,"input_tokens_details":{"cached_tokens":20},"output_tokens_details":{"reasoning_tokens":0}}}}
+E     
+E     data: [DONE]
+E     
+E     
+E   assert 200 == 429
+E    +  where 200 = <Response [200 OK]>.status_code
+_ test_http_bridge_reacquire_honors_dashboard_stream_cap[lower-cap-keyed-/v1/responses] _
+tests\integration\test_http_bridge_reacquire_caps.py:102: in test_http_bridge_reacquire_honors_dashboard_stream_cap
+    assert second.status_code == 429, second.text
+E   AssertionError: event: response.created
+E     data: {"type":"response.created","response":{"id":"resp_bridge_2","object":"response","status":"in_progress"}}
+E     
+E     event: response.output_text.delta
+E     data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"OK"}
+E     
+E     event: response.completed
+E     data: {"type":"response.completed","response":{"id":"resp_bridge_2","object":"response","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"OK"}]}],"usage":{"input_tokens":24,"output_tokens":2,"total_tokens":26,"input_tokens_details":{"cached_tokens":20},"output_tokens_details":{"reasoning_tokens":0}}}}
+E     
+E     
+E   assert 200 == 429
+E    +  where 200 = <Response [200 OK]>.status_code
+_ test_http_bridge_reacquire_honors_dashboard_stream_cap[lower-cap-keyed-/backend-api/codex/responses] _
+tests\integration\test_http_bridge_reacquire_caps.py:102: in test_http_bridge_reacquire_honors_dashboard_stream_cap
+    assert second.status_code == 429, second.text
+E   AssertionError: event: codex.keepalive
+E     data: {"type":"codex.keepalive"}
+E     
+E     event: response.created
+E     data: {"type":"response.created","response":{"id":"resp_bridge_2","object":"response","status":"in_progress"}}
+E     
+E     event: response.output_text.delta
+E     data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"OK"}
+E     
+E     event: response.completed
+E     data: {"type":"response.completed","response":{"id":"resp_bridge_2","object":"response","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"OK"}]}],"usage":{"input_tokens":24,"output_tokens":2,"total_tokens":26,"input_tokens_details":{"cached_tokens":20},"output_tokens_details":{"reasoning_tokens":0}}}}
+E     
+E     data: [DONE]
+E     
+E     
+E   assert 200 == 429
+E    +  where 200 = <Response [200 OK]>.status_code
+_ test_native_sse_projects_pool_and_honors_privacy[/backend-api/codex/responses-False-http] _
+tests\integration\test_proxy_rate_limit_events.py:204: in test_native_sse_projects_pool_and_honors_privacy
+    _assert_downstream(events, hidden=hidden, reset_at=quota_pool.reset_at)
+tests\integration\test_proxy_rate_limit_events.py:123: in _assert_downstream
+    assert len(quotas) == 1
+E   AssertionError: assert 2 == 1
+E    +  where 2 = len([{'type': 'codex.rate_limits', 'plan_type': 'pro', 'account_id': 'must-not-leak', 'rate_limits': {'primary': {'used_pe...ust-not-leak', 'rate_limits': {'primary': {'used_percent': 97, 'window_minutes': 10080, 'reset_at': 1900000000}}, ...}])
+_ test_native_sse_projects_pool_and_honors_privacy[/backend-api/codex/responses-False-bridge] _
+tests\integration\test_proxy_rate_limit_events.py:204: in test_native_sse_projects_pool_and_honors_privacy
+    _assert_downstream(events, hidden=hidden, reset_at=quota_pool.reset_at)
+tests\integration\test_proxy_rate_limit_events.py:123: in _assert_downstream
+    assert len(quotas) == 1
+E   AssertionError: assert 2 == 1
+E    +  where 2 = len([{'type': 'codex.rate_limits', 'plan_type': 'pro', 'account_id': 'must-not-leak', 'rate_limits': {'primary': {'used_pe...ust-not-leak', 'rate_limits': {'primary': {'used_percent': 97, 'window_minutes': 10080, 'reset_at': 1900000000}}, ...}])
+_ test_native_sse_projects_pool_and_honors_privacy[/backend-api/codex/responses-True-http] _
+tests\integration\test_proxy_rate_limit_events.py:204: in test_native_sse_projects_pool_and_honors_privacy
+    _assert_downstream(events, hidden=hidden, reset_at=quota_pool.reset_at)
+tests\integration\test_proxy_rate_limit_events.py:121: in _assert_downstream
+    assert quotas == []
+E   AssertionError: assert [{'type': 'co...00000}}, ...}] == []
+E     
+E     Left contains 2 more items, first extra item: {'type': 'codex.rate_limits', 'plan_type': 'pro', 'account_id': 'must-not-leak', 'rate_limits': {'primary': {'used_percent': 97, 'window_minutes': 10080, 'reset_at': 1900000000}}, ...}
+E     Use -v to get more diff
+_ test_native_sse_projects_pool_and_honors_privacy[/backend-api/codex/responses-True-bridge] _
+tests\integration\test_proxy_rate_limit_events.py:204: in test_native_sse_projects_pool_and_honors_privacy
+    _assert_downstream(events, hidden=hidden, reset_at=quota_pool.reset_at)
+tests\integration\test_proxy_rate_limit_events.py:121: in _assert_downstream
+    assert quotas == []
+E   AssertionError: assert [{'type': 'co...00000}}, ...}] == []
+E     
+E     Left contains 2 more items, first extra item: {'type': 'codex.rate_limits', 'plan_type': 'pro', 'account_id': 'must-not-leak', 'rate_limits': {'primary': {'used_percent': 97, 'window_minutes': 10080, 'reset_at': 1900000000}}, ...}
+E     Use -v to get more diff
+_ test_native_sse_projects_pool_and_honors_privacy[/backend-api/codex/responses/-False-http] _
+tests\integration\test_proxy_rate_limit_events.py:204: in test_native_sse_projects_pool_and_honors_privacy
+    _assert_downstream(events, hidden=hidden, reset_at=quota_pool.reset_at)
+tests\integration\test_proxy_rate_limit_events.py:123: in _assert_downstream
+    assert len(quotas) == 1
+E   AssertionError: assert 2 == 1
+E    +  where 2 = len([{'type': 'codex.rate_limits', 'plan_type': 'pro', 'account_id': 'must-not-leak', 'rate_limits': {'primary': {'used_pe...ust-not-leak', 'rate_limits': {'primary': {'used_percent': 97, 'window_minutes': 10080, 'reset_at': 1900000000}}, ...}])
+_ test_native_sse_projects_pool_and_honors_privacy[/backend-api/codex/responses/-False-bridge] _
+tests\integration\test_proxy_rate_limit_events.py:204: in test_native_sse_projects_pool_and_honors_privacy
+    _assert_downstream(events, hidden=hidden, reset_at=quota_pool.reset_at)
+tests\integration\test_proxy_rate_limit_events.py:123: in _assert_downstream
+    assert len(quotas) == 1
+E   AssertionError: assert 2 == 1
+E    +  where 2 = len([{'type': 'codex.rate_limits', 'plan_type': 'pro', 'account_id': 'must-not-leak', 'rate_limits': {'primary': {'used_pe...ust-not-leak', 'rate_limits': {'primary': {'used_percent': 97, 'window_minutes': 10080, 'reset_at': 1900000000}}, ...}])
+_ test_native_sse_projects_pool_and_honors_privacy[/backend-api/codex/responses/-True-http] _
+tests\integration\test_proxy_rate_limit_events.py:204: in test_native_sse_projects_pool_and_honors_privacy
+    _assert_downstream(events, hidden=hidden, reset_at=quota_pool.reset_at)
+tests\integration\test_proxy_rate_limit_events.py:121: in _assert_downstream
+    assert quotas == []
+E   AssertionError: assert [{'type': 'co...00000}}, ...}] == []
+E     
+E     Left contains 2 more items, first extra item: {'type': 'codex.rate_limits', 'plan_type': 'pro', 'account_id': 'must-not-leak', 'rate_limits': {'primary': {'used_percent': 97, 'window_minutes': 10080, 'reset_at': 1900000000}}, ...}
+E     Use -v to get more diff
+_ test_native_sse_projects_pool_and_honors_privacy[/backend-api/codex/responses/-True-bridge] _
+tests\integration\test_proxy_rate_limit_events.py:204: in test_native_sse_projects_pool_and_honors_privacy
+    _assert_downstream(events, hidden=hidden, reset_at=quota_pool.reset_at)
+tests\integration\test_proxy_rate_limit_events.py:121: in _assert_downstream
+    assert quotas == []
+E   AssertionError: assert [{'type': 'co...00000}}, ...}] == []
+E     
+E     Left contains 2 more items, first extra item: {'type': 'codex.rate_limits', 'plan_type': 'pro', 'account_id': 'must-not-leak', 'rate_limits': {'primary': {'used_percent': 97, 'window_minutes': 10080, 'reset_at': 1900000000}}, ...}
+E     Use -v to get more diff
+_ test_websocket_projects_pool_without_interrupting_responses[visible-/backend-api/codex/responses] _
+tests\integration\test_proxy_rate_limit_events.py:263: in test_websocket_projects_pool_without_interrupting_responses
+    _assert_downstream(events, hidden=mode != "visible", reset_at=quota_pool.reset_at)
+tests\integration\test_proxy_rate_limit_events.py:123: in _assert_downstream
+    assert len(quotas) == 1
+E   AssertionError: assert 2 == 1
+E    +  where 2 = len([{'type': 'codex.rate_limits', 'plan_type': 'pro', 'account_id': 'must-not-leak', 'rate_limits': {'primary': {'used_pe...ust-not-leak', 'rate_limits': {'primary': {'used_percent': 97, 'window_minutes': 10080, 'reset_at': 1900000000}}, ...}])
+_ test_websocket_projects_pool_without_interrupting_responses[visible-/v1/responses] _
+tests\integration\test_proxy_rate_limit_events.py:263: in test_websocket_projects_pool_without_interrupting_responses
+    _assert_downstream(events, hidden=mode != "visible", reset_at=quota_pool.reset_at)
+tests\integration\test_proxy_rate_limit_events.py:123: in _assert_downstream
+    assert len(quotas) == 1
+E   AssertionError: assert 2 == 1
+E    +  where 2 = len([{'type': 'codex.rate_limits', 'plan_type': 'pro', 'account_id': 'must-not-leak', 'rate_limits': {'primary': {'used_pe...ust-not-leak', 'rate_limits': {'primary': {'used_percent': 97, 'window_minutes': 10080, 'reset_at': 1900000000}}, ...}])
+_ test_websocket_projects_pool_without_interrupting_responses[hidden-/backend-api/codex/responses] _
+tests\integration\test_proxy_rate_limit_events.py:263: in test_websocket_projects_pool_without_interrupting_responses
+    _assert_downstream(events, hidden=mode != "visible", reset_at=quota_pool.reset_at)
+tests\integration\test_proxy_rate_limit_events.py:121: in _assert_downstream
+    assert quotas == []
+E   AssertionError: assert [{'type': 'co...00000}}, ...}] == []
+E     
+E     Left contains 2 more items, first extra item: {'type': 'codex.rate_limits', 'plan_type': 'pro', 'account_id': 'must-not-leak', 'rate_limits': {'primary': {'used_percent': 97, 'window_minutes': 10080, 'reset_at': 1900000000}}, ...}
+E     Use -v to get more diff
+_ test_websocket_projects_pool_without_interrupting_responses[hidden-/v1/responses] _
+tests\integration\test_proxy_rate_limit_events.py:263: in test_websocket_projects_pool_without_interrupting_responses
+    _assert_downstream(events, hidden=mode != "visible", reset_at=quota_pool.reset_at)
+tests\integration\test_proxy_rate_limit_events.py:121: in _assert_downstream
+    assert quotas == []
+E   AssertionError: assert [{'type': 'co...00000}}, ...}] == []
+E     
+E     Left contains 2 more items, first extra item: {'type': 'codex.rate_limits', 'plan_type': 'pro', 'account_id': 'must-not-leak', 'rate_limits': {'primary': {'used_percent': 97, 'window_minutes': 10080, 'reset_at': 1900000000}}, ...}
+E     Use -v to get more diff
+_ test_websocket_projects_pool_without_interrupting_responses[unavailable-/backend-api/codex/responses] _
+tests\integration\test_proxy_rate_limit_events.py:263: in test_websocket_projects_pool_without_interrupting_responses
+    _assert_downstream(events, hidden=mode != "visible", reset_at=quota_pool.reset_at)
+tests\integration\test_proxy_rate_limit_events.py:121: in _assert_downstream
+    assert quotas == []
+E   AssertionError: assert [{'type': 'co...00000}}, ...}] == []
+E     
+E     Left contains 2 more items, first extra item: {'type': 'codex.rate_limits', 'plan_type': 'pro', 'account_id': 'must-not-leak', 'rate_limits': {'primary': {'used_percent': 97, 'window_minutes': 10080, 'reset_at': 1900000000}}, ...}
+E     Use -v to get more diff
+_ test_websocket_projects_pool_without_interrupting_responses[unavailable-/v1/responses] _
+tests\integration\test_proxy_rate_limit_events.py:263: in test_websocket_projects_pool_without_interrupting_responses
+    _assert_downstream(events, hidden=mode != "visible", reset_at=quota_pool.reset_at)
+tests\integration\test_proxy_rate_limit_events.py:121: in _assert_downstream
+    assert quotas == []
+E   AssertionError: assert [{'type': 'co...00000}}, ...}] == []
+E     
+E     Left contains 2 more items, first extra item: {'type': 'codex.rate_limits', 'plan_type': 'pro', 'account_id': 'must-not-leak', 'rate_limits': {'primary': {'used_percent': 97, 'window_minutes': 10080, 'reset_at': 1900000000}}, ...}
+E     Use -v to get more diff
+============================== warnings summary ===============================
+.venv\Lib\site-packages\starlette\testclient.py:53
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/integration/test_http_bridge_reacquire_caps.py::test_http_bridge_reacquire_honors_dashboard_stream_cap[dashboard-128-unkeyed-/v1/responses]
+FAILED tests/integration/test_http_bridge_reacquire_caps.py::test_http_bridge_reacquire_honors_dashboard_stream_cap[dashboard-128-unkeyed-/backend-api/codex/responses]
+FAILED tests/integration/test_http_bridge_reacquire_caps.py::test_http_bridge_reacquire_honors_dashboard_stream_cap[dashboard-128-keyed-/v1/responses]
+FAILED tests/integration/test_http_bridge_reacquire_caps.py::test_http_bridge_reacquire_honors_dashboard_stream_cap[dashboard-128-keyed-/backend-api/codex/responses]
+FAILED tests/integration/test_http_bridge_reacquire_caps.py::test_http_bridge_reacquire_honors_dashboard_stream_cap[unlimited-unkeyed-/v1/responses]
+FAILED tests/integration/test_http_bridge_reacquire_caps.py::test_http_bridge_reacquire_honors_dashboard_stream_cap[unlimited-unkeyed-/backend-api/codex/responses]
+FAILED tests/integration/test_http_bridge_reacquire_caps.py::test_http_bridge_reacquire_honors_dashboard_stream_cap[unlimited-keyed-/v1/responses]
+FAILED tests/integration/test_http_bridge_reacquire_caps.py::test_http_bridge_reacquire_honors_dashboard_stream_cap[unlimited-keyed-/backend-api/codex/responses]
+FAILED tests/integration/test_http_bridge_reacquire_caps.py::test_http_bridge_reacquire_honors_dashboard_stream_cap[lower-cap-unkeyed-/v1/responses]
+FAILED tests/integration/test_http_bridge_reacquire_caps.py::test_http_bridge_reacquire_honors_dashboard_stream_cap[lower-cap-unkeyed-/backend-api/codex/responses]
+FAILED tests/integration/test_http_bridge_reacquire_caps.py::test_http_bridge_reacquire_honors_dashboard_stream_cap[lower-cap-keyed-/v1/responses]
+FAILED tests/integration/test_http_bridge_reacquire_caps.py::test_http_bridge_reacquire_honors_dashboard_stream_cap[lower-cap-keyed-/backend-api/codex/responses]
+FAILED tests/integration/test_proxy_rate_limit_events.py::test_native_sse_projects_pool_and_honors_privacy[/backend-api/codex/responses-False-http]
+FAILED tests/integration/test_proxy_rate_limit_events.py::test_native_sse_projects_pool_and_honors_privacy[/backend-api/codex/responses-False-bridge]
+FAILED tests/integration/test_proxy_rate_limit_events.py::test_native_sse_projects_pool_and_honors_privacy[/backend-api/codex/responses-True-http]
+FAILED tests/integration/test_proxy_rate_limit_events.py::test_native_sse_projects_pool_and_honors_privacy[/backend-api/codex/responses-True-bridge]
+FAILED tests/integration/test_proxy_rate_limit_events.py::test_native_sse_projects_pool_and_honors_privacy[/backend-api/codex/responses/-False-http]
+FAILED tests/integration/test_proxy_rate_limit_events.py::test_native_sse_projects_pool_and_honors_privacy[/backend-api/codex/responses/-False-bridge]
+FAILED tests/integration/test_proxy_rate_limit_events.py::test_native_sse_projects_pool_and_honors_privacy[/backend-api/codex/responses/-True-http]
+FAILED tests/integration/test_proxy_rate_limit_events.py::test_native_sse_projects_pool_and_honors_privacy[/backend-api/codex/responses/-True-bridge]
+FAILED tests/integration/test_proxy_rate_limit_events.py::test_websocket_projects_pool_without_interrupting_responses[visible-/backend-api/codex/responses]
+FAILED tests/integration/test_proxy_rate_limit_events.py::test_websocket_projects_pool_without_interrupting_responses[visible-/v1/responses]
+FAILED tests/integration/test_proxy_rate_limit_events.py::test_websocket_projects_pool_without_interrupting_responses[hidden-/backend-api/codex/responses]
+FAILED tests/integration/test_proxy_rate_limit_events.py::test_websocket_projects_pool_without_interrupting_responses[hidden-/v1/responses]
+FAILED tests/integration/test_proxy_rate_limit_events.py::test_websocket_projects_pool_without_interrupting_responses[unavailable-/backend-api/codex/responses]
+FAILED tests/integration/test_proxy_rate_limit_events.py::test_websocket_projects_pool_without_interrupting_responses[unavailable-/v1/responses]
+26 failed, 4 passed, 1 warning in 40.12s

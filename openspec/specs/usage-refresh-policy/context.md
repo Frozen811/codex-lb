@@ -203,3 +203,9 @@ No settings, schema revisions, or opt-in defaults change. Existing idle threshol
 The [refresh exclusion contract](spec.md#requirement-workspace-exclusion-preserves-other-records-during-refresh) uses the same exact permanent-failure code policy as request routing. The identity does not substitute for the selected routing record's ID.
 
 For example, two records sharing a user identity can have different workspace availability. A refresh rejection of A leaves B active; refreshing B does not revive A. Bare payment-status responses do not justify permanent status updates. This repair does not add a workspace-discovery mechanism or change credential storage.
+
+## Account operator verification on 2026-10-09
+
+The public exhausted-threshold name now maps to limit_warmup_reset_threshold_percent, initialized to zero. The historical exhausted column remains mapped as legacy, with old values and the 99 default retained. A positive floor is inclusive and reads the original before sample in retained reset evidence. Example: floor 50 accepts before usage 50 and rejects 49; zero permits any otherwise confirmed reset. Paid-to-Free requires prior monthly evidence for a positive floor. Downgrade removes the active column; upgrading again selects zero. Current post-reset gates, opt-in, status and deduplication still apply.
+
+See [requirements](spec.md). Live providers, server database execution and production remain outside local test evidence.

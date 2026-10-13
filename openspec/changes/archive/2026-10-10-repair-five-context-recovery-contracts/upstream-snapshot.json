@@ -1,0 +1,40 @@
+{
+  "clientDate": "2026-10-10",
+  "records": [
+    {
+      "number": 1898,
+      "state": "open",
+      "title": "fix(proxy): persist complete HTTP bridge replay transcripts",
+      "updated_at": "2026-09-28T08:40:43Z",
+      "url": "https://github.com/Soju06/codex-lb/issues/1898"
+    },
+    {
+      "number": 2563,
+      "state": "open",
+      "title": "DATA LOSS: codex-lb silently drops developer messages from chained requests (moves them into `instructions`, which `previous_response_id` does not carry)",
+      "updated_at": "2026-10-04T02:36:11Z",
+      "url": "https://github.com/Soju06/codex-lb/issues/2563"
+    },
+    {
+      "number": 2574,
+      "state": "open",
+      "title": "DATA LOSS: WebSocket replay drops the prewarm anchor and sends the first Codex turn without its context",
+      "updated_at": "2026-10-04T02:35:42Z",
+      "url": "https://github.com/Soju06/codex-lb/issues/2574"
+    },
+    {
+      "number": 2582,
+      "state": "open",
+      "title": "bug(proxy): subagent messages block recovery after HTTP bridge reconnect",
+      "updated_at": "2026-10-05T08:43:10Z",
+      "url": "https://github.com/Soju06/codex-lb/issues/2582"
+    },
+    {
+      "number": 1304,
+      "state": "open",
+      "title": "WebSocket clean-close handoff can consume a queued turn",
+      "updated_at": "2026-09-28T08:39:05Z",
+      "url": "https://github.com/Soju06/codex-lb/issues/1304"
+    }
+  ]
+}

@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="2" time="4.687" timestamp="2026-10-10T13:28:51.231497+03:00" hostname="extr3-dekstop"><testcase classname="tests.integration.test_http_responses_bridge" name="test_backend_responses_goal_restart_keeps_authority_for_same_request_reconnect" time="2.471"><failure message="AssertionError: {&quot;error&quot;:{&quot;message&quot;:&quot;Account selection state changed during admission; retry the request&quot;,&quot;type&quot;:&quot;server_error&quot;,&quot;code&quot;:&quot;selection_state_changed&quot;}}&#10;assert 503 == 200&#10; +  where 503 = &lt;Response [503 Service Unavailable]&gt;.status_code">async_client = &lt;httpx.AsyncClient object at 0x000001A82B769BE0&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001A82AE57BF0&gt;
+
+    @pytest.mark.asyncio
+    async def test_backend_responses_goal_restart_keeps_authority_for_same_request_reconnect(
+        async_client,
+        monkeypatch,
+    ):
+        _install_bridge_settings(monkeypatch, enabled=True)
+        owner_id = await _import_account(
+            async_client,
+            "acc_backend_bridge_reconnect_restart_owner",
+            "backend-bridge-reconnect-restart-owner@example.com",
+        )
+        replacement_id = await _import_account(
+            async_client,
+            "acc_backend_bridge_reconnect_restart_replacement",
+            "backend-bridge-reconnect-restart-replacement@example.com",
+        )
+        owner = await _get_account(owner_id)
+        replacement = await _get_account(replacement_id)
+        owner_chatgpt_account_id = cast(str, owner.chatgpt_account_id)
+        replacement_chatgpt_account_id = cast(str, replacement.chatgpt_account_id)
+        raw_session = "backend-bridge-reconnect-restart-session"
+        selection_key = _codex_session_selection_key(raw_session)
+        async with SessionLocal() as session:
+            await StickySessionsRepository(session).upsert(
+                raw_session,
+                owner.id,
+                kind=proxy_module.StickySessionKind.CODEX_SESSION,
+            )
+    
+        class _OwnerBecomesUnavailableBeforeResponse(_FakeBridgeUpstreamWebSocket):
+            async def send_text(self, text: str) -&gt; None:
+                self.sent_text.append(text)
+                async with SessionLocal() as session:
+                    await session.execute(
+                        update(Account).where(Account.id == owner.id).values(status=AccountStatus.QUOTA_EXCEEDED)
+                    )
+                    await session.commit()
+                await self._messages.put(_FakeUpstreamMessage("close", close_code=1000))
+    
+        owner_upstream = _OwnerBecomesUnavailableBeforeResponse("resp_bridge_reconnect_restart_owner")
+        replacement_upstream = _FakeBridgeUpstreamWebSocket("resp_bridge_reconnect_restart_replacement")
+        connected_account_ids: list[str] = []
+    
+        async def fake_ensure_fresh_with_budget(self, target, *, force=False, timeout_seconds):
+            del self, force, timeout_seconds
+            return target
+    
+        async def fake_connect_responses_websocket(
+            headers,
+            access_token,
+            account_id_header,
+            *,
+            base_url=None,
+            session=None,
+        ):
+            del headers, access_token, base_url, session
+            connected_account_ids.append(account_id_header)
+            if account_id_header == owner_chatgpt_account_id:
+                return owner_upstream
+            assert account_id_header == replacement_chatgpt_account_id
+            return replacement_upstream
+    
+        monkeypatch.setattr(proxy_module.ProxyService, "_ensure_fresh_with_budget", fake_ensure_fresh_with_budget)
+        monkeypatch.setattr(proxy_module, "connect_responses_websocket", fake_connect_responses_websocket)
+    
+&gt;       restart_events = await _collect_sse_events(
+            async_client,
+            "/backend-api/codex/responses",
+            headers={"session_id": raw_session},
+            json_body={
+                "model": "gpt-5.1",
+                "instructions": "Continue the existing task.",
+                "input": [
+                    {
+                        "role": "developer",
+                        "content": (
+                            '&lt;codex_internal_context source="goal"&gt;\nContinue working toward the active thread goal.'
+                        ),
+                    },
+                    {"role": "user", "content": [{"type": "input_text", "text": "continue"}]},
+                ],
+                "stream": True,
+            },
+        )
+
+tests\integration\test_http_responses_bridge.py:7247: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+async_client = &lt;httpx.AsyncClient object at 0x000001A82B769BE0&gt;
+path = '/backend-api/codex/responses'
+json_body = {'model': 'gpt-5.1', 'instructions': 'Continue the existing task.', 'input': [{'role': 'developer', 'content': '&lt;codex... the active thread goal.'}, {'role': 'user', 'content': [{'type': 'input_text', 'text': 'continue'}]}], 'stream': True}
+headers = {'session_id': 'backend-bridge-reconnect-restart-session'}
+
+    async def _collect_sse_events(
+        async_client,
+        path: str,
+        *,
+        json_body: dict,
+        headers: dict[str, str] | None = None,
+    ) -&gt; list[dict]:
+        async with async_client.stream("POST", path, json=json_body, headers=headers) as response:
+            if response.status_code != 200:
+                await response.aread()
+&gt;           assert response.status_code == 200, response.text
+E           AssertionError: {"error":{"message":"Account selection state changed during admission; retry the request","type":"server_error","code":"selection_state_changed"}}
+E           assert 503 == 200
+E            +  where 503 = &lt;Response [503 Service Unavailable]&gt;.status_code
+
+tests\integration\test_http_responses_bridge.py:126: AssertionError</failure></testcase><testcase classname="tests.integration.test_context_recovery_routes" name="test_cancelled_root_registration_cleans_up_its_committed_receipt" time="0.873" /></testsuite></testsuites>

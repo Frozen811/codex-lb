@@ -1,0 +1,16 @@
+[
+  "app/modules/proxy/api.py",
+  "app/modules/proxy/_service/http_bridge/request_submit.py",
+  "app/modules/proxy/_service/websocket/mixin.py",
+  "app/modules/proxy/_service/websocket/protocol.py",
+  "tests/unit/test_http_bridge_idle_leases.py",
+  "tests/unit/test_proxy_api_responses_contract.py",
+  "tests/integration/test_proxy_responses.py",
+  "tests/integration/test_proxy_api_extended.py",
+  "openspec/specs/proxy-admission-control/spec.md",
+  "openspec/specs/proxy-admission-control/context.md",
+  "openspec/specs/responses-api-compat/spec.md",
+  "openspec/specs/responses-api-compat/context.md",
+  "openspec/specs/api-keys/spec.md",
+  "openspec/specs/api-keys/context.md"
+]

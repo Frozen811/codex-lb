@@ -1,3 +1,4 @@
+import { UsageQuotaBar, UsageQuotaSummary } from "@/components/usage-quota-bar";
 import { Clock, ExternalLink, Play, RotateCcw, Zap } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -15,9 +16,8 @@ import { cn } from "@/lib/utils";
 import type { AccountSummary } from "@/features/dashboard/schemas";
 import { formatCompactAccountId } from "@/utils/account-identifiers";
 import {
+  getAccountDisplayStatus,
   normalizeStatus,
-  quotaBarColor,
-  quotaBarTrack,
 } from "@/utils/account-status";
 import {
   formatDateTimeInline,
@@ -26,6 +26,7 @@ import {
   formatSingleUnitRemaining,
   formatSlug,
 } from "@/utils/formatters";
+import { quotaBreakdown } from "@/utils/quota";
 
 export type AccountAction = "details" | "resume" | "reauth" | "warmup-toggle" | "reset-credit";
 
@@ -43,13 +44,16 @@ function formatWarmupWindow(window: string): string {
 function QuotaBar({
   label,
   percent,
+  cap,
   resetLabel,
 }: {
   label: string;
   percent: number | null;
+  cap?: number | null;
   resetLabel: string;
 }) {
   const clamped = percent === null ? 0 : Math.max(0, Math.min(100, percent));
+  const usable = quotaBreakdown(clamped, cap).usable;
   const hasPercent = percent !== null;
   return (
     <div className="space-y-1">
@@ -60,9 +64,9 @@ function QuotaBar({
             "tabular-nums font-medium",
             !hasPercent
               ? "text-muted-foreground"
-              : clamped >= 70
+              : usable >= 70
                 ? "text-emerald-600 dark:text-emerald-400"
-                : clamped >= 30
+                : usable >= 30
                   ? "text-amber-600 dark:text-amber-400"
                   : "text-red-600 dark:text-red-400",
           )}
@@ -70,16 +74,12 @@ function QuotaBar({
           {formatPercentNullable(percent, 1)}
         </span>
       </div>
-      <div className={cn("h-1.5 w-full overflow-hidden rounded-full", quotaBarTrack(clamped))}>
-        <div
-          className={cn("h-full rounded-full transition-colors duration-500 ease-out", quotaBarColor(clamped))}
-          style={{ width: `${clamped}%` }}
-        />
-      </div>
+      <UsageQuotaBar percent={percent} cap={cap} aria-label={label} />
       <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
         <Clock className="h-3 w-3 shrink-0" />
         <span>{resetLabel}</span>
       </div>
+      <UsageQuotaSummary percent={percent} cap={cap} />
     </div>
   );
 }
@@ -89,6 +89,7 @@ export function AccountCard({ account, showAccountId = false, readOnly = false, 
   const blurred = usePrivacyStore((s) => s.blurred);
   const dateDisplayFormat = useDateDisplayFormatStore((s) => s.dateDisplayFormat);
   const status = normalizeStatus(account.status);
+  const badgeStatus = getAccountDisplayStatus(account.status, account.usageLimitState);
   const primaryState = useSmoothPercent(account.usage?.primaryRemainingPercent ?? null);
   const secondaryState = useSmoothPercent(account.usage?.secondaryRemainingPercent ?? null);
   const monthlyState = useSmoothPercent(account.usage?.monthlyRemainingPercent ?? null);
@@ -166,7 +167,7 @@ export function AccountCard({ account, showAccountId = false, readOnly = false, 
             </p>
           ) : null}
         </div>
-        <StatusBadge status={status} />
+        <StatusBadge status={badgeStatus} />
       </div>
 
       {/* Quota bars */}
@@ -175,6 +176,7 @@ export function AccountCard({ account, showAccountId = false, readOnly = false, 
           <QuotaBar
             label={t("common.time.monthly")}
             percent={isPrimaryMonthly && monthlyRemaining == null ? primaryRemaining : monthlyRemaining}
+            cap={account.effectiveLimitMonthly}
             resetLabel={isPrimaryMonthly && account.resetAtMonthly == null ? primaryReset : monthlyReset}
           />
         ) : (
@@ -183,10 +185,11 @@ export function AccountCard({ account, showAccountId = false, readOnly = false, 
               <QuotaBar
                 label={isPrimaryMonthly ? t("common.time.monthly") : "5h"}
                 percent={primaryRemaining}
+                cap={account.effectiveLimitPrimary}
                 resetLabel={primaryReset}
               />
             )}
-            <QuotaBar label={t("common.time.weekly")} percent={secondaryRemaining} resetLabel={secondaryReset} />
+            <QuotaBar label={t("common.time.weekly")} percent={secondaryRemaining} cap={account.effectiveLimitSecondary} resetLabel={secondaryReset} />
           </>
         )}
       </div>

@@ -1,0 +1,42 @@
+{
+  "date": "2026-10-10",
+  "head": "7e3779ffaea1a27c29710a7d496e8fa037131f98",
+  "selected": [
+    "UP-ISSUE-1636",
+    "UP-ISSUE-2311",
+    "UP-ISSUE-2498",
+    "UP-PR-2323",
+    "UP-PR-2516"
+  ],
+  "initial_status": "НЕ ПРОВЕРЕНО",
+  "changed_source_rows": 5,
+  "unchanged_source_rows": 333,
+  "baseline_dirty_files": 408,
+  "unchanged_other_baseline_files": 407,
+  "adapted_baseline_files": [
+    "issues-check.md"
+  ],
+  "distinct_tests_passed": 111,
+  "test_module_counts": {
+    "test_codex_session_metadata_cli": 30,
+    "test_codex_sessions_retag": 19,
+    "test_cli": 38,
+    "test_operator_data_batch": 21,
+    "test_client_setup_examples": 3
+  },
+  "canonical_specs_passed": 68,
+  "final_queue": {
+    "total": 338,
+    "local_closures": 174,
+    "not_applicable": 2,
+    "partial": 7,
+    "unverified": 155
+  },
+  "commit_push_release_deploy": false,
+  "residuals": [
+    "synthetic Windows/SQLite only",
+    "live Codex homes, native WSL/Docker mounts, providers/search, cloud/production not verified",
+    "no cross-file transaction; retained backups support manual recovery",
+    "one external initial smoke SQLite file retained after automatic cleanup rejection"
+  ]
+}

@@ -11,6 +11,7 @@ from dataclasses import dataclass, replace
 from typing import Any, Literal, Mapping, cast
 from uuid import uuid4
 
+from app.core.balancer.logic import ACCOUNT_USAGE_LIMIT_REACHED_ERROR_CODE, ACCOUNT_USAGE_LIMIT_REACHED_ERROR_MESSAGE
 from app.core.clients.files import create_file as core_create_file  # noqa: F401
 from app.core.clients.files import finalize_file as core_finalize_file  # noqa: F401
 from app.core.clients.proxy import (  # noqa: F401
@@ -70,7 +71,7 @@ from app.core.utils.request_id import (
     set_request_id,
 )
 from app.core.utils.sse import format_sse_event, parse_sse_data_json
-from app.db.models import DashboardSettings, StickySessionKind
+from app.db.models import AccountStatus, DashboardSettings, StickySessionKind
 from app.modules.api_keys.service import (
     ApiKeyData,
     ApiKeyRequestUsageBudget,
@@ -105,6 +106,7 @@ from app.modules.proxy._service.http_bridge.helpers import (
     _http_bridge_key_strength,
     _http_bridge_payload_looks_like_full_resend,
     _http_bridge_precreated_retry_failure_error,
+    _http_bridge_previous_response_owner_unavailable_error,
     _http_bridge_prewarm_enabled,
     _http_bridge_request_budget_seconds,
     _http_bridge_request_counts_against_queue,
@@ -226,6 +228,7 @@ from app.modules.proxy._service.warmup import (
 from app.modules.proxy._service.warmup import (
     _WarmupUsageSnapshot as _WarmupUsageSnapshot,
 )
+from app.modules.proxy.account_eligibility import reauth_access_token_is_expired
 from app.modules.proxy.affinity import (
     _AffinityPolicy,
     _extract_model_class,
@@ -251,15 +254,23 @@ from app.modules.proxy.helpers import (
     _normalize_error_code,
     _parse_openai_error,
 )
-from app.modules.proxy.load_balancer import effective_account_concurrency_caps, effective_routing_tunables
+from app.modules.proxy.load_balancer import (
+    AccountConcurrencyCaps,
+    AccountSelection,
+    effective_account_concurrency_caps,
+    effective_routing_tunables,
+)
+from app.modules.proxy.selection_errors import selection_failure_response
 from app.modules.proxy.tool_call_dedupe import (
     dedupe_replayed_side_effect_input_items,
 )
+from app.modules.usage.authorization import OwnerAuthorization, OwnerAuthorizationKind
 
 logger = logging.getLogger("app.modules.proxy.service")
 
 _HTTP_BRIDGE_CLEAN_CLOSE_RETRY_MAX_COUNT = 1
 _HTTP_BRIDGE_CLEAN_CLOSE_RETRY_JITTER_MAX_SECONDS = 2.0
+_HTTP_BRIDGE_OWNER_AUTHORIZATION_TIMEOUT_SECONDS = 5.0
 
 _REQUEST_TRANSPORT_HTTP = "http"
 _WEBSOCKET_AUTH_INVALIDATED_FAILURE_CODE = "account_auth_invalidated"
@@ -269,6 +280,13 @@ _SECURITY_WORK_NO_AUTHORIZED_ACCOUNTS_MESSAGE = (
     "security work. codex-lb is continuing with normal account selection; the upstream request may still fail until "
     "an account with Trusted Access for Cyber is marked as security-work-authorized."
 )
+
+
+@dataclass(frozen=True, slots=True)
+class _HTTPBridgeReacquireSnapshot:
+    concurrency_caps: AccountConcurrencyCaps
+    fair_share_threshold_pct: int
+    routing_tunables: RoutingTunables
 
 
 @dataclass(frozen=True, slots=True)
@@ -329,6 +347,10 @@ def _http_bridge_operation_fingerprint(
     text_data: str,
 ) -> str:
     fingerprint_text = _text_without_account_installation_id(text_data)
+    if request_state.previous_response_id is None:
+        # Independent roots may have identical bodies. Keep retries of this
+        # request stable without merging another turn or conversation into it.
+        fingerprint_text = f"{session_id}:{request_state.request_id}:{fingerprint_text}"
     return durable_bridge_operation_fingerprint(
         api_key_scope=api_key_scope,
         request_text=fingerprint_text,
@@ -367,12 +389,50 @@ def _http_bridge_terminal_hard_turn_response_id(
     return response_id if isinstance(response_id, str) and response_id else None
 
 
+def _http_bridge_usage_limit_authorization_failed_error() -> ProxyResponseError:
+    return ProxyResponseError(
+        503,
+        openai_error(
+            "account_usage_limit_authorization_failed",
+            "Unable to verify account usage limit; retry later.",
+            error_type="server_error",
+        ),
+    )
+
+
+def _ensure_http_bridge_session_owner_authorized(
+    session: "_HTTPBridgeSession",
+    owner_authorization: OwnerAuthorization,
+) -> None:
+    if owner_authorization.kind is OwnerAuthorizationKind.AUTHORIZATION_FAILED:
+        raise _http_bridge_usage_limit_authorization_failed_error()
+    if owner_authorization.kind is OwnerAuthorizationKind.OWNER_UNAVAILABLE or (
+        owner_authorization.owner_status is AccountStatus.REAUTH_REQUIRED
+        and reauth_access_token_is_expired(AccountStatus.REAUTH_REQUIRED, session.access_token_expires_at)
+    ):
+        session.upstream_control.reconnect_requested = True
+        session.upstream_control.retire_after_drain = True
+        raise _http_bridge_previous_response_owner_unavailable_error()
+    if owner_authorization.allowed:
+        return
+    session.upstream_control.reconnect_requested = True
+    session.upstream_control.retire_after_drain = True
+    status_code, error_payload = selection_failure_response(
+        AccountSelection(
+            account=None,
+            error_message=ACCOUNT_USAGE_LIMIT_REACHED_ERROR_MESSAGE,
+            error_code=ACCOUNT_USAGE_LIMIT_REACHED_ERROR_CODE,
+        )
+    )
+    raise ProxyResponseError(status_code, error_payload)
+
+
 async def _rollback_http_bridge_recovery_turn_state_registration(
     service: Any,
     receipt: DurableBridgeAliasRegistrationReceipt,
 ) -> tuple[bool, asyncio.CancelledError | None]:
     rollback_task = scheduler_for(service).create_task(
-        service._durable_bridge.rollback_recovery_turn_state_registration(receipt=receipt)
+        service._rollback_http_bridge_recovery_turn_state_registration(receipt)
     )
     return await _await_task_deferring_cancellation(rollback_task)
 
@@ -431,7 +491,14 @@ async def _send_http_bridge_request_text_with_archive_id(
     on_send_started: Callable[[], None] | None = None,
     clock: Clock = REAL_CLOCK,
 ) -> None:
-    text_data = _text_with_operation_id(text_data, request_state.operation_id)
+    # A root's local transcript identity does not add a new upstream contract
+    # or consume the client's frame budget. Anchored operation tags retain
+    # their existing upstream idempotency role.
+    local_root_identity = request_state.operation_parent_response_id is None and (
+        request_state.operation_created or request_state.operation_rebound
+    )
+    if not local_root_identity:
+        text_data = _text_with_operation_id(text_data, request_state.operation_id)
     text_data = _text_with_thread_cache_identity(text_data, _bridge_thread_cache_identity(session))
     # Operation metadata is added after the initial payload sizing pass. Check
     # the exact frame that will cross the websocket so the metadata cannot
@@ -1248,6 +1315,7 @@ class _HTTPBridgeRequestSubmitMixin:
                     "bridge_previous_response_not_found",
                     "The reattached anchor for this session was proven dead; resend the full conversation.",
                 ),
+                local_pre_dispatch_refusal=request_is_undispatched,
             )
         # Persist the recovery checkpoint only after the retry circuit has
         # admitted this request. A client reconnect suppressed by the
@@ -1355,11 +1423,6 @@ class _HTTPBridgeRequestSubmitMixin:
         record_operation = getattr(self._durable_bridge, "record_operation", None)
         if (
             callable(record_operation)
-            and (
-                request_state.previous_response_id is not None
-                or request_state.operation_rebind_required
-                or recovery_attempt_consumed
-            )
             and (request_state.operation_id is None or request_state.operation_rebind_required)
             and session.durable_session_id is not None
             and session.durable_owner_epoch is not None
@@ -1390,7 +1453,11 @@ class _HTTPBridgeRequestSubmitMixin:
             # operation-tagged frame is known to fit. Otherwise a local size
             # rejection before ``send_text`` leaves a submitted ledger row
             # that fences every identical retry as an unknown in-flight turn.
-            operation_tagged_text = _text_with_operation_id(text_data, operation_id)
+            operation_tagged_text = (
+                _text_with_operation_id(text_data, operation_id)
+                if operation_parent_response_id is not None
+                else text_data
+            )
             _enforce_http_bridge_response_create_text_size(request_state, operation_tagged_text)
             try:
                 get_operation_by_fingerprint = getattr(self._durable_bridge, "get_operation_by_fingerprint", None)
@@ -1540,32 +1607,39 @@ class _HTTPBridgeRequestSubmitMixin:
                             ),
                             local_pre_dispatch_refusal=True,
                         ) from exc
-                operation = await _call_with_supported_optional_kwargs(
-                    record_operation,
-                    optional_kwargs={
-                        "recovery_attempt_session_id": request_state.recovery_attempt_session_id
-                        if request_state.recovery_attempt_claimed
-                        else None,
-                        "recovery_attempt_owner_epoch": request_state.recovery_attempt_owner_epoch
-                        if request_state.recovery_attempt_claimed
-                        else None,
-                        "recovery_attempt_fingerprint": request_state.recovery_attempt_fingerprint
-                        if request_state.recovery_attempt_claimed
-                        else None,
-                        "recovery_attempt_consumed": recovery_attempt_consumed,
-                    },
-                    operation_id=operation_id,
-                    session_id=session.durable_session_id,
-                    instance_id=_service_get_settings().http_responses_session_bridge_instance_id,
-                    owner_epoch=session.durable_owner_epoch,
-                    request_fingerprint=operation_fingerprint,
-                    api_key_scope=api_key_scope,
-                    account_id=session.account.id,
-                    model=request_state.model,
-                    parent_response_id=operation_parent_response_id,
-                    request_text=text_data,
-                )
+
+                async def register_operation_with_receipt() -> Any:
+                    return await _call_with_supported_optional_kwargs(
+                        record_operation,
+                        optional_kwargs={
+                            "recovery_attempt_session_id": request_state.recovery_attempt_session_id
+                            if request_state.recovery_attempt_claimed
+                            else None,
+                            "recovery_attempt_owner_epoch": request_state.recovery_attempt_owner_epoch
+                            if request_state.recovery_attempt_claimed
+                            else None,
+                            "recovery_attempt_fingerprint": request_state.recovery_attempt_fingerprint
+                            if request_state.recovery_attempt_claimed
+                            else None,
+                            "recovery_attempt_consumed": recovery_attempt_consumed,
+                        },
+                        operation_id=operation_id,
+                        session_id=session.durable_session_id,
+                        instance_id=_service_get_settings().http_responses_session_bridge_instance_id,
+                        owner_epoch=session.durable_owner_epoch,
+                        request_fingerprint=operation_fingerprint,
+                        api_key_scope=api_key_scope,
+                        account_id=session.account.id,
+                        model=request_state.model,
+                        parent_response_id=operation_parent_response_id,
+                        request_text=text_data,
+                    )
+
+                registration_task = scheduler_for(self).create_task(register_operation_with_receipt())
+                operation, operation_cancellation = await _await_task_deferring_cancellation(registration_task)
             except Exception as exc:
+                if isinstance(exc, ProxyResponseError) and exc.local_pre_dispatch_refusal:
+                    raise
                 session.closed = True
                 session.upstream_control.reconnect_requested = True
                 session.upstream_control.retire_after_drain = True
@@ -1687,6 +1761,20 @@ class _HTTPBridgeRequestSubmitMixin:
                 operation, "rebound_from_parent_response_id", None
             )
             request_state.operation_persisted_response_id = getattr(operation, "response_id", None)
+            if operation_cancellation is not None:
+                # Deliver a committed registration receipt to interruption
+                # cleanup before propagating caller cancellation.
+                cleanup_task = scheduler_for(self).create_task(
+                    self._cleanup_http_bridge_submit_interruption(
+                        session,
+                        request_state=request_state,
+                        gate_acquired=False,
+                        request_enqueued=False,
+                        counted_in_queue=False,
+                    )
+                )
+                await _await_task_deferring_cancellation(cleanup_task)
+                raise operation_cancellation
 
         async def _cleanup_unsubmitted_recovery_claim() -> None:
             if (
@@ -1838,17 +1926,18 @@ class _HTTPBridgeRequestSubmitMixin:
             # critical section (issue #1971) — and only when the reacquire can
             # actually run: a session already holding its lease never depended
             # on a settings read to admit a turn.
-            fair_share_threshold_pct, routing_tunables = (
-                await self._http_bridge_reacquire_snapshot(session) if needs_stream_lease else (0, None)
-            )
-            async with session.pending_lock:
-                await self._ensure_http_bridge_session_stream_lease_locked(
-                    session,
-                    request_state=request_state,
-                    fair_share_threshold_pct=fair_share_threshold_pct,
-                    routing_tunables=routing_tunables,
-                )
-        except BaseException:
+            reacquire_snapshot = None
+            if needs_stream_lease:
+                reacquire_snapshot = await self._http_bridge_reacquire_snapshot(session)
+                owner_authorization = await self._fresh_http_bridge_owner_authorization(session)
+                async with session.pending_lock:
+                    await self._ensure_http_bridge_session_stream_lease_locked(
+                        session,
+                        request_state=request_state,
+                        snapshot=reacquire_snapshot,
+                        owner_authorization=owner_authorization,
+                    )
+        except BaseException as exc:
             # Recovery claims are made before admission. If reacquiring an
             # idle session's stream lease fails, no upstream frame can have
             # been sent; restore that claim before propagating the admission
@@ -1866,6 +1955,9 @@ class _HTTPBridgeRequestSubmitMixin:
                 )
             )
             await _await_task_deferring_cancellation(cleanup_task)
+            if isinstance(exc, ProxyResponseError) and not owned_unanchored_handoff:
+                if session.upstream_control.retire_after_drain and not session.upstream_close_attempted:
+                    await self._retire_http_bridge_after_drain_if_ready(session)
             raise
         try:
             await self._maybe_prewarm_http_bridge_session(
@@ -1887,14 +1979,24 @@ class _HTTPBridgeRequestSubmitMixin:
                 )
             )
             await _await_task_deferring_cancellation(cleanup_task)
+            if (
+                not owned_unanchored_handoff
+                and session.upstream_control.retire_after_drain
+                and not session.upstream_close_attempted
+            ):
+                await self._retire_http_bridge_after_drain_if_ready(session)
             raise
         try:
-            # Reuses the pre-prewarm snapshot: the registered admission waiter
-            # kept the lease from idle release, so this reacquire is a no-op
-            # unless the session closed mid-prewarm — a fresh refresh here
-            # could only stall an otherwise admissible request on a
-            # TTL-expired settings read (issue #1971).
+            # The fair-share snapshot remains reusable across prewarm, but the
+            # account policy is re-read immediately before queue admission.
+            owner_authorization = await self._fresh_http_bridge_owner_authorization(session)
             async with session.pending_lock:
+                await self._ensure_http_bridge_session_stream_lease_locked(
+                    session,
+                    request_state=request_state,
+                    snapshot=reacquire_snapshot,
+                    owner_authorization=owner_authorization,
+                )
                 if session.queued_request_count >= queue_limit:
                     _log_http_bridge_event(
                         "bridge_queue_full",
@@ -1913,12 +2015,6 @@ class _HTTPBridgeRequestSubmitMixin:
                             error_type="rate_limit_error",
                         ),
                     )
-                await self._ensure_http_bridge_session_stream_lease_locked(
-                    session,
-                    request_state=request_state,
-                    fair_share_threshold_pct=fair_share_threshold_pct,
-                    routing_tunables=routing_tunables,
-                )
                 session.queued_request_count += 1
                 if getattr(session, "unanchored_reservation_id", None) == request_scope_id:
                     session.unanchored_reservation_id = None
@@ -1936,6 +2032,12 @@ class _HTTPBridgeRequestSubmitMixin:
                 )
             )
             await _await_task_deferring_cancellation(cleanup_task)
+            if (
+                not owned_unanchored_handoff
+                and session.upstream_control.retire_after_drain
+                and not session.upstream_close_attempted
+            ):
+                await self._retire_http_bridge_after_drain_if_ready(session)
             raise
         try:
             text_data = await self._inline_http_bridge_image_urls(text_data, request_state)
@@ -1955,7 +2057,7 @@ class _HTTPBridgeRequestSubmitMixin:
                 request_state,
                 response_create_gate=session.response_create_gate,
                 account_id=session.account.id,
-                routing_tunables=routing_tunables,
+                routing_tunables=reacquire_snapshot.routing_tunables if reacquire_snapshot is not None else None,
                 surface="http_bridge",
                 bridge_session=session,
             )
@@ -2304,6 +2406,8 @@ class _HTTPBridgeRequestSubmitMixin:
                                 retry_after_seconds=suppressed_retry_after_seconds,
                                 local_pre_dispatch_refusal=request_is_undispatched,
                             )
+                    owner_authorization = await self._fresh_http_bridge_owner_authorization(session)
+                    _ensure_http_bridge_session_owner_authorized(session, owner_authorization)
                     async with session.pending_lock:
                         session.pending_requests.append(request_state)
                         session.admission_waiter_count = max(0, session.admission_waiter_count - 1)
@@ -2350,16 +2454,18 @@ class _HTTPBridgeRequestSubmitMixin:
                     request_state.recovery_attempt_dispatched = True
                     request_state.operation_dispatched = request_state.operation_id is not None
                     session.last_used_at = clock.monotonic()
-                except asyncio.CancelledError:
+                except BaseException as exc:
                     if recovery_receipt is not None and not upstream_send_started:
-                        session.closed = True
-                        session.upstream_control.reconnect_requested = True
-                        session.upstream_control.retire_after_drain = True
+                        if isinstance(exc, asyncio.CancelledError):
+                            session.closed = True
+                            session.upstream_control.reconnect_requested = True
+                            session.upstream_control.retire_after_drain = True
+                        rollback_cancellation: asyncio.CancelledError | None = None
                         async with session.recovery_alias_lock:
                             try:
                                 (
                                     rolled_back,
-                                    _rollback_cancellation,
+                                    rollback_cancellation,
                                 ) = await _rollback_http_bridge_recovery_turn_state_registration(
                                     self,
                                     recovery_receipt,
@@ -2367,10 +2473,13 @@ class _HTTPBridgeRequestSubmitMixin:
                             except Exception:
                                 rolled_back = False
                                 logger.warning(
-                                    "Failed to roll back cancelled HTTP bridge recovery alias",
+                                    "Failed to roll back HTTP bridge recovery alias before dispatch",
                                     exc_info=True,
                                 )
                             if not rolled_back:
+                                session.closed = True
+                                session.upstream_control.reconnect_requested = True
+                                session.upstream_control.retire_after_drain = True
                                 _record_continuity_fail_closed(
                                     surface="http_bridge",
                                     reason="recovery_alias_rollback_failed",
@@ -2378,6 +2487,11 @@ class _HTTPBridgeRequestSubmitMixin:
                                     session_id=request_state.session_id,
                                     upstream_error_code="bridge_continuity_persistence_failed",
                                 )
+                        if rollback_cancellation is not None:
+                            session.closed = True
+                            session.upstream_control.reconnect_requested = True
+                            session.upstream_control.retire_after_drain = True
+                            raise rollback_cancellation
                     raise
         except ProxyResponseError:
             await self._cleanup_http_bridge_submit_interruption(
@@ -2671,6 +2785,8 @@ class _HTTPBridgeRequestSubmitMixin:
                         )
                         gate_acquired = False
                         return
+                    owner_authorization = await self._fresh_http_bridge_owner_authorization(session)
+                    _ensure_http_bridge_session_owner_authorized(session, owner_authorization)
                     async with session.pending_lock:
                         session.pending_requests.append(warmup_state)
                     request_enqueued = True
@@ -2922,51 +3038,62 @@ class _HTTPBridgeRequestSubmitMixin:
     async def _http_bridge_reacquire_snapshot(
         self: Any,
         session: "_HTTPBridgeSession",
-    ) -> tuple[int, RoutingTunables | None]:
-        """Resolve the reacquire's settings inputs WITHOUT holding pending_lock.
+    ) -> _HTTPBridgeReacquireSnapshot:
+        """Resolve one dashboard row before entering the pending lock.
 
-        For a keyed session one cached dashboard row yields both the fair-share
-        threshold and the routing tunables the lease is judged against (C2-2
-        routing/overload: the lease TTL). An unkeyed session reads no settings
-        here, as before: its threshold is ``0`` and the balancer falls back to
-        the snapshot of its most recent request. The settings-cache refresh
-        runs a DB query behind a process-global lock; awaiting it while holding
-        a session's ``pending_lock`` let one stalled query wedge every keyed
-        submit process-wide (issue #1971). Callers resolve the snapshot first
-        and pass both values into ``_ensure_http_bridge_session_stream_lease_locked``.
+        Keyed and unkeyed warm sessions use the same effective caps as initial
+        selection. Settings I/O under pending_lock would stall cleanup (#1971).
         """
-        if session.key.api_key_id is None:
-            return 0, None
         dashboard_settings = await _service_get_settings_cache().get()
-        return (
-            _api_key_fair_share_threshold_pct_from_settings(dashboard_settings),
-            effective_routing_tunables(dashboard_settings),
+        return _HTTPBridgeReacquireSnapshot(
+            concurrency_caps=effective_account_concurrency_caps(dashboard_settings),
+            fair_share_threshold_pct=(
+                _api_key_fair_share_threshold_pct_from_settings(dashboard_settings)
+                if session.key.api_key_id is not None
+                else 0
+            ),
+            routing_tunables=effective_routing_tunables(dashboard_settings),
         )
+
+    async def _fresh_http_bridge_owner_authorization(
+        self: Any,
+        session: "_HTTPBridgeSession",
+    ) -> OwnerAuthorization:
+        account_id = session.account.id
+        try:
+            # Final dispatch reads stay under lifecycle_lock so a reconnect
+            # cannot switch the owner between authorization and upstream send.
+            return await scheduler_for(self).wait_for(
+                self._load_balancer.authorize_account_fresh(account_id),
+                timeout=_HTTP_BRIDGE_OWNER_AUTHORIZATION_TIMEOUT_SECONDS,
+            )
+        except TimeoutError:
+            logger.warning("HTTP bridge owner authorization timed out account_id=%s", account_id)
+            return OwnerAuthorization(OwnerAuthorizationKind.AUTHORIZATION_FAILED)
 
     async def _ensure_http_bridge_session_stream_lease_locked(
         self: Any,
         session: "_HTTPBridgeSession",
         *,
+        snapshot: _HTTPBridgeReacquireSnapshot | None,
         request_state: _WebSocketRequestState | None = None,
-        fair_share_threshold_pct: int | None = None,
-        routing_tunables: RoutingTunables | None = None,
+        owner_authorization: OwnerAuthorization,
     ) -> None:
         """Reacquire the account stream lease for a session idled between turns.
 
-        Callers hold ``session.pending_lock`` and MUST pass both
-        ``fair_share_threshold_pct`` and ``routing_tunables`` (see
-        ``_http_bridge_reacquire_snapshot``) computed before acquiring it:
-        resolving either reads the settings cache, whose refresh runs a DB
-        query behind a process-global lock — one stalled refresh under
-        ``pending_lock`` wedged every keyed submit for days (issue #1971).
-        The ``None`` fallback resolves them inline from one cached row and
-        exists for lock-free callers only.
+        Callers hold ``session.pending_lock`` and pass a settings snapshot
+        resolved before acquiring it. ``None`` is valid only when no new lease
+        is needed. This helper never reads settings under the lock (#1971).
 
         The lease is released when the
         session's last in-flight turn detaches, so an idle session does not
         occupy a per-account stream slot; the next turn must pass normal cap
         admission again. Denial raises the standard local-cap envelope so the
         existing recoverable capacity wait applies.
+
+        An idle session is revalidated before reacquiring its lease. Every turn,
+        including one whose session still holds a lease, is then revalidated
+        immediately before queue admission and again at the dispatch boundary.
 
         The lease stays per-session (one upstream stream): a session that
         already holds a lease admits further queued turns without acquiring
@@ -2980,26 +3107,20 @@ class _HTTPBridgeRequestSubmitMixin:
         fair-share denial raises the standard local-cap envelope with the
         fair-share code so the recoverable capacity wait applies.
         """
-        if session.account_lease is not None or session.closed:
-            return
         load_balancer = getattr(self, "_load_balancer", None)
         if load_balancer is None:
             return
+        _ensure_http_bridge_session_owner_authorized(session, owner_authorization)
+        if session.account_lease is not None or session.closed:
+            return
+        assert snapshot is not None, "stream reacquisition requires a pre-lock settings snapshot"
         api_key_id = session.key.api_key_id
-        if api_key_id is None:
-            fair_share_threshold_pct = 0
-        elif fair_share_threshold_pct is None:
-            # Lock-free callers only (see the docstring): one cached row serves
-            # both inputs.
-            dashboard_settings = await _service_get_settings_cache().get()
-            fair_share_threshold_pct = _api_key_fair_share_threshold_pct_from_settings(dashboard_settings)
-            if routing_tunables is None:
-                routing_tunables = effective_routing_tunables(dashboard_settings)
         try:
             lease = await load_balancer.acquire_account_lease(
                 session.account.id,
                 kind="stream",
-                routing_tunables=routing_tunables,
+                concurrency_caps=snapshot.concurrency_caps,
+                routing_tunables=snapshot.routing_tunables,
                 # Carry the turn's usage-budget estimate like initial selection
                 # and reconnect do, so capacity-weighted routing pressure still
                 # sees large turns on reused warm sessions.
@@ -3007,7 +3128,7 @@ class _HTTPBridgeRequestSubmitMixin:
                     request_state.request_usage_budget if request_state is not None else None
                 ),
                 api_key_id=api_key_id,
-                api_key_stream_fair_share_threshold_pct=fair_share_threshold_pct,
+                api_key_stream_fair_share_threshold_pct=snapshot.fair_share_threshold_pct,
             )
         except ApiKeyFairShareDenialError as denial:
             raise ProxyResponseError(
@@ -3900,6 +4021,11 @@ class _HTTPBridgeRequestSubmitMixin:
         )
 
         def request_is_retryable(request_state: _WebSocketRequestState) -> bool:
+            attempt = request_state.response_create_attempt
+            if attempt is not None and attempt.disarmed:
+                # A cancelled or failed send is ambiguous even without an
+                # upstream event; its sender owns settlement, not replay.
+                return False
             transport_only_unanchored_replay = bool(
                 request_state.precreated_replay_reason is None
                 and (
@@ -3973,6 +4099,8 @@ class _HTTPBridgeRequestSubmitMixin:
             key=session.key.affinity_key,
         )
         hard_owner_bound = _http_bridge_key_strength(session.key) == "hard"
+        root_rebind_required = False
+        root_replay_response_id: str | None = None
         async with session.pending_lock:
             if request_state is not None:
                 if (
@@ -4100,8 +4228,17 @@ class _HTTPBridgeRequestSubmitMixin:
                 # codex_lb_operation_id after selection. Keep that operation
                 # identity on its owner unless a dedicated rebind path has
                 # already replaced the operation ID.
-                candidate_portable = request_state.operation_id is None and (
-                    _websocket_request_text_is_account_neutral_fresh_replay(candidate_text)
+                local_root = (
+                    request_state.operation_created or request_state.operation_rebound
+                ) and request_state.operation_parent_response_id is None
+                root_rebind_required = local_root
+                root_replay_response_id = request_state.operation_persisted_response_id
+                candidate_portable = (request_state.operation_id is None or local_root) and (
+                    _websocket_request_text_is_account_neutral_fresh_replay(
+                        _text_without_operation_id(candidate_text)
+                        if local_root and candidate_text is not None
+                        else candidate_text
+                    )
                 )
                 request_text = _prepare_websocket_request_state_for_visible_output_replay(request_state)
                 if request_text is None or request_text != candidate_text:
@@ -4156,6 +4293,16 @@ class _HTTPBridgeRequestSubmitMixin:
         )
         reconnect_reader_kwargs = {"restart_reader": True} if restart_reader else {}
         try:
+            if root_rebind_required and request_state.operation_id is not None:
+                # The existing retry predicate proved no model output. Drain
+                # the predecessor's lifecycle frames before resetting this
+                # local transcript under the replacement owner fence.
+                await self._http_bridge_operation_event_batcher.flush_pending_operation(
+                    operation_id=request_state.operation_id
+                )
+                await self._http_bridge_operation_event_batcher.discard_operation(
+                    operation_id=request_state.operation_id
+                )
             if retry_jitter_seconds > 0:
                 logger.info(
                     "HTTP bridge clean-close retry jitter request_id=%s sleep_seconds=%.3f",
@@ -4270,6 +4417,29 @@ class _HTTPBridgeRequestSubmitMixin:
                     await self._release_request_state_account_response_create_lease(request_state)
                     return False
             request_text = self._http_bridge_text_with_account_installation_id(session, request_state, request_text)
+            if root_rebind_required:
+                if (
+                    request_state.operation_id is None
+                    or session.durable_session_id is None
+                    or session.durable_owner_epoch is None
+                    or not await self._durable_bridge.restart_root_operation_for_replay(
+                        operation_id=request_state.operation_id,
+                        session_id=session.durable_session_id,
+                        instance_id=_service_get_settings().http_responses_session_bridge_instance_id,
+                        owner_epoch=session.durable_owner_epoch,
+                        account_id=session.account.id,
+                        model=request_state.model,
+                        request_text=_text_without_operation_id(request_text),
+                        expected_response_id=root_replay_response_id,
+                    )
+                ):
+                    raise ProxyResponseError(
+                        502,
+                        openai_error(
+                            "bridge_continuity_persistence_failed", "Root replay ownership could not be persisted."
+                        ),
+                    )
+                request_state.operation_persisted_response_id = None
             await _send_http_bridge_request_text_with_archive_id(session, request_state, request_text, clock=clock)
             session.last_used_at = clock.monotonic()
             request_state.clean_close_retry_result = True

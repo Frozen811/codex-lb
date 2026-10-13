@@ -766,6 +766,18 @@ describe("RoutingSettings", () => {
     });
   });
 
+  it("accepts an explicit zero reset threshold and rejects empty input", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(<RoutingSettings settings={{ ...BASE_SETTINGS, limitWarmupEnabled: true, limitWarmupExhaustedThresholdPercent: 50 }} busy={false} onSave={onSave} />);
+    const input = screen.getByLabelText("Min usage percent");
+    await user.clear(input);
+    expect(screen.getByRole("button", { name: "Save warm-up settings" })).toBeDisabled();
+    await user.type(input, "0");
+    await user.click(screen.getByRole("button", { name: "Save warm-up settings" }));
+    expect(onSave).toHaveBeenCalledWith({ ...BASE_UPDATE_PAYLOAD, limitWarmupEnabled: true, limitWarmupExhaustedThresholdPercent: 0 });
+  });
+
   it("rejects invalid warm-up exhausted thresholds", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue(undefined);

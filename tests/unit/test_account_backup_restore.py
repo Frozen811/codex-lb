@@ -26,10 +26,17 @@ async def test_accounts_service_export_backup():
     acc1.email = "active@example.com"
     acc1.alias = "primary-work"
     acc1.plan_type = "team"
+    acc1.workspace_id = "workspace-1"
+    acc1.workspace_label = "test-workspace"
+    acc1.seat_type = "standard"
     acc1.status = AccountStatus.ACTIVE
     acc1.routing_policy = "normal"
     acc1.limit_warmup_enabled = True
     acc1.quota_limit_percent = 50.0
+    acc1.usage_limit_enabled = False
+    acc1.usage_limit_percent = None
+    acc1.usage_limit_5h_percent = None
+    acc1.usage_limit_weekly_percent = None
     acc1.chatgpt_account_id = "chatgpt-1"
     acc1.access_token_encrypted = b"access1"
     acc1.refresh_token_encrypted = b"refresh1"
@@ -110,10 +117,10 @@ async def test_accounts_service_restore_backup():
         tokens=tokens_error,
     )
 
-    async def _mock_import(auth: AuthFile):
+    async def _mock_import(auth: AuthFile, **kwargs):
         if auth.tokens.access_token == "tok-err":
             raise ValueError("Upstream auth rejected")
-        return MagicMock()
+        return MagicMock(account_id="acc-1")
 
     service.import_account.side_effect = _mock_import
 
@@ -139,7 +146,8 @@ async def test_accounts_service_restore_backup():
             email="user1@example.com",
             plan_type="pro",
             account_id="chatgpt-acc-1",
-        )
+        ),
+        restore_account_id="acc-1",
     )
     service.set_account_alias.assert_called_once_with("acc-1", "work-account")
     service.set_routing_policy.assert_called_once_with("acc-1", "priority")

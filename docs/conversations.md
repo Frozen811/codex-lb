@@ -123,6 +123,50 @@ Conversations are derived from eligible request-log rows. Empty conversation
 IDs and rows excluded by the request-log retention filters do not create a
 conversation entry.
 
+## Repairing local Codex session metadata
+
+An interrupted provider transition can leave a local session's JSONL header and
+SQLite thread row with different provider tags. Inspect the discrepancy first:
+
+```bash
+codex-lb codex-sessions preview --session-id SESSION_ID --codex-home PATH --json
+```
+
+Without `--session-id`, preview inspects all local sessions. It reports
+`consistent`, `mismatch`, `unsupported`, `incomplete` or `ambiguous` metadata.
+Preview is read-only and creates no backup or temporary database copy. Targeted
+lookup uses the SQLite rollout path when available; older schemas fall back to
+filename discovery and bounded header reads. Unreadable or invalid headers
+produce an error rather than guessing a session ID.
+
+Close Codex and Codex CLI, choose the tag that matches your intended provider,
+and repair just the selected session:
+
+```bash
+codex-lb codex-sessions repair --session-id SESSION_ID --to codex-lb --codex-home PATH --yes --json --progress-json
+```
+
+Only `openai` and `codex-lb` tags are supported. `--thread-id` is an alias for
+`--session-id`. `--yes` confirms that Codex is closed; JSON repair requires it.
+Human-readable repair can prompt interactively. The result on stdout reports
+updated JSONL files and SQLite rows, skipped tags and the backup location;
+`--progress-json` emits phase records separately on stderr. An already consistent
+session with the requested tag needs no writes or backup.
+
+Repair preserves transcript bytes, other sessions and `config.toml`; it does not
+select a provider or establish conversation synchronization. Missing counterparts,
+unsupported tags, conflicting identities, paths outside the selected home and
+stale targets are refused. Backups under `PATH/backups/provider-retag/` snapshot
+planned SQLite databases and preserve JSONL originals through hard links or copies.
+
+JSONL and SQLite changes are not one atomic transaction. If a failure reports
+partial changes, keep Codex closed and preserve the reported backup. Inspect the
+selected header and row before manually restoring the affected file/database from
+that backup; a SQLite snapshot includes other rows, so restoring the entire database
+can overwrite unrelated changes made after the snapshot. Rerun preview before
+reopening Codex. These commands were verified against synthetic Windows homes;
+live Codex homes and native WSL/Docker mounts require their own verification.
+
 ---
 
 *Spec: [conversations-api](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/conversations-api)*

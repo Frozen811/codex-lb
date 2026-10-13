@@ -1,0 +1,12 @@
+........................................................................ [ 38%]
+.....................s.s................................................ [ 77%]
+..........................................                               [100%]
+============================== warnings summary ===============================
+tests/unit/test_leader_election.py::test_try_acquire_returns_true_when_disabled
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+SKIPPED [2] tests\unit\test_db_session.py:1434: could not import 'uvloop': No module named 'uvloop'
+184 passed, 2 skipped, 1 warning in 54.92s

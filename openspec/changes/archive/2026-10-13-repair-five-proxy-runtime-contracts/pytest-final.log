@@ -1,0 +1,48 @@
+bringing up nodes...
+bringing up nodes...
+
+........................................................................ [ 20%]
+........................................................................ [ 40%]
+........................................................................ [ 61%]
+........................................................................ [ 81%]
+................................................................         [100%]
+============================== warnings summary ===============================
+.venv\Lib\site-packages\starlette\testclient.py:53
+.venv\Lib\site-packages\starlette\testclient.py:53
+.venv\Lib\site-packages\starlette\testclient.py:53
+.venv\Lib\site-packages\starlette\testclient.py:53
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_withholds_clean_shutdown_while_maintenance_cleanup_is_owned
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\codex-lb\app\db\alembic\versions\20260309_000000_add_additional_usage_history.py:30: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_limit_latest
+    return {str(index["name"]) for index in inspector.get_indexes(table_name) if index.get("name") is not None}
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_withholds_clean_shutdown_while_maintenance_cleanup_is_owned
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\codex-lb\app\db\alembic\versions\20260309_000000_add_additional_usage_history.py:30: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_feature_latest
+    return {str(index["name"]) for index in inspector.get_indexes(table_name) if index.get("name") is not None}
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_withholds_clean_shutdown_while_maintenance_cleanup_is_owned
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\codex-lb\app\db\alembic\versions\20260312_000000_add_additional_usage_quota_key.py:45: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_limit_latest
+    return {str(index["name"]) for index in inspector.get_indexes(table_name) if index.get("name") is not None}
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_withholds_clean_shutdown_while_maintenance_cleanup_is_owned
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\codex-lb\app\db\alembic\versions\20260312_000000_add_additional_usage_quota_key.py:45: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_feature_latest
+    return {str(index["name"]) for index in inspector.get_indexes(table_name) if index.get("name") is not None}
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_withholds_clean_shutdown_while_maintenance_cleanup_is_owned
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\contextlib.py:148: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_limit_latest
+    next(self.gen)
+
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_withholds_clean_shutdown_while_maintenance_cleanup_is_owned
+tests/integration/test_lifecycle_history_batch.py::test_lifespan_heartbeat_survives_blocked_optional_maintenance
+  C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\contextlib.py:148: SAWarning: Skipped unsupported reflection of expression-based index ix_additional_usage_alias_feature_latest
+    next(self.gen)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+352 passed, 16 warnings in 97.25s (0:01:37)

@@ -1,0 +1,465 @@
+--- initial/app/modules/proxy/durable_bridge_repository.py
++++ current/app/modules/proxy/durable_bridge_repository.py
+@@ -26,6 +26,7 @@
+     HTTP_BRIDGE_TERMINAL_APPEND_PHASE_PENDING,
+     HTTP_BRIDGE_TERMINAL_APPEND_PHASE_SETTLED,
+     Account,
++    AccountStatus,
+     HttpBridgeOperationEvent,
+     HttpBridgeOperationEventChunk,
+     HttpBridgeOperationRecord,
+@@ -3887,13 +3888,18 @@
+         """
+         if not session_id or not expected_account_id:
+             return False
++        quota_statuses = (AccountStatus.RATE_LIMITED, AccountStatus.QUOTA_EXCEEDED)
+         owner_status_lock = (
+             select(Account.status, Account.reset_at).where(Account.id == expected_account_id).with_for_update()
+         )
+         unavailable_owner = select(Account.id).where(
+             Account.id == expected_account_id,
+             Account.status.in_(HARD_OWNER_UNAVAILABLE_STATUSES),
+-            or_(Account.reset_at.is_(None), Account.reset_at >= recovery_deadline_epoch),
++            or_(
++                Account.status.not_in(quota_statuses),
++                Account.reset_at.is_(None),
++                Account.reset_at >= recovery_deadline_epoch,
++            ),
+         )
+         statement = (
+             update(HttpBridgeSessionRecord)
+@@ -3912,12 +3918,15 @@
+                 await self._session.commit()
+                 return False
+             owner_reset_at = locked[1]
+-            if owner_reset_at is not None and owner_reset_at < recovery_deadline_epoch:
++            if locked[0] in quota_statuses and owner_reset_at is not None and owner_reset_at < recovery_deadline_epoch:
+                 # The owner is expected back inside the window the caller is
+                 # willing to wait, so waiting keeps the upstream prompt cache
+                 # instead of forcing a full resend onto another account.
+                 await self._session.commit()
+                 return False
++            # A quota reset cannot unpause an account or repair its credentials.
++            # Other unavailable statuses can retain an incidental reset value
++            # from an earlier quota observation; it is not a recovery horizon.
+             result = await self._session.execute(statement)
+             if (getattr(result, "rowcount", 0) or 0) > 0:
+                 await self._session.commit()
+--- initial/app/modules/proxy/_service/http_bridge/streaming.py
++++ current/app/modules/proxy/_service/http_bridge/streaming.py
+@@ -2517,6 +2517,17 @@
+             durable_lookup = None
+             return True
+ 
++        def dead_client_anchor_error() -> ProxyResponseError:
++            return ProxyResponseError(
++                404,
++                openai_error(
++                    "bridge_previous_response_not_found",
++                    "The account that owns this conversation is no longer available; "
++                    "resend the full conversation history or start a new conversation.",
++                ),
++                local_pre_dispatch_refusal=True,
++            )
++
+         async def retire_dead_client_anchor(exc: ProxyResponseError) -> ProxyResponseError | None:
+             """Tell the client its anchor is gone instead of asking it to retry forever.
+ 
+@@ -2551,6 +2562,15 @@
+             client_anchor = payload.previous_response_id
+             if client_anchor is None or rewritten_file_account_id is not None:
+                 return None
++            if (
++                durable_lookup is not None
++                and durable_lookup.continuity_abandoned
++                and durable_lookup.retired_account_id is not None
++            ):
++                # Retired lookups deliberately hide account_id. A subsequent
++                # request with the same client anchor still has positive proof
++                # of retirement, rather than a retryable owner lookup miss.
++                return dead_client_anchor_error()
+             retiring_account_id = request_state.preferred_account_id
+             if durable_lookup is None or retiring_account_id is None:
+                 return None
+@@ -2578,15 +2598,7 @@
+                 model_class=_extract_model_class(payload.model) if payload.model else None,
+                 owner_check_applied=True,
+             )
+-            return ProxyResponseError(
+-                404,
+-                openai_error(
+-                    "bridge_previous_response_not_found",
+-                    "The account that owns this conversation is no longer available; "
+-                    "resend the full conversation history or start a new conversation.",
+-                ),
+-                local_pre_dispatch_refusal=True,
+-            )
++            return dead_client_anchor_error()
+ 
+         def owner_unavailable_allows_account_neutral_replay(exc: ProxyResponseError) -> bool:
+             if not _http_bridge_is_previous_response_owner_unavailable(exc):
+@@ -2747,6 +2759,9 @@
+             replay_rejection = classify_account_neutral_replay_rejection()
+             if replay_rejection is not None:
+                 record_account_neutral_replay_rejection(replay_rejection)
++            dead_anchor_error = await retire_dead_client_anchor(owner_unavailable)
++            if dead_anchor_error is not None:
++                raise dead_anchor_error
+             raise owner_unavailable
+ 
+         while True:
+@@ -4068,6 +4083,11 @@
+                 effective_payload.previous_response_id is not None
+                 and _http_bridge_is_explicit_previous_response_rejection(exc)
+             )
++            if explicit_previous_response_rejection and exc.local_pre_dispatch_refusal:
++                # A local tombstone rejected this request before publication or
++                # dispatch. Keep its selected refusal; there is no submitted
++                # operation to fence or reset for transparent upstream replay.
++                raise
+             if explicit_previous_response_rejection and (
+                 request_state.replay_count > 0
+                 or request_state.response_event_count > 0
+--- initial/app/modules/proxy/_service/http_bridge/request_submit.py
++++ current/app/modules/proxy/_service/http_bridge/request_submit.py
+@@ -1315,6 +1315,7 @@
+                     "bridge_previous_response_not_found",
+                     "The reattached anchor for this session was proven dead; resend the full conversation.",
+                 ),
++                local_pre_dispatch_refusal=request_is_undispatched,
+             )
+         # Persist the recovery checkpoint only after the retry circuit has
+         # admitted this request. A client reconnect suppressed by the
+--- initial/tests/unit/test_durable_bridge_owner_retirement.py
++++ current/tests/unit/test_durable_bridge_owner_retirement.py
+@@ -518,6 +518,56 @@
+     return naive_utc_to_epoch(to_utc_naive(utcnow() + timedelta(seconds=seconds)))
+ 
+ 
++@pytest.mark.parametrize("status", sorted(HARD_OWNER_UNAVAILABLE_STATUSES, key=lambda value: value.value))
++@pytest.mark.parametrize("horizon", ["absent", "expired", "inside", "deadline", "outside"])
++async def test_request_path_reset_horizon_depends_on_owner_status(
++    async_session_factory: Callable[[], AsyncSession],
++    coordinator: DurableBridgeSessionCoordinator,
++    status: AccountStatus,
++    horizon: str,
++) -> None:
++    deadline = _epoch_in(120)
++    resets = {
++        "absent": None,
++        "expired": deadline - 180,
++        "inside": deadline - 60,
++        "deadline": deadline,
++        "outside": deadline + 3600,
++    }
++    reset_at = resets[horizon]
++    await _add_account(async_session_factory, "owner-reset", status, reset_at=reset_at)
++    session_id = await _claim(coordinator, account_id="owner-reset")
++    quota_status = status in (AccountStatus.RATE_LIMITED, AccountStatus.QUOTA_EXCEEDED)
++    should_retire = not (quota_status and reset_at is not None and reset_at < deadline)
++
++    assert (
++        await _retire_now(
++            async_session_factory, session_id=session_id, account_id="owner-reset", deadline_epoch=deadline
++        )
++        is should_retire
++    )
++    lookup = await _lookup(coordinator)
++    assert lookup is not None
++    assert lookup.continuity_abandoned is should_retire
++    async with async_session_factory() as session:
++        account = (await session.scalars(select(Account))).one()
++        marker = (await session.scalars(select(HttpBridgeSessionRecord))).one()
++        original_marker = (marker.continuity_abandonment_scope, marker.continuity_abandoned_at)
++        assert account.status == status
++        assert account.reset_at == reset_at
++
++    # A duplicate sees the same authoritative outcome and does not rewrite it.
++    assert (
++        await _retire_now(
++            async_session_factory, session_id=session_id, account_id="owner-reset", deadline_epoch=deadline
++        )
++        is should_retire
++    )
++    async with async_session_factory() as session:
++        marker = (await session.scalars(select(HttpBridgeSessionRecord))).one()
++        assert (marker.continuity_abandonment_scope, marker.continuity_abandoned_at) == original_marker
++
++
+ async def test_request_path_retires_an_owner_with_no_recovery_horizon(
+     async_session_factory: Callable[[], AsyncSession],
+     coordinator: DurableBridgeSessionCoordinator,
+--- /dev/null
++++ current/tests/integration/test_dead_anchor_contracts.py
+@@ -0,0 +1,271 @@
++from __future__ import annotations
++
++import asyncio
++import json
++import time
++from typing import Any, cast
++
++import pytest
++from sqlalchemy import select, update
++
++import app.modules.proxy.service as proxy_module
++from app.db.models import Account, AccountStatus, ApiKeyLimit, ApiKeyUsageReservation, HttpBridgeSessionRecord
++from app.db.session import SessionLocal
++from app.dependencies import get_proxy_service_for_app
++from app.modules.proxy._service.http_bridge import retry_circuit as retry_circuit_module
++from app.modules.proxy.load_balancer import CONTINUITY_OWNER_UNAVAILABLE, AccountSelection
++from tests.integration import test_http_responses_bridge as bridge
++
++pytestmark = pytest.mark.integration
++PATHS = ["/backend-api/codex/responses", "/backend-api/codex/responses/", "/v1/responses", "/v1/responses/"]
++
++
++@pytest.mark.parametrize("path", PATHS)
++@pytest.mark.parametrize("status", [AccountStatus.PAUSED, AccountStatus.DEACTIVATED, AccountStatus.REAUTH_REQUIRED])
++@pytest.mark.parametrize("keyed", [False, True])
++async def test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers(
++    async_client, app_instance, monkeypatch, path: str, status: AccountStatus, keyed: bool
++) -> None:
++    dashboard = bridge._make_dashboard_settings()
++    dashboard.api_key_auth_enabled = keyed
++    bridge._install_proxy_settings(
++        monkeypatch, app_settings=bridge._make_app_settings(enabled=True), dashboard_settings=dashboard
++    )
++    owner_id = await bridge._import_account(async_client, "dead-anchor-owner", "dead-anchor-owner@example.com")
++    healthy_id = await bridge._import_account(async_client, "dead-anchor-healthy", "dead-anchor-healthy@example.com")
++    owner, healthy = await bridge._get_account(owner_id), await bridge._get_account(healthy_id)
++    selected: list[str] = []
++    sockets: list[Any] = []
++    raw_attempts: list[bool] = []
++
++    async def select_account(self, deadline, **kwargs):
++        del self, deadline
++        if kwargs.get("preferred_account_id") == owner.id:
++            return AccountSelection(
++                account=None, error_message="Owner unavailable", error_code=CONTINUITY_OWNER_UNAVAILABLE
++            )
++        account = owner if not selected else healthy
++        selected.append(account.id)
++        return AccountSelection(account=account, error_message=None, error_code=None)
++
++    async def fresh(self, target, *, force=False, timeout_seconds):
++        del self, force, timeout_seconds
++        return target
++
++    async def connect(*args, **kwargs):
++        del args, kwargs
++        upstream = bridge._FakeBridgeUpstreamWebSocket(f"resp_dead_anchor_{len(sockets)}")
++        sockets.append(upstream)
++        return upstream
++
++    async def raw(*args, **kwargs):
++        del args, kwargs
++        raw_attempts.append(True)
++        raise AssertionError("dead-anchor refusal must not route to raw HTTP")
++        yield ""  # Preserve the upstream adapter's async-generator protocol.
++
++    monkeypatch.setattr(proxy_module.ProxyService, "_select_account_with_budget", select_account)
++    monkeypatch.setattr(proxy_module.ProxyService, "_ensure_fresh_with_budget", fresh)
++    monkeypatch.setattr(proxy_module, "connect_responses_websocket", connect)
++    monkeypatch.setattr(proxy_module, "core_stream_responses", raw)
++    service = get_proxy_service_for_app(app_instance)
++    headers = {"session_id": "dead-anchor-session", "thread-id": "dead-anchor-thread"}
++    if keyed:
++        created = await async_client.post(
++            "/api/api-keys/",
++            json={
++                "name": "dead-anchor-key",
++                "limits": [{"limitType": "total_tokens", "limitWindow": "weekly", "maxValue": 200000}],
++            },
++        )
++        assert created.status_code == 200, created.text
++        headers["Authorization"] = f"Bearer {created.json()['key']}"
++        enabled = await async_client.put(
++            "/api/settings",
++            json={
++                "stickyThreadsEnabled": False,
++                "preferEarlierResetAccounts": False,
++                "totpRequiredOnLogin": False,
++                "apiKeyAuthEnabled": True,
++            },
++        )
++        assert enabled.status_code == 200, enabled.text
++
++    def body(history, **extra):
++        return {
++            "model": "gpt-5.1",
++            "instructions": "",
++            "input": history,
++            "prompt_cache_key": "dead-anchor-cache",
++            "stream": True,
++            **extra,
++        }
++
++    history = [{"role": "user", "content": "first turn"}]
++    try:
++        first = await async_client.post(path, headers=headers, json=body(history))
++        assert first.status_code == 200 and "response.completed" in first.text, first.text
++        dispatched = json.loads(sockets[0].sent_text[0])
++        assert not dispatched.get("previous_response_id")
++        async with SessionLocal() as session:
++            owned = (await session.scalars(select(HttpBridgeSessionRecord))).one()
++            anchor = owned.latest_response_id
++            assert anchor
++        await service.close_all_http_bridge_sessions()
++        reset_at = int(time.time()) + 30
++        async with SessionLocal() as session:
++            await session.execute(
++                update(Account)
++                .where(Account.id == owner.id)
++                .values(status=status, reset_at=reset_at, deactivation_reason="account_auth_invalidated")
++            )
++            await session.commit()
++
++        denied = await async_client.post(
++            path, headers=headers, json=body([{"role": "user", "content": "continue"}], previous_response_id=anchor)
++        )
++        assert denied.status_code == 404, denied.text
++        error = denied.json()["error"]
++        assert error["code"] == "bridge_previous_response_not_found"
++        assert "resend the full conversation history" in error["message"]
++        assert not raw_attempts and len(sockets) == 1
++        async with SessionLocal() as session:
++            retired = (await session.scalars(select(HttpBridgeSessionRecord))).one()
++            assert retired.continuity_abandonment_scope
++            original_marker = (retired.continuity_abandonment_scope, retired.continuity_abandoned_at)
++            persisted_owner = await session.get(Account, owner.id)
++            assert persisted_owner is not None and persisted_owner.status == status
++            assert persisted_owner.reset_at == reset_at
++
++        repeated = await async_client.post(
++            path, headers=headers, json=body([{"role": "user", "content": "continue"}], previous_response_id=anchor)
++        )
++        assert repeated.status_code == 404, repeated.text
++        assert repeated.json()["error"]["code"] == "bridge_previous_response_not_found"
++        async with SessionLocal() as session:
++            retired = (await session.scalars(select(HttpBridgeSessionRecord))).one()
++            assert (retired.continuity_abandonment_scope, retired.continuity_abandoned_at) == original_marker
++
++        history.extend(
++            [
++                {"role": "assistant", "content": [{"type": "output_text", "text": "OK"}]},
++                {"role": "user", "content": "continue"},
++            ]
++        )
++        recovered = await async_client.post(path, headers=headers, json=body(history))
++        assert recovered.status_code == 200 and "response.completed" in recovered.text, recovered.text
++        assert selected[-1] == healthy.id and len(sockets) == 2 and not raw_attempts
++        recovered_wire = json.loads(sockets[-1].sent_text[-1])
++        assert not recovered_wire.get("previous_response_id")
++        assert [item["role"] for item in recovered_wire["input"]] == [item["role"] for item in history]
++        assert recovered_wire["input"] == history
++    finally:
++        await service.close_all_http_bridge_sessions()
++    if keyed:
++        deadline = time.monotonic() + 5
++        while True:
++            async with SessionLocal() as session:
++                reservations = list((await session.scalars(select(ApiKeyUsageReservation))).all())
++            if reservations and all(row.status != "reserved" for row in reservations):
++                break
++            assert time.monotonic() < deadline, (
++                f"Unsettled reservations: {[(row.id, row.status) for row in reservations]}"
++            )
++            await asyncio.sleep(0.01)
++        assert len(reservations) == 4
++        async with SessionLocal() as session:
++            limit = (await session.scalars(select(ApiKeyLimit))).one()
++            assert limit.current_value == 52
++
++
++@pytest.mark.parametrize("path", PATHS)
++async def test_submit_time_tombstone_refusal_releases_carriers_but_guards_deltas(
++    async_client, app_instance, monkeypatch, path: str
++) -> None:
++    bridge._install_bridge_settings(monkeypatch, enabled=True)
++    owner_id = await bridge._import_account(async_client, "tombstone-owner", "tombstone-owner@example.com")
++    owner = await bridge._get_account(owner_id)
++    upstream = bridge._FakeBridgeUpstreamWebSocket("resp_tombstone")
++    bridge._install_bridge_account_upstream(monkeypatch, account=owner, upstream=upstream)
++    service = get_proxy_service_for_app(app_instance)
++    headers = {"session_id": "tombstone-session", "thread-id": "tombstone-thread"}
++    history = [{"role": "user", "content": "first turn"}]
++
++    def body(history):
++        return {
++            "model": "gpt-5.1",
++            "instructions": "",
++            "input": history,
++            "prompt_cache_key": "tombstone-cache",
++            "stream": True,
++        }
++
++    try:
++        first = await async_client.post(path, headers=headers, json=body(history))
++        assert first.status_code == 200 and "response.completed" in first.text
++        async with SessionLocal() as session:
++            record = (await session.scalars(select(HttpBridgeSessionRecord))).one()
++            denied_anchor = record.latest_response_id
++            assert denied_anchor
++        original_submit = service._submit_http_bridge_request
++        captured = []
++
++        async def late_tombstone(session, **kwargs):
++            if not captured:
++                request_state = kwargs["request_state"]
++                assert request_state.proxy_injected_previous_response_id
++                assert request_state.previous_response_id == denied_anchor
++                persisted = await service._durable_bridge.persist_retry_circuit(
++                    session_key_kind=session.key.affinity_kind,
++                    session_key_value=session.key.affinity_key,
++                    api_key_id=session.key.api_key_id,
++                    consecutive_failures=0,
++                    cooldown_until_epoch=0,
++                    last_detail="anchor_abandoned",
++                    updated_at_epoch=time.time(),
++                )
++                assert persisted is not None
++                state = retry_circuit_module._HTTPBridgeRetryCircuitState(last_touched_monotonic=time.monotonic())
++                state.last_detail = "anchor_abandoned"
++                runtime = cast(Any, service)
++                async with runtime._http_bridge_retry_circuit_lock:
++                    runtime._http_bridge_retry_circuits[session.key] = state
++                captured.append(session)
++            return await original_submit(session, **kwargs)
++
++        monkeypatch.setattr(service, "_submit_http_bridge_request", late_tombstone)
++        history.extend(
++            [
++                {"role": "assistant", "content": [{"type": "output_text", "text": "OK"}]},
++                {"role": "user", "content": "second turn"},
++            ]
++        )
++        refusal = await async_client.post(path, headers=headers, json=body(history))
++        assert refusal.status_code == 404, refusal.text
++        assert refusal.json()["error"]["code"] == "bridge_previous_response_not_found"
++        assert len(upstream.sent_text) == 1
++        live = captured[0]
++        assert live.last_completed_response_id is None
++        assert denied_anchor not in live.previous_response_ids
++        async with SessionLocal() as session:
++            record = (await session.scalars(select(HttpBridgeSessionRecord))).one()
++            assert record.latest_response_id is None
++        tombstone = await service._durable_bridge.lookup_retry_circuit(
++            session_key_kind=live.key.affinity_kind,
++            session_key_value=live.key.affinity_key,
++            api_key_id=live.key.api_key_id,
++        )
++        assert tombstone is not None and tombstone.last_detail == "anchor_abandoned"
++
++        delta = await async_client.post(path, headers=headers, json=body("delta without history"))
++        assert delta.status_code == 404, delta.text
++        assert delta.json()["error"]["code"] == "bridge_previous_response_not_found"
++        assert len(upstream.sent_text) == 1
++        recovered = await async_client.post(path, headers=headers, json=body(history))
++        assert recovered.status_code == 200 and "response.completed" in recovered.text, recovered.text
++        assert len(upstream.sent_text) == 2
++        recovery = json.loads(upstream.sent_text[-1])
++        assert not recovery.get("previous_response_id")
++        assert recovery["input"] == history
++    finally:
++        await service.close_all_http_bridge_sessions()

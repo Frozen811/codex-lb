@@ -331,7 +331,6 @@ async def redeem_all_rate_limit_reset_credits(
         last_windows_reset: int | None = None
         account_error: str | None = None
 
-        current_credits = [c for c in snapshot.credits if c.status == "available"]
         initial_available = snapshot.available_count
         for _ in range(initial_available):
             try:
@@ -349,18 +348,16 @@ async def redeem_all_rate_limit_reset_credits(
                 if outcome.available_count_after <= 0:
                     break
 
-                if current_credits:
-                    current_credits = current_credits[1:]
-                await store.set(
-                    account.id,
-                    RateLimitResetCreditsSnapshot(
-                        available_count=outcome.available_count_after,
-                        credits=current_credits
-                        or [
-                            ResetCreditItem(id=f"remaining-{i}", status="available")
-                            for i in range(outcome.available_count_after)
-                        ],
-                    ),
+                redeem_account = account
+                if context.service._auth_manager is not None:
+                    redeem_account = await context.service._auth_manager.ensure_fresh(account, force=False)
+                await _try_restore_reset_credits_snapshot_after_consume(
+                    account=account,
+                    redeem_account=redeem_account,
+                    encryptor=context.service._encryptor,
+                    store=store,
+                    fetch_fn=fetch_reset_credits,
+                    resolve_route=_resolve_reset_credit_route,
                 )
             except Exception as exc:
                 account_error = str(exc)
@@ -686,7 +683,8 @@ async def _try_restore_reset_credits_snapshot_after_consume(
     fetch_fn: FetchFn,
     resolve_route: ResolveRouteFn | None,
 ) -> None:
-    """Best-effort cache repopulation when usage refresh fails after a successful consume."""
+    """Observe authoritative remaining credits after a successful consume."""
+    snapshot_generation = store.generation(account.id)
     try:
         access_token = encryptor.decrypt(redeem_account.access_token_encrypted)
         route: ResolvedUpstreamRoute | None = None
@@ -705,7 +703,7 @@ async def _try_restore_reset_credits_snapshot_after_consume(
             exc_info=True,
         )
         return
-    await store.set(account.id, build_snapshot(credits_response))
+    await store.set_if_generation(account.id, build_snapshot(credits_response), snapshot_generation)
 
 
 async def get_reset_credit_redeem_lock(account_id: str) -> asyncio.Lock:

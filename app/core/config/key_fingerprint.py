@@ -12,6 +12,7 @@ from app.core.config.settings import get_settings
 from app.core.crypto import get_or_create_key
 from app.db.dialect_sql import dialect_upsert
 from app.db.models import RuntimeSentinel
+from app.db.session import sqlite_writer_section
 from app.db.sqlite_lock_retry import retry_on_sqlite_lock
 
 logger = logging.getLogger(__name__)
@@ -88,7 +89,7 @@ async def verify_encryption_key_fingerprint(
     local_fingerprint = compute_encryption_key_fingerprint(key_file)
 
     async def stamp_and_read() -> str | None:
-        async with make_session() as session:
+        async with sqlite_writer_section(), make_session() as session:
             await _stamp_if_absent(session, local_fingerprint)
             return await session.scalar(
                 select(RuntimeSentinel.value).where(RuntimeSentinel.name == ENCRYPTION_KEY_FINGERPRINT_SENTINEL)

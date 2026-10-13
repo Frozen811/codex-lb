@@ -1,0 +1,37 @@
+{
+  "retrieved_client_date": "2026-10-10",
+  "records": [
+    {
+      "url": "https://github.com/Soju06/codex-lb/issues/2447",
+      "title": "SQLite database is locked during login/OAuth under concurrent streaming load",
+      "state": "open",
+      "updated_at": "2026-10-05T11:58:47Z"
+    },
+    {
+      "url": "https://github.com/Soju06/codex-lb/issues/1949",
+      "title": "bug: encryption-key fingerprint stamp flakes CI on SQLite lock contention",
+      "state": "closed",
+      "updated_at": "2026-09-28T08:41:19Z"
+    },
+    {
+      "url": "https://github.com/Soju06/codex-lb/issues/1682",
+      "title": "bug: leader lease loss on single-instance SQLite causes a self-sustaining 17-minute `database is locked` stall that blocks leader re-election",
+      "state": "open",
+      "updated_at": "2026-09-28T08:39:55Z"
+    },
+    {
+      "url": "https://github.com/Soju06/codex-lb/issues/1981",
+      "title": "bug: wedged-teardown interrupt fails with \"Cannot operate on a closed database\", then the process holds the SQLite write lock permanently (55 min of database-is-locked while /health stays 200)",
+      "state": "open",
+      "updated_at": "2026-10-04T14:27:54Z"
+    },
+    {
+      "url": "https://github.com/Soju06/codex-lb/pull/2460",
+      "title": "fix(dashboard-users): take the owner row before the owned-key cascade reads it",
+      "state": "closed",
+      "updated_at": "2026-09-28T10:56:00Z",
+      "merged": true,
+      "head": "d920a789c20a02a9b9e0aad1e6600919e1a1dd0d"
+    }
+  ]
+}

@@ -1650,3 +1650,23 @@ async def test_redeem_all_rate_limit_reset_credits_unit(monkeypatch: pytest.Monk
     assert res.total_credits_redeemed == 2
     assert len(res.results) == 2
     assert {r.account_id for r in res.results} == {"acc_1", "acc_2"}
+
+
+async def test_post_consume_observation_cannot_overwrite_newer_credit_generation():
+    account = _account("generation-fence")
+    store = RateLimitResetCreditsStore()
+    newer = _snapshot([_credit("newer")], available_count=1)
+
+    async def fetch(*args, **kwargs):
+        await store.set(account.id, newer)
+        return ResetCreditsResponse(available_count=1, credits=[_credit("stale")])
+
+    await reset_credits_api._try_restore_reset_credits_snapshot_after_consume(
+        account=account,
+        redeem_account=account,
+        encryptor=StubEncryptor(),
+        store=store,
+        fetch_fn=fetch,
+        resolve_route=None,
+    )
+    assert store.get(account.id) is newer

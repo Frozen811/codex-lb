@@ -1,0 +1,115 @@
+[
+  {
+    "command": [
+      "uv",
+      "run",
+      "ruff",
+      "check",
+      "app/modules/proxy/durable_bridge_repository.py",
+      "app/modules/proxy/_service/http_bridge/streaming.py",
+      "tests/unit/test_durable_bridge_owner_retirement.py",
+      "tests/integration/test_dead_anchor_contracts.py"
+    ],
+    "exit_code": 0,
+    "log": "static-0.log"
+  },
+  {
+    "command": [
+      "uv",
+      "run",
+      "ruff",
+      "format",
+      "--check",
+      "app/modules/proxy/durable_bridge_repository.py",
+      "app/modules/proxy/_service/http_bridge/streaming.py",
+      "tests/unit/test_durable_bridge_owner_retirement.py",
+      "tests/integration/test_dead_anchor_contracts.py"
+    ],
+    "exit_code": 0,
+    "log": "static-1.log"
+  },
+  {
+    "command": [
+      "uv",
+      "run",
+      "ty",
+      "check",
+      "app/modules/proxy/durable_bridge_repository.py",
+      "app/modules/proxy/_service/http_bridge/streaming.py",
+      "tests/unit/test_durable_bridge_owner_retirement.py",
+      "tests/integration/test_dead_anchor_contracts.py"
+    ],
+    "exit_code": 1,
+    "log": "static-2.log"
+  },
+  {
+    "command": [
+      "uv",
+      "run",
+      "python",
+      "scripts/check_proxy_architecture.py"
+    ],
+    "exit_code": 0,
+    "log": "static-3.log"
+  },
+  {
+    "command": [
+      "uv",
+      "run",
+      "python",
+      "scripts/check_cancellation_safety.py"
+    ],
+    "exit_code": 0,
+    "log": "static-4.log"
+  },
+  {
+    "command": [
+      "uv",
+      "run",
+      "python",
+      "scripts/check_proxy_timing_seams.py"
+    ],
+    "exit_code": 0,
+    "log": "static-5.log"
+  },
+  {
+    "command": [
+      "uv",
+      "run",
+      "python",
+      "scripts/check_settings_tiers.py"
+    ],
+    "exit_code": 0,
+    "log": "static-6.log"
+  },
+  {
+    "command": [
+      "uv",
+      "run",
+      "python",
+      "scripts/check_migration_topology.py"
+    ],
+    "exit_code": 0,
+    "log": "static-7.log"
+  },
+  {
+    "command": [
+      "uv",
+      "run",
+      "python",
+      "scripts/check_migration_durations.py"
+    ],
+    "exit_code": 0,
+    "log": "static-8.log"
+  },
+  {
+    "command": [
+      "uv",
+      "run",
+      "python",
+      ".github/scripts/check_simplicity_budgets.py"
+    ],
+    "exit_code": 0,
+    "log": "static-9.log"
+  }
+]

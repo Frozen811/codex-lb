@@ -1,0 +1,10 @@
+........................................................................ [ 49%]
+........................................................................ [ 98%]
+..                                                                       [100%]
+============================== warnings summary ===============================
+tests/integration/test_oauth_flow.py::test_occupied_browser_callback_port_keeps_manual_flow_and_warns
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+146 passed, 1 warning in 148.93s (0:02:28)

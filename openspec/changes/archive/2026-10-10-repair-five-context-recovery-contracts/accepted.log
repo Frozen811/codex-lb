@@ -1,0 +1,8 @@
+...............                                                          [100%]
+============================== warnings summary ===============================
+tests/integration/test_http_responses_bridge.py::test_v1_responses_http_bridge_slims_historical_inline_artifacts_and_succeeds
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+15 passed, 222 deselected, 1 warning in 18.69s

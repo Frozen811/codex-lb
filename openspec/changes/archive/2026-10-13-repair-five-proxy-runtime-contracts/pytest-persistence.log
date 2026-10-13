@@ -1,0 +1,42 @@
+FFFF                                                                     [100%]
+================================== FAILURES ===================================
+_ test_drain_status_observes_real_http_reservation_after_response_close[/backend-api/codex/responses] _
+tests\integration\test_runtime_persistence_observation.py:96: in test_drain_status_observes_real_http_reservation_after_response_close
+    assert reservation.status == "committed"
+E   AssertionError: assert 'finalized' == 'committed'
+E     
+E     - committed
+E     + finalized
+_ test_drain_status_observes_real_http_reservation_after_response_close[/backend-api/codex/responses/] _
+tests\integration\test_runtime_persistence_observation.py:96: in test_drain_status_observes_real_http_reservation_after_response_close
+    assert reservation.status == "committed"
+E   AssertionError: assert 'finalized' == 'committed'
+E     
+E     - committed
+E     + finalized
+_ test_drain_status_observes_real_http_reservation_after_response_close[/v1/responses] _
+tests\integration\test_runtime_persistence_observation.py:96: in test_drain_status_observes_real_http_reservation_after_response_close
+    assert reservation.status == "committed"
+E   AssertionError: assert 'finalized' == 'committed'
+E     
+E     - committed
+E     + finalized
+_ test_drain_status_observes_real_http_reservation_after_response_close[/v1/responses/] _
+tests\integration\test_runtime_persistence_observation.py:96: in test_drain_status_observes_real_http_reservation_after_response_close
+    assert reservation.status == "committed"
+E   AssertionError: assert 'finalized' == 'committed'
+E     
+E     - committed
+E     + finalized
+============================== warnings summary ===============================
+tests/integration/test_runtime_persistence_observation.py::test_drain_status_observes_real_http_reservation_after_response_close[/backend-api/codex/responses]
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/integration/test_runtime_persistence_observation.py::test_drain_status_observes_real_http_reservation_after_response_close[/backend-api/codex/responses]
+FAILED tests/integration/test_runtime_persistence_observation.py::test_drain_status_observes_real_http_reservation_after_response_close[/backend-api/codex/responses/]
+FAILED tests/integration/test_runtime_persistence_observation.py::test_drain_status_observes_real_http_reservation_after_response_close[/v1/responses]
+FAILED tests/integration/test_runtime_persistence_observation.py::test_drain_status_observes_real_http_reservation_after_response_close[/v1/responses/]
+4 failed, 1 warning in 4.87s

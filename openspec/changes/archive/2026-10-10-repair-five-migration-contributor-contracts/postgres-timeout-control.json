@@ -1,0 +1,19 @@
+{
+  "backend": "postgresql",
+  "rows": 20,
+  "baseline": "20260928_020000_add_request_logs_facet_indexes",
+  "budget_seconds": 0.01,
+  "timings": [
+    {
+      "revision": "20261007_000000_add_account_quota_limit",
+      "elapsed_seconds": 0.011924100002943305,
+      "status": "failed"
+    }
+  ],
+  "failure": "OperationalError",
+  "failure_phase": "measured_upgrade",
+  "cleanup_complete": true,
+  "fixture_rows_seeded": 20,
+  "no_pending_migrations": false,
+  "passed": false
+}

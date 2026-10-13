@@ -28,6 +28,95 @@ fixtures start with an unseeded empty snapshot when their fictional account IDs
 do not exist in the test DB; actual routing regressions explicitly seed/refresh
 the native snapshot and preserve its missing-account refusal.
 
+## Account usage limits
+
+Account limits reserve part of the observed standard quota for direct use. They
+are optional hard policies, separate from advisory routing preferences and
+upstream rate-limit status. One shared evaluator supplies routing, dashboard,
+and warmup decisions, including weekly-only and monthly-only account shapes.
+See the usage-limit requirements in [spec.md](spec.md) for the exact contract.
+
+For example, a 10% maximum leaves roughly 90% reserved. Once a current standard
+observation reaches 10%, newly dispatched work is blocked. Delayed observations
+and work already sent upstream can overshoot the threshold. Missing or stale
+observations also block an enabled policy until current data becomes available.
+Disabling the policy restores ordinary advisory usage behavior.
+
+The saved policy has a default threshold and optional duration-matched 5-hour
+and weekly overrides. Overrides replace the default only for their matching
+window; monthly and nonstandard windows use the default. Without a default,
+unmatched windows remain unrestricted. The editor asks for reserve percentages
+and stores maximum-used percentages. At 54% used and an 80% cap, provider
+remaining is 46%, reserved capacity is 20%, and usable capacity is 26%.
+
+Both toggle directions retain the latest saved percentage in the database.
+A tab showing a disabled 10% limit therefore enables a newer saved 20% value
+without overwriting it. If another client removed the value, the API returns a
+validation error so the operator can reload or explicitly set a new limit.
+
+Selection invalidation keeps committed telemetry and policy edits visible.
+Capped live observations invalidate selection immediately; uncapped observations
+retain the existing throttled refresh. Fresh owner authorization reads committed policy, status, and standard telemetry
+in one database snapshot, independently of selection caching. Peer selection
+retains the existing invalidation and TTL fallback; acknowledging a mutation
+does not synchronously invalidate every replica.
+
+Shared transports authorize each new turn, including after admission waits.
+Policy reads run outside the HTTP bridge pending-response lock and within the request
+deadline, so a slow read cannot hold up older responses. A denied new turn
+leaves already-dispatched work to settle; a failed read returns a separate
+authorization error. WebSocket dispatch also checks pending ownership after
+asynchronous authorization to avoid sending or settling reader-finalized work.
+
+Dispatch authorization follows the lifecycle-lock wait and durable preparation.
+It holds send serialization while loading policy, so a newer sender cannot pass
+it; older responses can still be processed and settled through the pending lock.
+A denial after a recovery alias was persisted restores its prior owner before
+the unsent request is discarded. Sticky admission detects policy invalidation
+after affinity persistence, releases the provisional lease, and returns
+`selection_state_changed` without compensating writes to the stored affinity.
+
+For example, a second turn can pass queue admission while its account is at 5%
+against a 10% limit, then wait for dispatch. If telemetry reaches 10% during that
+wait, the turn fails before sending. Already-dispatched turns retain their
+ownership and settlement. A successful poll with no standard windows likewise
+supersedes earlier below-limit observations for capped accounts; the dashboard
+reports `data_unavailable` and direct Responses requests return HTTP 429 with
+`rate_limit_error`, without an upstream reset deadline. Authorization
+infrastructure failures instead return HTTP 503 and retain a healthy transport.
+
+Usage-policy freshness follows the shared fixed refresh cadence. Synthetic
+warmup claims retain upstream's execution/lease fence during policy-denial
+cleanup so a stale worker cannot skip another worker's reclaimed decision.
+
+Warmup authorization projects committed policy and status onto transient account
+copies. The original session-owned account stays observational: claim, request-log,
+and completion commits cannot write those projected fields over a later operator
+edit. For example, a warmup can load 10%, authorize 20%, and then overlap an
+acknowledged 30% policy; its settlement preserves 30% while admitted work finishes.
+Quota-planner probes reuse the dashboard snapshot already resolved for their
+claim lease and stream budget, including resilience toggles, so dispatch adds no
+settings wait after final owner authorization. Once standard telemetry commits
+for a capped account, the refresh owns routing invalidation even if its subsequent
+policy read is cancelled; the committed measurement becomes visible and
+cancellation propagates.
+
+Final selection observation also covers the runtime-lock wait before a recovery
+probe commits and the database wait that initializes a process seed. The probe
+checks its generation inside the commitment lock, so a rejected attempt does
+not consume the quiet interval. A retried selection carries its successful
+generation to the seed-persistence fence. If that seed already committed, it
+retains its owner while the superseded attempt releases admission and fails
+closed; deleting it could invalidate a sibling that already observed it.
+
+Rejected WebSocket frames transfer settlement to a tracked finalization task
+before leaving pending ownership. Scope cancellation can await that task even
+while account-lease release waits. Late sticky invalidation uses the existing
+cancellation-deferring resource release, preserving both cancellation and
+committed affinity. For example, lowering a 20-percent cap to 10 percent during
+the final wait for an account observed at 10 percent prevents dispatch and
+releases its provisional accounting.
+
 ## Reauthentication warning state
 
 `reauth_required` alone means refresh-token exchange needs operator repair; it does not
@@ -319,3 +408,19 @@ The selector passes only the existing boolean exclusion proof to consumers, keep
 The [encrypted-input rejection contract](spec.md#requirement-encrypted-input-rejections-do-not-poison-replacement-account-health) prevents one rejected body from driving otherwise active accounts into transient backoff. A replacement's invalid_encrypted_content or recognized reasoning-payload rejection at HTTP 400, or a qualifying error frame, retains its original envelope while leaving account health unchanged. Other HTTP statuses keep ordinary health handling. A provenance warning distinguishes rejection after quota failover from rejection on the original account and contains no ciphertext.
 
 The [hard-owner backoff contract](spec.md#requirement-transient-backoff-does-not-empty-a-hard-continuity-owner-pool) preserves an active owner without erasing its transient history. For example, a backed-off A remains the required owner even when healthy B is in the global pool; an excluded, paused, quota-held, or capped A still fails closed. Movable work continues to prefer healthy siblings. Focused tests exercise sticky and unbound selection, while live provider and distributed-runtime evidence remain separate.
+
+## Account operator verification on 2026-10-09
+
+Account quota_limit_percent is an operator admission cap, independent of upstream quota exemption and error backoff. Example: usage 50 with cap 50 is excluded; a cleared cap restores ordinary selection, and cap zero excludes unknown usage. This bounded contract does not implement upstream per-window reserve accounting, usable-credit forecasts or reserved-quota visualization from the evolving PR #1528.
+
+See [requirements](spec.md). Live providers, server database execution and production remain outside local test evidence.
+
+## Fork account reserves completed on 2026-10-09
+
+The prior scalar-only partial status is superseded by the completed reserve integration. Shared and duration-matched 5-hour/weekly caps use the canonical fresh-data evaluator; disabled settings retain saved percentages, while removal clears them. Provider remaining stays in provider units; reserved and usable quota are shown separately, and weekly burn remains provider-scaled. A 20% reserve with 54% consumption gives 46% provider remaining and 26% usable quota.
+
+The fork adds a single forward revision on its verified reset-threshold head. Legacy positive scalar values seed the shared policy and zero remains a hard denial. The legacy API updates the shared policy; the reserve API can disable/remove it. Backup carries the shared and override values. MySQL updates use the transaction-held row lock and projection instead of UPDATE RETURNING.
+
+Fresh owner authorization retains strict revoked-credential handling and usable reauth warning behavior for manual warm-up. Selection retries are bounded at eight to let local and persisted invalidation echoes settle, with final current-owner refusal and complete lease cleanup under continuing churn. Foreground ranking ignores unavailable peers when choosing the best health tier but retains their hard-block evidence for canonical backoff fallback.
+
+Code and tests are adapted from NikitaMGrimm's upstream PR #1528 at caf31b77a4ef85047459635e956fdd62f7fbd7ce; aaravrav is credited there for complementary reserve presentation. No old migration or prior archived evidence is rewritten. Local verification is separate from live providers, server backends and publication. See [requirements](spec.md).

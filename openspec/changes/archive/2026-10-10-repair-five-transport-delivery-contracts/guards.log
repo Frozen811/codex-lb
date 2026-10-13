@@ -1,0 +1,12 @@
+proxy architecture checks passed
+cancellation safety checks passed
+proxy timing seam checks passed
+settings fields: 98/98; tiers: T0=13, T1=51, T2=0, T3=30, T4=4
+check_settings_tiers: ok
+revisions: 274; head: 20261009_010000_add_account_window_reserves; ratchet: 20260911_000000; base-ref check: origin/main (+11 revision(s) on this checkout)
+migration topology checks passed
+README lines (all-contributors block excluded): 218/225 OK
+README top-level headings (h1+h2, fenced code excluded): 10/10 OK
+env example lines: 54/60 OK
+core nav items (CORE_NAV_ITEMS): 5/5 OK
+tracked root entries outside allowlist: 0/0 OK

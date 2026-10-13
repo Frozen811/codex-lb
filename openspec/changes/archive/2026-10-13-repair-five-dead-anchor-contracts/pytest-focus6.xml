@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="13" time="25.782" timestamp="2026-10-13T10:11:10.920270+03:00" hostname="extr3-dekstop"><testcase classname="tests.integration.test_dead_anchor_contracts" name="test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[True-paused-/backend-api/codex/responses]" time="2.107" /><testcase classname="tests.integration.test_dead_anchor_contracts" name="test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[True-paused-/backend-api/codex/responses/]" time="2.127" /><testcase classname="tests.integration.test_dead_anchor_contracts" name="test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[True-paused-/v1/responses]" time="1.748" /><testcase classname="tests.integration.test_dead_anchor_contracts" name="test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[True-paused-/v1/responses/]" time="2.226" /><testcase classname="tests.integration.test_dead_anchor_contracts" name="test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[True-deactivated-/backend-api/codex/responses]" time="1.663" /><testcase classname="tests.integration.test_dead_anchor_contracts" name="test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[True-deactivated-/backend-api/codex/responses/]" time="1.671" /><testcase classname="tests.integration.test_dead_anchor_contracts" name="test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[True-deactivated-/v1/responses]" time="2.025" /><testcase classname="tests.integration.test_dead_anchor_contracts" name="test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[True-deactivated-/v1/responses/]" time="1.867" /><testcase classname="tests.integration.test_dead_anchor_contracts" name="test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[True-reauth_required-/backend-api/codex/responses]" time="1.738" /><testcase classname="tests.integration.test_dead_anchor_contracts" name="test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[True-reauth_required-/backend-api/codex/responses/]" time="2.046" /><testcase classname="tests.integration.test_dead_anchor_contracts" name="test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[True-reauth_required-/v1/responses]" time="1.875" /><testcase classname="tests.integration.test_dead_anchor_contracts" name="test_dead_client_anchor_ignores_incidental_reset_and_full_history_recovers[True-reauth_required-/v1/responses/]" time="2.370" /><testcase classname="tests.integration.test_dead_anchor_contracts" name="test_submit_time_tombstone_refusal_releases_carriers_but_guards_deltas[/backend-api/codex/responses]" time="1.615"><failure message="AssertionError: {&quot;error&quot;:{&quot;message&quot;:&quot;HTTP response recovery operation fence is unavailable; retry the request.&quot;,&quot;type&quot;:&quot;server_error&quot;,&quot;code&quot;:&quot;bridge_continuity_persistence_failed&quot;}}&#10;assert 502 == 404&#10; +  where 502 = &lt;Response [502 Bad Gateway]&gt;.status_code">async_client = &lt;httpx.AsyncClient object at 0x00000278282FFCB0&gt;
+app_instance = &lt;fastapi.applications.FastAPI object at 0x00000278289802D0&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x0000027826C2ECF0&gt;
+path = '/backend-api/codex/responses'
+
+    @pytest.mark.parametrize("path", PATHS)
+    async def test_submit_time_tombstone_refusal_releases_carriers_but_guards_deltas(
+        async_client, app_instance, monkeypatch, path: str
+    ) -&gt; None:
+        bridge._install_bridge_settings(monkeypatch, enabled=True)
+        owner_id = await bridge._import_account(async_client, "tombstone-owner", "tombstone-owner@example.com")
+        owner = await bridge._get_account(owner_id)
+        upstream = bridge._FakeBridgeUpstreamWebSocket("resp_tombstone")
+        bridge._install_bridge_account_upstream(monkeypatch, account=owner, upstream=upstream)
+        service = get_proxy_service_for_app(app_instance)
+        headers = {"session_id": "tombstone-session", "thread-id": "tombstone-thread"}
+        history = [{"role": "user", "content": "first turn"}]
+    
+        def body(history):
+            return {
+                "model": "gpt-5.1",
+                "instructions": "",
+                "input": history,
+                "prompt_cache_key": "tombstone-cache",
+                "stream": True,
+            }
+    
+        try:
+            first = await async_client.post(path, headers=headers, json=body(history))
+            assert first.status_code == 200 and "response.completed" in first.text
+            async with SessionLocal() as session:
+                record = (await session.scalars(select(HttpBridgeSessionRecord))).one()
+                denied_anchor = record.latest_response_id
+                assert denied_anchor
+            original_submit = service._submit_http_bridge_request
+            captured = []
+    
+            async def late_tombstone(session, **kwargs):
+                if not captured:
+                    request_state = kwargs["request_state"]
+                    assert request_state.proxy_injected_previous_response_id
+                    assert request_state.previous_response_id == denied_anchor
+                    persisted = await service._durable_bridge.persist_retry_circuit(
+                        session_key_kind=session.key.affinity_kind,
+                        session_key_value=session.key.affinity_key,
+                        api_key_id=session.key.api_key_id,
+                        consecutive_failures=0,
+                        cooldown_until_epoch=0,
+                        last_detail="anchor_abandoned",
+                        updated_at_epoch=time.time(),
+                    )
+                    assert persisted is not None
+                    state = retry_circuit_module._HTTPBridgeRetryCircuitState(last_touched_monotonic=time.monotonic())
+                    state.last_detail = "anchor_abandoned"
+                    runtime = cast(Any, service)
+                    async with runtime._http_bridge_retry_circuit_lock:
+                        runtime._http_bridge_retry_circuits[session.key] = state
+                    captured.append(session)
+                return await original_submit(session, **kwargs)
+    
+            monkeypatch.setattr(service, "_submit_http_bridge_request", late_tombstone)
+            history.extend(
+                [
+                    {"role": "assistant", "content": [{"type": "output_text", "text": "OK"}]},
+                    {"role": "user", "content": "second turn"},
+                ]
+            )
+            refusal = await async_client.post(path, headers=headers, json=body(history))
+&gt;           assert refusal.status_code == 404, refusal.text
+E           AssertionError: {"error":{"message":"HTTP response recovery operation fence is unavailable; retry the request.","type":"server_error","code":"bridge_continuity_persistence_failed"}}
+E           assert 502 == 404
+E            +  where 502 = &lt;Response [502 Bad Gateway]&gt;.status_code
+
+tests\integration\test_dead_anchor_contracts.py:244: AssertionError</failure></testcase></testsuite></testsuites>

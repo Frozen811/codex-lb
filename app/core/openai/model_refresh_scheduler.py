@@ -29,6 +29,7 @@ from app.db.session import detach_session_objects, get_background_session
 from app.modules.accounts.auth_manager import AuthManager
 from app.modules.accounts.background_repository import BackgroundAccountsRepository
 from app.modules.accounts.repository import AccountsRepository
+from app.modules.model_sources.discovery import refresh_source_catalogs
 from app.modules.proxy.account_cache import get_account_selection_cache
 
 logger = logging.getLogger(__name__)
@@ -112,6 +113,7 @@ class ModelRefreshScheduler:
 
     async def _refresh_as_leader(self) -> bool:
         try:
+            await refresh_source_catalogs()
             async with get_background_session() as session:
                 accounts_repo = AccountsRepository(session)
                 accounts = await accounts_repo.list_accounts()

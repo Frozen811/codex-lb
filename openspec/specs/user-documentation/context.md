@@ -186,3 +186,17 @@ Git selection and earlier dated infrastructure evidence. Full per-command
 execution and public metadata/site publication remain open in issues-check§27.
 The contract is in [spec.md](spec.md); the bounded local implementation and
 evidence are archived as repair-fork-installation-documentation.
+
+## Ordinary Codex examples and standalone search
+
+The [ordinary search-example contract](spec.md#requirement-ordinary-codex-provider-examples-declare-standalone-search) covers five blocks: both READMEs, two ordinary provider blocks in the client guide, and the downloadable main configuration. They declare the provider capability and minimum server version. Live-search preference and the experimental feature flag are distinct controls; the separate Daybreak provider keeps its existing policy.
+
+For example, `supports_standalone_web_search = true` belongs in the ordinary provider table while `web_search = "live"` is a top-level client preference. Parsed example verification establishes documentation consistency, not a live search call or provider eligibility. Astra defaults and GPT-5.6-specific large-context guidance retain the already documented scope; model availability still comes from the deployment's live catalog.
+
+## Contributor ownership and scoped verification
+
+[AGENTS.md](../../../AGENTS.md) keeps one primary OpenSpec workflow and preserves the existing code conventions, contributor gates and simplicity rules. Its bounded-ownership guidance makes the requested rows and their evidence the completion boundary and preserves unrelated work. Publication and deployment authority remain separate from a successful local run.
+
+The prompting references are the official [Astra guidance](https://developers.openai.com/api/docs/guides/latest-model#prompting-best-practices) and [agent instruction maintenance guidance](https://developers.openai.com/blog/rethinking-skills-and-prompts-for-gpt-6-astra). They inform concise contextual instructions; they do not replace repository-specific requirements or add blanket delegation.
+
+For example, a five-row HTTP-bridge repair creates its OpenSpec change first, configures disposable storage before application imports, tests the affected HTTP/bridge and applicable WebSocket boundaries, saves and rereads exactly five registry rows, then synchronizes verified specs. A helper passing by itself does not prove that a broken public route recovered. An unrelated historical failure is recorded separately instead of being fixed outside the requested scope. The instruction edit is reviewed through its diff and preserved gates; tests that merely mirror its prose add no useful product evidence. See [requirements](spec.md).

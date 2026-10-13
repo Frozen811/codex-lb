@@ -1,0 +1,55 @@
+bringing up nodes...
+bringing up nodes...
+
+........................................................................ [ 29%]
+........................................................................ [ 59%]
+....................F.....F............................................. [ 89%]
+.........................                                                [100%]
+================================== FAILURES ===================================
+_ test_get_or_create_http_bridge_session_late_owner_after_inflight_evict_closes_unregistered_session _
+[gw1] win32 -- Python 3.13.12 C:\codex-lb\.venv\Scripts\python.exe
+tests\unit\test_proxy_http_bridge.py:24478: in test_get_or_create_http_bridge_session_late_owner_after_inflight_evict_closes_unregistered_session
+    await asyncio.wait_for(owner_task, timeout=1.0)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\tasks.py:507: in wait_for
+    return await fut
+           ^^^^^^^^^
+tests\unit\test_proxy_http_bridge.py:24452: in get_session
+    return await service._get_or_create_http_bridge_session(
+app\modules\proxy\_service\http_bridge\mixin.py:1521: in _get_or_create_http_bridge_session
+    created_session = await create_session(key, **create_kwargs)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\unit\test_proxy_http_bridge.py:24434: in create_session
+    await finish_create.wait()
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\locks.py:213: in wait
+    await fut
+E   asyncio.exceptions.CancelledError
+__ test_rejected_creator_does_not_release_the_registered_winners_durable_row __
+[gw1] win32 -- Python 3.13.12 C:\codex-lb\.venv\Scripts\python.exe
+tests\unit\test_proxy_http_bridge.py:38664: in test_rejected_creator_does_not_release_the_registered_winners_durable_row
+    await asyncio.wait_for(owner_task, timeout=1.0)
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\tasks.py:507: in wait_for
+    return await fut
+           ^^^^^^^^^
+tests\unit\test_proxy_http_bridge.py:38639: in get_session
+    return await service._get_or_create_http_bridge_session(
+app\modules\proxy\_service\http_bridge\mixin.py:1521: in _get_or_create_http_bridge_session
+    created_session = await create_session(key, **create_kwargs)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\unit\test_proxy_http_bridge.py:38620: in create_session
+    await finish_create.wait()
+C:\Users\ext\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\Lib\asyncio\locks.py:213: in wait
+    await fut
+E   asyncio.exceptions.CancelledError
+============================== warnings summary ===============================
+.venv\Lib\site-packages\starlette\testclient.py:53
+.venv\Lib\site-packages\starlette\testclient.py:53
+.venv\Lib\site-packages\starlette\testclient.py:53
+.venv\Lib\site-packages\starlette\testclient.py:53
+  C:\codex-lb\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/unit/test_proxy_http_bridge.py::test_get_or_create_http_bridge_session_late_owner_after_inflight_evict_closes_unregistered_session
+FAILED tests/unit/test_proxy_http_bridge.py::test_rejected_creator_does_not_release_the_registered_winners_durable_row
+2 failed, 239 passed, 4 warnings in 39.40s

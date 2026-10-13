@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import DashboardRateLimitError
 from app.db.dialect_sql import is_mysql
 from app.db.models import RateLimitAttempt
+from app.db.session import sqlite_writer_section
 
 #: How long a recorded attempt is kept before the periodic sweep deletes it.
 #: Every limiter in the product counts over a window of at most a minute, so an
@@ -79,6 +80,7 @@ class DatabaseRateLimiter:
                 retry_after = max(1, int((reset_at - now).total_seconds()))
             raise DashboardRateLimitError("Too many attempts", retry_after=retry_after)
 
+    @sqlite_writer_section()
     async def check_and_increment(self, key: str, session: AsyncSession) -> None:
         """Atomically check the rate limit and record an attempt.
 
@@ -157,6 +159,7 @@ class DatabaseRateLimiter:
                 retry_after = max(1, int((reset_at - now).total_seconds()))
             raise DashboardRateLimitError("Too many attempts", retry_after=retry_after)
 
+    @sqlite_writer_section()
     async def record_failure(self, key: str, session: AsyncSession) -> None:
         """Record a failed attempt atomically.
 
@@ -206,6 +209,7 @@ class DatabaseRateLimiter:
                 retry_after = max(1, int((reset_at - now).total_seconds()))
             raise DashboardRateLimitError("Too many attempts", retry_after=retry_after)
 
+    @sqlite_writer_section()
     async def clear_for_key(self, key: str, session: AsyncSession) -> None:
         """Delete all attempts for (key, type) — used to reset counter on successful auth."""
         await session.execute(
@@ -216,6 +220,7 @@ class DatabaseRateLimiter:
         )
         await session.commit()
 
+    @sqlite_writer_section()
     async def cleanup(
         self, session: AsyncSession, older_than_seconds: int = RATE_LIMIT_ATTEMPT_RETENTION_SECONDS
     ) -> None:

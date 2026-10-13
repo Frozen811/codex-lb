@@ -91,6 +91,26 @@ class FileAccountPin(Base):
 
 class Account(Base):
     __tablename__ = "accounts"
+    __table_args__ = (
+        CheckConstraint(
+            "usage_limit_percent IS NULL OR (usage_limit_percent > 0 AND usage_limit_percent <= 100)",
+            name="ck_accounts_usage_limit_percent_range",
+        ),
+        CheckConstraint(
+            "usage_limit_5h_percent IS NULL OR (usage_limit_5h_percent > 0 AND usage_limit_5h_percent <= 100)",
+            name="ck_accounts_usage_limit_5h_percent_range",
+        ),
+        CheckConstraint(
+            "usage_limit_weekly_percent IS NULL OR "
+            "(usage_limit_weekly_percent > 0 AND usage_limit_weekly_percent <= 100)",
+            name="ck_accounts_usage_limit_weekly_percent_range",
+        ),
+        CheckConstraint(
+            "NOT usage_limit_enabled OR usage_limit_percent IS NOT NULL "
+            "OR usage_limit_5h_percent IS NOT NULL OR usage_limit_weekly_percent IS NOT NULL",
+            name="ck_accounts_usage_limit_enabled_requires_percent",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(mysql_string_for("id"), primary_key=True)
     chatgpt_account_id: Mapped[str | None] = mapped_column(mysql_string_for("chatgpt_account_id"), nullable=True)
@@ -118,6 +138,15 @@ class Account(Base):
         nullable=False,
     )
     quota_limit_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    usage_limit_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default=false(),
+        nullable=False,
+    )
+    usage_limit_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    usage_limit_5h_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    usage_limit_weekly_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     access_token_encrypted: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     refresh_token_encrypted: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
@@ -1640,6 +1669,14 @@ class DashboardSettings(Base):
         nullable=False,
     )
     limit_warmup_exhausted_threshold_percent: Mapped[float] = mapped_column(
+        "limit_warmup_reset_threshold_percent",
+        Float,
+        default=0.0,
+        server_default=text("0.0"),
+        nullable=False,
+    )
+    limit_warmup_legacy_exhausted_threshold_percent: Mapped[float] = mapped_column(
+        "limit_warmup_exhausted_threshold_percent",
         Float,
         default=99.0,
         server_default=text("99.0"),
@@ -1924,6 +1961,8 @@ class ModelSource(Base):
     )
     base_url: Mapped[str] = mapped_column(mysql_string_for("base_url"), nullable=False)
     api_key_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    catalog_mode: Mapped[str] = mapped_column(String(32), default="manual", server_default="manual", nullable=False)
+    catalog_revision: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), nullable=False)
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true(), nullable=False)
     health_status: Mapped[str] = mapped_column(
         mysql_string_for("health_status"),
@@ -2004,6 +2043,7 @@ class ModelSourceModel(Base):
     output_per_1m: Mapped[float | None] = mapped_column(Float, nullable=True)
     audio_per_minute: Mapped[float | None] = mapped_column(Float, nullable=True)
     raw_metadata_json: Mapped[str | None] = mapped_column(mysql_text_for("raw_metadata_json"), nullable=True)
+    is_available: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true(), nullable=False)
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true(), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(

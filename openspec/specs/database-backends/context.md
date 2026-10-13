@@ -45,3 +45,14 @@ For example, a native rollback may finish while the loop is blocked across the i
 Warnings distinguish observed completion, attempted reclamation and failed cleanup. Elapsed time at the initial bound is not an event-loop lag measurement, and a failed invalidation does not prove a permanent writer hold. No database migration, pool change or operator setting is required. The [owning requirement](spec.md#requirement-a-completed-sqlite-teardown-is-never-reclaimed) defines the completion and cleanup contract.
 
 The invalidation warning covers exceptions raised by `connection.invalidate()`. SQLAlchemy 2.0.52 catches ordinary driver-close exceptions inside `Pool._close_connection` and logs them at ERROR, so those failures retain the pool's diagnostic owner. Finalization can also run for a task already terminal during grace; its message reports completion without claiming that the task finished after reclamation.
+
+
+## Local SQLite admission and cancelled cleanup
+
+The [database-backends requirements](spec.md) cover shared local write admission. Its reentrancy belongs to the current asyncio task. Context copied into a child preserves ambient data but does not transfer lock ownership: create a child while holding admission only if the parent can leave before awaiting that child to write. Same-task nested repository calls remain supported.
+
+Authentication attempt writes, OAuth flow persistence, fingerprint verification and lease writes use this admission to avoid spending the native busy timeout against an already admitted local writer. OAuth/fingerprint/lease sessions are scoped inside admission, so rollback and close run before its release. OAuth network exchange and password verification run outside it. For example, a paused SQLite writer can delay an OAuth flow record; releasing its transaction admits persistence and returns a pending browser flow, rather than a lock-error HTTP 500.
+
+Lease writes still judge expiry using the database execution clock after waiting. Admission does not grant a new TTL to an expired lease. PostgreSQL and in-memory SQLite retain their concurrency behavior, and external SQLite processes still require the existing bounded lock retry policy.
+
+Reclamation registers both the abandoned teardown and its connection-cleanup task before waiting. Caller cancellation is deferred until interruption/invalidation and late-close callback registration finish. A failed interrupt does not prove a permanent lock; invalidation is still attempted and its failure is reported. The cleanup registry remains drainable at shutdown. No process restart, production repair or guaranteed native-driver recovery follows from these local checks.

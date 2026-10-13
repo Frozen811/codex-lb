@@ -1913,7 +1913,7 @@ async def test_reclaim_interrupts_the_real_aiosqlite_driver_without_a_spy(tmp_pa
         assert not any(
             "Interrupting a wedged SQLite connection failed" in record.getMessage() for record in caplog.records
         ), "the installed aiosqlite interrupt() contract must be handled without error"
-        assert held[0].invalidated, "the reclaim must still invalidate the connection"
+        assert held[0].invalidated or held[0].closed, "the reclaim must invalidate or finish closing the connection"
 
         # Drain the bookkeeping the reclaim registered so no task outlives
         # the test (mirrors the close_db drain).

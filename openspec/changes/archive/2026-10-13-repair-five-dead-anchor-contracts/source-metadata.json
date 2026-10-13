@@ -1,0 +1,40 @@
+[
+  {
+    "id": 1921,
+    "title": "bug: existing Codex threads repeatedly fail with invalid previous_response_id",
+    "url": "https://github.com/Soju06/codex-lb/issues/1921",
+    "state": "closed",
+    "head": null,
+    "read_date": "2026-10-13"
+  },
+  {
+    "id": 1707,
+    "title": "bug: existing Codex thread can remain unusable on dead hard-affinity owner while fresh/side chat works",
+    "url": "https://github.com/Soju06/codex-lb/issues/1707",
+    "state": "open",
+    "head": null,
+    "read_date": "2026-10-13"
+  },
+  {
+    "id": 2423,
+    "title": "fix(proxy): reject a dead client anchor instead of asking for a retry",
+    "url": "https://github.com/Soju06/codex-lb/pull/2423",
+    "state": "open",
+    "head": "fdf5f6a8fce0b3731550364f45d35758dea749dc",
+    "read_date": "2026-10-13"
+  },
+  {
+    "id": 2467,
+    "title": "fix(proxy-responses): retire tombstoned injected anchors",
+    "url": "https://github.com/Soju06/codex-lb/pull/2467",
+    "state": "open",
+    "head": "a9d45b5a70eed9a0360b32d1778b57550c0fceb2",
+    "read_date": "2026-10-13"
+  },
+  {
+    "id": 1864,
+    "url": "https://github.com/Soju06/codex-lb/discussions/1864",
+    "kind": "discussion",
+    "read_date": "2026-10-13"
+  }
+]

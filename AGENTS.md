@@ -22,7 +22,7 @@ This repo uses **OpenSpec as the primary workflow and SSOT** for change-driven d
 ### How to work (default)
 
 1) Find the relevant spec(s) in `openspec/specs/**` and treat them as source-of-truth.
-2) If the work changes behavior, requirements, contracts, or schema: create an OpenSpec change in `openspec/changes/**` first (proposal -> tasks).
+2) If the work changes behavior, API/CLI/dashboard/operator/compatibility contracts, routing, or schema: create an OpenSpec change in `openspec/changes/**` first (proposal -> tasks).
 3) Implement the tasks; keep code + specs in sync (update `spec.md` as needed).
 4) Validate specs locally: `openspec validate --specs`
 5) When done: verify + archive the change (do not archive unverified changes).
@@ -89,13 +89,9 @@ are encouraged but not substitutes for the cloud gates.
 
 These rules encode recurring review blockers observed across codex-lb PRs.
 
-- OpenSpec is a hard gate for behavior, API, schema, CLI,
-  dashboard-visible, proxy-routing, operator-contract, and compatibility
-  changes. Create or update `openspec/changes/<slug>/` before coding, keep
-  `spec.md` normative with MUST/SHALL-style requirements, put rationale and
-  examples in `context.md` or change notes, and run strict OpenSpec validation
-  before calling the PR ready. Code/tests alone are not enough when OpenSpec is
-  required.
+- Follow the OpenSpec-first workflow above for behavior changes. Run strict
+  change and canonical-spec validation before calling a PR ready; code/tests
+  alone do not satisfy this gate.
 - CodeRabbit review state must come from current-head GitHub evidence.
   Unresolved, non-outdated actionable review threads block readiness until
   their findings are fixed or explicitly addressed or dismissed in-thread;
@@ -146,6 +142,10 @@ These rules encode recurring review blockers observed across codex-lb PRs.
 When acting as an AI coding assistant (such as GPT-6 Astra or other frontier models) in this repository:
 
 - **Autonomy & Decisiveness**: Do not pause for intermediate conversational confirmation on planned or agreed implementation steps. Complete code edits, test additions, and spec synchronization end-to-end.
+- **Bounded Ownership**: Complete the requested scope, preserve unrelated dirty work, and record any remaining limitations. An explicitly sized `issues-check.md` batch owns exactly that number of selected rows; update and reread their evidence before reporting completion. Commit, push, merge, release and deployment require the user's authorization; local verification does not establish hosted CI or production results.
 - **Scope-Bounded Verification**: Run focused, targeted tests covering the modified subsystem (e.g. `uv run pytest tests/unit/test_<area>.py`) and linters (`uv run ruff check`) rather than launching expansive full-repository test suites for minor changes.
-- **Test Database Isolation**: Unit and integration test suites automatically run against isolated temporary SQLite or test databases. Never pause out of concern for local database corruption or data loss when running documented test commands.
-- **OpenSpec & Simplicity Alignment**: Maintain OpenSpec as the strict SSOT. Keep `spec.md` normative with testable requirements, and place rationale, design decisions, and operational details in `context.md`. Follow the repository simplicity gates (P1–P6) without introducing unnecessary configuration surface.
+- **Test Database Isolation**: `tests/conftest.py` configures disposable test storage through `tests/runtime.py` before importing application modules that initialize database engines. Preserve this order in new harnesses and subprocess tests. Run documented test commands and fix failures caused by the requested change without seeking approval for each run; never substitute an application or production database for a test fixture.
+- **Request-Path Coverage**: Cover each affected public HTTP, native WebSocket and HTTP-bridge entrypoint, including applicable aliases, external error envelopes and partial-failure cleanup. Use the changed transport's existing regression suites; helper-only assertions do not prove a failing product path.
+- **Simplicity Alignment**: Follow the repository simplicity gates (P1–P6) without introducing unnecessary configuration surface. Apply the OpenSpec and documentation model above.
+
+These ownership and verification boundaries follow [OpenAI's Astra prompting guidance](https://developers.openai.com/api/docs/guides/latest-model#prompting-best-practices) and [guidance on maintaining agent instructions](https://developers.openai.com/blog/rethinking-skills-and-prompts-for-gpt-6-astra). Repository-specific workflow and merge gates remain authoritative.

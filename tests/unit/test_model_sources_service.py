@@ -40,6 +40,10 @@ class _FakeRepository:
     async def commit(self) -> None:
         self.committed = True
 
+    async def invalidate_catalog(self, source_id: str) -> None:
+        assert self.created is not None and self.created.id == source_id
+        self.created.catalog_revision = (self.created.catalog_revision or 0) + 1
+
     async def rollback(self) -> None:
         self.rolled_back = True
 
