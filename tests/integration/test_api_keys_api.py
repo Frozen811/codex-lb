@@ -21,6 +21,7 @@ import app.modules.proxy.api as proxy_api
 import app.modules.proxy.load_balancer as load_balancer_module
 import app.modules.proxy.service as proxy_module
 from app.core.auth import generate_unique_account_id
+from app.core.cache.invalidation import get_cache_invalidation_poller
 from app.core.clients.proxy import ProxyResponseError
 from app.core.openai.model_registry import ReasoningLevel, UpstreamModel, get_model_registry
 from app.core.openai.models import OpenAIResponsePayload
@@ -58,6 +59,15 @@ pytestmark = pytest.mark.integration
 
 _TEST_MODELS = ["model-alpha", "model-beta"]
 _HIDDEN_MODEL = "model-hidden"
+
+
+async def _settle_account_import_invalidations() -> None:
+    """Acknowledge fixture mutations before testing a later admission boundary."""
+    poller = get_cache_invalidation_poller()
+    if poller is not None:
+        await poller.stop()
+        await poller.prime()
+        await poller.start()
 
 
 def _make_upstream_model(slug: str, *, supported_in_api: bool = True) -> UpstreamModel:
@@ -5066,6 +5076,7 @@ async def test_v1_responses_ultrafast_cost_logs_and_settlement(
     assert created.status_code == 200
     key = created.json()
     await _import_account(async_client, "acc_ultrafast_cost", "ultrafast-cost@example.test")
+    await _settle_account_import_invalidations()
     seen = {"calls": 0}
     recorded = asyncio.Event()
     settled = asyncio.Event()
@@ -5109,7 +5120,7 @@ async def test_v1_responses_ultrafast_cost_logs_and_settlement(
     headers = {"Authorization": f"Bearer {key['key']}"}
     body = {"model": "gpt-6-astra", "input": "hi", "stream": stream, "service_tier": "ultrafast"}
     response = await async_client.post("/v1/responses", headers=headers, json=body)
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     await asyncio.wait_for(recorded.wait(), timeout=10)
     await asyncio.wait_for(settled.wait(), timeout=10)
     if stream:

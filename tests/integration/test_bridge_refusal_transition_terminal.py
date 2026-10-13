@@ -8,7 +8,6 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 
-from app.core.cache.invalidation import get_cache_invalidation_poller
 from app.core.clients.proxy import ProxyResponseError
 from app.db.models import ApiKeyUsageReservation, RequestLog, StickySessionKind
 from app.db.session import SessionLocal
@@ -23,6 +22,7 @@ from app.modules.proxy.http_bridge_forwarding import (
     build_owner_forward_headers,
 )
 from app.modules.proxy.sticky_repository import StickySessionsRepository
+from tests.integration.test_api_keys_api import _settle_account_import_invalidations
 from tests.integration.test_bridge_continuation_contracts import _events, _user
 from tests.integration.test_bridge_continuation_contracts import bridge_origin as _bridge_origin_fixture
 from tests.integration.test_http_responses_bridge import _client_reporting_committed_stream_failures, _import_account
@@ -30,15 +30,6 @@ from tests.integration.test_http_responses_bridge import _client_reporting_commi
 pytestmark = pytest.mark.integration
 bridge_origin = _bridge_origin_fixture
 PATHS = ["/v1/responses", "/v1/responses/", "/backend-api/codex/responses"]
-
-
-async def _settle_account_import_invalidations() -> None:
-    """Acknowledge fixture mutations before testing a later admission boundary."""
-    poller = get_cache_invalidation_poller()
-    if poller is not None:
-        await poller.stop()
-        await poller.prime()
-        await poller.start()
 
 
 def _commit_before_refusal(service, monkeypatch):
