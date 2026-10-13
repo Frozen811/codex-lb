@@ -28,7 +28,7 @@ def test_select_account_filters_persisted_quota_restriction(used, secondary, lim
         quota_limit_percent=limit,
     )
     assert (select_account([state]).account is None) == blocked
-    assert select_account([state], ignore_standard_quota=True).account is not None
+    assert (select_account([state], ignore_standard_quota=True).account is None) == blocked
 
 
 async def test_service_quota_limit_commits_and_propagates(monkeypatch):

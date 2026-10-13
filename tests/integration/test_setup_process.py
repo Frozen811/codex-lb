@@ -117,8 +117,16 @@ def test_cli_sqlite_restart_and_paired_restore(tmp_path: Path) -> None:
     data_dir = tmp_path / "original"
     with _server(data_dir) as client:
         assert client.get("/api/settings").json()["proxyAccountResponseCreateLimit"] == 4
-        response = client.put("/api/settings", json={"proxyAccountResponseCreateLimit": 9})
-        assert response.status_code == 200
+        for _ in range(5):
+            settings = client.get("/api/settings").json()
+            response = client.put(
+                "/api/settings",
+                json={"proxyAccountResponseCreateLimit": 9, "expectedVersion": settings["version"]},
+            )
+            if response.status_code != 409:
+                break
+            assert response.json()["error"]["code"] == "settings_conflict", response.text
+        assert response.status_code == 200, response.text
         assert response.json()["proxyAccountResponseCreateLimitOverride"] == 9
     key = (data_dir / "encryption.key").read_bytes()
     encryptor = TokenEncryptor(key=key)

@@ -2090,7 +2090,8 @@ async def test_real_sql_authorization_interruption_releases_warmup_claim_and_res
                     await session.execute(text("SELECT pr1528_wait()"))
                 else:
                     sql_started.set()
-                    await session.execute(text("SELECT pg_sleep(30) /* pr1528-authorization-cancel */"))
+                    sleep_function = "SLEEP" if dialect == "mysql" else "pg_sleep"
+                    await session.execute(text(f"SELECT {sleep_function}(30) /* pr1528-authorization-cancel */"))
             return await original(owner_id)
 
         async def send_probe(**kwargs):

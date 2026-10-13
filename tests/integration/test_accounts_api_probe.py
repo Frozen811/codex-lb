@@ -84,12 +84,12 @@ async def test_force_probe_settles_after_repository_session_closes(
         """Accept the upstream probe without making a network request."""
         return 200
 
-    async def _fake_fetch_usage(**_kwargs):
-        """Complete refresh without replacing the seeded usage-window rows."""
-        return UsagePayload(plan_type=plan_type)
+    async def _refresh_without_writing(self, account, **_kwargs):
+        """Complete the advisory refresh without replacing seeded measurements."""
+        return AccountRefreshResult(usage_written=False, fetch_succeeded=True)
 
     monkeypatch.setattr(AccountsService, "_send_probe_request", _fake_probe)
-    monkeypatch.setattr("app.modules.usage.updater.fetch_usage", _fake_fetch_usage)
+    monkeypatch.setattr(UsageUpdater, "force_refresh_result", _refresh_without_writing)
     account_id = await _import_test_account(
         async_client,
         email="probe-settlement@example.com",
@@ -143,11 +143,11 @@ async def test_force_probe_settlement_normalizes_usage_after_real_teardown(
     async def fake_probe(self, **kwargs):  # noqa: ARG001
         return 200
 
-    async def fake_fetch_usage(**_kwargs):
-        return UsagePayload(plan_type="pro")
+    async def refresh_without_writing(self, account, **_kwargs):
+        return AccountRefreshResult(usage_written=False, fetch_succeeded=True)
 
     monkeypatch.setattr(AccountsService, "_send_probe_request", fake_probe)
-    monkeypatch.setattr("app.modules.usage.updater.fetch_usage", fake_fetch_usage)
+    monkeypatch.setattr(UsageUpdater, "force_refresh_result", refresh_without_writing)
     account_id = await _import_test_account(
         async_client, email="probe-normalization@example.test", account_id="probe-normalization"
     )

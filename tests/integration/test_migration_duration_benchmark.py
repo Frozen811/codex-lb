@@ -14,6 +14,7 @@ from sqlalchemy import create_engine, text
 
 import app.db.migration_progress as migration_progress
 import scripts.benchmark_migrations as benchmark
+import scripts.check_migration_topology as topology
 from app.db.migrate import _build_alembic_config
 
 pytestmark = pytest.mark.integration
@@ -150,8 +151,30 @@ def test_unknown_baseline_fails_with_cleanup_and_private_output(tmp_path: Path) 
     assert json.loads(output.read_text())["failure"]
 
 
-def test_baseline_ref_uses_real_git_graph() -> None:
+def test_baseline_ref_uses_real_git_graph(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    repository = tmp_path / "history"
+    repository.mkdir()
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=repository, check=True, capture_output=True)
+
+    git("init", "--initial-branch=main")
+    git("config", "user.name", "Migration fixture")
+    git("config", "user.email", "migration-fixture@example.invalid")
+    versions = repository / "app/db/alembic/versions"
+    versions.mkdir(parents=True)
+    (versions / f"{BASELINE}.py").write_text(f"revision = '{BASELINE}'\ndown_revision = None\n")
+    git("add", ".")
+    git("commit", "-m", "test: baseline migration")
+    git("tag", "v1.25.1")
+    (versions / "fixture_next.py").write_text(f"revision = 'fixture_next'\ndown_revision = '{BASELINE}'\n")
+    git("add", ".")
+    git("commit", "-m", "test: next migration")
+    git("tag", "v1.25.2")
+    git("tag", "v9.0.0-beta.1")
+    monkeypatch.setattr(benchmark, "ROOT", repository)
+    monkeypatch.setattr(topology, "ROOT", repository)
     assert benchmark.resolve_baseline("v1.25.1") == BASELINE
-    assert benchmark.resolve_baseline("latest-stable")
+    assert benchmark.resolve_baseline("latest-stable") == "fixture_next"
     with pytest.raises(ValueError):
         benchmark.resolve_baseline("refs/tags/nonexistent-duration-fixture")

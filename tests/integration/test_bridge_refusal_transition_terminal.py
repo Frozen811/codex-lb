@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 
+from app.core.cache.invalidation import get_cache_invalidation_poller
 from app.core.clients.proxy import ProxyResponseError
 from app.db.models import ApiKeyUsageReservation, RequestLog, StickySessionKind
 from app.db.session import SessionLocal
@@ -29,6 +30,15 @@ from tests.integration.test_http_responses_bridge import _client_reporting_commi
 pytestmark = pytest.mark.integration
 bridge_origin = _bridge_origin_fixture
 PATHS = ["/v1/responses", "/v1/responses/", "/backend-api/codex/responses"]
+
+
+async def _settle_account_import_invalidations() -> None:
+    """Acknowledge fixture mutations before testing a later admission boundary."""
+    poller = get_cache_invalidation_poller()
+    if poller is not None:
+        await poller.stop()
+        await poller.prime()
+        await poller.start()
 
 
 def _commit_before_refusal(service, monkeypatch):
@@ -234,6 +244,7 @@ async def test_model_transition_successor_converges_on_the_next_turn(
         return await initial_select(*args, **kwargs)
 
     monkeypatch.setattr(service, "_select_account_with_budget", select_seed_owner)
+    await _settle_account_import_invalidations()
     first_input = [_user("old model")]
     seed = await async_client.post(
         path, headers=headers, json={"model": "gpt-5.1", "input": first_input, "stream": True}
@@ -424,6 +435,7 @@ async def test_health_failure_after_real_settlement_preserves_one_terminal(
     async_client, app_instance, bridge_origin, monkeypatch, caplog, path, failure_path, anchored
 ):
     service = get_proxy_service_for_app(app_instance)
+    await _settle_account_import_invalidations()
     seed = await async_client.post(path, json={"model": "gpt-5.1", "input": [_user("seed")], "stream": True})
     assert seed.status_code == 200, seed.text
     assert await service.drain_persistence_tasks(timeout_seconds=5)

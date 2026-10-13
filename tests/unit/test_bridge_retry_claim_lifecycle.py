@@ -20,6 +20,7 @@ from app.modules.proxy.durable_bridge_coordinator import DurableBridgeSessionCoo
 from tests.simulation.virtual_time import VirtualClock
 from tests.unit.test_durable_bridge_sessions import async_session_factory as _session_factory_fixture
 from tests.unit.test_proxy_http_bridge import _make_bridge_session, _make_eventless_http_bridge_owner
+from tests.unit.test_proxy_utils import _make_account, _repo_factory, _RequestLogsRecorder
 
 pytestmark = pytest.mark.unit
 async_session_factory = _session_factory_fixture
@@ -111,9 +112,10 @@ async def test_durable_release_preserves_replacement_local_probe(monkeypatch, ou
 async def test_cancelled_submit_recovers_committed_claim_receipt(
     monkeypatch, coordinator, async_client, cancel_release, existing_row
 ):
-    service = proxy_service.ProxyService(cast(Any, nullcontext()))
-    service._durable_bridge = coordinator
     session = _make_bridge_session(key_value="claim-cancellation-source")
+    session.account = _make_account(session.account.id)
+    service = proxy_service.ProxyService(_repo_factory(_RequestLogsRecorder(), accounts=[session.account]))
+    service._durable_bridge = coordinator
     service._http_bridge_sessions[session.key] = session
     if existing_row is True:
         await coordinator.persist_retry_circuit(
@@ -235,9 +237,10 @@ async def test_real_durable_elapsed_cooldown_allows_repeated_admission(coordinat
 
 @pytest.mark.asyncio
 async def test_cancelled_claim_cannot_wait_forever_on_local_key_lock(monkeypatch, coordinator, async_client):
-    service = proxy_service.ProxyService(cast(Any, nullcontext()))
-    service._durable_bridge = coordinator
     session = _make_bridge_session(key_value="claim-key-lock-timeout")
+    session.account = _make_account(session.account.id)
+    service = proxy_service.ProxyService(_repo_factory(_RequestLogsRecorder(), accounts=[session.account]))
+    service._durable_bridge = coordinator
     service._http_bridge_sessions[session.key] = session
     cast(Any, session.upstream).send_text = AsyncMock()
     request = _make_eventless_http_bridge_owner(request_id="bounded-key-lock-owner")

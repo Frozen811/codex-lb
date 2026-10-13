@@ -288,8 +288,8 @@ async def test_reused_websocket_usage_share_refusal_is_not_attributed_to_open_ac
     monkeypatch.setattr(proxy_service, "get_settings_cache", lambda: _SettingsCache(settings))
 
     request_logs = _RequestLogsRecorder()
-    service = proxy_service.ProxyService(_repo_factory(request_logs))
     account = _make_account("account-websocket-share-reuse")
+    service = proxy_service.ProxyService(_repo_factory(request_logs, accounts=[account]))
     upstream = _TurnDrivenUpstream([_completed_turn("response-share-allowed")])
     allowed_key = _api_key(estimate=_estimate(used=19, allowance=20))
     blocked_key = _api_key(estimate=_estimate(used=20, allowance=20))

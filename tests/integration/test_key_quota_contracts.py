@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import pytest
 
-from app.core.balancer import select_account
 from app.core.openai.models import OpenAIResponsePayload
 from app.core.utils.time import utcnow
 from app.db.models import Account, LimitType, RequestLog
@@ -73,11 +72,10 @@ async def test_quota_limit_is_persisted_and_used_by_fresh_selection(async_client
         account = await session.get(Account, account_id)
         assert account is not None
         assert account.quota_limit_percent == limit
-        state = LoadBalancer(_repo_factory)._state_for(account)
-        state.used_percent = 50.0 if limit else None
-        selection = select_account([state], ignore_standard_quota=False)
-        assert (selection.account is None) == (limit is not None)
-        assert select_account([state], ignore_standard_quota=True).account is not None
+        await UsageRepository(session).add_entry(account_id, 50.0, window="primary", window_minutes=300)
+    balancer = LoadBalancer(_repo_factory)
+    selection = await balancer.select_account(account_ids={account_id})
+    assert (selection.account is None) == (limit is not None)
 
 
 async def test_explicit_usage_reset_preserves_key_and_history(async_client):

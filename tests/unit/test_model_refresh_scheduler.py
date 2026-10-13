@@ -523,6 +523,10 @@ async def test_refresh_once_clears_registry_when_no_active_accounts(
 
     clear = AsyncMock()
     invalidate = MagicMock()
+    refresh_catalogs = AsyncMock()
+    persist_registry = AsyncMock()
+    monkeypatch.setattr(scheduler_module, "refresh_source_catalogs", refresh_catalogs)
+    monkeypatch.setattr(scheduler_module, "_persist_registry_state_and_bump", persist_registry)
     monkeypatch.setattr(scheduler_module, "_get_leader_election", lambda: _Leader())
     monkeypatch.setattr(scheduler_module, "get_background_session", _background_session)
     monkeypatch.setattr(scheduler_module, "AccountsRepository", _AccountsRepo)
@@ -537,6 +541,8 @@ async def test_refresh_once_clears_registry_when_no_active_accounts(
     await scheduler._refresh_once()
 
     clear.assert_awaited_once_with()
+    refresh_catalogs.assert_awaited_once_with()
+    persist_registry.assert_awaited_once_with()
     invalidate.assert_called_once_with()
 
 

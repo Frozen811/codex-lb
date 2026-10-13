@@ -99,7 +99,11 @@ async def test_options_avoid_repeated_live_cohort_scans(
                     text(f"CREATE INDEX idx_logs_live_{name} ON request_logs ({columns}) WHERE deleted_at IS NULL")
                 )
         await session.commit()
-        assert not (await session.execute(text("SELECT name FROM sqlite_master WHERE name = 'sqlite_stat1'"))).all()
+        if (await session.execute(text("SELECT name FROM sqlite_master WHERE name = 'sqlite_stat1'"))).all():
+            await session.execute(text("DELETE FROM sqlite_stat1"))
+            await session.execute(text("ANALYZE sqlite_schema"))
+            await session.commit()
+            assert not (await session.execute(text("SELECT * FROM sqlite_stat1"))).all()
 
     # Count SQLite VM work for the real HTTP endpoint, including its actual
     # connection lifecycle. This catches rescans without a wall-clock flake.
