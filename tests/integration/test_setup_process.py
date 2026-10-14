@@ -83,7 +83,7 @@ def _server(data_dir: Path, *, fallback: str = "4") -> Iterator[httpx.Client]:
 def _assert_account(data_dir: Path) -> None:
     # A relocated installation reads its store in a fresh interpreter too.
     # Keep the rehearsal reader independent from the snapshot-creating process.
-    subprocess.run(
+    result = subprocess.run(
         [
             sys.executable,
             "-c",
@@ -106,11 +106,12 @@ with closing(sqlite3.connect(settings.data_dir / 'store.db')) as connection:
         ],
         cwd=data_dir.parent,
         env=_environment(data_dir),
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
         timeout=10,
     )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_cli_sqlite_restart_and_paired_restore(tmp_path: Path) -> None:

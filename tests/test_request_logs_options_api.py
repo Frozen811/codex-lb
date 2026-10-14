@@ -688,7 +688,11 @@ async def test_request_logs_options_facet_probes_use_live_row_indexes_postgresql
     assert [key["id"] for key in payload["apiKeys"]] == ["key_live_a", "key_live_b"]
     assert payload["statuses"] == ["ok", "cancelled", "rate_limit", "error"]
 
-    facet_statements = [sql for sql in captured if "FROM request_logs" in sql]
+    # This gate owns model, API-key and status facets; upstream probes have a
+    # separate source-discovery contract and do not use these partial indexes.
+    facet_statements = [
+        sql for sql in captured if "FROM request_logs" in sql and "request_logs.model_source_id" not in sql
+    ]
     assert any("facet_skip" in sql for sql in facet_statements)
     # Leading skip scans, second-column skip scans and (value, NULL) probes.
     assert any("request_logs.reasoning_effort IS NULL" in sql for sql in facet_statements)

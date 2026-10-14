@@ -119,6 +119,29 @@ async def test_strict_route_rejects_unavailable_target(async_client, placement, 
 
 
 @pytest.mark.parametrize("path", PATHS)
+async def test_child_bridge_reuse_keeps_idle_retention_bounded(async_client, placement, path):
+    service, _ids, _calls, _sockets, _dashboard = placement
+    headers = {
+        "x-openai-subagent": "collab_spawn",
+        "x-parent-session-id": "parent-retention",
+        "session_id": "child-retention",
+        "thread-id": "child-retention",
+    }
+    payload = {**BODY, "prompt_cache_key": "child-retention-cache"}
+    response = await async_client.post(path, json=payload, headers=headers)
+    assert response.status_code == 200 and "response.completed" in response.text, response.text
+    assert service._http_bridge_sessions
+    first_sessions = tuple(service._http_bridge_sessions.values())
+    assert all(0 < session.idle_ttl_seconds <= 300 for session in first_sessions)
+    await service.drain_persistence_tasks(timeout_seconds=5)
+    response = await async_client.post(path, json=payload, headers=headers)
+    assert response.status_code == 200 and "response.completed" in response.text, response.text
+    retained = tuple(service._http_bridge_sessions.values())
+    assert any(session is first_sessions[0] for session in retained)
+    assert all(0 < session.idle_ttl_seconds <= 300 for session in retained)
+
+
+@pytest.mark.parametrize("path", PATHS)
 async def test_warm_bridge_strict_route_preserves_required_owner(async_client, placement, path):
     _service, ids, calls, sockets, _dashboard = placement
     headers = {

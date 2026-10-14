@@ -3,7 +3,9 @@
 ## Purpose
 
 Define sticky-session operation contracts so durable sessions, dashboard affinity, and prompt-cache affinity stay distinct.
+
 ## Requirements
+
 ### Requirement: Sticky sessions are explicitly typed
 
 The system SHALL persist each sticky-session mapping with an explicit kind so durable Codex backend affinity, durable dashboard sticky-thread routing, and bounded prompt-cache affinity can be managed independently. Budget-pressure reallocation MUST apply only to mappings whose kind/source is soft. A raw or legacy `codex_session` mapping MUST remain owner-bound because it may represent explicit turn-state continuity; budget pressure MUST NOT delete or rebind it.
@@ -1646,10 +1648,9 @@ For an unanchored request without file ownership or a same-owner-only full-resen
 - **WHEN** the request carries a response anchor, file pin or a durable same-owner-only resend proof
 - **THEN** policy conflict cannot retire the owner or dispatch to an alternate account
 
-
 ### Requirement: Child HTTP bridge idle retention follows the child affinity bound
 
-HTTP bridge sessions for requests carrying recognized subagent lineage SHALL retain an idle socket and stream lease for at most the effective child affinity TTL, capped at 300 seconds. A shorter configured retention or affinity TTL MUST remain shorter. Hard turn-state or process affinity MUST NOT bypass this idle cap. The cap MUST apply to both creation and reuse, MUST NOT interrupt an active request, and MUST NOT weaken stored-object account ownership. Requests without recognized child lineage SHALL keep their ordinary retention policy.
+HTTP bridge sessions for requests carrying recognized subagent lineage SHALL retain an idle socket and stream lease for at most the effective child affinity TTL, capped at 300 seconds. A shorter configured retention or affinity TTL MUST remain shorter. Hard turn-state or process affinity MUST NOT bypass this idle cap. The cap MUST apply to both creation and reuse, MUST NOT interrupt an active request, and MUST NOT weaken stored-object account ownership. Requests without recognized child lineage SHALL keep their ordinary retention policy, including Codex lifetime promotion when reusing a turn-state alias.
 
 #### Scenario: Child thread caps long bridge retention
 - **WHEN** a child thread would otherwise retain an idle bridge for 1800 seconds
@@ -1667,6 +1668,10 @@ HTTP bridge sessions for requests carrying recognized subagent lineage SHALL ret
 - **WHEN** a request has no recognized subagent lineage
 - **THEN** ordinary Codex and prompt-cache bridge retention remains applicable
 
+#### Scenario: Parent alias reuse retains promoted Codex lifetime
+- **WHEN** a parent request reuses a prompt-cache bridge through its turn-state alias
+- **AND** the bridge has adopted the configured Codex idle lifetime
+- **THEN** reuse does not shorten that lifetime to the original prompt-cache retention
 
 ### Requirement: Opt-in sticky budget reallocation waits for explicit compaction
 

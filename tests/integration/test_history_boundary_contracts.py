@@ -332,7 +332,8 @@ async def test_eventless_close_terminates_without_keepalive_only_stream(async_cl
 
 
 @pytest.mark.asyncio
-async def test_timing_migration_preserves_historical_default_and_roundtrips(tmp_path):
+@pytest.mark.parametrize("precreated", [False, True])
+async def test_timing_migration_preserves_historical_default_and_roundtrips(tmp_path, precreated):
     from alembic import command
     from anyio import to_thread
     from sqlalchemy import text
@@ -348,11 +349,20 @@ async def test_timing_migration_preserves_historical_default_and_roundtrips(tmp_
         async with engine.begin() as conn:
             assert (await conn.execute(text("SELECT COUNT(*) FROM dashboard_settings WHERE id=1"))).scalar_one() == 1
             await conn.execute(text("UPDATE dashboard_settings SET sticky_threads_enabled=false WHERE id=1"))
+            if precreated:
+                await conn.execute(
+                    text(
+                        "ALTER TABLE dashboard_settings ADD COLUMN sticky_reallocation_timing "
+                        "VARCHAR(32) NOT NULL DEFAULT 'immediate'"
+                    )
+                )
+                await conn.execute(text("UPDATE dashboard_settings SET sticky_reallocation_timing='after_compaction'"))
         await to_thread.run_sync(lambda: run_upgrade(db_url, "head", bootstrap_legacy=False))
         async with engine.begin() as conn:
             assert (
                 await conn.execute(text("SELECT sticky_reallocation_timing FROM dashboard_settings"))
-            ).scalar_one() == "immediate"
+            ).scalar_one() == ("after_compaction" if precreated else "immediate")
+            assert (await conn.execute(text("SELECT sticky_threads_enabled FROM dashboard_settings"))).scalar_one() == 0
             await conn.execute(text("UPDATE dashboard_settings SET sticky_reallocation_timing='after_compaction'"))
         assert await to_thread.run_sync(lambda: check_schema_drift(db_url)) == ()
         await to_thread.run_sync(lambda: command.downgrade(_build_alembic_config(db_url), parent))

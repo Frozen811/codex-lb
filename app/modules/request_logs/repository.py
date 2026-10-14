@@ -1743,7 +1743,8 @@ class RequestLogsRepository:
         values. NULL pair placement follows the backend's ORDER BY ASC NULL
         ordering (SQLite: first, MySQL/MariaDB: first, PostgreSQL: last) so
         results match the legacy DISTINCT path exactly."""
-        nulls_first = self._session.get_bind().dialect.name in ("sqlite", "mysql", "mariadb")
+        dialect_name = self._session.get_bind().dialect.name
+        nulls_first = dialect_name in ("sqlite", "mysql", "mariadb")
         values = [value for value in await self._distinct_skip_scan(leading, conditions) if value]
         pairs: list[tuple[str, str | None]] = []
         for value in values:
@@ -1754,7 +1755,13 @@ class RequestLogsRepository:
             # loses the index plan (measured 0.5 s batched against 0.8 ms per probe
             # on a production-shaped database).
             null_probe = select(RequestLog.id).where(*value_conditions, second.is_(None)).limit(1)
-            has_null = (await self._session.execute(null_probe)).scalar_one_or_none() is not None
+            has_raw_null = True
+            if dialect_name == "sqlite":
+                # Visibility predicates can choose a different index and walk
+                # the entire prefix when its NULL counterpart is absent.
+                raw_null_probe = select(RequestLog.id).where(prefix, second.is_(None)).limit(1)
+                has_raw_null = (await self._session.execute(raw_null_probe)).scalar_one_or_none() is not None
+            has_null = has_raw_null and (await self._session.execute(null_probe)).scalar_one_or_none() is not None
             second_values = await self._distinct_skip_scan(second, value_conditions, prefix_conditions=(prefix,))
             if has_null and nulls_first:
                 pairs.append((value, None))

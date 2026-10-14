@@ -3535,7 +3535,7 @@ async def test_v1_responses_http_bridge_turn_state_alias_respects_api_key_isolat
         sticky_threads_enabled=False,
         api_key=None,
     )
-    api_key_a = cast(proxy_module.ApiKeyData, SimpleNamespace(id="api-key-a"))
+    api_key_a = cast(proxy_module.ApiKeyData, SimpleNamespace(id="api-key-a", account_assignment_scope_enabled=False))
     session = await service._get_or_create_http_bridge_session(
         proxy_module._make_http_bridge_session_key(
             payload,
@@ -3561,7 +3561,9 @@ async def test_v1_responses_http_bridge_turn_state_alias_respects_api_key_isolat
                 key="http_turn_api_key_alias",
                 kind=proxy_module.StickySessionKind.CODEX_SESSION,
             ),
-            api_key=cast(proxy_module.ApiKeyData, SimpleNamespace(id="api-key-b")),
+            api_key=cast(
+                proxy_module.ApiKeyData, SimpleNamespace(id="api-key-b", account_assignment_scope_enabled=False)
+            ),
             request_model=payload.model,
             idle_ttl_seconds=120.0,
             max_sessions=128,

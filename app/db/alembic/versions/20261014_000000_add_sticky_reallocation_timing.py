@@ -10,10 +10,12 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "dashboard_settings",
-        sa.Column("sticky_reallocation_timing", sa.String(32), nullable=False, server_default="immediate"),
-    )
+    columns = {column["name"] for column in sa.inspect(op.get_bind()).get_columns("dashboard_settings")}
+    if "sticky_reallocation_timing" not in columns:
+        op.add_column(
+            "dashboard_settings",
+            sa.Column("sticky_reallocation_timing", sa.String(32), nullable=False, server_default="immediate"),
+        )
 
 
 def downgrade() -> None:

@@ -102,3 +102,7 @@ In deferred mode an active soft owner at 96 percent stays on account A for ordin
 Revision 20261014_000000_add_sticky_reallocation_timing adds a bounded, non-null column with the historical immediate default. Upgrade/downgrade/upgrade and schema drift are exercised on disposable SQLite, PostgreSQL 16 and MySQL 8.4. Downgrade removes this preference; a later upgrade initializes immediate again. No production migration or deployment was performed.
 
 See [requirements](spec.md) and [verification](../../changes/archive/2026-10-14-repair-five-history-boundary-contracts/verification.md).
+
+## Parent and child bridge reuse
+
+Child idle caps apply when incoming affinity actually identifies child lineage. Applying a minimum on every reuse incorrectly shortens an ordinary parent turn-state alias after it has adopted the configured Codex lifetime. A parent bridge promoted from 120 seconds to a 600-second Codex lifetime therefore keeps 600 seconds during ordinary alias reuse; a recognized child still adopts its shorter effective bound. This affects idle retention, not active-request interruption or account ownership. Parent alias, API-key isolation and real HTTP child-reuse regressions cover the boundary. See [requirements](spec.md).

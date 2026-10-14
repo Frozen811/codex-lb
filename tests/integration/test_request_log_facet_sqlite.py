@@ -108,28 +108,45 @@ async def test_options_avoid_repeated_live_cohort_scans(
     # Count SQLite VM work for the real HTTP endpoint, including its actual
     # connection lifecycle. This catches rescans without a wall-clock flake.
     operations = 0
-
-    def count_operations() -> int:
-        nonlocal operations
-        operations += 100
-        return 0
+    statement_operations: dict[str, int] = {}
 
     def instrument_connection(connection, _record) -> None:
+        def count_operations() -> int:
+            nonlocal operations
+            operations += 100
+            statement = _record.info.get("facet_sql", "connection initialization")
+            statement_operations[statement] = statement_operations.get(statement, 0) + 100
+            return 0
+
         connection.run_async(lambda driver: driver.set_progress_handler(count_operations, 100))
+
+    def instrument_statement(connection, _cursor, statement, _parameters, _context, _many) -> None:
+        connection.info["facet_sql"] = statement
 
     background_engine = db_session._background_engine
     assert background_engine is not None
     observed_engines = {engine.sync_engine, background_engine.sync_engine}
     for observed in observed_engines:
         event.listen(observed, "connect", instrument_connection)
+        event.listen(observed, "before_cursor_execute", instrument_statement)
     try:
         response = await async_client.get("/api/request-logs/options")
     finally:
         for observed in observed_engines:
             event.remove(observed, "connect", instrument_connection)
+            event.remove(observed, "before_cursor_execute", instrument_statement)
 
     assert response.status_code == 200
     assert response.json() == {
+        "upstreams": [
+            {
+                "id": "subscription_pool",
+                "type": "subscription_pool",
+                "displayName": None,
+                "modelSourceKind": None,
+                "isDeleted": False,
+            }
+        ],
         "accountIds": ["facet-a", "facet-b"],
         "apiKeys": [{"id": "facet-key", "name": "Facet key", "keyPrefix": "sk-facet"}],
         "modelOptions": [
@@ -142,4 +159,6 @@ async def test_options_avoid_repeated_live_cohort_scans(
         "statuses": ["ok", "rate_limit"],
     }
     record_property("sqlite_vm_operations", operations)
-    assert 0 < operations < 20_000, f"Unfiltered options executed {operations:,} SQLite VM operations"
+    assert 0 < operations < 20_000, (
+        f"Unfiltered options executed {operations:,} SQLite VM operations; by_statement={statement_operations}"
+    )

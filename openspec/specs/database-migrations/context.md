@@ -140,3 +140,9 @@ For example, a revision that executes a 200 ms sleep under a 10 ms statement bud
 The September pair remains `20260914_000000_add_scim_tokens` and `20260914_000000_drop_subscription_overflow_schema`, joined by the published `20260918_000000_merge_scim_and_overflow_heads`. The rejected restamping proposal is not needed for single-head behavior and would orphan published ledgers. Only that exact pair after convergence receives the collision exemption. An extra member or a new collision still fails, even after an empty merge. Both-parent ledgers, merge reversal and unrelated populated rows have independent local regression coverage. See [requirements](spec.md).
 
 Synthetic timings depend on hardware, distribution and selected revision range; they do not prove production timing, PostgreSQL 16 hosted behavior or every historical migration's performance. Background data phases belong to the separate open proposal and are not established by this gate.
+
+## Sticky timing replay compatibility
+
+Legacy bootstrap and whole-chain replay can start with tables built from current ORM metadata while the Alembic ledger predates the timing revision. Adding the column again fails on SQLite, PostgreSQL and MySQL. The newly introduced timing revision therefore inspects storage before additive DDL, following the adjacent source-catalog migration's approach. Revision identity, parent and downgrade remain intact; historical upstream revisions are not rewritten.
+
+For example, a settings row already holding `after_compaction` retains that value when its older ledger upgrades to head. A row without timing storage receives `immediate`. Existence alone does not certify an incompatible precreated column: the normal startup drift guard still rejects a divergent schema. Real roundtrip, legacy startup and credential-preservation tests cover this behavior; local SQLite results and hosted server-backend results remain separate evidence. See [requirements](spec.md).

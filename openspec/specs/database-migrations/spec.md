@@ -3,7 +3,9 @@
 ## Purpose
 
 Define migration, drift detection, and Alembic governance contracts so deployments fail closed on schema mismatch.
+
 ## Requirements
+
 ### Requirement: Alembic as migration source of truth
 
 The system SHALL use Alembic as the only runtime migration mechanism and SHALL NOT execute custom migration runners. Dashboard settings schema changes, including weekly pace working days, MUST be represented by Alembic revisions and ORM metadata so startup drift detection can verify them.
@@ -602,11 +604,6 @@ Locked startup and CLI upgrades MUST preserve an existing nullable floating-poin
 - **WHEN** the existing quota column is not nullable floating-point storage without a server default
 - **THEN** upgrade fails with an explicit schema error without applying or recording the quota-only revision
 
-
-
-
-
-
 ### Requirement: Online migration steps report private execution progress
 
 Online migrations MUST report each revision's identity and direction before executing it and its elapsed time when execution succeeds or fails. Progress records MUST NOT contain SQL, parameters, database URLs, revision descriptions or exception text. Failed execution MUST preserve its original exception and stop later revisions. The migration framework MUST retain revision selection, transaction and version-table ownership; temporary progress instrumentation MUST be restored on every exit. Executed progress MUST NOT imply transaction commit. The migration CLI MUST enable progress on stderr and preserve stdout result formats. No-op runs MUST not invent executed revisions.
@@ -657,3 +654,29 @@ The published September SCIM and overflow revision identifiers MUST remain uncha
 - **WHEN** it upgrades to the merge, downgrades only that merge and re-upgrades
 - **THEN** published identities, parent schemas and unrelated rows are preserved
 - **AND** the subsequent upgrade reaches the canonical single head
+
+### Requirement: Sticky reallocation timing migration supports schema replay
+
+The sticky reallocation timing migration MUST tolerate a settings schema created from current ORM metadata before its revision is recorded. It SHALL preserve existing timing values and unrelated settings or credentials, and SHALL add a non-null column with the `immediate` default when the column is absent.
+
+#### Scenario: Existing settings receive the historical default
+
+- **GIVEN** the settings table does not have sticky reallocation timing storage
+- **WHEN** the migration upgrades the schema
+- **THEN** existing settings rows have timing `immediate`
+- **AND** unrelated settings remain unchanged
+
+#### Scenario: Precreated timing storage retains its saved value
+
+- **GIVEN** timing storage exists with a saved value of `after_compaction`
+- **AND** its migration revision is still pending
+- **WHEN** migration reconciliation upgrades to head
+- **THEN** the upgrade succeeds without duplicate-column DDL
+- **AND** the saved timing remains `after_compaction`
+
+#### Scenario: Current metadata can replay an older migration ledger
+
+- **GIVEN** the schema was created from current ORM metadata with an older or absent migration ledger
+- **WHEN** startup or whole-chain migration replay reconciles the ledger
+- **THEN** timing storage does not prevent completion
+- **AND** existing settings and credentials are preserved

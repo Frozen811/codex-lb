@@ -422,10 +422,9 @@ class _HTTPBridgeMixin(
         original_request_unanchored = _http_bridge_request_needs_unanchored_handoff(
             key, incoming_turn_state, previous_response_id, forwarded_request, forwarded_original_request_unanchored
         )
-        # Model-transition isolation intentionally drops the durable lookup as a
-        # routing input below. Preserve generation provenance first: the same
-        # replica id can still name an older socket/process whose late release
-        # must be fenced by a newly advanced owner epoch.
+        # Model-transition isolation drops the durable lookup as a routing input.
+        # Preserve generation provenance: the same replica id can name an older
+        # socket/process whose late release must be fenced by a new owner epoch.
         same_replica_durable_predecessor = bool(
             durable_lookup and durable_lookup.owner_instance_id == settings.http_responses_session_bridge_instance_id
         )
@@ -744,7 +743,8 @@ class _HTTPBridgeMixin(
                     current_instance = settings.http_responses_session_bridge_instance_id
                     if _durable_bridge_lookup_allows_local_reuse(durable_lookup, current_instance=current_instance):
                         existing.api_key = api_key
-                        existing.idle_ttl_seconds = min(existing.idle_ttl_seconds, idle_ttl_seconds)
+                        if affinity.subagent_bridge_idle_ttl_seconds is not None:
+                            existing.idle_ttl_seconds = min(existing.idle_ttl_seconds, idle_ttl_seconds)
                         existing.request_model = request_model
                         existing.request_service_tier = request_service_tier
                         existing.last_used_at = clock_for(self).monotonic()
@@ -1458,7 +1458,8 @@ class _HTTPBridgeMixin(
                     current_instance = settings.http_responses_session_bridge_instance_id
                     if _durable_bridge_lookup_allows_local_reuse(durable_lookup, current_instance=current_instance):
                         session.api_key = api_key
-                        session.idle_ttl_seconds = min(session.idle_ttl_seconds, idle_ttl_seconds)
+                        if affinity.subagent_bridge_idle_ttl_seconds is not None:
+                            session.idle_ttl_seconds = min(session.idle_ttl_seconds, idle_ttl_seconds)
                         session.request_model = request_model
                         session.request_service_tier = request_service_tier
                         session.last_used_at = clock_for(self).monotonic()
