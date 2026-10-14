@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import Field
 
@@ -97,7 +98,16 @@ class RequestLogApiKeyOption(DashboardModel):
     key_prefix: str | None = None
 
 
+class RequestLogUpstreamOption(DashboardModel):
+    id: str
+    type: Literal["subscription_pool", "model_source"]
+    display_name: str | None = None
+    model_source_kind: str | None = None
+    is_deleted: bool = False
+
+
 class RequestLogFilterOptionsResponse(DashboardModel):
+    upstreams: list[RequestLogUpstreamOption] = Field(default_factory=list)
     account_ids: list[str] = Field(default_factory=list)
     model_options: list[RequestLogModelOption] = Field(default_factory=list)
     api_keys: list[RequestLogApiKeyOption] = Field(default_factory=list)

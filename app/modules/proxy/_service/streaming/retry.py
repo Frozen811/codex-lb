@@ -92,6 +92,7 @@ from app.modules.proxy._service.websocket.helpers import (
     _websocket_input_items_are_self_contained_fresh_replay,
 )
 from app.modules.proxy.affinity import (
+    _affinity_with_deferred_reallocation,
     _is_synthesized_turn_state,
     _owner_lookup_session_id_from_headers,
     _prompt_cache_key_from_request_model,
@@ -544,6 +545,9 @@ class _StreamingRetryMixin:
             api_key=api_key,
         )
         turn_state_owner_account_id: str | None = None
+        affinity = _affinity_with_deferred_reallocation(
+            affinity, defer=_facade().effective_routing_tunables(settings).defer_sticky_budget_reallocation
+        )
         turn_state = _sticky_key_from_turn_state_header(headers)
         if turn_state is not None:
             # HTTP and WebSocket transports share the bridge turn-state index;
@@ -1744,6 +1748,7 @@ class _StreamingRetryMixin:
                             deadline,
                             request_id=request_id,
                             kind="stream",
+                            headers=headers,
                             api_key=api_key,
                             affinity_policy=affinity,
                             prefer_earlier_reset_accounts=prefer_earlier_reset,

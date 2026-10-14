@@ -32,7 +32,8 @@ export type AuthExportDialogProps = {
   onOpenChange: (open: boolean) => void;
 };
 
-function truncateSecret(value: string, leading = 18, trailing = 10): string {
+function truncateSecret(value: string | null | undefined, leading = 18, trailing = 10): string | null {
+  if (value == null) return null;
   if (value.length <= leading + trailing + 1) return value;
   return `${value.slice(0, leading)}…${value.slice(-trailing)}`;
 }
@@ -44,15 +45,13 @@ function codexAuthString(exportData: AccountAuthExportResponse): string {
 function codexAuthPreview(exportData: AccountAuthExportResponse): string {
   return `${JSON.stringify(
     {
-      auth_mode: exportData.codexAuthJson.auth_mode,
-      OPENAI_API_KEY: exportData.codexAuthJson.OPENAI_API_KEY,
+      ...exportData.codexAuthJson,
       tokens: {
         id_token: truncateSecret(exportData.codexAuthJson.tokens.id_token),
         access_token: truncateSecret(exportData.codexAuthJson.tokens.access_token),
         refresh_token: truncateSecret(exportData.codexAuthJson.tokens.refresh_token),
         account_id: exportData.codexAuthJson.tokens.account_id,
       },
-      last_refresh: exportData.codexAuthJson.last_refresh,
     },
     null,
     2,
@@ -146,10 +145,10 @@ function AuthExportDialogBody({
 
         <div className="rounded-lg border bg-muted/20 p-3 text-xs">
           <div className="font-medium">{t("accounts.authExport.exportedAccount")}</div>
-          <div className="mt-1 text-muted-foreground">
+          <div className="mt-1 break-all text-muted-foreground">
             <span className={blurred ? "privacy-blur" : undefined}>{exportData.account.email}</span>
           </div>
-          <div className="mt-1 font-mono text-muted-foreground">
+          <div className="mt-1 break-all font-mono text-muted-foreground">
             {exportData.account.chatgptAccountId ?? exportData.account.accountId}
           </div>
         </div>
@@ -176,7 +175,7 @@ function AuthExportDialogBody({
           </div>
 
           <div className="overflow-hidden rounded-lg border bg-muted/20">
-            {tokenPreviewRows.map((row, index) => (
+            {tokenPreviewRows.map((row, index) => row.value ? (
               <div
                 key={row.copyLabel}
                 className={`flex items-center justify-between gap-3 px-3 py-2 ${
@@ -191,7 +190,7 @@ function AuthExportDialogBody({
                 </div>
                 <CopyButton value={row.value} label={row.copyLabel} iconOnly />
               </div>
-            ))}
+            ) : null)}
           </div>
         </div>
 
@@ -227,7 +226,7 @@ export function AuthExportDialog({
   const { t } = useTranslation();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{t("accounts.authExport.title")}</DialogTitle>
           <DialogDescription>

@@ -208,11 +208,11 @@ async def test_dashboard_overview_carries_weekly_runway_fields_and_attribution(
     pace = response.json()["weeklyCreditPace"]
     assert pace is not None
     assert pace["headroomPercent"] == pytest.approx(5.0)
-    assert pace["headroomCredits"] == pytest.approx(2_520.0)
-    assert pace["burnRateRecentCreditsPerHour"] == pytest.approx(4_473.3727810651)
+    assert pace["headroomCredits"] == pytest.approx(1_800.0)
+    assert pace["burnRateRecentCreditsPerHour"] == pytest.approx(3_195.26627218936)
     assert pace["depletionEtaHours"] == pytest.approx(0.5633333333)
     assert pace["nextReliefInHours"] == pytest.approx(4.0)
-    assert pace["nextReliefCredits"] == pytest.approx(47_880.0)
+    assert pace["nextReliefCredits"] == pytest.approx(34_200.0)
     assert pace["runwayStatus"] == "runs_dry"
     assert pace["status"] == "danger"
     assert pace["saturatedAccountCount"] == 0
@@ -659,12 +659,12 @@ async def test_dashboard_overview_counts_prolite_capacity(async_client, db_setup
     assert account["planType"] == "prolite"
     assert account["capacityCreditsPrimary"] == pytest.approx(1125.0)
     assert account["remainingCreditsPrimary"] == pytest.approx(1125.0)
-    assert account["capacityCreditsSecondary"] == pytest.approx(37800.0)
-    assert account["remainingCreditsSecondary"] == pytest.approx(37800.0)
+    assert account["capacityCreditsSecondary"] == pytest.approx(9000.0)
+    assert account["remainingCreditsSecondary"] == pytest.approx(9000.0)
     assert payload["summary"]["primaryWindow"]["capacityCredits"] == pytest.approx(1125.0)
     assert payload["summary"]["primaryWindow"]["remainingCredits"] == pytest.approx(1125.0)
-    assert payload["summary"]["secondaryWindow"]["capacityCredits"] == pytest.approx(37800.0)
-    assert payload["summary"]["secondaryWindow"]["remainingCredits"] == pytest.approx(37800.0)
+    assert payload["summary"]["secondaryWindow"]["capacityCredits"] == pytest.approx(9000.0)
+    assert payload["summary"]["secondaryWindow"]["remainingCredits"] == pytest.approx(9000.0)
 
 
 @pytest.mark.asyncio
@@ -757,10 +757,10 @@ async def test_dashboard_projections_weekly_credit_pace_excludes_inactive_and_st
     assert pace["accountCount"] == 3
     assert pace["staleAccountCount"] == 1
     assert pace["inactiveAccountCount"] == 1
-    assert pace["totalFullCredits"] == pytest.approx(151_200.0)
+    assert pace["totalFullCredits"] == pytest.approx(108_000.0)
     assert pace["actualUsedPercent"] == pytest.approx(73.333, abs=0.01)
     assert pace["scheduledUsedPercent"] == pytest.approx(42.857, abs=0.01)
-    assert pace["scheduleGapCredits"] == pytest.approx(46_080.0, abs=1.0)
+    assert pace["scheduleGapCredits"] == pytest.approx(32_914.2857, abs=1.0)
     # No account has two fresh samples, so burn is unmeasured and headroom is
     # ~26.7%: the runway verdict is safe, which maps to legacy on_track.
     assert pace["runwayStatus"] == "safe"
@@ -815,7 +815,7 @@ async def test_dashboard_projections_weekly_credit_pace_forecast_uses_recent_slo
     assert pace["accountCount"] == 1
     assert pace["actualUsedPercent"] == pytest.approx(24.0)
     assert pace["scheduledUsedPercent"] == pytest.approx(17.857, abs=0.01)
-    assert pace["scheduleGapCredits"] == pytest.approx(3_096.0, abs=1.0)
+    assert pace["scheduleGapCredits"] == pytest.approx(2_211.428571, abs=1.0)
     assert pace["projectedShortfallCredits"] == 0
     assert pace["forecastBurnRateCreditsPerHour"] == pytest.approx(0.0)
     assert pace["paceMultiplier"] == pytest.approx(0.0)
@@ -866,7 +866,7 @@ async def test_dashboard_projections_weekly_credit_pace_smooths_displayed_gap(
     assert pace["paceGapSmoothingMinutes"] == 240
     assert pace["actualUsedPercent"] == pytest.approx(24.0)
     assert pace["deltaPercent"] == pytest.approx(6.142, abs=0.01)
-    assert pace["scheduleGapCredits"] == pytest.approx(3_096.0, abs=1.0)
+    assert pace["scheduleGapCredits"] == pytest.approx(2_211.428571, abs=1.0)
     assert pace["smoothedDeltaPercent"] == pytest.approx(-5.857, abs=0.01)
     assert pace["smoothedScheduleGapCredits"] == 0
 

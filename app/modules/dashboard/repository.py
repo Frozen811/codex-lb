@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import case, func, select, union_all
+from sqlalchemy import and_, case, func, literal, or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.usage.types import BucketConversationAggregate, BucketModelAggregate, RequestActivityAggregate
@@ -18,6 +18,7 @@ from app.db.models import (
     UsageHistory,
 )
 from app.modules.accounts.repository import AccountsRepository
+from app.modules.dashboard.weekly_cost import WeeklyCostWindow
 from app.modules.limit_warmup.repository import LimitWarmupRepository
 from app.modules.request_logs.repository import RequestLogsRepository
 from app.modules.settings.repository import SettingsRepository
@@ -167,6 +168,46 @@ class DashboardRepository:
         until: datetime,
     ) -> RequestActivityAggregate:
         return await self._logs_repo.aggregate_activity_between(since, until)
+
+    async def weekly_costs(self, windows: list[WeeklyCostWindow]) -> dict[str, float]:
+        costs: dict[str, float] = {}
+        # Bounded bind count and sequential execution on the request's session.
+        for offset in range(0, len(windows), 100):
+            bounds = union_all(
+                *[
+                    select(
+                        literal(window.account_id).label("account_id"),
+                        literal(window.since).label("since"),
+                        literal(window.until).label("until"),
+                    )
+                    for window in windows[offset : offset + 100]
+                ]
+            ).subquery()
+            statement = (
+                select(
+                    bounds.c.account_id,
+                    func.sum(RequestLog.cost_usd),
+                    func.sum(case((RequestLog.cost_usd.is_(None), 1), else_=0)),
+                )
+                .join(
+                    RequestLog,
+                    and_(
+                        RequestLog.account_id == bounds.c.account_id,
+                        RequestLog.requested_at > bounds.c.since,
+                        RequestLog.requested_at <= bounds.c.until,
+                    ),
+                )
+                .where(
+                    RequestLog.deleted_at.is_(None),
+                    RequestLog.model_source_id.is_(None),
+                    or_(RequestLog.model_source_kind.is_(None), RequestLog.model_source_kind == "subscription"),
+                )
+                .group_by(bounds.c.account_id)
+            )
+            for account_id, cost, unknown in (await self._session.execute(statement)).all():
+                if not unknown and cost is not None:
+                    costs[account_id] = float(cost)
+        return costs
 
     async def top_error_since(self, since: datetime) -> str | None:
         return await self._logs_repo.top_error_since(since)

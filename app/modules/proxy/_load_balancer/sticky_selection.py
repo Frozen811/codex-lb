@@ -1621,6 +1621,7 @@ async def _select_with_stickiness(
     usage_exhaustion_states: Iterable[AccountState] | None = None,
     sticky_refresh_skip_deadline: datetime | None = None,
     overload_backoff_runtime: Mapping[str, RuntimeState] | None = None,
+    defer_budget_reallocation: bool = False,
     hard_owner_pool: bool = False,
     clock: Clock,
     redact_sensitive_details: bool = False,
@@ -1701,13 +1702,11 @@ async def _select_with_stickiness(
     # to retire the mapping and the isolation reroute reuses the same local
     # further down, so the caller's intent is captured before that happens.
     #
-    # ``STICKY_THREAD`` is the exception, because on that kind the flag carries
-    # no per-request intent to respect: ``affinity.py`` sets it on *every*
-    # sticky-thread policy (see ``_resolve_affinity_policy``), so reading it as
-    # "this caller asked to retire the mapping" would exempt the whole kind
-    # from retention and leave it accumulating an owner per isolation episode --
-    # while the two kinds either side of it stopped.
-    caller_requested_reallocation = reallocate_sticky and sticky_kind != StickySessionKind.STICKY_THREAD
+    # In deferred mode, compact and failure recovery explicitly authorize
+    # reallocation. Immediate mode retains the legacy sticky-thread behavior.
+    caller_requested_reallocation = reallocate_sticky and (
+        defer_budget_reallocation or sticky_kind != StickySessionKind.STICKY_THREAD
+    )
     overload_reroute_request_local = False
     isolation_release: tuple[str, int] | None = None
     # A mapping kept because the conversation's owner is *ambiguous* is not a
@@ -1802,11 +1801,8 @@ async def _select_with_stickiness(
             pinned_refresh_skip_deadline = (
                 sticky_refresh_skip_deadline if pinned_refresh_account_id is not None else None
             )
-            # Proactively rebind session affinity for any sticky kind
-            # once the pinned account is already above the configured
-            # budget threshold. That preserves continuity below the
-            # threshold while avoiding obvious short-window failures once
-            # the session is skating on the edge of exhaustion.
+            # Deferred timing retains an eligible owner on ordinary turns;
+            # compact and safe failure recovery explicitly permit reallocation.
             now = clock.time()
             budget_pressured = (
                 sticky_kind
@@ -1815,6 +1811,7 @@ async def _select_with_stickiness(
                     StickySessionKind.STICKY_THREAD,
                     StickySessionKind.CODEX_SESSION,
                 )
+                and (not defer_budget_reallocation or reallocate_sticky)
                 and routing_strategy not in ("sequential_drain", "reset_drain", "single_account")
                 and pinned.status != AccountStatus.RATE_LIMITED
                 and _state_above_sticky_budget_threshold(

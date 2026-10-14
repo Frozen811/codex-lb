@@ -33,7 +33,7 @@ async def select_account_with_subagent_preference(
     parent_owner_id = None
     if (
         affinity_policy is not None
-        and kwargs.get("request_stage", "first_turn") == "first_turn"
+        and kwargs.get("request_stage", "first_turn") in {"first_turn", "follow_up"}
         and kwargs.get("preferred_account_id") is None
     ):
         parent_owner_id = await _parent_owner_to_avoid(repo_factory, affinity_policy)

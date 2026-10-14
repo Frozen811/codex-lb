@@ -1,0 +1,684 @@
+{
+  "selected_ids": [
+    "UP-ISSUE-1870",
+    "UP-PR-2146",
+    "UP-DISC-378",
+    "UP-DISC-1894",
+    "UP-DISC-292"
+  ],
+  "rows": {
+    "UP-ISSUE-1870": "| [UP-ISSUE-1870](https://github.com/Soju06/codex-lb/issues/1870) | feat: add an upstream facet to dashboard request logs | РЕШЕНО | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | §99: observed upstream OR/AND facet, stable/deleted IDs, source/self/status filters, exact counts/cache и URL/reset/badges; canonical/slash + SQLite/backend/browser PASS. PG/MySQL plans/live/cloud отдельно. [Verification](openspec/changes/archive/2026-10-14-repair-five-observability-contracts/verification.md). |",
+    "UP-PR-2146": "| [UP-PR-2146](https://github.com/Soju06/codex-lb/pull/2146) | PR #2146: feat(dashboard): add request heatmap on dashboard | Раздел 12, L1402 | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | §99: six-month UTC rollup+raw-tail endpoint и optional local Appearance heatmap; warmup exclusion, server calendar, loading/retry, mode persistence/query gating и 375/768/1440 browser PASS. PG/MySQL/live/cloud отдельно. [Verification](openspec/changes/archive/2026-10-14-repair-five-observability-contracts/verification.md). |",
+    "UP-DISC-378": "| [UP-DISC-378](https://github.com/Soju06/codex-lb/discussions/378) | #378: Deeper usage analysis | Раздел 11, L1339 | ИСПРАВЛЕНО ЛОКАЛЬНО / ЧАСТИЧНО ПРОВЕРЕНО | §99: offline JSONL/gzip/SSE tool-call/results CLI, session/request dedup, explicit error/success/unknown и privacy subprocess PASS. Автоматическая оценка качества модели, per-tool tokens и dashboard analytics остаются открыты; default correlation request-scoped без session metadata. [Verification](openspec/changes/archive/2026-10-14-repair-five-observability-contracts/verification.md). |",
+    "UP-DISC-1894": "| [UP-DISC-1894](https://github.com/Soju06/codex-lb/discussions/1894) | #1894: Why is the reporting so SLOW? | Раздел 11, L1198 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §99: existing report rollup/cache, coalescing/cancellation, long-window speed omission и 30000-row real API/raw-retention parity PASS; local probe ~0.389s→0.072s. Исторический production slowdown/live/server DB этим не закрывается. [Verification](openspec/changes/archive/2026-10-14-repair-five-observability-contracts/verification.md). |",
+    "UP-DISC-292": "| [UP-DISC-292](https://github.com/Soju06/codex-lb/discussions/292) | #292: Request log retention: auto-clearing and configuration options | Раздел 11, L1308 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §99: retention default off, tri-state/floors/settings, runtime leader tick/no restart, bounded pruning/folded aggregate preservation PASS; operator docs added. Production deletion не выполнялась; archive policy отдельно. [Verification](openspec/changes/archive/2026-10-14-repair-five-observability-contracts/verification.md). |"
+  },
+  "unselected_rows_preserved": 354,
+  "initial_dirty_files": 156,
+  "unrelated_dirty_files_preserved": 149,
+  "unrelated_dirty_hashes": [
+    {
+      "path": "app/core/clients/native_egress.py",
+      "sha256": "3078b6d67057452c7eca6003ce2ad9857e270a3a8b8fc71343944b3f9a4d50d2"
+    },
+    {
+      "path": "app/core/clients/oauth.py",
+      "sha256": "a8c63a2d8c09872adf75f02e635f693af7873bdf6ab0ede41eedc046f04af657"
+    },
+    {
+      "path": "app/core/openai/images.py",
+      "sha256": "74b08c8c62cb0c78bf355459489afd1e63e9c6b0fd449f950477eeb89ce4a393"
+    },
+    {
+      "path": "app/core/usage/__init__.py",
+      "sha256": "e0a078ad757a1e001671117cdcc3753f0b39a6c56f7bc9b77e2fde74209f4245"
+    },
+    {
+      "path": "app/db/models.py",
+      "sha256": "09fb2223ed94f999c5ae297fd9792181d3f08f92ec336eb26c233735e1050e04"
+    },
+    {
+      "path": "app/db/session.py",
+      "sha256": "0c14833ead47e3638a85af51efb96655aeae24452f1a5914cbae01e2063af496"
+    },
+    {
+      "path": "app/modules/accounts/schemas.py",
+      "sha256": "b7a880d48f8119e4515640dc7a860ab7d96e60c380268dc9f59861077432399b"
+    },
+    {
+      "path": "app/modules/dashboard/repository.py",
+      "sha256": "8f0ca37f9961927b54272327ed426409e36c4930cb289ff9a86c56f294e235d5"
+    },
+    {
+      "path": "app/modules/dashboard/schemas.py",
+      "sha256": "078ca6e360954faeed78a6d7e276f30619304af53555f9c0c97a0ff978969705"
+    },
+    {
+      "path": "app/modules/dashboard/service.py",
+      "sha256": "74cc2901d9b3aacf4378bfe41f07b12eb77f9294b7cacbebc0f5c7b29cff8f96"
+    },
+    {
+      "path": "app/modules/dashboard/weekly_pace.py",
+      "sha256": "132e72864ebdd90f74125a6adfd43732e8e3bf0233a1552a0df506451bde64c0"
+    },
+    {
+      "path": "app/modules/proxy/_load_balancer/sticky_selection.py",
+      "sha256": "79f2c3f2b6b27192a1cb61a6a92a4b18984bbbbc61b26bc26fa8911f6b66cf95"
+    },
+    {
+      "path": "app/modules/proxy/_load_balancer/tunables.py",
+      "sha256": "ae0bbce22af0983b903661d5f276596c39ac6e7f5de88fe5624a30adc0b28d40"
+    },
+    {
+      "path": "app/modules/proxy/_service/compact.py",
+      "sha256": "858e8274947eac774faf969d2f9198e4fc1bbb7febab865db0b62d312953f315"
+    },
+    {
+      "path": "app/modules/proxy/_service/http_bridge/helpers.py",
+      "sha256": "d5ac8a6d66a78e739651581d5c64b25f1c0e553f7679853a21b2d5993e74943e"
+    },
+    {
+      "path": "app/modules/proxy/_service/http_bridge/mixin.py",
+      "sha256": "c8da9502a68ad2319d5995dadd4d5f2e2de21d6054bf3a41d4aeaf1f8f6ba8bf"
+    },
+    {
+      "path": "app/modules/proxy/_service/http_bridge/streaming.py",
+      "sha256": "d588ea6fdf47957903e02ef02f17aa028c2400f36b19a6bc5fc17ce5b946db29"
+    },
+    {
+      "path": "app/modules/proxy/_service/streaming/helpers.py",
+      "sha256": "4e4984e74b6b56044aef338333507e61c112784860cb9a0cae820f8391bfa7db"
+    },
+    {
+      "path": "app/modules/proxy/_service/streaming/retry.py",
+      "sha256": "d58eed10204142ecc30a94c6a4a4013721610ed067cb9d1ea39f11ce6e812a4f"
+    },
+    {
+      "path": "app/modules/proxy/_service/support.py",
+      "sha256": "299e0aa20cda3267931535fdc2863e9376f2a5629bcf87e1f9350fec5694c2b7"
+    },
+    {
+      "path": "app/modules/proxy/_service/websocket/mixin.py",
+      "sha256": "f2adfeea3feff52ef3f81dea279441e20a885142dd076b88eaed08e246141f61"
+    },
+    {
+      "path": "app/modules/proxy/affinity.py",
+      "sha256": "43b877f088d095381a9d91cf93d510ec7eba6fd1e044fc10b146f615d5df3224"
+    },
+    {
+      "path": "app/modules/proxy/api.py",
+      "sha256": "c3f9c6b572bb56b3ba6bc126d73f5944ff90258d81b4696652aec9076d81801c"
+    },
+    {
+      "path": "app/modules/proxy/images_service.py",
+      "sha256": "ba486d83d1bdbcf67211c5226b22a35ac3f69b77ec902389205507bc61fddb1a"
+    },
+    {
+      "path": "app/modules/proxy/load_balancer.py",
+      "sha256": "a96b394c0cf6c9c76e27e0636f22fc631444e95aaa44195211839da8e9c35127"
+    },
+    {
+      "path": "app/modules/proxy/model_account_routing.py",
+      "sha256": "51144bcdaf2f21260ac0344ea931c7404a59555ff5dda72c95def13b26fd72e2"
+    },
+    {
+      "path": "app/modules/proxy/service.py",
+      "sha256": "b6692c3fdc3f2dddd6f0004b905d511e705febc6f0e98782ea29e5ec8d31c2cf"
+    },
+    {
+      "path": "app/modules/proxy/subagent_preference.py",
+      "sha256": "e804fe84744f5332af41dad008d101db6abb48a4990bcf149068ad171c73c8b1"
+    },
+    {
+      "path": "app/modules/settings/api.py",
+      "sha256": "62ec8b8228e3e6a1c048447d82401c19a83b79f3d71a6ae221b77e16419622e9"
+    },
+    {
+      "path": "app/modules/settings/repository.py",
+      "sha256": "81eb3a2f0c5f3de87a45e83b226077920ea7d7f24d2209e2a0c517f5dd141a0e"
+    },
+    {
+      "path": "app/modules/settings/schemas.py",
+      "sha256": "eb191528154bf89e974a25bb86a799763789442e379e14fcdec00a803f8bfd11"
+    },
+    {
+      "path": "app/modules/settings/service.py",
+      "sha256": "341fa93723ffc2e2019f5fd1a603ca8c15db222fcc2849c336473798e80bf861"
+    },
+    {
+      "path": "app/modules/usage/schemas.py",
+      "sha256": "2447d55fe2ec11b7b8a0130745f050f575767f28dd45ce1aa76c6dce1b3c0d0c"
+    },
+    {
+      "path": "frontend/src/features/auth/components/totp-dialog.test.tsx",
+      "sha256": "b04e92cda463e21b18754045b7e73417e40b560aee1659c824c3d38efe070371"
+    },
+    {
+      "path": "frontend/src/features/dashboard/components/account-view-mode-toggle.tsx",
+      "sha256": "705a2a4afa2608865bb03bf9001485e9c30791c3dc366b377da71f3c9b48b099"
+    },
+    {
+      "path": "frontend/src/features/dashboard/components/weekly-credits-pace-card.test.tsx",
+      "sha256": "3dbf044404f38f943831cd80052d0b98ba2ae24d01ca62bd9283a0a61748f8d9"
+    },
+    {
+      "path": "frontend/src/features/dashboard/components/weekly-credits-pace-card.tsx",
+      "sha256": "ec25b5a5935b5d4406897305693138dabe7d6cc0deb0f029980be2fc93af5669"
+    },
+    {
+      "path": "frontend/src/features/dashboard/utils.test.ts",
+      "sha256": "2180dd770de329a1d630afaeb1f8dcc056a746eb9c9b6c06e70f2a0160eee607"
+    },
+    {
+      "path": "frontend/src/features/dashboard/utils.ts",
+      "sha256": "ba1d4fef96c387b37b860f2c59449b5cabafc6720e7662ebed9173f4dce8559d"
+    },
+    {
+      "path": "frontend/src/features/settings/components/session-settings.test.tsx",
+      "sha256": "619c34c54b0eda87a8c1409acd0f3d0f3fef541dc476b4f784955396b1c4144c"
+    },
+    {
+      "path": "frontend/src/features/settings/components/telemetry-consent-dialog.test.tsx",
+      "sha256": "244537a07c94c8d60368c4421431c602dd001f9d1d7208cc873ef9eb22bb064e"
+    },
+    {
+      "path": "frontend/src/features/settings/components/telemetry-consent-dialog.tsx",
+      "sha256": "2dbc4cad9d3dbcbd0740f449f68e6755020e4edbf3228970efc989a6a07216e6"
+    },
+    {
+      "path": "openspec/specs/account-quota-presentation/context.md",
+      "sha256": "179f1671917c24e2187b0e0ccb50e0712901a29956b93a608a1dd36b5569afaa"
+    },
+    {
+      "path": "openspec/specs/account-quota-presentation/spec.md",
+      "sha256": "aee31b7dfa779d149220006a2507be1f0eeae46c1e7217140438e6744c245878"
+    },
+    {
+      "path": "openspec/specs/account-routing/context.md",
+      "sha256": "633ea6e5025f3cdeb920827ec0acd56687e87657741f1b2f1feb2c909e67a3c3"
+    },
+    {
+      "path": "openspec/specs/account-routing/spec.md",
+      "sha256": "5b0594db8ebc22d6a79f8f944d7e55a65541e50da5a55fff9ef132c2c68027db"
+    },
+    {
+      "path": "openspec/specs/database-backends/context.md",
+      "sha256": "9dc340298e564fedbb2001d7fcabe2d040b9772e375756099dd67601b5238534"
+    },
+    {
+      "path": "openspec/specs/database-backends/spec.md",
+      "sha256": "d57897239691867b5d10fb83066a47ffc2dfbdfb7cf50e2700f481166d899c49"
+    },
+    {
+      "path": "openspec/specs/images-api-compat/context.md",
+      "sha256": "4fb9f906b9eff7d3d99fd6c086738c3a35488945e1823527f5a34ad438dc68e7"
+    },
+    {
+      "path": "openspec/specs/images-api-compat/spec.md",
+      "sha256": "702d2ec9a2bedb538c3b2d2302d600d24d4cb518e855ade6e0e93842c0b82415"
+    },
+    {
+      "path": "openspec/specs/oauth-callback-privacy/context.md",
+      "sha256": "62307ad70870a7a6029ec5c6b1b626903d16fcbe9c4750beb5b185c64b79ff27"
+    },
+    {
+      "path": "openspec/specs/oauth-callback-privacy/spec.md",
+      "sha256": "dbc9465d08c3c504eb63df7c4c5e1c9284cbbab54d061d1479d55098eee5e555"
+    },
+    {
+      "path": "openspec/specs/responses-api-compat/context.md",
+      "sha256": "f2ff14278f96baaa7eb6d3913d72687b8f9a62247fcc2830abf5adc86a8bdec0"
+    },
+    {
+      "path": "openspec/specs/responses-api-compat/spec.md",
+      "sha256": "e15f10a32e08518fc08968354436587cee78f58baaa2e6412c29a28bdc2d2806"
+    },
+    {
+      "path": "openspec/specs/sticky-session-operations/context.md",
+      "sha256": "44a42aab95ef38aa01a5fd5511e136eab4417c4dfe306d606209a0a437a32777"
+    },
+    {
+      "path": "openspec/specs/sticky-session-operations/spec.md",
+      "sha256": "ac70f0dcf1f81d8c597581918b30d55b44cc825b4b45ddcc265b7b6a2cfbf0c3"
+    },
+    {
+      "path": "openspec/specs/telemetry/context.md",
+      "sha256": "818debca7f4f5d0f5e377b9f0a260cf9697ff94d4ab0f5edcdd8d063c2167b65"
+    },
+    {
+      "path": "openspec/specs/telemetry/spec.md",
+      "sha256": "3df8a677720ff673c3295bf60d096104512075d67fabfabc71b8c72fa8611ab4"
+    },
+    {
+      "path": "openspec/specs/usage-refresh-policy/context.md",
+      "sha256": "e2d63522bd833fa7ee65b9ce30308c23596539fc78b5259fb78a028e51533fe6"
+    },
+    {
+      "path": "openspec/specs/usage-refresh-policy/spec.md",
+      "sha256": "f1a07dfa33759bd10d9dca4a45ea68cdadf22f3703ed75d238cedf6b7faca610"
+    },
+    {
+      "path": "pyproject.toml",
+      "sha256": "eb83d609f79be252d547c5313b1e41718edfc23658bfd0411698499f07419517"
+    },
+    {
+      "path": "tests/integration/test_dashboard_overview.py",
+      "sha256": "819a1dd821aae7b81f72dcbe2f1be6629de449f23c9e7fdccb1ff8f31fd6311b"
+    },
+    {
+      "path": "tests/integration/test_plan_json_contracts.py",
+      "sha256": "ddfb6e77893c11ede692addab00d9f87df2f80869fae19004061c855452c6a31"
+    },
+    {
+      "path": "tests/integration/test_proxy_images.py",
+      "sha256": "552124a1d1bcaa439f33aff1f5c77e1147f665be1de58646c85e0003c62dcfd7"
+    },
+    {
+      "path": "tests/unit/test_affinity_subagent_ttl.py",
+      "sha256": "7e392ab4ffeca78a4bb8ccf3e1ac169d4feb03bb63983462c70668a41f1fdabe"
+    },
+    {
+      "path": "tests/unit/test_dashboard_weekly_pace.py",
+      "sha256": "60d1f2bf3434370c0ee70c2a4daa1f183829ba689fc9bc11259973ba7b5d563f"
+    },
+    {
+      "path": "tests/unit/test_db_session.py",
+      "sha256": "2ca41c4dbe1b4f6613ac2e393b40f4940f00910ae0be7cd87da1fd454e9185cb"
+    },
+    {
+      "path": "tests/unit/test_images_schemas.py",
+      "sha256": "475b1a8ee0757d8c77cdfefa867c243c45a2ed408ef6c5fcca0766220c2e4226"
+    },
+    {
+      "path": "tests/unit/test_proxy_utils.py",
+      "sha256": "da61bba8c4a0a9bc86192dd71434a8591b6013ae38feadc71a15fb01351a5c41"
+    },
+    {
+      "path": "tests/unit/test_usage.py",
+      "sha256": "c0fa136ebc557ea9f2debd5b07e536ca2e25fe73831f0edb38893b53957684d9"
+    },
+    {
+      "path": "uv.lock",
+      "sha256": "034250103b2942b9c469fda9b2e4f4604186ba60b2050087b396436483657f71"
+    },
+    {
+      "path": "app/db/alembic/versions/20261014_000000_add_sticky_reallocation_timing.py",
+      "sha256": "847d59c49a6fb2bd0506c428a1b86e9966a78d739f05eda857bfdbe47e792806"
+    },
+    {
+      "path": "app/db/sqlite_connection.py",
+      "sha256": "42c9fb539ee55e2a4cc4628aab60405106babb7aa96284fe54ba589768a383d3"
+    },
+    {
+      "path": "app/modules/dashboard/weekly_cost.py",
+      "sha256": "1f231856501a95c5fc6c30d35ef57b530d369afe0167be2e2aabace47ce5e826"
+    },
+    {
+      "path": "frontend/browser-smoke/dashboard-interactions.config.ts",
+      "sha256": "3aabf0a43b70931dc31539ef75c601388b5dda6d528c3c4692169e6fca6339f3"
+    },
+    {
+      "path": "frontend/browser-smoke/dashboard-interactions.spec.ts",
+      "sha256": "fac4622695ab5ea07410bf1c8f31b1aee38f1779b82a81fa68c7ba4576639fc5"
+    },
+    {
+      "path": "frontend/browser-smoke/quota-estimates.config.ts",
+      "sha256": "1740ac5a7c053030383a50569535fec1eb9f573a3fd417d280cbcd025ec04266"
+    },
+    {
+      "path": "frontend/browser-smoke/quota-estimates.spec.ts",
+      "sha256": "bd054dbe2b3aeb78bb0f40164a71806e72f4cc2609a3de82407eca319cf6d3b7"
+    },
+    {
+      "path": "frontend/src/features/dashboard/components/account-view-mode-toggle.test.tsx",
+      "sha256": "4942c85b14ca988d0ddb9d253399e8a815c32c0a46a7918b87d36a0a2df61efa"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-13-repair-five-account-placement-contracts/.openspec.yaml",
+      "sha256": "010447270992e8e9533b7bbfb4dbdecda78eab560f05c50428c80463aa9e0ec1"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-13-repair-five-account-placement-contracts/closure.json",
+      "sha256": "e314ab9bf3b34c1d2d717fab911bb77112af6fcfebf11f93111b56082b8662e9"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-13-repair-five-account-placement-contracts/design.md",
+      "sha256": "761fe8699a228c72479cbbd2a43b695943b82af3e1ae2b7fed2bbc086060cd11"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-13-repair-five-account-placement-contracts/prefixes.json",
+      "sha256": "751c5576247b23207783d35896729d9ba293200759ecb2b23655bba1a5314800"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-13-repair-five-account-placement-contracts/proposal.md",
+      "sha256": "47e7ae0eebb43a59d5f281f16ee9507bc4851562f8a1c379fa7e11b4f7150334"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-13-repair-five-account-placement-contracts/specs/account-routing/spec.md",
+      "sha256": "f800ceb2c2fae7ce5e0c2413c866414ed273339c734d6eac3462da5cb619cb6a"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-13-repair-five-account-placement-contracts/specs/sticky-session-operations/spec.md",
+      "sha256": "ef24493f04a5a32ae7bb72624641e49972e92796d4b754fbc3ee374e3ed27eca"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-13-repair-five-account-placement-contracts/tasks.md",
+      "sha256": "a82b6bcff2eaba6982eeac338ec0c920b409f02c1c6b015666a72ad2aa642fe1"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-13-repair-five-account-placement-contracts/verification.md",
+      "sha256": "b301bd4ccab35c5db0d009aa254b6c6e7ba75caafabe93aeada555424b9aaf78"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-client-boundary-contracts/.openspec.yaml",
+      "sha256": "cd54fe01555559ffd5cf6f7f1d1b06209492e5ba9147cdc3800201c09e2291d0"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-client-boundary-contracts/closure.json",
+      "sha256": "ccfc707d91ec81d7fcc4d73d3051c122560ecd650dddd4d7cc222fc7782b814e"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-client-boundary-contracts/design.md",
+      "sha256": "f214bc134a3449ee7a662c49ee8093a26ca74d4a973ed2188be0ae214cc9507d"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-client-boundary-contracts/proposal.md",
+      "sha256": "8fb1523dc05ffabf88ae08fab07a3af14eed1b04811fd6b1bfe6f502da66e3f6"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-client-boundary-contracts/specs/images-api-compat/spec.md",
+      "sha256": "91dd4303da6082b57e3d273cf940d0c2c53151e76ee7d7a04e10ccd2cd7a275a"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-client-boundary-contracts/specs/oauth-callback-privacy/spec.md",
+      "sha256": "7927e15b9ea25a1e125e4c517af3c48f72e50ad0532e6694189f023a17d61f07"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-client-boundary-contracts/specs/responses-api-compat/spec.md",
+      "sha256": "593af2bf23efbf2cf8372feb062a758ae986b162603ed932eb814c3b1dac2ef6"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-client-boundary-contracts/specs/usage-refresh-policy/spec.md",
+      "sha256": "5041be3c7b8d40d44e6ec023f7b9b04e0a5b7d202126dab50f3edef2adcf7c2c"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-client-boundary-contracts/tasks.md",
+      "sha256": "ba7b2b73d41c3b890fc2441a9510c09029963f9720fb5d18cf4ffe07257b5b1f"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-client-boundary-contracts/verification.md",
+      "sha256": "2f578a37e077b0b22c22e6e22e2f9ed6ebb8bebad008b0f3fb29059352fc9689"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-dashboard-interaction-contracts/.openspec.yaml",
+      "sha256": "cd54fe01555559ffd5cf6f7f1d1b06209492e5ba9147cdc3800201c09e2291d0"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-dashboard-interaction-contracts/closure.json",
+      "sha256": "1781be0006adc13a533cf6f221e3f33cae472382c3bc7ead9e764a7c715cddc5"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-dashboard-interaction-contracts/design.md",
+      "sha256": "5cd0dd5a850717e848ae46409118885eac5887afea9a9ede9388561878f781aa"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-dashboard-interaction-contracts/proposal.md",
+      "sha256": "a239d2e09718198bdd52839c8766525208c0ef13885e98f9dcaf3a6acfe6a4dd"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-dashboard-interaction-contracts/specs/frontend-architecture/spec.md",
+      "sha256": "1bbfc275d34b88aca01cd39916d8b1c64118ff035b88ec61be21a7879fa72d14"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-dashboard-interaction-contracts/specs/telemetry/spec.md",
+      "sha256": "e17da051d92b8c84dfed98caf6a3f7e53b99e7e6492db4bf33fe557e43cf1f0d"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-dashboard-interaction-contracts/tasks.md",
+      "sha256": "caad95bcb34ccd21df970aa0a069916db89dcf891e9036034ea8679a5c44e4d2"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-dashboard-interaction-contracts/verification.md",
+      "sha256": "b1f27a3ac7123f47656e59744458a7839fff4330bef142c36f30bed0cd98b9c9"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-history-boundary-contracts/.openspec.yaml",
+      "sha256": "cd54fe01555559ffd5cf6f7f1d1b06209492e5ba9147cdc3800201c09e2291d0"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-history-boundary-contracts/closure.json",
+      "sha256": "cbeacc969fd2649a983878d2302fc1eab2652ffd1cbcdcd5cff5fa56d1bfc755"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-history-boundary-contracts/design.md",
+      "sha256": "f6e9996ef818c27c846f9dce3dfe19a62458bfa239b7067ea8d95dcaa340d59e"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-history-boundary-contracts/proposal.md",
+      "sha256": "1e3c966f67ebfdb52e3c2793c2d4118355b1a0aa9b5df24746679fbdd8a6aeaa"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-history-boundary-contracts/specs/responses-api-compat/spec.md",
+      "sha256": "38275803160551cd15154e805935c5137af1f5790c499849e351fa96d1c050e5"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-history-boundary-contracts/specs/sticky-session-operations/spec.md",
+      "sha256": "8f7c3a54aed1f7e9814f6f5a4efb4645dce4640a244239f22d3e1efd4880af41"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-history-boundary-contracts/tasks.md",
+      "sha256": "110dda26905339a2eaa409dfb50c833ed0bc1a4679f5b1ba4cde74dfb3f6867d"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-history-boundary-contracts/verification.md",
+      "sha256": "4555922de949503f341a9b57bbefe2d6fd8c8045a81743951d2384822e212cbd"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-image-stream-contracts/.openspec.yaml",
+      "sha256": "cd54fe01555559ffd5cf6f7f1d1b06209492e5ba9147cdc3800201c09e2291d0"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-image-stream-contracts/closure.json",
+      "sha256": "f32f75899df90578ef2dff10015f09d1fd52c3f44be88e91e7a045b67309d809"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-image-stream-contracts/design.md",
+      "sha256": "18330faf5b28796005d330faa5296099a9f5a9a60d1cb5f6f1bfedbf10f7229d"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-image-stream-contracts/proposal.md",
+      "sha256": "dcbf7fcc770c440b14efea73f742c3bfa17f85e196b931285597cb57f4fa4522"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-image-stream-contracts/specs/images-api-compat/spec.md",
+      "sha256": "858e20cc0d5c8f2042aa6b91e4199aa047788f794f004e17421e38c0d4c1ceaa"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-image-stream-contracts/tasks.md",
+      "sha256": "cc78dbc0a3dee4811b378b4d060cdaad02d56d52ce1c86cedcf74b79381b1982"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-image-stream-contracts/verification.md",
+      "sha256": "872b75c54b29467486210c376d410f2b0bab950568f8a10f75f1c94abfb0734e"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-owner-cursor-packaging-contracts/.openspec.yaml",
+      "sha256": "cd54fe01555559ffd5cf6f7f1d1b06209492e5ba9147cdc3800201c09e2291d0"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-owner-cursor-packaging-contracts/design.md",
+      "sha256": "e4b3556fc989adba6de62834d855db3349237b50b15477a9a1b8d4d772b42c45"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-owner-cursor-packaging-contracts/proposal.md",
+      "sha256": "68461507f0b9e7a2ae36a2171594d5acad78ac21186554e9651dedb966d435e3"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-owner-cursor-packaging-contracts/specs/database-backends/spec.md",
+      "sha256": "6b8f8d984808aaf76fd15565f26ee2607c613ac7fff9848c5f96d08d1001fb91"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-owner-cursor-packaging-contracts/specs/responses-api-compat/spec.md",
+      "sha256": "8a36bef16a446a803eaa18dba352cc752f37af2213913cf70972cfb97b620602"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-owner-cursor-packaging-contracts/tasks.md",
+      "sha256": "a01eec769947025af5675a55bc9c6773226783ff9e714def2f6894b911307aeb"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-owner-cursor-packaging-contracts/verification.md",
+      "sha256": "4e494302aad205e5e33b4d0a1a4e6246cd922d56374e33b5351e8e04a4b99b6b"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-quota-estimate-contracts/closure.json",
+      "sha256": "c0bce39e6e2d424386d33ddee9024016aab49a7124411d33a1653eabfe347151"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-quota-estimate-contracts/design.md",
+      "sha256": "745154c15dc1f16a8d9eb58a0078132920daf2a654d30bf09552ab848ef70ec5"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-quota-estimate-contracts/proposal.md",
+      "sha256": "0bb33acb344683aaf03303ff3ee925165e71e9a021377e36a155efa8a8f1addd"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-quota-estimate-contracts/specs/account-quota-presentation/spec.md",
+      "sha256": "5b6d907dc50821dae4ccba9f480b03741a63c5f32dbd99189d50cb8646542461"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-quota-estimate-contracts/specs/frontend-architecture/spec.md",
+      "sha256": "062f69f1bbdc19894d0612c07feb6ca898a794a9f4e701d5cd9120516da0189d"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-quota-estimate-contracts/tasks.md",
+      "sha256": "04ff9fdc3b4a8050f544e5d8753dcbf7bfb72a8bdda55bf788290ba7d2a2fa6e"
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-14-repair-five-quota-estimate-contracts/verification.md",
+      "sha256": "6a03ce079a053837aa1ba1833c6b42e9655801ca29db447f6302478e9bbe36c8"
+    },
+    {
+      "path": "tests/integration/test_account_placement_contracts.py",
+      "sha256": "b7fa4ce4596d314924e7982878573ad823f24bca14390f1df45f2b278604ef11"
+    },
+    {
+      "path": "tests/integration/test_client_boundary_contracts.py",
+      "sha256": "54187940ca04d65412dcb08a44d87bf4178e0daf70243679a14dda8a9aff677b"
+    },
+    {
+      "path": "tests/integration/test_dashboard_interaction_contracts.py",
+      "sha256": "af279c0fa1a7742c95524e3649c3d4c71c999f048da8a2e29be1fc69b6980716"
+    },
+    {
+      "path": "tests/integration/test_history_boundary_contracts.py",
+      "sha256": "e9e0313f888271109e6dd299bfa80ee24c6b35eddda7618477ac84863a8c2ec1"
+    },
+    {
+      "path": "tests/integration/test_image_stream_contracts.py",
+      "sha256": "5c1e975348384a236b87ec04520302e738d141a6228df075b2271646ca7d94ed"
+    },
+    {
+      "path": "tests/integration/test_quota_estimate_contracts.py",
+      "sha256": "93d9ebae2d8eef9e0b661b2765dd523635c46cfe55c7228d4c601a8134c47495"
+    },
+    {
+      "path": "tests/integration/test_required_owner_connect_errors.py",
+      "sha256": "52fdc3cce3590d047e2c7ebe0db9d9b5a4c3dac6ff6a46e54240de473269896f"
+    },
+    {
+      "path": "tests/integration/test_sqlite_terminal_timeout.py",
+      "sha256": "2bbc3b4b243bf947ee752c803685f675fe3565a4f71488f2b2d37bb1b3cceccf"
+    },
+    {
+      "path": "tests/unit/test_history_boundary_contracts.py",
+      "sha256": "689a1680c8c0139cfc93bfa46ab94045a8a2b2e6e16826d886409b03d1409183"
+    },
+    {
+      "path": "tests/unit/test_image_stream_contracts.py",
+      "sha256": "02eaaafa33a0d2654de1081bf0e92a997c99fdba7daeb6b5ba7683f50f23f79f"
+    },
+    {
+      "path": "tests/unit/test_native_websocket_buffering.py",
+      "sha256": "7b1b68f0d2efadf99532d2480a400f0baaa9dabf4e596b2cf22c632a10dd44eb"
+    },
+    {
+      "path": "tests/unit/test_oauth_transport_errors.py",
+      "sha256": "0dce54dd21f302ceb171f9fe334595a24554e445907955936a1d9abb2654a55e"
+    },
+    {
+      "path": "tests/unit/test_quota_estimate_contracts.py",
+      "sha256": "cd728f5b7359f03b175bd172ea90d656e92309107c446f37577fdc3f991ec232"
+    },
+    {
+      "path": "tests/unit/test_sqlite_connection.py",
+      "sha256": "76ba0c1bcfc0645014664d0ecfb37364e5977da9e8526f8ee51482f8b235e532"
+    }
+  ],
+  "shared_paths": [
+    "app/modules/dashboard/activity.py",
+    "app/modules/dashboard/api.py",
+    "app/modules/request_logs/api.py",
+    "app/modules/request_logs/repository.py",
+    "app/modules/request_logs/schemas.py",
+    "app/modules/request_logs/service.py",
+    "app/modules/request_logs/upstreams.py",
+    "docs/usage-reporting.md",
+    "frontend/browser-smoke/observability.config.ts",
+    "frontend/browser-smoke/observability.spec.ts",
+    "frontend/src/features/dashboard/activity-calendar.ts",
+    "frontend/src/features/dashboard/api.ts",
+    "frontend/src/features/dashboard/components/dashboard-page.test.tsx",
+    "frontend/src/features/dashboard/components/dashboard-page.tsx",
+    "frontend/src/features/dashboard/components/filters/request-filters.test.tsx",
+    "frontend/src/features/dashboard/components/filters/request-filters.tsx",
+    "frontend/src/features/dashboard/components/recent-requests-table.tsx",
+    "frontend/src/features/dashboard/components/request-activity-heatmap.test.tsx",
+    "frontend/src/features/dashboard/components/request-activity-heatmap.tsx",
+    "frontend/src/features/dashboard/hooks/use-request-logs.test.ts",
+    "frontend/src/features/dashboard/hooks/use-request-logs.ts",
+    "frontend/src/features/dashboard/schemas.ts",
+    "frontend/src/features/settings/components/appearance-settings.tsx",
+    "frontend/src/hooks/use-dashboard-preferences.test.ts",
+    "frontend/src/hooks/use-dashboard-preferences.ts",
+    "frontend/src/i18n/locales/en.json",
+    "frontend/src/i18n/locales/ko.json",
+    "frontend/src/i18n/locales/zh-CN.json",
+    "issues-check.md",
+    "openspec/changes/repair-five-observability-contracts/.openspec.yaml",
+    "openspec/changes/repair-five-observability-contracts/design.md",
+    "openspec/changes/repair-five-observability-contracts/proposal.md",
+    "openspec/changes/repair-five-observability-contracts/specs/dashboard-request-activity/spec.md",
+    "openspec/changes/repair-five-observability-contracts/specs/frontend-architecture/spec.md",
+    "openspec/changes/repair-five-observability-contracts/specs/request-log-upstreams/spec.md",
+    "openspec/changes/repair-five-observability-contracts/specs/tool-usage-analysis/spec.md",
+    "openspec/changes/repair-five-observability-contracts/tasks.md",
+    "openspec/specs/dashboard-request-activity/context.md",
+    "openspec/specs/dashboard-request-activity/spec.md",
+    "openspec/specs/data-retention/context.md",
+    "openspec/specs/frontend-architecture/context.md",
+    "openspec/specs/frontend-architecture/spec.md",
+    "openspec/specs/report-aggregation/context.md",
+    "openspec/specs/request-log-upstreams/context.md",
+    "openspec/specs/request-log-upstreams/spec.md",
+    "openspec/specs/tool-usage-analysis/context.md",
+    "openspec/specs/tool-usage-analysis/spec.md",
+    "scripts/analyze_tool_usage.py",
+    "tests/integration/test_observability_contracts.py",
+    "tests/unit/test_tool_usage_analysis.py"
+  ],
+  "queue": {
+    "source": 359,
+    "local_closed": 231,
+    "partial": 10,
+    "not_applicable": 2,
+    "unverified": 116
+  },
+  "prior_shared_preservation": {
+    "frontend/src/features/dashboard/schemas.ts": "All prior added/deleted line occurrences retained",
+    "frontend/src/i18n/locales/en.json": "All original locale keys/values retained",
+    "frontend/src/i18n/locales/ko.json": "All original locale keys/values retained",
+    "frontend/src/i18n/locales/zh-CN.json": "All original locale keys/values retained",
+    "openspec/specs/frontend-architecture/context.md": "Exact initial text prefix retained",
+    "openspec/specs/frontend-architecture/spec.md": "Exact initial text prefix retained"
+  }
+}

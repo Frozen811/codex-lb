@@ -32,6 +32,7 @@ import { RequestFilters } from "@/features/dashboard/components/filters/request-
 import { RecentRequestsTable } from "@/features/dashboard/components/recent-requests-table";
 import { StatsGrid } from "@/features/dashboard/components/stats-grid";
 import { UsageDonuts } from "@/features/dashboard/components/usage-donuts";
+import { RequestActivityHeatmap } from "@/features/dashboard/components/request-activity-heatmap";
 import { WeeklyCreditsPaceCard } from "@/features/dashboard/components/weekly-credits-pace-card";
 import { useAuthStore, usePermission } from "@/features/auth/hooks/use-auth";
 import { useDashboard, useDashboardProjections } from "@/features/dashboard/hooks/use-dashboard";
@@ -78,6 +79,7 @@ export function DashboardPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const isDark = useThemeStore((s) => s.theme === "dark");
+  const dashboardDisplayMode = useDashboardPreferencesStore((s) => s.dashboardDisplayMode);
   const showAccountBurnrate = useDashboardPreferencesStore((s) => s.accountBurnrateEnabled);
   const accountViewMode = useDashboardPreferencesStore((s) => s.accountViewMode);
   const fullscreenAccounts = searchParams.get("accountsFullscreen") === "1";
@@ -273,6 +275,20 @@ export function DashboardPage() {
       };
     });
   }, [optionsQuery.data?.accountIds, overview?.accounts]);
+
+  const upstreamOptions = useMemo(() => {
+    const observed = optionsQuery.data?.upstreams ?? [];
+    const options = observed.map((option) => ({
+      value: option.id,
+      label: option.type === "subscription_pool" ? t("dashboard.filters.subscriptionPool")
+        : option.isDeleted ? t("dashboard.filters.deletedSource", { id: option.id })
+        : `${option.displayName ?? option.id} · ${option.id}`,
+    }));
+    for (const id of filters.upstreams ?? []) {
+      if (!options.some((option) => option.value === id)) options.push({ value: id, label: id });
+    }
+    return options;
+  }, [optionsQuery.data?.upstreams, filters.upstreams, t]);
 
   const apiKeyOptions = useMemo(
     () =>
@@ -496,7 +512,7 @@ export function DashboardPage() {
             <>
               <StatsGrid stats={view.stats} />
 
-              {view.weeklyCreditPace ? (
+              {view.weeklyCreditPace || dashboardDisplayMode === "requestHeatmap" ? (
                 <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
                   <UsageDonuts
                     primaryItems={view.primaryUsageItems}
@@ -508,7 +524,7 @@ export function DashboardPage() {
                     safeLinePrimary={view.safeLinePrimary}
                     safeLineSecondary={view.safeLineSecondary}
                   />
-                  <WeeklyCreditsPaceCard pace={view.weeklyCreditPace} />
+                  {dashboardDisplayMode === "requestHeatmap" ? <RequestActivityHeatmap /> : <WeeklyCreditsPaceCard pace={view.weeklyCreditPace} />}
                 </div>
               ) : (
                 <UsageDonuts
@@ -646,6 +662,8 @@ export function DashboardPage() {
                     <>
                       <RequestFilters
                         filters={filters}
+                        upstreamOptions={upstreamOptions}
+                        onUpstreamChange={(upstreams) => updateFilters({ upstreams, offset: 0 })}
                         accountOptions={accountOptions}
                         apiKeyOptions={apiKeyOptions}
                         modelOptions={modelOptions}
@@ -665,6 +683,7 @@ export function DashboardPage() {
                             search: "",
                             timeframe: "all",
                             accountIds: [],
+                            upstreams: [],
                             apiKeyIds: [],
                             modelOptions: [],
                             statuses: [],

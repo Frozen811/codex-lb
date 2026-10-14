@@ -404,7 +404,6 @@ function formatBurnWindowLabel(windowKey: "primary" | "secondary", windowMinutes
 }
 
 const TREND_COLORS = ["#3b82f6", "#8b5cf6", "#10b981", "#ef4444", "#f59e0b"];
-const PRO_WEEKLY_CAPACITY_CREDITS = 50_400;
 
 function trendPointsToValues(points: TrendPoint[]): { value: number }[] {
   return points.map((p) => ({ value: p.v }));
@@ -626,6 +625,7 @@ function advanceWeeklyResetAt(resetAtMs: number, windowMs: number, nowMs: number
 export function buildWeeklyCreditPace(
   accounts: AccountSummary[],
   now: Date = new Date(),
+  proWeeklyCapacityCredits: number | null = null,
 ): WeeklyCreditPace | null {
   const nowMs = now.getTime();
   if (!Number.isFinite(nowMs)) {
@@ -705,12 +705,14 @@ export function buildWeeklyCreditPace(
       : null;
   const reduceByPercent = throttleToPercent != null ? 100 - throttleToPercent : null;
   const proAccountEquivalentToCoverOverPlan =
-    projectedShortfallCredits > 0 ? projectedShortfallCredits / PRO_WEEKLY_CAPACITY_CREDITS : null;
+    projectedShortfallCredits > 0 && isPositiveFinite(proWeeklyCapacityCredits)
+      ? projectedShortfallCredits / proWeeklyCapacityCredits : null;
   const proAccountsToCoverOverPlan =
-    projectedShortfallCredits > 0 ? Math.ceil(projectedShortfallCredits / PRO_WEEKLY_CAPACITY_CREDITS) : null;
+    proAccountEquivalentToCoverOverPlan != null ? Math.ceil(proAccountEquivalentToCoverOverPlan) : null;
 
   return {
     totalFullCredits,
+    proWeeklyCapacityCredits,
     totalActualRemainingCredits,
     totalExpectedRemainingCredits,
     actualUsedPercent,

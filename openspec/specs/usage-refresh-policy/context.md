@@ -209,3 +209,26 @@ For example, two records sharing a user identity can have different workspace av
 The public exhausted-threshold name now maps to limit_warmup_reset_threshold_percent, initialized to zero. The historical exhausted column remains mapped as legacy, with old values and the 99 default retained. A positive floor is inclusive and reads the original before sample in retained reset evidence. Example: floor 50 accepts before usage 50 and rejects 49; zero permits any otherwise confirmed reset. Paid-to-Free requires prior monthly evidence for a positive floor. Downgrade removes the active column; upgrading again selects zero. Current post-reset gates, opt-in, status and deduplication still apply.
 
 See [requirements](spec.md). Live providers, server database execution and production remain outside local test evidence.
+
+## Weekly-only Pro Lite recovery (UP-ISSUE-2602)
+
+The existing fork recovery contract was independently verified with self_serve_business_prolite, a primary 604800-second weekly window and an empty secondary with duration zero and no reset. The alias canonicalizes to prolite. An accepted operator probe followed by fresh available usage clears a persisted rate_limited status, including a future old reset after credit; normal rollover also recovers. The accepted account subsequently serves gpt-6-astra through the public Responses route.
+
+Failed probes, exhausted weekly quota and an operator pause remain protected; the ordinary refresh tests continue to enforce a real unexpired 429 cooldown and compare-and-set. No recovery production code change was needed. This distinguishes successful HTTP probe plus fresh usage from evidence of an actual provider terminal response. The historical reporter's pre-reactivation account row was unavailable, so the exact production reset mismatch is not proven. Normative local recovery behavior is in [spec.md](spec.md).
+
+## Daily reauthentication evidence boundary (2026-10-14)
+
+UP-ISSUE-1919 is verified locally against the current Guardian and AuthManager,
+not against an enrolled Advanced Account Security account. Idle keepalive still
+uses a strict greater-than-twelve-hours boundary and is independent of the
+ordinary request freshness interval. A statement that this boundary was removed
+does not describe current behavior. Paused accounts remain paused; leader and
+dynamic multi-replica guards prevent duplicate background work, and concurrent
+new credentials defeat a stale permanent-error downgrade through guarded writes.
+
+Changing selected subscription accounts is separate from reauthenticating them.
+An explicit upstream permanent refresh/session rejection can still require
+operator login. The local tests establish scheduling, rotation and exact-account
+state ownership; they do not establish session lifetime or the absence of daily
+reauthentication for a live security-enrolled provider account. See
+[requirements](spec.md).

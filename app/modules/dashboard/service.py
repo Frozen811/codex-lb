@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from math import isfinite
 
 from app.core import usage as usage_core
 from app.core.crypto import TokenEncryptor
@@ -9,6 +10,7 @@ from app.core.usage.types import UsageWindowRow
 from app.core.utils.time import utcnow
 from app.db.models import UsageHistory
 from app.modules.accounts.mappers import build_account_summaries
+from app.modules.accounts.schemas import AccountSummary
 from app.modules.dashboard.builders import (
     build_dashboard_overview_summary,
     build_overview_timeframe,
@@ -23,10 +25,17 @@ from app.modules.dashboard.schemas import (
     DashboardProjectionsResponse,
     DashboardUsageWindows,
     DepletionResponse,
+    WeeklyAccountCostEstimate,
     WeeklyCreditApiKeyAttribution,
     WeeklyCreditPaceResponse,
 )
-from app.modules.dashboard.weekly_pace import DEMAND_WINDOW, FLEET_BURN_WINDOW, build_weekly_credit_pace
+from app.modules.dashboard.weekly_cost import weekly_cost_windows
+from app.modules.dashboard.weekly_pace import (
+    DEMAND_WINDOW,
+    FLEET_BURN_WINDOW,
+    _freshness_seconds,
+    build_weekly_credit_pace,
+)
 from app.modules.usage.builders import (
     align_bucket_window_start,
     build_activity_summaries,
@@ -67,6 +76,38 @@ from app.modules.usage.repository import NormalizedUsageWindow
 # with no newer rows to decay it — may diverge from the full replay.
 # Every equal-weight consumer is protected by the floor instead.
 _PROJECTION_EWMA_TAIL_ROWS = 64
+
+
+async def _attach_weekly_cost_estimates(
+    repo: DashboardRepository,
+    pace: WeeklyCreditPaceResponse | None,
+    summaries: list[AccountSummary],
+    histories: dict[str, list[UsageHistory]],
+    now: datetime,
+) -> None:
+    if pace is None:
+        return
+    windows = weekly_cost_windows(summaries, histories, now, _freshness_seconds(USAGE_REFRESH_INTERVAL_SECONDS))
+    if not windows:
+        return
+    costs = await repo.weekly_costs(windows)
+    for window in windows:
+        cost = costs.get(window.account_id)
+        if cost is None or not isfinite(cost) or cost <= 0:
+            continue
+        estimate = cost * 100.0 / window.used_percent
+        if not isfinite(estimate):
+            continue
+        pace.account_cost_estimates.append(
+            WeeklyAccountCostEstimate(
+                account_id=window.account_id,
+                observed_since=window.since,
+                observed_until=window.until,
+                observed_used_percent=window.used_percent,
+                observed_cost_usd=round(cost, 4),
+                estimated_full_weekly_limit_cost_usd=round(estimate, 2),
+            )
+        )
 
 
 def _parse_weekly_pace_working_days(value: str) -> set[int]:
@@ -213,9 +254,9 @@ class DashboardService:
             trailing_demand_used_percent_by_account=trailing_demand,
             working_days=_parse_weekly_pace_working_days(dashboard_settings.weekly_pace_working_days),
             smoothing_window_minutes=dashboard_settings.weekly_pace_smoothing_minutes,
-            activity_cost_usd=activity_cost.total_usd if activity_cost else None,
         )
         await _attach_top_api_keys(self._repo, weekly_credit_pace, now)
+        await _attach_weekly_cost_estimates(self._repo, weekly_credit_pace, account_summaries, secondary_history, now)
 
         additional_ts = await self._repo.latest_additional_recorded_at()
         return DashboardOverviewResponse(
@@ -268,6 +309,7 @@ class DashboardService:
             smoothing_window_minutes=dashboard_settings.weekly_pace_smoothing_minutes,
         )
         await _attach_top_api_keys(self._repo, weekly_credit_pace, now)
+        await _attach_weekly_cost_estimates(self._repo, weekly_credit_pace, account_summaries, secondary_history, now)
         return DashboardProjectionsResponse(
             depletion_primary=pri_depletion,
             depletion_secondary=sec_depletion,

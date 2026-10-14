@@ -9732,8 +9732,6 @@ async def _normalize_public_responses_stream(
     preserve_native_failure_lifecycle: bool = False,
     codex_rate_limit_headers: Mapping[str, str] | None = None,
 ) -> AsyncIterator[str]:
-    raw_stream = stream
-    stream = _normalize_reasoning_summary_stream(stream)
     """Normalize the upstream SSE event stream for the public /v1 surface.
 
     Args:
@@ -9743,10 +9741,14 @@ async def _normalize_public_responses_stream(
             outside response.* and error, backfill terminal output from streamed
             item events, and synthesize a leading response.created event
             when the upstream stream's first standard event is not
-            response.created. When False (used for /backend-api/codex/*,
-            which feeds the Codex CLI), preserve native events without synthesis,
-            except account quota events, which use the pooled header snapshot.
+            response.created. When False, preserve vendor events without SDK
+            event synthesis. Shared reasoning-summary, error and terminal
+            normalization still applies. Backend Codex requests may opt into
+            SDK enforcement for OpenAI-shaped input. Native account quota
+            events use the pooled header snapshot.
     """
+    raw_stream = stream
+    stream = _normalize_reasoning_summary_stream(stream)
     terminal_seen = False
     done_seen = False
     unparseable_forwarded = False

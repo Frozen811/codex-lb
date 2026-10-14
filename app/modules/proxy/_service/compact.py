@@ -56,6 +56,7 @@ from app.modules.proxy._service.support import (
     resolve_continuity_owner_candidate,
 )
 from app.modules.proxy.affinity import (
+    _affinity_with_deferred_reallocation,
     _affinity_with_payload_continuity,
     _AffinityPolicy,
     _bare_codex_session_affinity,
@@ -86,6 +87,7 @@ from app.modules.proxy.load_balancer import (
     AccountLease,
     AccountSelection,
     effective_account_concurrency_caps,
+    effective_routing_tunables,
 )
 from app.modules.proxy.replay_safety import (
     project_responses_input_for_account_neutral_fresh_replay,
@@ -895,6 +897,11 @@ class _CompactMixin:
             api_key=api_key,
         )
         affinity_observation = AffinityObservation.from_policy(affinity)
+        affinity = _affinity_with_deferred_reallocation(
+            affinity,
+            defer=effective_routing_tunables(settings).defer_sticky_budget_reallocation,
+            compaction=True,
+        )
         _maybe_log_proxy_request_shape(
             "compact",
             payload,
@@ -1307,6 +1314,7 @@ class _CompactMixin:
                     deadline,
                     request_id=request_id,
                     kind="compact",
+                    headers=headers,
                     api_key=api_key,
                     affinity_policy=affinity,
                     prefer_earlier_reset_accounts=prefer_earlier_reset,
@@ -1338,6 +1346,7 @@ class _CompactMixin:
                             deadline,
                             request_id=request_id,
                             kind="compact",
+                            headers=headers,
                             api_key=api_key,
                             affinity_policy=affinity,
                             prefer_earlier_reset_accounts=prefer_earlier_reset,
@@ -1468,6 +1477,7 @@ class _CompactMixin:
                                 deadline,
                                 request_id=request_id,
                                 kind="compact",
+                                headers=headers,
                                 api_key=api_key,
                                 affinity_policy=affinity,
                                 prefer_earlier_reset_accounts=prefer_earlier_reset,

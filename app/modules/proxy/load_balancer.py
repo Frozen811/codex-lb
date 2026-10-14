@@ -268,8 +268,7 @@ class LoadBalancer:
         self._account_locks: dict[str, asyncio.Lock] = {}
         self._account_locks_registry_lock = asyncio.Lock()
         self._selection_inputs_cache = account_cache.get_account_selection_cache()
-        # C2-2 routing/overload: the most recent request-path snapshot; paths
-        # without one (stream error funnel, unkeyed bridge reacquires) reuse it.
+        # Cached routing snapshot, also reused by stream error handling and unkeyed bridge reacquires.
         self._routing_tunables: RoutingTunables | None = None
 
     def _resolve_routing_tunables(self, routing_tunables: RoutingTunables | None) -> RoutingTunables:
@@ -1681,6 +1680,7 @@ class LoadBalancer:
             usage_exhaustion_states=usage_exhaustion_states,
             sticky_refresh_skip_deadline=sticky_refresh_skip_deadline,
             overload_backoff_runtime=self._runtime,
+            defer_budget_reallocation=self.current_routing_tunables().defer_sticky_budget_reallocation,
             hard_owner_pool=hard_owner_pool,
             clock=self._clock,
             redact_sensitive_details=redact_sensitive_details,

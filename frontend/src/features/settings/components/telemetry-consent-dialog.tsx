@@ -2,6 +2,7 @@ import { ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { AlertMessage } from "@/components/alert-message";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -16,6 +17,7 @@ import { useAuthStore } from "@/features/auth/hooks/use-auth";
 import { TelemetryPayloadPreview } from "@/features/settings/components/telemetry-payload-preview";
 import { useTelemetryConsent } from "@/features/settings/hooks/use-settings";
 import { cn } from "@/lib/utils";
+import { getErrorMessageOrNull } from "@/utils/errors";
 
 // Same published page the backend startup notice points operators to
 // (TELEMETRY_FIELDS_DOCUMENTATION in app/modules/telemetry/scheduler.py).
@@ -73,6 +75,7 @@ export function TelemetryConsentDialog() {
   }
 
   const busy = updateTelemetryConsentMutation.isPending;
+  const errorMessage = getErrorMessageOrNull(updateTelemetryConsentMutation.error);
   const decide = (enabled: boolean) => {
     updateTelemetryConsentMutation.mutate({ enabled }, { onSuccess: () => setDismissed(true) });
   };
@@ -121,6 +124,11 @@ export function TelemetryConsentDialog() {
             <TelemetryPayloadPreview preview={preview} />
           </CollapsibleContent>
         </Collapsible>
+        {errorMessage ? (
+          <div role="alert">
+            <AlertMessage variant="error">{errorMessage}</AlertMessage>
+          </div>
+        ) : null}
         <DialogFooter>
           <Button type="button" variant="outline" disabled={busy} onClick={() => decide(false)}>
             {t("settings.telemetry.consentDialog.disable")}

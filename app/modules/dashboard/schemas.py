@@ -101,7 +101,19 @@ class WeeklyCreditApiKeyAttribution(DashboardModel):
     dominant_model: str
 
 
+class WeeklyAccountCostEstimate(DashboardModel):
+    account_id: str
+    observed_since: datetime
+    observed_until: datetime
+    observed_used_percent: float
+    observed_cost_usd: float
+    estimated_full_weekly_limit_cost_usd: float
+
+
 class WeeklyCreditPaceResponse(DashboardModel):
+    credits_are_estimates: bool = True
+    pro_weekly_capacity_credits: float | None = None
+    account_cost_estimates: list[WeeklyAccountCostEstimate] = Field(default_factory=list)
     total_full_credits: float
     total_actual_remaining_credits: float
     total_expected_remaining_credits: float

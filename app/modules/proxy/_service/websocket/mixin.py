@@ -477,6 +477,7 @@ from app.modules.proxy._service.websocket.protocol import _WebSocketServiceProto
 from app.modules.proxy.account_cache import is_account_routing_unavailable
 from app.modules.proxy.account_eligibility import account_access_token_expires_at, reauth_access_token_is_expired
 from app.modules.proxy.affinity import (
+    _affinity_with_deferred_reallocation,
     _AffinityPolicy,
     _is_synthesized_turn_state,
     _owner_lookup_session_id_from_headers,
@@ -509,7 +510,6 @@ from app.modules.proxy.helpers import (
     _normalize_error_code,
     _parse_openai_error,
     _upstream_error_from_openai,
-    is_model_scoped_upstream_rejection,
 )
 from app.modules.proxy.http_bridge_forwarding import (
     HTTPBridgeForwardContext as HTTPBridgeForwardContext,
@@ -518,6 +518,7 @@ from app.modules.proxy.http_bridge_forwarding import (
     OwnerForwardRelayFailure as OwnerForwardRelayFailure,
 )
 from app.modules.proxy.load_balancer import AccountLease, AccountSelection, effective_account_concurrency_caps
+from app.modules.proxy.model_account_routing import resolve_model_account_target
 from app.modules.proxy.rate_limit_events import project_codex_rate_limit_event, rate_limit_headers_for_client
 from app.modules.proxy.request_policy import (
     apply_api_key_enforcement,
@@ -1943,6 +1944,9 @@ class _WebSocketMixin:
                                     codex_session_affinity=codex_session_affinity,
                                     openai_cache_affinity=openai_cache_affinity,
                                     sticky_threads_enabled=sticky_threads_enabled,
+                                    defer_sticky_reallocation=_facade()
+                                    .effective_routing_tunables(settings)
+                                    .defer_sticky_budget_reallocation,
                                     openai_cache_affinity_max_age_seconds=openai_cache_affinity_max_age_seconds,
                                     prohibit_fast_mode=prohibit_fast_mode,
                                     api_key=api_key,
@@ -1984,6 +1988,9 @@ class _WebSocketMixin:
                                         codex_session_affinity=codex_session_affinity,
                                         openai_cache_affinity=openai_cache_affinity,
                                         sticky_threads_enabled=sticky_threads_enabled,
+                                        defer_sticky_reallocation=_facade()
+                                        .effective_routing_tunables(settings)
+                                        .defer_sticky_budget_reallocation,
                                         openai_cache_affinity_max_age_seconds=openai_cache_affinity_max_age_seconds,
                                         prohibit_fast_mode=prohibit_fast_mode,
                                         api_key=api_key,
@@ -2560,7 +2567,10 @@ class _WebSocketMixin:
                     request_state is not None
                     and upstream is not None
                     and account is not None
-                    and request_state.affinity_policy.require_unambiguous_account
+                    and (
+                        request_state.affinity_policy.require_unambiguous_account
+                        or resolve_model_account_target(request_state.model, headers=headers) is not None
+                    )
                 ):
                     # Socket reuse bypasses connect-time selection. Re-run the
                     # ownership-only check for every conversation frame; the
@@ -2570,6 +2580,7 @@ class _WebSocketMixin:
                         request_id=request_state.request_log_id or request_state.request_id,
                         kind="websocket",
                         request_stage=request_state.request_stage,
+                        headers=headers,
                         api_key=request_state.api_key or api_key,
                         affinity_policy=request_state.affinity_policy,
                         model=request_state.model,
@@ -3472,6 +3483,7 @@ class _WebSocketMixin:
         codex_session_affinity: bool,
         openai_cache_affinity: bool,
         sticky_threads_enabled: bool,
+        defer_sticky_reallocation: bool = False,
         openai_cache_affinity_max_age_seconds: int,
         api_key: ApiKeyData | None,
         prohibit_fast_mode: bool = False,
@@ -3814,6 +3826,7 @@ class _WebSocketMixin:
             affinity_policy,
             synthesized_turn_state=synthesized_turn_state,
         )
+        affinity_policy = _affinity_with_deferred_reallocation(affinity_policy, defer=defer_sticky_reallocation)
         _maybe_log_proxy_request_shape(
             "websocket",
             responses_payload,
@@ -4303,6 +4316,7 @@ class _WebSocketMixin:
                     request_id=request_state.request_log_id or request_state.request_id,
                     kind="websocket",
                     api_key=api_key,
+                    headers=headers,
                     sticky_key=sticky_key,
                     sticky_kind=sticky_kind,
                     reallocate_sticky=reallocate_sticky,
@@ -4993,32 +5007,20 @@ class _WebSocketMixin:
         else:
             classified = await proxy._handle_websocket_connect_error(account, exc)
             failure_class = classified["failure_class"] if isinstance(classified, dict) else "non_retryable"
-        error = _parse_openai_error(exc.payload)
-        model_scoped_rejection = is_model_scoped_upstream_rejection(
-            error.message if error else None,
-            error_code=_normalize_error_code(error.code if error else None, error.type if error else None),
-        )
         more_candidates_possible = attempt < max_attempts
         if confirmed_pre_dispatch:
             action = "surface" if require_preferred_account or not more_candidates_possible else "failover_next"
-        elif exc.status_code == 401 and more_candidates_possible:
+        elif exc.status_code == 401 and more_candidates_possible and not require_preferred_account:
             action = "failover_next"
         elif deterministic_failover_enabled:
-            # The connect path has no same-account burst retry to offer, so a
-            # preferred-account requirement keeps being answered by the
-            # confirmed-pre-dispatch branch and by selection itself rather than
-            # by ``owner_bound`` here.
             action = failover_decision(
                 failure_class=failure_class,
                 downstream_visible=False,
                 more_candidates_possible=more_candidates_possible,
-                # A required continuity or file owner cannot be excluded for a
-                # different account after rejecting the model: ``failover_next``
-                # would only re-select into the owner requirement and replace
-                # the owner's own envelope (a 404 ``model_not_found`` included)
-                # with owner unavailability. Capacity failures keep their
-                # existing owner-unavailable translation.
-                owner_bound=require_preferred_account and model_scoped_rejection,
+                # A hard owner cannot move. Reselection after excluding it
+                # would replace the original connect error with a generated
+                # owner-unavailable failure.
+                owner_bound=require_preferred_account,
             )
         else:
             action = "surface"

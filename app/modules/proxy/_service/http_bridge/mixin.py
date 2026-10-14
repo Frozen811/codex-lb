@@ -223,6 +223,7 @@ from app.modules.proxy.continuity import (
 )
 from app.modules.proxy.durable_bridge_coordinator import DurableBridgeLookup
 from app.modules.proxy.load_balancer import CONTINUITY_OWNER_UNAVAILABLE, AccountLease
+from app.modules.proxy.model_account_routing import strict_model_bridge_preference
 from app.modules.proxy.selection_errors import USAGE_LIMIT_REACHED, selection_failure_response
 
 logger = logging.getLogger("app.modules.proxy.service")
@@ -405,6 +406,16 @@ class _HTTPBridgeMixin(
     ) -> "_HTTPBridgeSession | _HTTPBridgeOwnerForward":
         settings = _service_get_settings()
         request_scope_id = ensure_request_scope_id()
+        preferred_account_id, fallback_on_preferred_account_unavailable = await strict_model_bridge_preference(
+            request_model,
+            headers,
+            self._repo_factory,
+            api_key,
+            preferred_account_id,
+            fallback_on_preferred_account_unavailable,
+            previous_response_id is not None or preferred_account_has_continuity_provenance or key.strength == "hard",
+            exclude_account_ids,
+        )
         api_key_id = api_key.id if api_key is not None else None
         incoming_turn_state = _sticky_key_from_turn_state_header(headers)
         incoming_session_key, initial_session_key = _turn_keys(headers, api_key, key, session_header_fallback_key)
@@ -733,6 +744,7 @@ class _HTTPBridgeMixin(
                     current_instance = settings.http_responses_session_bridge_instance_id
                     if _durable_bridge_lookup_allows_local_reuse(durable_lookup, current_instance=current_instance):
                         existing.api_key = api_key
+                        existing.idle_ttl_seconds = min(existing.idle_ttl_seconds, idle_ttl_seconds)
                         existing.request_model = request_model
                         existing.request_service_tier = request_service_tier
                         existing.last_used_at = clock_for(self).monotonic()
@@ -1446,6 +1458,7 @@ class _HTTPBridgeMixin(
                     current_instance = settings.http_responses_session_bridge_instance_id
                     if _durable_bridge_lookup_allows_local_reuse(durable_lookup, current_instance=current_instance):
                         session.api_key = api_key
+                        session.idle_ttl_seconds = min(session.idle_ttl_seconds, idle_ttl_seconds)
                         session.request_model = request_model
                         session.request_service_tier = request_service_tier
                         session.last_used_at = clock_for(self).monotonic()
@@ -1700,6 +1713,7 @@ class _HTTPBridgeMixin(
             select_kwargs = {
                 "request_id": request_state.request_log_id or request_state.request_id,
                 "kind": "http_bridge",
+                "headers": headers,
                 "request_stage": request_stage,
                 "api_key": api_key,
                 "affinity_policy": (

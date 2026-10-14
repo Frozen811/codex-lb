@@ -1,0 +1,853 @@
+{
+  "selected": [
+    "UP-ISSUE-1132",
+    "UP-DISC-636",
+    "UP-DISC-1593",
+    "UP-ISSUE-1919",
+    "UP-DISC-884"
+  ],
+  "changed_source_rows": [
+    "UP-ISSUE-1132",
+    "UP-ISSUE-1919",
+    "UP-DISC-1593",
+    "UP-DISC-636",
+    "UP-DISC-884"
+  ],
+  "source_count": 359,
+  "unselected_source_rows_preserved": 354,
+  "saved_rows": {
+    "UP-ISSUE-1132": "| [UP-ISSUE-1132](https://github.com/Soju06/codex-lb/issues/1132) | #1132: UI account section bag — account-list overflow, связан PR #1149 | Раздел 4, L622 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §100: account list/detail overflow independently verified at390/768/1440; fixed tall export dialog with bounded scrolling and reachable Download/Close. [Evidence](openspec/changes/archive/2026-10-14-repair-five-account-access-contracts/verification.md). |",
+    "UP-DISC-636": "| [UP-DISC-636](https://github.com/Soju06/codex-lb/discussions/636) | #636: Import&#124;Export Accaunts | Раздел 11, L1302 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §100: Export action and OAuth/OpenCode behavior verified; fixed null/missing ID+refresh schema/rendering/copy controls and retained identity in downloaded auth.json. [Evidence](openspec/changes/archive/2026-10-14-repair-five-account-access-contracts/verification.md). |",
+    "UP-DISC-1593": "| [UP-DISC-1593](https://github.com/Soju06/codex-lb/discussions/1593) | #1593: Reauthentication when switching Business accounts: same workspace vs different workspace | Раздел 11, L1257 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §100: fixed opaque auth export/import metadata loss; same-workspace siblings and same email/different workspaces remain isolated; targeted OAuth mismatch/seat tests PASS. Live sign-outs and cross-workspace conversation continuity remain unverified. [Evidence](openspec/changes/archive/2026-10-14-repair-five-account-access-contracts/verification.md). |",
+    "UP-ISSUE-1919": "| [UP-ISSUE-1919](https://github.com/Soju06/codex-lb/issues/1919) | #1919 / PR #2429: bug: Need to reauthenticate accounts with Advanced Account Security every single day | Раздел 4, L624 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §100: current Guardian/AuthManager keepalive/rotation/failure ownership independently verified. Idle>12h remains separate from request freshness; dynamic leadership and fresh-credential CAS PASS. Live daily Advanced Account Security session loss is not reproduced or globally claimed fixed. [Evidence](openspec/changes/archive/2026-10-14-repair-five-account-access-contracts/verification.md). |",
+    "UP-DISC-884": "| [UP-DISC-884](https://github.com/Soju06/codex-lb/discussions/884) | #884: Idea: API-based authorization flow for accounts when SMS verification is unavailable | Раздел 11, L1318 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §100: existing Model Sources API-key flow verified through encrypted/redacted storage and real synthetic Responses dispatch with no subscription accounts. PAT export repaired; operator context distinguishes source API billing from subscription credentials. No SMS/security bypass or live entitlement claim. [Evidence](openspec/changes/archive/2026-10-14-repair-five-account-access-contracts/verification.md). |"
+  },
+  "status_counts": {
+    "ИСПРАВЛЕНО ЛОКАЛЬНО / ЧАСТИЧНО ПРОВЕРЕНО": 4,
+    "ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО": 112,
+    "ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО": 83,
+    "НЕ ПРОВЕРЕНО": 111,
+    "ЧАСТИЧНО ПРОВЕРЕНО": 6,
+    "ЗАКРЫТО ЛОКАЛЬНО": 22,
+    "ЛОКАЛЬНО ПРОВЕРЕНО / ЗАКРЫТО": 1,
+    "НЕ ПРИМЕНИМО": 2,
+    "ИСПРАВЛЕНО ЛОКАЛЬНО / ЗАКРЫТО": 5,
+    "ЗАКРЫТО ЛОКАЛЬНО (CATALOG SCOPE)": 1,
+    "**ЗАКРЫТО ЛОКАЛЬНО (§75)**": 5,
+    "**ЗАКРЫТО ЛОКАЛЬНО (§76)**": 5,
+    "ЗАКРЫТО ЛОКАЛЬНО (DOC/CONFIG SCOPE)": 1,
+    "ЗАКРЫТО ЛОКАЛЬНО (ACCOUNT-LOCAL SCOPE)": 1
+  },
+  "initial_dirty_paths": 201,
+  "unrelated_initial_paths_preserved": 196,
+  "shared_paths": [
+    "app/modules/accounts/schemas.py",
+    "issues-check.md",
+    "openspec/specs/frontend-architecture/context.md",
+    "openspec/specs/frontend-architecture/spec.md",
+    "openspec/specs/usage-refresh-policy/context.md"
+  ],
+  "preserved": [
+    {
+      "Path": "app/core/clients/native_egress.py",
+      "Hash": "3078B6D67057452C7ECA6003CE2AD9857E270A3A8B8FC71343944B3F9A4D50D2"
+    },
+    {
+      "Path": "app/core/clients/oauth.py",
+      "Hash": "A8C63A2D8C09872ADF75F02E635F693AF7873BDF6AB0EDE41EEDC046F04AF657"
+    },
+    {
+      "Path": "app/core/openai/images.py",
+      "Hash": "74B08C8C62CB0C78BF355459489AFD1E63E9C6B0FD449F950477EEB89CE4A393"
+    },
+    {
+      "Path": "app/core/usage/__init__.py",
+      "Hash": "E0A078AD757A1E001671117CDCC3753F0B39A6C56F7BC9B77E2FDE74209F4245"
+    },
+    {
+      "Path": "app/db/models.py",
+      "Hash": "09FB2223ED94F999C5AE297FD9792181D3F08F92EC336EB26C233735E1050E04"
+    },
+    {
+      "Path": "app/db/session.py",
+      "Hash": "0C14833EAD47E3638A85AF51EFB96655AEAE24452F1A5914CBAE01E2063AF496"
+    },
+    {
+      "Path": "app/modules/dashboard/api.py",
+      "Hash": "1523E173069D1B8ACEBF7C4F9D07EE4A80BF81775F9CD80BF2DA014684D99778"
+    },
+    {
+      "Path": "app/modules/dashboard/repository.py",
+      "Hash": "8F0CA37F9961927B54272327ED426409E36C4930CB289FF9A86C56F294E235D5"
+    },
+    {
+      "Path": "app/modules/dashboard/schemas.py",
+      "Hash": "078CA6E360954FAEED78A6D7E276F30619304AF53555F9C0C97A0FF978969705"
+    },
+    {
+      "Path": "app/modules/dashboard/service.py",
+      "Hash": "74CC2901D9B3AACF4378BFE41F07B12EB77F9294B7CACBEBC0F5C7B29CFF8F96"
+    },
+    {
+      "Path": "app/modules/dashboard/weekly_pace.py",
+      "Hash": "132E72864EBDD90F74125A6ADFD43732E8E3BF0233A1552A0DF506451BDE64C0"
+    },
+    {
+      "Path": "app/modules/proxy/_load_balancer/sticky_selection.py",
+      "Hash": "79F2C3F2B6B27192A1CB61A6A92A4B18984BBBBC61B26BC26FA8911F6B66CF95"
+    },
+    {
+      "Path": "app/modules/proxy/_load_balancer/tunables.py",
+      "Hash": "AE0BBCE22AF0983B903661D5F276596C39AC6E7F5DE88FE5624A30ADC0B28D40"
+    },
+    {
+      "Path": "app/modules/proxy/_service/compact.py",
+      "Hash": "858E8274947EAC774FAF969D2F9198E4FC1BBB7FEBAB865DB0B62D312953F315"
+    },
+    {
+      "Path": "app/modules/proxy/_service/http_bridge/helpers.py",
+      "Hash": "D5AC8A6D66A78E739651581D5C64B25F1C0E553F7679853A21B2D5993E74943E"
+    },
+    {
+      "Path": "app/modules/proxy/_service/http_bridge/mixin.py",
+      "Hash": "C8DA9502A68AD2319D5995DADD4D5F2E2DE21D6054BF3A41D4AEAF1F8F6BA8BF"
+    },
+    {
+      "Path": "app/modules/proxy/_service/http_bridge/streaming.py",
+      "Hash": "D588EA6FDF47957903E02EF02F17AA028C2400F36B19A6BC5FC17CE5B946DB29"
+    },
+    {
+      "Path": "app/modules/proxy/_service/streaming/helpers.py",
+      "Hash": "4E4984E74B6B56044AEF338333507E61C112784860CB9A0CAE820F8391BFA7DB"
+    },
+    {
+      "Path": "app/modules/proxy/_service/streaming/retry.py",
+      "Hash": "D58EED10204142ECC30A94C6A4A4013721610ED067CB9D1EA39F11CE6E812A4F"
+    },
+    {
+      "Path": "app/modules/proxy/_service/support.py",
+      "Hash": "299E0AA20CDA3267931535FDC2863E9376F2A5629BCF87E1F9350FEC5694C2B7"
+    },
+    {
+      "Path": "app/modules/proxy/_service/websocket/mixin.py",
+      "Hash": "F2ADFEEA3FEFF52EF3F81DEA279441E20A885142DD076B88EAED08E246141F61"
+    },
+    {
+      "Path": "app/modules/proxy/affinity.py",
+      "Hash": "43B877F088D095381A9D91CF93D510EC7EBA6FD1E044FC10B146F615D5DF3224"
+    },
+    {
+      "Path": "app/modules/proxy/api.py",
+      "Hash": "C3F9C6B572BB56B3BA6BC126D73F5944FF90258D81B4696652AEC9076D81801C"
+    },
+    {
+      "Path": "app/modules/proxy/images_service.py",
+      "Hash": "BA486D83D1BDBCF67211C5226B22A35AC3F69B77EC902389205507BC61FDDB1A"
+    },
+    {
+      "Path": "app/modules/proxy/load_balancer.py",
+      "Hash": "A96B394C0CF6C9C76E27E0636F22FC631444E95AAA44195211839DA8E9C35127"
+    },
+    {
+      "Path": "app/modules/proxy/model_account_routing.py",
+      "Hash": "51144BCDAF2F21260AC0344EA931C7404A59555FF5DDA72C95DEF13B26FD72E2"
+    },
+    {
+      "Path": "app/modules/proxy/service.py",
+      "Hash": "B6692C3FDC3F2DDDD6F0004B905D511E705FEBC6F0E98782EA29E5EC8D31C2CF"
+    },
+    {
+      "Path": "app/modules/proxy/subagent_preference.py",
+      "Hash": "E804FE84744F5332AF41DAD008D101DB6ABB48A4990BCF149068AD171C73C8B1"
+    },
+    {
+      "Path": "app/modules/request_logs/api.py",
+      "Hash": "C3C40B196EB219B39480E8C5F034D0C51491C8FF6981BCE73004D6B3A440F347"
+    },
+    {
+      "Path": "app/modules/request_logs/repository.py",
+      "Hash": "3D885D4D6E09A8DAEBCBF57AA3B4040845D5854FF0B8303BFE3307BC43311BF1"
+    },
+    {
+      "Path": "app/modules/request_logs/schemas.py",
+      "Hash": "29BD3D64AFCEF4F002E6BA35F791821B10405DDD8FA90BD791D24EF09D32F9D8"
+    },
+    {
+      "Path": "app/modules/request_logs/service.py",
+      "Hash": "3715CDCB985C2329F96215F32CC0D657E278E532BE6A77D839005C4835C2A7C8"
+    },
+    {
+      "Path": "app/modules/settings/api.py",
+      "Hash": "62EC8B8228E3E6A1C048447D82401C19A83B79F3D71A6AE221B77E16419622E9"
+    },
+    {
+      "Path": "app/modules/settings/repository.py",
+      "Hash": "81EB3A2F0C5F3DE87A45E83B226077920EA7D7F24D2209E2A0C517F5DD141A0E"
+    },
+    {
+      "Path": "app/modules/settings/schemas.py",
+      "Hash": "EB191528154BF89E974A25BB86A799763789442E379E14FCDEC00A803F8BFD11"
+    },
+    {
+      "Path": "app/modules/settings/service.py",
+      "Hash": "341FA93723FFC2E2019F5FD1A603CA8C15DB222FCC2849C336473798E80BF861"
+    },
+    {
+      "Path": "app/modules/usage/schemas.py",
+      "Hash": "2447D55FE2EC11B7B8A0130745F050F575767F28DD45CE1AA76C6DCE1B3C0D0C"
+    },
+    {
+      "Path": "docs/usage-reporting.md",
+      "Hash": "4506D04C4DB66EF0EA25E5616FD099BE9C80818479BC66F97D9EA05001E3C880"
+    },
+    {
+      "Path": "frontend/src/features/auth/components/totp-dialog.test.tsx",
+      "Hash": "B04E92CDA463E21B18754045B7E73417E40B560AEE1659C824C3D38EFE070371"
+    },
+    {
+      "Path": "frontend/src/features/dashboard/api.ts",
+      "Hash": "0AC3A565B42138903E4C7D212B920F253C5E5D4C43028C48675AF5B5D0B9631D"
+    },
+    {
+      "Path": "frontend/src/features/dashboard/components/account-view-mode-toggle.tsx",
+      "Hash": "705A2A4AFA2608865BB03BF9001485E9C30791C3DC366B377DA71F3C9B48B099"
+    },
+    {
+      "Path": "frontend/src/features/dashboard/components/dashboard-page.test.tsx",
+      "Hash": "3852E761E3698E2CBD3E69D7BEECD8EDBF102246DB98EAB3251BB1345D06E206"
+    },
+    {
+      "Path": "frontend/src/features/dashboard/components/dashboard-page.tsx",
+      "Hash": "45CEA9FE98CC8955AF642F8BC51F1A606A3E7A9E9FC2E9D09C423303BD9DD6A3"
+    },
+    {
+      "Path": "frontend/src/features/dashboard/components/filters/request-filters.test.tsx",
+      "Hash": "5CC1373BB3FE54CC42C9FC11E97D02236773387E1E65F58C25E2E3C240BFF3BC"
+    },
+    {
+      "Path": "frontend/src/features/dashboard/components/filters/request-filters.tsx",
+      "Hash": "97FB46B37E6A7A39160C2D06053555A7D7475008A2A53FFF7317B1054A5FDF53"
+    },
+    {
+      "Path": "frontend/src/features/dashboard/components/recent-requests-table.tsx",
+      "Hash": "7830197A7EBA36333BB4854C1AFF8C814043CD3148FBEE44FA3CC02F1A632879"
+    },
+    {
+      "Path": "frontend/src/features/dashboard/components/weekly-credits-pace-card.test.tsx",
+      "Hash": "3DBF044404F38F943831CD80052D0B98BA2AE24D01CA62BD9283A0A61748F8D9"
+    },
+    {
+      "Path": "frontend/src/features/dashboard/components/weekly-credits-pace-card.tsx",
+      "Hash": "EC25B5A5935B5D4406897305693138DABE7D6CC0DEB0F029980BE2FC93AF5669"
+    },
+    {
+      "Path": "frontend/src/features/dashboard/hooks/use-request-logs.test.ts",
+      "Hash": "C51167DF2C3A56CF0F1238FF14A78B59812D00D58A99C279070A5E3272A9BA63"
+    },
+    {
+      "Path": "frontend/src/features/dashboard/hooks/use-request-logs.ts",
+      "Hash": "DE6404034A2897BDCD793F7355F1B295AB3F4FA4A2F14462C22A9C55686DFB90"
+    },
+    {
+      "Path": "frontend/src/features/dashboard/schemas.ts",
+      "Hash": "3A4BBDED4B8C4CC0589D9FE41DEB0C3C16E34A94B129C4D0E0743BDD6C8D18A0"
+    },
+    {
+      "Path": "frontend/src/features/dashboard/utils.test.ts",
+      "Hash": "2180DD770DE329A1D630AFAEB1F8DCC056A746EB9C9B6C06E70F2A0160EEE607"
+    },
+    {
+      "Path": "frontend/src/features/dashboard/utils.ts",
+      "Hash": "BA1D4FEF96C387B37B860F2C59449B5CABAFC6720E7662EBED9173F4DCE8559D"
+    },
+    {
+      "Path": "frontend/src/features/settings/components/appearance-settings.tsx",
+      "Hash": "4FB04AFB06E5E720E2F7F739BDE84DC9A954436E5ADF26E24DFE08E8986729C4"
+    },
+    {
+      "Path": "frontend/src/features/settings/components/session-settings.test.tsx",
+      "Hash": "619C34C54B0EDA87A8C1409ACD0F3D0F3FEF541DC476B4F784955396B1C4144C"
+    },
+    {
+      "Path": "frontend/src/features/settings/components/telemetry-consent-dialog.test.tsx",
+      "Hash": "244537A07C94C8D60368C4421431C602DD001F9D1D7208CC873EF9EB22BB064E"
+    },
+    {
+      "Path": "frontend/src/features/settings/components/telemetry-consent-dialog.tsx",
+      "Hash": "2DBC4CAD9D3DBCBD0740F449F68E6755020E4EDBF3228970EFC989A6A07216E6"
+    },
+    {
+      "Path": "frontend/src/hooks/use-dashboard-preferences.test.ts",
+      "Hash": "DE1C792CCB621B5BE1E0586E1FFA6E2E600CBF89E9DC8F8802AD8BD3A5A21232"
+    },
+    {
+      "Path": "frontend/src/hooks/use-dashboard-preferences.ts",
+      "Hash": "88A0D9DB13DD4CD493EACA959624F2FFFB523F1A0C9EFE2D72A27D4D7F6DF683"
+    },
+    {
+      "Path": "frontend/src/i18n/locales/en.json",
+      "Hash": "BDA724617B2315ABE3F8B56D3C7B836CFA8980E7BD4F58833550DBF1C7F8B121"
+    },
+    {
+      "Path": "frontend/src/i18n/locales/ko.json",
+      "Hash": "74B8903488A8AFC03A91B17A91CA20AAB2AE2330563D1C0FF962928FEFF31E15"
+    },
+    {
+      "Path": "frontend/src/i18n/locales/zh-CN.json",
+      "Hash": "9F47386AE521C6BD8405142C0D723BD209D82006EACDC96F828A50C7DDB8050C"
+    },
+    {
+      "Path": "openspec/specs/account-quota-presentation/context.md",
+      "Hash": "179F1671917C24E2187B0E0CCB50E0712901A29956B93A608A1DD36B5569AFAA"
+    },
+    {
+      "Path": "openspec/specs/account-quota-presentation/spec.md",
+      "Hash": "AEE31B7DFA779D149220006A2507BE1F0EEAE46C1E7217140438E6744C245878"
+    },
+    {
+      "Path": "openspec/specs/account-routing/context.md",
+      "Hash": "633EA6E5025F3CDEB920827EC0ACD56687E87657741F1B2F1FEB2C909E67A3C3"
+    },
+    {
+      "Path": "openspec/specs/account-routing/spec.md",
+      "Hash": "5B0594DB8EBC22D6A79F8F944D7E55A65541E50DA5A55FFF9EF132C2C68027DB"
+    },
+    {
+      "Path": "openspec/specs/data-retention/context.md",
+      "Hash": "C005C89B7650154F4C46B1DB32C4AD2EDA60C9C91D610FDBF2FA97D64132D3CF"
+    },
+    {
+      "Path": "openspec/specs/database-backends/context.md",
+      "Hash": "9DC340298E564FEDBB2001D7FCABE2D040B9772E375756099DD67601B5238534"
+    },
+    {
+      "Path": "openspec/specs/database-backends/spec.md",
+      "Hash": "D57897239691867B5D10FB83066A47FFC2DFBDFB7CF50E2700F481166D899C49"
+    },
+    {
+      "Path": "openspec/specs/images-api-compat/context.md",
+      "Hash": "4FB9F906B9EFF7D3D99FD6C086738C3A35488945E1823527F5A34AD438DC68E7"
+    },
+    {
+      "Path": "openspec/specs/images-api-compat/spec.md",
+      "Hash": "702D2EC9A2BEDB538C3B2D2302D600D24D4CB518E855ADE6E0E93842C0B82415"
+    },
+    {
+      "Path": "openspec/specs/oauth-callback-privacy/context.md",
+      "Hash": "62307AD70870A7A6029EC5C6B1B626903D16FCBE9C4750BEB5B185C64B79FF27"
+    },
+    {
+      "Path": "openspec/specs/oauth-callback-privacy/spec.md",
+      "Hash": "DBC9465D08C3C504EB63DF7C4C5E1C9284CBBAB54D061D1479D55098EEE5E555"
+    },
+    {
+      "Path": "openspec/specs/report-aggregation/context.md",
+      "Hash": "6DE62EE06D6052158D197932711F64EFD8A481180EC25D023ACC484066CB03CF"
+    },
+    {
+      "Path": "openspec/specs/responses-api-compat/context.md",
+      "Hash": "F2FF14278F96BAAA7EB6D3913D72687B8F9A62247FCC2830ABF5ADC86A8BDEC0"
+    },
+    {
+      "Path": "openspec/specs/responses-api-compat/spec.md",
+      "Hash": "E15F10A32E08518FC08968354436587CEE78F58BAAA2E6412C29A28BDC2D2806"
+    },
+    {
+      "Path": "openspec/specs/sticky-session-operations/context.md",
+      "Hash": "44A42AAB95EF38AA01A5FD5511E136EAB4417C4DFE306D606209A0A437A32777"
+    },
+    {
+      "Path": "openspec/specs/sticky-session-operations/spec.md",
+      "Hash": "AC70F0DCF1F81D8C597581918B30D55B44CC825B4B45DDCC265B7B6A2CFBF0C3"
+    },
+    {
+      "Path": "openspec/specs/telemetry/context.md",
+      "Hash": "818DEBCA7F4F5D0F5E377B9F0A260CF9697FF94D4AB0F5EDCDD8D063C2167B65"
+    },
+    {
+      "Path": "openspec/specs/telemetry/spec.md",
+      "Hash": "3DF8A677720FF673C3295BF60D096104512075D67FABFABC71B8C72FA8611AB4"
+    },
+    {
+      "Path": "openspec/specs/usage-refresh-policy/spec.md",
+      "Hash": "F1A07DFA33759BD10D9DCA4A45EA68CDADF22F3703ED75D238CEDF6B7FACA610"
+    },
+    {
+      "Path": "pyproject.toml",
+      "Hash": "EB83D609F79BE252D547C5313B1E41718EDFC23658BFD0411698499F07419517"
+    },
+    {
+      "Path": "tests/integration/test_dashboard_overview.py",
+      "Hash": "819A1DD821AAE7B81F72DCBE2F1BE6629DE449F23C9E7FDCCB1FF8F31FD6311B"
+    },
+    {
+      "Path": "tests/integration/test_plan_json_contracts.py",
+      "Hash": "DDFB6E77893C11EDE692ADDAB00D9F87DF2F80869FAE19004061C855452C6A31"
+    },
+    {
+      "Path": "tests/integration/test_proxy_images.py",
+      "Hash": "552124A1D1BCAA439F33AFF1F5C77E1147F665BE1DE58646C85E0003C62DCFD7"
+    },
+    {
+      "Path": "tests/unit/test_affinity_subagent_ttl.py",
+      "Hash": "7E392AB4FFECA78A4BB8CCF3E1AC169D4FEB03BB63983462C70668A41F1FDABE"
+    },
+    {
+      "Path": "tests/unit/test_dashboard_weekly_pace.py",
+      "Hash": "60D1F2BF3434370C0EE70C2A4DAA1F183829BA689FC9BC11259973BA7B5D563F"
+    },
+    {
+      "Path": "tests/unit/test_db_session.py",
+      "Hash": "2CA41C4DBE1B4F6613AC2E393B40F4940F00910AE0BE7CD87DA1FD454E9185CB"
+    },
+    {
+      "Path": "tests/unit/test_images_schemas.py",
+      "Hash": "475B1A8EE0757D8C77CDFEFA867C243C45A2ED408EF6C5FCCA0766220C2E4226"
+    },
+    {
+      "Path": "tests/unit/test_proxy_utils.py",
+      "Hash": "DA61BBA8C4A0A9BC86192DD71434A8591B6013AE38FEADC71A15FB01351A5C41"
+    },
+    {
+      "Path": "tests/unit/test_usage.py",
+      "Hash": "C0FA136EBC557EA9F2DEBD5B07E536CA2E25FE73831F0EDB38893B53957684D9"
+    },
+    {
+      "Path": "uv.lock",
+      "Hash": "034250103B2942B9C469FDA9B2E4F4604186BA60B2050087B396436483657F71"
+    },
+    {
+      "Path": "app/db/alembic/versions/20261014_000000_add_sticky_reallocation_timing.py",
+      "Hash": "847D59C49A6FB2BD0506C428A1B86E9966A78D739F05EDA857BFDBE47E792806"
+    },
+    {
+      "Path": "app/db/sqlite_connection.py",
+      "Hash": "42C9FB539EE55E2A4CC4628AAB60405106BABB7AA96284FE54BA589768A383D3"
+    },
+    {
+      "Path": "app/modules/dashboard/activity.py",
+      "Hash": "19B189D4D1C28B28CB489E508968703A261B5F00B10F9F03619FE1EEECFE8B6E"
+    },
+    {
+      "Path": "app/modules/dashboard/weekly_cost.py",
+      "Hash": "1F231856501A95C5FC6C30D35EF57B530D369AFE0167BE2E2AABACE47CE5E826"
+    },
+    {
+      "Path": "app/modules/request_logs/upstreams.py",
+      "Hash": "9BCA2A59F4323B47636DCB999C8DCCFE5A58916C87AECCA1CAC365B94942F450"
+    },
+    {
+      "Path": "frontend/browser-smoke/dashboard-interactions.config.ts",
+      "Hash": "3AABF0A43B70931DC31539EF75C601388B5DDA6D528C3C4692169E6FCA6339F3"
+    },
+    {
+      "Path": "frontend/browser-smoke/dashboard-interactions.spec.ts",
+      "Hash": "FAC4622695AB5EA07410BF1C8F31B1AEE38F1779B82A81FA68C7BA4576639FC5"
+    },
+    {
+      "Path": "frontend/browser-smoke/observability.config.ts",
+      "Hash": "04C615DDA795DA87F0D6800758AF158204A2DC39AE78FCC05BC278DA9D8EC5D3"
+    },
+    {
+      "Path": "frontend/browser-smoke/observability.spec.ts",
+      "Hash": "C7797D99A2619F3AEC30092F4346006207E48F8B2757066D2DD2B254D4F18AFE"
+    },
+    {
+      "Path": "frontend/browser-smoke/quota-estimates.config.ts",
+      "Hash": "1740AC5A7C053030383A50569535FEC1EB9F573A3FD417D280CBCD025EC04266"
+    },
+    {
+      "Path": "frontend/browser-smoke/quota-estimates.spec.ts",
+      "Hash": "BD054DBE2B3AEB78BB0F40164A71806E72F4CC2609A3DE82407ECA319CF6D3B7"
+    },
+    {
+      "Path": "frontend/src/features/dashboard/activity-calendar.ts",
+      "Hash": "0E0EC4F6C31B180D361B7A6E3F515572EA9227E7B7748AFAA96A5B066EF477B1"
+    },
+    {
+      "Path": "frontend/src/features/dashboard/components/account-view-mode-toggle.test.tsx",
+      "Hash": "4942C85B14CA988D0DDB9D253399E8A815C32C0A46A7918B87D36A0A2DF61EFA"
+    },
+    {
+      "Path": "frontend/src/features/dashboard/components/request-activity-heatmap.test.tsx",
+      "Hash": "D861783B4689628123B4E7C7C7936D0D09D1ED3E099D11AB0D906EBF61BE1761"
+    },
+    {
+      "Path": "frontend/src/features/dashboard/components/request-activity-heatmap.tsx",
+      "Hash": "1A3949828E58BC770C0A8AFF5F0E23AE34C163E102C5196FC3EB65CE2F1AE94A"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-13-repair-five-account-placement-contracts/.openspec.yaml",
+      "Hash": "010447270992E8E9533B7BBFB4DBDECDA78EAB560F05C50428C80463AA9E0EC1"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-13-repair-five-account-placement-contracts/closure.json",
+      "Hash": "E314AB9BF3B34C1D2D717FAB911BB77112AF6FCFEBF11F93111B56082B8662E9"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-13-repair-five-account-placement-contracts/design.md",
+      "Hash": "761FE8699A228C72479CBBD2A43B695943B82AF3E1AE2B7FED2BBC086060CD11"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-13-repair-five-account-placement-contracts/prefixes.json",
+      "Hash": "751C5576247B23207783D35896729D9BA293200759ECB2B23655BBA1A5314800"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-13-repair-five-account-placement-contracts/proposal.md",
+      "Hash": "47E7AE0EEBB43A59D5F281F16EE9507BC4851562F8A1C379FA7E11B4F7150334"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-13-repair-five-account-placement-contracts/specs/account-routing/spec.md",
+      "Hash": "F800CEB2C2FAE7CE5E0C2413C866414ED273339C734D6EAC3462DA5CB619CB6A"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-13-repair-five-account-placement-contracts/specs/sticky-session-operations/spec.md",
+      "Hash": "EF24493F04A5A32AE7BB72624641E49972E92796D4B754FBC3EE374E3ED27ECA"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-13-repair-five-account-placement-contracts/tasks.md",
+      "Hash": "A82B6BCFF2EABA6982EEAC338EC0C920B409F02C1C6B015666A72AD2AA642FE1"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-13-repair-five-account-placement-contracts/verification.md",
+      "Hash": "B301BD4CCAB35C5DB0D009AA254B6C6E7BA75CAAFABE93AEADA555424B9AAF78"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-client-boundary-contracts/.openspec.yaml",
+      "Hash": "CD54FE01555559FFD5CF6F7F1D1B06209492E5BA9147CDC3800201C09E2291D0"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-client-boundary-contracts/closure.json",
+      "Hash": "CCFC707D91EC81D7FCC4D73D3051C122560ECD650DDDD4D7CC222FC7782B814E"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-client-boundary-contracts/design.md",
+      "Hash": "F214BC134A3449EE7A662C49EE8093A26CA74D4A973ED2188BE0AE214CC9507D"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-client-boundary-contracts/proposal.md",
+      "Hash": "8FB1523DC05FFABF88AE08FAB07A3AF14EED1B04811FD6B1BFE6F502DA66E3F6"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-client-boundary-contracts/specs/images-api-compat/spec.md",
+      "Hash": "91DD4303DA6082B57E3D273CF940D0C2C53151E76EE7D7A04E10CCD2CD7A275A"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-client-boundary-contracts/specs/oauth-callback-privacy/spec.md",
+      "Hash": "7927E15B9EA25A1E125E4C517AF3C48F72E50AD0532E6694189F023A17D61F07"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-client-boundary-contracts/specs/responses-api-compat/spec.md",
+      "Hash": "593AF2BF23EFBF2CF8372FEB062A758AE986B162603ED932EB814C3B1DAC2EF6"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-client-boundary-contracts/specs/usage-refresh-policy/spec.md",
+      "Hash": "5041BE3C7B8D40D44E6EC023F7B9B04E0A5B7D202126DAB50F3EDEF2ADCF7C2C"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-client-boundary-contracts/tasks.md",
+      "Hash": "BA7B2B73D41C3B890FC2441A9510C09029963F9720FB5D18CF4FFE07257B5B1F"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-client-boundary-contracts/verification.md",
+      "Hash": "2F578A37E077B0B22C22E6E22E2F9ED6EBB8BEBAD008B0F3FB29059352FC9689"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-dashboard-interaction-contracts/.openspec.yaml",
+      "Hash": "CD54FE01555559FFD5CF6F7F1D1B06209492E5BA9147CDC3800201C09E2291D0"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-dashboard-interaction-contracts/closure.json",
+      "Hash": "1781BE0006ADC13A533CF6F221E3F33CAE472382C3BC7EAD9E764A7C715CDDC5"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-dashboard-interaction-contracts/design.md",
+      "Hash": "5CD0DD5A850717E848AE46409118885EAC5887AFEA9A9EDE9388561878F781AA"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-dashboard-interaction-contracts/proposal.md",
+      "Hash": "A239D2E09718198BDD52839C8766525208C0EF13885E98F9DCAF3A6ACFE6A4DD"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-dashboard-interaction-contracts/specs/frontend-architecture/spec.md",
+      "Hash": "1BBFC275D34B88ACA01CD39916D8B1C64118FF035B88EC61BE21A7879FA72D14"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-dashboard-interaction-contracts/specs/telemetry/spec.md",
+      "Hash": "E17DA051D92B8C84DFED98CAF6A3F7E53B99E7E6492DB4BF33FE557E43CF1F0D"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-dashboard-interaction-contracts/tasks.md",
+      "Hash": "CAAD95BCB34CCD21DF970AA0A069916DB89DCF891E9036034EA8679A5C44E4D2"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-dashboard-interaction-contracts/verification.md",
+      "Hash": "B1F27A3AC7123F47656E59744458A7839FFF4330BEF142C36F30BED0CD98B9C9"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-history-boundary-contracts/.openspec.yaml",
+      "Hash": "CD54FE01555559FFD5CF6F7F1D1B06209492E5BA9147CDC3800201C09E2291D0"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-history-boundary-contracts/closure.json",
+      "Hash": "CBEACC969FD2649A983878D2302FC1EAB2652FFD1CBCDCD5CFF5FA56D1BFC755"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-history-boundary-contracts/design.md",
+      "Hash": "F6E9996EF818C27C846F9DCE3DFE19A62458BFA239B7067EA8D95DCAA340D59E"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-history-boundary-contracts/proposal.md",
+      "Hash": "1E3C966F67EBFDB52E3C2793C2D4118355B1A0AA9B5DF24746679FBDD8A6AEAA"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-history-boundary-contracts/specs/responses-api-compat/spec.md",
+      "Hash": "38275803160551CD15154E805935C5137AF1F5790C499849E351FA96D1C050E5"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-history-boundary-contracts/specs/sticky-session-operations/spec.md",
+      "Hash": "8F7C3A54AED1F7E9814F6F5A4EFB4645DCE4640A244239F22D3E1EFD4880AF41"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-history-boundary-contracts/tasks.md",
+      "Hash": "110DDA26905339A2EAA409DFB50C833ED0BC1A4679F5B1BA4CDE74DFB3F6867D"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-history-boundary-contracts/verification.md",
+      "Hash": "4555922DE949503F341A9B57BBEFE2D6FD8C8045A81743951D2384822E212CBD"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-image-stream-contracts/.openspec.yaml",
+      "Hash": "CD54FE01555559FFD5CF6F7F1D1B06209492E5BA9147CDC3800201C09E2291D0"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-image-stream-contracts/closure.json",
+      "Hash": "F32F75899DF90578EF2DFF10015F09D1FD52C3F44BE88E91E7A045B67309D809"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-image-stream-contracts/design.md",
+      "Hash": "18330FAF5B28796005D330FAA5296099A9F5A9A60D1CB5F6F1BFEDBF10F7229D"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-image-stream-contracts/proposal.md",
+      "Hash": "DCBF7FCC770C440B14EFEA73F742C3BFA17F85E196B931285597CB57F4FA4522"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-image-stream-contracts/specs/images-api-compat/spec.md",
+      "Hash": "858E20CC0D5C8F2042AA6B91E4199AA047788F794F004E17421E38C0D4C1CEAA"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-image-stream-contracts/tasks.md",
+      "Hash": "CC78DBC0A3DEE4811B378B4D060CDAAD02D56D52CE1C86CEDCF74B79381B1982"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-image-stream-contracts/verification.md",
+      "Hash": "872B75C54B29467486210C376D410F2B0BAB950568F8A10F75F1C94ABFB0734E"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-observability-contracts/.openspec.yaml",
+      "Hash": "CD54FE01555559FFD5CF6F7F1D1B06209492E5BA9147CDC3800201C09E2291D0"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-observability-contracts/closure.json",
+      "Hash": "5430F6C9BD77E4DFE949EADA6E9E12FAA423939AC43AC53C1D8061FB1C8543B5"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-observability-contracts/design.md",
+      "Hash": "E968033E3AF63C4650E90A4B439FFAB473F2966BA05C537C970B056AAC22F2E2"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-observability-contracts/proposal.md",
+      "Hash": "D7BBB51DB82B71921E4258A1A4AC46E478FD93F6BF68A18442019FEC310380F4"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-observability-contracts/specs/dashboard-request-activity/spec.md",
+      "Hash": "8D8FFF53B92C9A5F3AAFEF21D2E06140317859795EFDEEAB07F1D440B53299C3"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-observability-contracts/specs/frontend-architecture/spec.md",
+      "Hash": "8B44AD753F765200BCA4CD187EB386DC6076FDDD07099B78BE5ACE4AABA17607"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-observability-contracts/specs/request-log-upstreams/spec.md",
+      "Hash": "BDAB6350935B8BBD43BBEDF373879989905857F08D566BC3B0401EFCBDBB3717"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-observability-contracts/specs/tool-usage-analysis/spec.md",
+      "Hash": "D2042779150C72984D8473613353AD2EC5C2A4F4200913BBEDE3CAA68F0A6B36"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-observability-contracts/tasks.md",
+      "Hash": "AC66EEB4134667501B7FE6074931AD2AE7207BB922A518353DDC23108D79016E"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-observability-contracts/verification.md",
+      "Hash": "D921E7A375277D3AF966C7699E46308F74415DF7145AD0D6EDA696F43ECA2894"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-owner-cursor-packaging-contracts/.openspec.yaml",
+      "Hash": "CD54FE01555559FFD5CF6F7F1D1B06209492E5BA9147CDC3800201C09E2291D0"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-owner-cursor-packaging-contracts/design.md",
+      "Hash": "E4B3556FC989ADBA6DE62834D855DB3349237B50B15477A9A1B8D4D772B42C45"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-owner-cursor-packaging-contracts/proposal.md",
+      "Hash": "68461507F0B9E7A2AE36A2171594D5ACAD78AC21186554E9651DEDB966D435E3"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-owner-cursor-packaging-contracts/specs/database-backends/spec.md",
+      "Hash": "6B8F8D984808AAF76FD15565F26EE2607C613AC7FFF9848C5F96D08D1001FB91"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-owner-cursor-packaging-contracts/specs/responses-api-compat/spec.md",
+      "Hash": "8A36BEF16A446A803EAA18DBA352CC752F37AF2213913CF70972CFB97B620602"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-owner-cursor-packaging-contracts/tasks.md",
+      "Hash": "A01EEC769947025AF5675A55BC9C6773226783FF9E714DEF2F6894B911307AEB"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-owner-cursor-packaging-contracts/verification.md",
+      "Hash": "4E494302AAD205E5E33B4D0A1A4E6246CD922D56374E33B5351E8E04A4B99B6B"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-quota-estimate-contracts/closure.json",
+      "Hash": "C0BCE39E6E2D424386D33DDEE9024016AAB49A7124411D33A1653EABFE347151"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-quota-estimate-contracts/design.md",
+      "Hash": "745154C15DC1F16A8D9EB58A0078132920DAF2A654D30BF09552AB848EF70EC5"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-quota-estimate-contracts/proposal.md",
+      "Hash": "0BB33ACB344683AAF03303FF3EE925165E71E9A021377E36A155EFA8A8F1ADDD"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-quota-estimate-contracts/specs/account-quota-presentation/spec.md",
+      "Hash": "5B6D907DC50821DAE4CCBA9F480B03741A63C5F32DBD99189D50CB8646542461"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-quota-estimate-contracts/specs/frontend-architecture/spec.md",
+      "Hash": "062F69F1BBDC19894D0612C07FEB6CA898A794A9F4E701D5CD9120516DA0189D"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-quota-estimate-contracts/tasks.md",
+      "Hash": "04FF9FDC3B4A8050F544E5D8753DCBF7BFB72A8BDDA55BF788290BA7D2A2FA6E"
+    },
+    {
+      "Path": "openspec/changes/archive/2026-10-14-repair-five-quota-estimate-contracts/verification.md",
+      "Hash": "6A03CE079A053837AA1BA1833C6B42E9655801CA29DB447F6302478E9BBE36C8"
+    },
+    {
+      "Path": "openspec/specs/dashboard-request-activity/context.md",
+      "Hash": "73674C710C97F61CEACF8CA5AD5C7BB71D4B3BEDF3C6CAE0F17AF1C0353DA376"
+    },
+    {
+      "Path": "openspec/specs/dashboard-request-activity/spec.md",
+      "Hash": "F3A76993FCFFFC4BFB84639E9FDA41EC339DD8C263908EA2AE13C77E16BB205F"
+    },
+    {
+      "Path": "openspec/specs/request-log-upstreams/context.md",
+      "Hash": "8F9C8E5362102791AEEAA968349640AC9D27296A56D3ED84285500F5714C374D"
+    },
+    {
+      "Path": "openspec/specs/request-log-upstreams/spec.md",
+      "Hash": "7E6B1844B2C65E7A1C1A0531F36484BB98B5D3E0D70733696CB7BA368BF198E9"
+    },
+    {
+      "Path": "openspec/specs/tool-usage-analysis/context.md",
+      "Hash": "9DD109307E656B04F7261A126E462BF9F7414A0BC975CB324DAD3C9E3466D720"
+    },
+    {
+      "Path": "openspec/specs/tool-usage-analysis/spec.md",
+      "Hash": "253B500F4D51687DBF0F406255A5D8307217660A76C7F77B00E0BDAC5733E403"
+    },
+    {
+      "Path": "scripts/analyze_tool_usage.py",
+      "Hash": "A76FA9AFC099746AA463FDF648EC19B923B1AB6394AD1480035BD48BB66551D3"
+    },
+    {
+      "Path": "tests/integration/test_account_placement_contracts.py",
+      "Hash": "B7FA4CE4596D314924E7982878573AD823F24BCA14390F1DF45F2B278604EF11"
+    },
+    {
+      "Path": "tests/integration/test_client_boundary_contracts.py",
+      "Hash": "54187940CA04D65412DCB08A44D87BF4178E0DAF70243679A14DDA8A9AFF677B"
+    },
+    {
+      "Path": "tests/integration/test_dashboard_interaction_contracts.py",
+      "Hash": "AF279C0FA1A7742C95524E3649C3D4C71C999F048DA8A2E29BE1FC69B6980716"
+    },
+    {
+      "Path": "tests/integration/test_history_boundary_contracts.py",
+      "Hash": "E9E0313F888271109E6DD299BFA80EE24C6B35EDDDA7618477AC84863A8C2EC1"
+    },
+    {
+      "Path": "tests/integration/test_image_stream_contracts.py",
+      "Hash": "5C1E975348384A236B87EC04520302E738D141A6228DF075B2271646CA7D94ED"
+    },
+    {
+      "Path": "tests/integration/test_observability_contracts.py",
+      "Hash": "BA6005DF69736DA3C88B0DD628B67BB3529E938F6D2C9E5256C6B87C84C202E4"
+    },
+    {
+      "Path": "tests/integration/test_quota_estimate_contracts.py",
+      "Hash": "93D9EBAE2D8EEF9E0B661B2765DD523635C46CFE55C7228D4C601A8134C47495"
+    },
+    {
+      "Path": "tests/integration/test_required_owner_connect_errors.py",
+      "Hash": "52FDC3CCE3590D047E2C7EBE0DB9D9B5A4C3DAC6FF6A46E54240DE473269896F"
+    },
+    {
+      "Path": "tests/integration/test_sqlite_terminal_timeout.py",
+      "Hash": "2BBC3B4B243BF947EE752C803685F675FE3565A4F71488F2B2D37BB1B3CCECCF"
+    },
+    {
+      "Path": "tests/unit/test_history_boundary_contracts.py",
+      "Hash": "689A1680C8C0139CFC93BFA46AB94045A8A2B2E6E16826D886409B03D1409183"
+    },
+    {
+      "Path": "tests/unit/test_image_stream_contracts.py",
+      "Hash": "02EAAAFA33A0D2654DE1081BF0E92A997C99FDBA7DAEB6B5BA7683F50F23F79F"
+    },
+    {
+      "Path": "tests/unit/test_native_websocket_buffering.py",
+      "Hash": "7B1B68F0D2EFADF99532D2480A400F0BAAA9DABF4E596B2CF22C632A10DD44EB"
+    },
+    {
+      "Path": "tests/unit/test_oauth_transport_errors.py",
+      "Hash": "0DCE54DD21F302CEB171F9FE334595A24554E445907955936A1D9ABB2654A55E"
+    },
+    {
+      "Path": "tests/unit/test_quota_estimate_contracts.py",
+      "Hash": "CD728F5B7359F03B175BD172EA90D656E92309107C446F37577FDC3F991EC232"
+    },
+    {
+      "Path": "tests/unit/test_sqlite_connection.py",
+      "Hash": "76BA0C1BCFC0645014664D0ECFB37364E5977DA9E8526F8EE51482F8B235E532"
+    },
+    {
+      "Path": "tests/unit/test_tool_usage_analysis.py",
+      "Hash": "06BB9A4BDF273ED6E019702BC66D6435A9FCCE828751B76F52FE6BAA8D52FB77"
+    }
+  ],
+  "accepted_test_counts": {
+    "accounts-final.xml": 33,
+    "guardian-final.xml": 92,
+    "oauth.xml": 6,
+    "frontend-final.xml": 31
+  },
+  "distinct_backend_frontend_tests": 162,
+  "browser_pass": 6,
+  "total_distinct_pass": 168,
+  "full_typecheck": "FAIL: 3 byte-identical baseline Reports fixture errors",
+  "scoped_typecheck": "PASS",
+  "diff_check": "PASS",
+  "published": false,
+  "deployed": false,
+  "archive": "openspec/changes/archive/2026-10-14-repair-five-account-access-contracts",
+  "canonical_specs": "71/71 PASS",
+  "final_readback": "PASS: exactly five selected rows and 354 preserved source rows"
+}

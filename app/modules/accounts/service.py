@@ -482,6 +482,11 @@ class AccountsService:
                 account_id=account.chatgpt_account_id,
             ),
             last_refresh=account.last_refresh.strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z",
+            email=account.email,
+            plan_type=account.plan_type,
+            workspace_id=account.workspace_id,
+            workspace_label=account.workspace_label,
+            seat_type=account.seat_type,
         )
 
         opencode_auth_json = OpenCodeAuthJson(

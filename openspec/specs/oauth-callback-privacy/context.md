@@ -28,3 +28,9 @@ certify an OpenAI login. Existing OAuth expiry, race, replay and callback-log
 tests remain in the focused suite. A successful readiness response is not
 evidence that this callback listener is bound. See docs/getting-started.md and
 issues-check.md section 25 for operator guidance and rehearsal limits.
+
+## Direct outbound transport errors (UP-ISSUE-2601)
+
+Authorization-code exchange and device startup now share a direct-session error boundary. It catches aiohttp client errors and timeouts, reports transport_error with a constant message, and logs only request ID and exception type. Cancellation propagates through the existing session lease. No retry of a single-use authorization code is introduced; existing durable callback success wins a raced error write.
+
+For example, a connector failure during browser login displays "Unable to connect to the OAuth server. Please try again." and status polling reads error. Device startup returns the existing dashboard 502 envelope, and manual callback returns its terminal error result. URL, state, verifier and raw exception details are omitted. Synthetic connection faults, real local callback HTTP and disposable SQLite establish local error handling; provider login and network configuration are not attested. See [spec.md](spec.md).

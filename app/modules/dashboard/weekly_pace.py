@@ -7,7 +7,7 @@ from math import ceil, isfinite
 from typing import Literal
 
 from app.core.crypto import TokenEncryptor
-from app.core.usage import PLAN_CAPACITY_CREDITS_SECONDARY
+from app.core.usage import PLAN_CAPACITY_CREDITS_SECONDARY, capacity_for_plan
 from app.core.usage.depletion import EWMAState, ewma_update
 from app.core.utils.time import naive_utc_to_epoch
 from app.db.models import Account, AccountStatus, UsageHistory
@@ -209,8 +209,11 @@ def build_weekly_credit_pace(
         else None
     )
     reduce_by_percent = 100.0 - throttle_to_percent if throttle_to_percent is not None else None
+    pro_capacity = capacity_for_plan("pro", "secondary")
     pro_equivalent = (
-        projected_shortfall_credits / PRO_WEEKLY_CAPACITY_CREDITS if projected_shortfall_credits > 0 else None
+        projected_shortfall_credits / pro_capacity
+        if projected_shortfall_credits > 0 and pro_capacity is not None and pro_capacity > 0
+        else None
     )
     pro_accounts = ceil(pro_equivalent) if pro_equivalent is not None else None
 
@@ -232,27 +235,21 @@ def build_weekly_credit_pace(
     )
     saturated_account_count = sum(_used_percent(account) >= SATURATED_USED_PERCENT for account in pace_accounts)
     add_pro_accounts = None
-    if trailing_demand_used_percent_by_account is not None:
+    if trailing_demand_used_percent_by_account is not None and pro_capacity is not None and pro_capacity > 0:
         trailing_demand_credits = sum(
             account.provider_full_credits
             * max(0.0, trailing_demand_used_percent_by_account.get(account.account_id, 0.0))
             / 100.0
             for account in pace_accounts
         )
-        demand_quota_weeks = trailing_demand_credits / PRO_WEEKLY_CAPACITY_CREDITS
-        fleet_capacity_quota_weeks = total_full_credits / PRO_WEEKLY_CAPACITY_CREDITS
+        demand_quota_weeks = trailing_demand_credits / pro_capacity
+        fleet_capacity_quota_weeks = total_full_credits / pro_capacity
         demand_surplus_accounts = demand_quota_weeks - fleet_capacity_quota_weeks
         if demand_surplus_accounts > 0 and (runway_status == "runs_dry" or saturated_account_count > 0):
             add_pro_accounts = ceil(demand_surplus_accounts)
 
-    estimated_full_weekly_limit_cost_usd = None
-    used_cost_usd = None
-    if activity_cost_usd is not None and activity_cost_usd > 0:
-        used_cost_usd = round(activity_cost_usd, 2)
-        if actual_used_percent > 0:
-            estimated_full_weekly_limit_cost_usd = round(activity_cost_usd / (actual_used_percent / 100.0), 2)
-
     return WeeklyCreditPaceResponse(
+        pro_weekly_capacity_credits=pro_capacity,
         total_full_credits=total_full_credits,
         total_actual_remaining_credits=total_actual_remaining_credits,
         total_expected_remaining_credits=total_expected_remaining_credits,
@@ -291,8 +288,6 @@ def build_weekly_credit_pace(
         stale_account_count=stale_account_count,
         inactive_account_count=inactive_account_count,
         confidence=_confidence(len(pace_accounts), rate_sample_count, stale_account_count),
-        estimated_full_weekly_limit_cost_usd=estimated_full_weekly_limit_cost_usd,
-        used_cost_usd=used_cost_usd,
     )
 
 

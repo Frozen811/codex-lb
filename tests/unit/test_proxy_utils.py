@@ -26025,7 +26025,8 @@ async def test_create_http_bridge_session_fails_over_after_repeated_401_refresh_
 
 
 @pytest.mark.asyncio
-async def test_connect_proxy_websocket_previous_response_owner_usage_limit_fails_closed(monkeypatch):
+@pytest.mark.parametrize("owner_kind", ["previous_response", "file", "replay", "turn_state"])
+async def test_connect_proxy_websocket_previous_response_owner_usage_limit_fails_closed(monkeypatch, owner_kind):
     request_logs = _RequestLogsRecorder()
     service = proxy_service.ProxyService(_repo_factory(request_logs))
     account_owner = _make_account("acc_ws_prev_owner")
@@ -26059,8 +26060,15 @@ async def test_connect_proxy_websocket_previous_response_owner_usage_limit_fails
         reasoning_effort=None,
         api_key_reservation=None,
         started_at=0.0,
-        previous_response_id="resp_prev_anchor",
+        previous_response_id="resp_prev_anchor" if owner_kind == "previous_response" else None,
         preferred_account_id=account_owner.id,
+        file_required_preferred_account=owner_kind == "file",
+        replay_required_account_id=account_owner.id if owner_kind == "replay" else None,
+        affinity_policy=(
+            proxy_service._AffinityPolicy(codex_session_source="turn_state")
+            if owner_kind == "turn_state"
+            else proxy_service._AffinityPolicy()
+        ),
     )
 
     websocket_send = AsyncMock()
@@ -26081,7 +26089,7 @@ async def test_connect_proxy_websocket_previous_response_owner_usage_limit_fails
 
     assert selected_account is None
     assert selected_upstream is None
-    assert seen_excluded_account_ids == [set(), {account_owner.id}]
+    assert seen_excluded_account_ids == [set()]
     mark_rate_limit.assert_awaited_once()
     mark_call = mark_rate_limit.await_args
     assert mark_call is not None
@@ -26090,11 +26098,11 @@ async def test_connect_proxy_websocket_previous_response_owner_usage_limit_fails
     await_args = websocket_send.await_args
     assert await_args is not None
     sent_payload = json.loads(await_args.args[0])
-    assert sent_payload["status"] == 502
-    assert sent_payload["error"]["code"] == "previous_response_owner_unavailable"
-    assert sent_payload["error"]["message"] == "Previous response owner account is unavailable; retry later."
+    assert sent_payload["status"] == 429
+    assert sent_payload["error"]["code"] == "usage_limit_reached"
+    assert sent_payload["error"]["message"] == "usage limit reached"
     assert request_logs.calls[0]["request_id"] == "ws_req_prev_owner_handshake_429"
-    assert request_logs.calls[0]["error_code"] == "previous_response_owner_unavailable"
+    assert request_logs.calls[0]["error_code"] == "usage_limit_reached"
     assert request_logs.calls[0]["account_id"] == account_owner.id
 
 

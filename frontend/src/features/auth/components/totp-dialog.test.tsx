@@ -82,4 +82,13 @@ describe("TotpDialog", () => {
       expect(verifyTotp).toHaveBeenCalledWith("456789");
     });
   });
+
+  it("accepts a password-manager replacement input without a paste event", async () => {
+    renderWithProviders(<TotpDialog open />);
+    const input = screen.getByLabelText("TOTP code");
+    fireEvent.input(input, { target: { value: "234567" }, inputType: "insertReplacementText" });
+
+    await waitFor(() => expect(verifyTotp).toHaveBeenCalledExactlyOnceWith("234567"));
+    expect(logout).not.toHaveBeenCalled();
+  });
 });

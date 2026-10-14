@@ -54,7 +54,7 @@ async def test_imported_business_prolite_has_canonical_dashboard_plan(async_clie
     row = next(row for row in response.json()["accounts"] if row["accountId"] == owner)
     assert row["planType"] == "prolite"
     assert capacity_for_plan(plan, "primary") == 1125.0
-    assert capacity_for_plan(plan, "secondary") == 37800.0
+    assert capacity_for_plan(plan, "secondary") == 9000.0
     assert normalize_rate_limit_plan_type(plan) == "prolite"
     assert account_plan_matches_allowed(plan, frozenset({"pro"}))
     assert not account_plan_matches_allowed(plan, frozenset({"plus"}))
@@ -137,7 +137,7 @@ async def test_business_prolite_refresh_persists_usage_without_identity_drift(
         summary = await async_client.get("/api/usage/summary")
         assert summary.status_code == 200
         assert summary.json()["primaryWindow"]["capacityCredits"] == 1125.0
-        assert summary.json()["secondaryWindow"]["capacityCredits"] == 37800.0
+        assert summary.json()["secondaryWindow"]["capacityCredits"] == 9000.0
 
 
 @pytest.mark.asyncio

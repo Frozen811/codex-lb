@@ -282,7 +282,7 @@ describe("useRequestLogs", () => {
     expect(result.current.logsQuery.data?.total).toBe(firstTotal);
   });
 
-  it("uses facet filters for options query without status self-filter", async () => {
+  it("passes status for upstream options while retaining full status options", async () => {
     const calls: Array<{
       statuses: string[];
       accountIds: string[];
@@ -330,7 +330,7 @@ describe("useRequestLogs", () => {
         call.modelOptions.includes("gpt-5.1:::high"),
     );
     expect(matchingCall).toBeDefined();
-    expect(matchingCall?.statuses).toEqual([]);
+    expect(matchingCall?.statuses).toEqual(["ok"]);
     expect(matchingCall?.timeframe).toBe("24h");
     expect(matchingCall?.since).toBeNull();
   });
@@ -615,5 +615,29 @@ describe("requestLogFiltersApplied", () => {
     expect(requestLogFiltersApplied({ ...defaults, search: "rate" })).toBe(true);
     expect(requestLogFiltersApplied({ ...defaults, conversationId: "conv-1" })).toBe(true);
     expect(requestLogFiltersApplied({ ...defaults, statuses: ["error"] })).toBe(true);
+  });
+});
+
+
+describe("upstream URL filter", () => {
+  it("retains OR selection in both APIs and clears it on reset", async () => {
+    const lists: URLSearchParams[] = [];
+    const facets: URLSearchParams[] = [];
+    server.use(
+      http.get("/api/request-logs", ({ request }) => { lists.push(new URL(request.url).searchParams); return HttpResponse.json({ requests: [], total: 0, hasMore: false }); }),
+      http.get("/api/request-logs/options", ({ request }) => { facets.push(new URL(request.url).searchParams); return HttpResponse.json({ accountIds: [], apiKeys: [], modelOptions: [], statuses: [] }); }),
+    );
+    const searches: string[] = [];
+    const { result } = renderHook(() => useRequestLogs(), { wrapper: createWrapper(createTestQueryClient(), "/dashboard?upstream=src-gone&upstream=subscription_pool&offset=25", (search) => searches.push(search)) });
+    await waitFor(() => expect(result.current.optionsQuery.isSuccess).toBe(true));
+    expect(result.current.filters.upstreams).toEqual(["src-gone", "subscription_pool"]);
+    expect(result.current.emptyStateFiltersApplied).toBe(true);
+    expect(lists[0].getAll("upstream")).toEqual(["src-gone", "subscription_pool"]);
+    expect(facets[0].getAll("upstream")).toEqual(["src-gone", "subscription_pool"]);
+    act(() => result.current.updateFilters({ upstreams: [], offset: 0 }));
+    await waitFor(() => expect(result.current.filters.upstreams).toEqual([]));
+    expect(new URLSearchParams(searches.at(-1)).has("upstream")).toBe(false);
+    expect(result.current.filters.offset).toBe(0);
+    await waitFor(() => expect(result.current.optionsQuery.data?.upstreams).toEqual([]));
   });
 });

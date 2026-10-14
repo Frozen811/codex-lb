@@ -1,5 +1,39 @@
 # Context: frontend-architecture
 
+## Weekly per-account API-price equivalents
+
+The weekly dollar estimate answers the per-account question in
+[issue 1793](https://github.com/Soju06/codex-lb/issues/1793). A fleet's arbitrary
+1d/7d/30d activity spend cannot be divided by a capacity-weighted fleet usage
+percentage: the sets of accounts and observation windows are different. The
+legacy fleet USD fields stay null; each account now has its own observation
+interval, usage percentage-point change, matched cost and full-week estimate.
+
+For example, two samples in one current reset epoch rise from 20 to 30 percent
+while retained subscription requests inside `(first sample, last sample]` cost
+4 USD. The estimate is 40 USD for that account. Another account with different
+reset timing remains a separate row. Changing the overview timeframe cannot
+change these matched figures. This is an API-price equivalent of observed
+proxied usage, not a payment, upstream invoice or guaranteed subscription value.
+External usage and pruned/missing history can bias it; model mix, caching and
+reasoning can change its trend. Request attribution uses recorded request times,
+so long-running turns can straddle a sampling boundary.
+
+Reset changes, decreasing counters, missing/invalid quota observations and stale
+samples end the usable segment. Unknown prices suppress its estimate; requests
+from external sources and soft-deleted logs do not contribute. Repository
+queries batch at most 100 accounts and execute sequentially on the request's
+session. The existing bounded quota-history tail can shorten the observation
+interval; this does not claim a complete weekly billing audit or historical
+time-series view. Accounts without usable weekly runway data do not acquire a
+synthetic dollar allowance.
+
+The response supplies the current Pro reference capacity and clients have no
+embedded numeric substitute. Absolute credits are marked as estimates. Before/
+after Chromium evidence covers mobile, tablet and desktop in the five-quota
+change. Real quota calibration, live upstream billing, PostgreSQL/MySQL runtime,
+hosted CI and deployment remain outside that local evidence.
+
 Normative requirements live in [`spec.md`](./spec.md). This document currently
 covers the progressive-disclosure navigation and settings model.
 
@@ -116,3 +150,37 @@ readiness. It does not retry failed containment assertions, add fixed sleeps,
 or raise the existing expectation deadline. For example, resizing the seeded
 dashboard from 390px to 1440px must keep every observed document frame within
 its viewport even before the chart adopts its new measured width.
+
+## Five dashboard interaction checks (2026-10-14)
+
+The OTP field accepts a password-manager replacement input independently of the
+clipboard path. Chromium automation can verify input semantics and outside-focus
+handling; the macOS Apple Passwords extension remains a separate platform check.
+For example, replacing the input with `234567` submits one verification request.
+
+Compact and fullscreen actions use translated labels in all three supported
+locales. The exit action announces its actual purpose, while sort cycling keeps
+rows in their original column and fullscreen preserves unrelated URL filters.
+The account-list regression uses 31 long synthetic identities at 320, 768 and
+1440 pixels to verify document containment, internal scrolling and reachable add
+and selection actions.
+
+The Session card explains the existing locality guard instead of inferring an
+effective TTL from the browser URL. A setting of 8760000 hours persists, but a
+LAN request still normally receives 12 hours; existing cookies retain their
+embedded expiry. This is an absolute server-side lifetime, not a promise that a
+browser will retain a cookie for centuries. See the [authentication policy](../admin-auth/spec.md).
+
+## Observability controls (2026-10-14)
+
+[Upstream identity](../request-log-upstreams/spec.md) adds an observed-source filter to existing request logs. Selected stable IDs survive URLs; a single unselected source does not add a control. Current source names are disambiguated with IDs and deleted configurations retain localized fallbacks. [Request activity](../dashboard-request-activity/spec.md) provides an alternate local Appearance choice; the default remains weekly pace and activity is queried only in heatmap mode. For example, selecting Deleted model source src_a remains usable after reload.
+
+## Account export viewport boundaries (2026-10-14)
+
+Long email/workspace values are contained in the account view, but previously
+made the fixed export dialog taller than a mobile viewport. Its footer could
+not be scrolled into view. The dialog now has a viewport-relative maximum
+height and internal vertical scrolling, plus explicit identity wrapping.
+Browser checks at 390/768/1440px cover both OAuth and access-only credentials,
+Download, Close, missing-token copy controls and document/dialog width.
+See [requirements](spec.md); screenshot data is synthetic.

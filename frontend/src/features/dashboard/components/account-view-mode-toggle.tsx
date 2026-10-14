@@ -56,7 +56,7 @@ export function AccountViewModeToggle({ value, onChange, fullscreen, onFullscree
       <button
         type="button"
         aria-pressed={fullscreen}
-        aria-label={t("dashboard.accounts.viewFullscreen")}
+        aria-label={t(fullscreen ? "dashboard.accounts.exitFullscreen" : "dashboard.accounts.viewFullscreen")}
         title={t(fullscreen ? "dashboard.accounts.exitFullscreen" : "dashboard.accounts.viewFullscreen")}
         onClick={() => onFullscreenChange(!fullscreen)}
         className={cn(

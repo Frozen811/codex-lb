@@ -21,6 +21,7 @@ from app.modules.request_logs.schemas import (
     ConversationModelStat,
     RequestLogConversation,
     RequestLogEntry,
+    RequestLogUpstreamOption,
 )
 
 
@@ -48,6 +49,7 @@ class RequestLogStatusFilter:
 
 @dataclass(frozen=True, slots=True)
 class RequestLogFilterOptions:
+    upstreams: list[RequestLogUpstreamOption]
     account_ids: list[str]
     model_options: list[RequestLogModelOption]
     api_keys: list[RequestLogApiKeyOption]
@@ -99,6 +101,7 @@ class RequestLogsService:
         reasoning_efforts: list[str] | None = None,
         status: list[str] | None = None,
         *,
+        upstreams: list[str] | None = None,
         cache_mode: str = "since",
         timeframe: str | None = None,
         include_sensitive_metadata: bool,
@@ -110,6 +113,7 @@ class RequestLogsService:
             [(option.model, option.reasoning_effort) for option in model_options] if model_options else None
         )
         result = await self._repo.list_recent(
+            upstreams=upstreams,
             limit=limit,
             offset=offset,
             search=search,
@@ -168,6 +172,9 @@ class RequestLogsService:
         model_options: list[RequestLogModelOption] | None = None,
         models: list[str] | None = None,
         reasoning_efforts: list[str] | None = None,
+        *,
+        upstreams: list[str] | None = None,
+        status: list[str] | None = None,
     ) -> RequestLogFilterOptions:
         normalized_model_options = (
             [(option.model, option.reasoning_effort) for option in model_options] if model_options else None
@@ -178,6 +185,7 @@ class RequestLogsService:
             option_api_key_ids,
             status_values,
         ) = await self._repo.list_filter_options(
+            upstreams=upstreams,
             since=since,
             until=until,
             account_ids=account_ids,
@@ -196,7 +204,23 @@ class RequestLogsService:
             for key_id in option_api_key_ids
         ]
         option_api_keys.sort(key=lambda option: (option.name.lower(), (option.key_prefix or "").lower(), option.id))
+        status_filter = _map_status_filter(status)
+        upstream_options = await self._repo.list_upstream_options(
+            since=since,
+            until=until,
+            account_ids=account_ids,
+            api_key_ids=api_key_ids,
+            model_options=normalized_model_options,
+            models=models,
+            reasoning_efforts=reasoning_efforts,
+            include_success=status_filter.include_success,
+            include_cancelled=status_filter.include_cancelled,
+            include_error_other=status_filter.include_error_other,
+            error_codes_in=status_filter.error_codes_in,
+            error_codes_excluding=status_filter.error_codes_excluding,
+        )
         return RequestLogFilterOptions(
+            upstreams=upstream_options,
             account_ids=option_account_ids,
             model_options=[
                 RequestLogModelOption(model=model, reasoning_effort=reasoning_effort)

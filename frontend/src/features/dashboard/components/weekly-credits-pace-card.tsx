@@ -6,7 +6,6 @@ import { useDateDisplayFormatStore } from "@/hooks/use-date-format";
 import { cn } from "@/lib/utils";
 import { formatCompactNumber, formatCurrency, formatDateTimeInline, formatModelLabel } from "@/utils/formatters";
 
-const PRO_WEEKLY_CAPACITY_CREDITS = 50_400;
 
 export type WeeklyCreditsPaceCardProps = {
   pace: WeeklyCreditPace | null;
@@ -118,8 +117,10 @@ function proAccountsLine(pace: WeeklyCreditPace, t: ReturnType<typeof useTransla
   const gapCredits =
     pace.projectedShortfallCredits > 0 ? pace.projectedShortfallCredits : Math.max(0, scheduleGapCredits);
   const equivalent =
-    pace.proAccountEquivalentToCoverOverPlan ?? (gapCredits > 0 ? gapCredits / PRO_WEEKLY_CAPACITY_CREDITS : null);
-  const accounts = pace.proAccountsToCoverOverPlan ?? (gapCredits > 0 ? Math.ceil(gapCredits / PRO_WEEKLY_CAPACITY_CREDITS) : null);
+    pace.proAccountEquivalentToCoverOverPlan ??
+    (gapCredits > 0 && pace.proWeeklyCapacityCredits != null && pace.proWeeklyCapacityCredits > 0
+      ? gapCredits / pace.proWeeklyCapacityCredits : null);
+  const accounts = pace.proAccountsToCoverOverPlan ?? (equivalent != null ? Math.ceil(equivalent) : null);
 
   if (!accounts || equivalent == null) {
     return null;
@@ -305,15 +306,20 @@ function RunwayWeeklyCreditsPaceCard({
           {saturated ? (
             <p className="mt-1 text-[11px] text-muted-foreground">{t("dashboard.weeklyPace.saturatedFloor")}</p>
           ) : null}
-          {pace.estimatedFullWeeklyLimitCostUsd != null && pace.estimatedFullWeeklyLimitCostUsd > 0 ? (
-            <p className="mt-1 text-[11px] tabular-nums text-muted-foreground" data-testid="weekly-estimated-limit-cost">
-              {t("dashboard.weeklyPace.estimatedLimitCost", {
-                fullCost: formatCurrency(pace.estimatedFullWeeklyLimitCostUsd),
-                usedCost: formatCurrency(pace.usedCostUsd ?? 0),
-                percent: Math.round(pace.actualUsedPercent),
+          <p className="mt-1 text-[11px] text-muted-foreground">{t("dashboard.weeklyPace.creditEstimates")}</p>
+          <div className="max-h-40 overflow-y-auto" data-testid="weekly-cost-estimates">
+          {pace.accountCostEstimates?.map((estimate) => (
+            <p key={estimate.accountId} className="mt-1 break-words text-[11px] tabular-nums text-muted-foreground"
+              data-testid="weekly-estimated-limit-cost">
+              {t("dashboard.weeklyPace.accountEstimatedLimitCost", {
+                accountId: estimate.accountId,
+                fullCost: formatCurrency(estimate.estimatedFullWeeklyLimitCostUsd),
+                usedCost: formatCurrency(estimate.observedCostUsd),
+                percent: Math.round(estimate.observedUsedPercent),
               })}
             </p>
-          ) : null}
+          ))}
+          </div>
         </div>
 
         <div className="min-h-5 text-xs">

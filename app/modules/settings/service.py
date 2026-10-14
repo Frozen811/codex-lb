@@ -151,6 +151,7 @@ class DashboardSettingsData:
     # Effective value, source and fallbacks of every inheritable setting, keyed
     # by setting name; the settings API exposes it as ``provenance``.
     provenance: Mapping[str, InheritableValue[Any]] = field(default_factory=dict)
+    sticky_reallocation_timing: str = "immediate"
 
 
 @dataclass(frozen=True, slots=True)
@@ -277,6 +278,7 @@ class DashboardSettingsUpdateData:
     clear_http_responses_stream_request_budget_seconds: bool = False
     http_responses_session_bridge_request_budget_seconds: float | None = None
     clear_http_responses_session_bridge_request_budget_seconds: bool = False
+    sticky_reallocation_timing: str | None = None
     # end M1 stream/bridge budgets
 
 
@@ -360,6 +362,7 @@ class SettingsService:
         row = await self._repository.update(
             expected_version=expected_version,
             sticky_threads_enabled=payload.sticky_threads_enabled,
+            sticky_reallocation_timing=payload.sticky_reallocation_timing,
             upstream_stream_transport=payload.upstream_stream_transport,
             prohibit_fast_mode=payload.prohibit_fast_mode,
             http_downstream_transport_policy=payload.http_downstream_transport_policy,
@@ -619,6 +622,7 @@ def _settings_data(row: DashboardSettings, totp: TotpEnrollmentSummary) -> Dashb
     resolved = _resolve_inheritable_settings(row)
     return DashboardSettingsData(
         sticky_threads_enabled=row.sticky_threads_enabled,
+        sticky_reallocation_timing=row.sticky_reallocation_timing,
         upstream_stream_transport=row.upstream_stream_transport,
         prohibit_fast_mode=row.prohibit_fast_mode,
         http_downstream_transport_policy=row.http_downstream_transport_policy,

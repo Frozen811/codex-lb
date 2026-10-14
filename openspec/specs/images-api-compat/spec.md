@@ -9,7 +9,7 @@ pipeline.
 
 ### Requirement: OpenAI-compatible image generation endpoint
 
-The system SHALL expose `POST /v1/images/generations` and accept the OpenAI Images API request shape (`model`, `prompt`, `n`, `size`, `quality`, `background`, `output_format`, `output_compression`, `moderation`, `partial_images`, `stream`, `user`). The endpoint MUST require `model` to start with `gpt-image-` and MUST treat `gpt-image-2` as the default if unspecified; the default is the fixed constant `DEFAULT_PUBLIC_IMAGE_MODEL` in `app/core/openai/images.py` and MUST NOT be operator-configurable. The endpoint MUST accept models in the `gpt-image-2` family, including `gpt-image-2`, `gpt-image-2.5-flare`, and `gpt-image-2.5-sunburst`, under the same parameter validation matrix. The endpoint MUST NOT expose the internal "host" Responses model used to invoke the built-in `image_generation` tool. The endpoint MUST accept `1 <= n <= 10` (`MAX_IMAGE_FANOUT`) for non-streaming requests, fanning out concurrent internal Responses calls and aggregating results. Streaming requests with `n > 1` MUST be rejected with HTTP 400.
+The system SHALL expose `POST /v1/images/generations` and accept the OpenAI Images API request shape (`model`, `prompt`, `n`, `size`, `quality`, `background`, `output_format`, `output_compression`, `moderation`, `partial_images`, `stream`, `user`). The endpoint MUST require `model` to start with `gpt-image-` and MUST treat `gpt-image-2` as the default if unspecified; the default is the fixed constant `DEFAULT_PUBLIC_IMAGE_MODEL` in `app/core/openai/images.py` and MUST NOT be operator-configurable. The endpoint MUST accept models in the `gpt-image-2` family, including `gpt-image-2`, `gpt-image-2.5-flare`, and `gpt-image-2.5-sunburst`, under the same parameter validation matrix. The endpoint MUST accept `background=transparent` with PNG or WebP output, MUST reject transparent JPEG before upstream dispatch with `param=output_format`, and MUST preserve upstream image bytes without post-processing. The endpoint MUST NOT expose the internal "host" Responses model used to invoke the built-in `image_generation` tool. The endpoint MUST accept `1 <= n <= 10` (`MAX_IMAGE_FANOUT`) for non-streaming requests, fanning out concurrent internal Responses calls and aggregating results. Streaming requests with `n > 1` MUST be rejected with HTTP 400.
 
 #### Scenario: Compatible image generation request returns a JSON envelope
 
@@ -23,7 +23,7 @@ The system SHALL expose `POST /v1/images/generations` and accept the OpenAI Imag
 
 #### Scenario: Per-model parameter rules are enforced for gpt-image-2 family
 
-- **WHEN** a client sends `gpt-image-2`, `gpt-image-2.5-flare`, or `gpt-image-2.5-sunburst` with `background=transparent` or `input_fidelity=low|high`, or with `size` violating the gpt-image-2 size constraints (max edge ≤ 3840 px, both edges multiples of 16, ratio ≤ 3:1, total pixels in [655_360, 8_294_400])
+- **WHEN** a client sends `gpt-image-2`, `gpt-image-2.5-flare`, or `gpt-image-2.5-sunburst` with `input_fidelity=low|high`, or with `size` violating the gpt-image-2 size constraints (max edge ≤ 3840 px, both edges multiples of 16, ratio ≤ 3:1, total pixels in [655_360, 8_294_400])
 - **THEN** the service returns 400 with OpenAI `invalid_request_error` describing the rejected parameter
 
 #### Scenario: Compatible GPT Image 2.5 generations request succeeds
@@ -47,6 +47,16 @@ The system SHALL expose `POST /v1/images/generations` and accept the OpenAI Imag
 - **WHEN** a client sends `/v1/images/generations` or `/v1/images/edits` without `model`
 - **THEN** the service uses `gpt-image-2` as the publicly-effective model for validation, request log accounting, and the internal `image_generation` tool config
 - **AND** a `CODEX_LB_IMAGES_DEFAULT_MODEL` value in the environment does not change that default (startup logs the removed-setting warning once)
+
+#### Scenario: Transparent PNG or WebP generation and editing
+
+- **WHEN** a client requests transparent PNG or WebP output through a supported generation or edit route, with JSON or streaming output
+- **THEN** the image tool receives the requested background and format unchanged and returned image bytes remain unchanged
+
+#### Scenario: Transparent JPEG is refused before dispatch
+
+- **WHEN** a client requests transparent JPEG output through generation or editing
+- **THEN** the service returns HTTP 400 with OpenAI invalid_request_error and param=output_format without calling upstream
 
 ### Requirement: OpenAI-compatible image edit endpoint
 
@@ -97,17 +107,17 @@ The system SHALL implement `/v1/images/generations` and `/v1/images/edits` by is
 
 ### Requirement: Image generation streaming uses canonical OpenAI Images events
 
-When a client requests `stream=true` on `/v1/images/generations` or `/v1/images/edits`, the system SHALL translate upstream Responses SSE events into the OpenAI Images streaming format. The system MUST emit `image_generation.partial_image` for each upstream `response.image_generation_call.partial_image` and an `image_generation.completed` event for *every* `image_generation_call` ResponseItem the upstream surfaces, in arrival order, when the trailing `response.completed` arrives. The `usage` field MUST be attached only to the final `image_generation.completed` event so multi-image responses match the OpenAI Images streaming shape. The system MUST NOT forward Responses-specific events (`response.created`, `response.in_progress`, `response.image_generation_call.in_progress`, `response.image_generation_call.generating`, reasoning/content events) to the client. The system MUST also surface upstream errors that occur before the first SSE chunk as a structured OpenAI error envelope rather than a broken/truncated stream body.
+When a client requests `stream=true` on `/v1/images/generations` or `/v1/images/edits`, the system SHALL translate upstream Responses SSE events into the OpenAI Images streaming format. Generation requests MUST use `image_generation.*` event names, and edit requests MUST use `image_edit.*` event names. The system MUST emit the corresponding `partial_image` event for each upstream `response.image_generation_call.partial_image` and the corresponding `completed` event for *every* `image_generation_call` ResponseItem the upstream surfaces, in arrival order, when the trailing `response.completed` arrives. The `usage` field MUST be attached only to the final `completed` event so multi-image responses match the OpenAI Images streaming shape. The system MUST NOT forward Responses-specific events (`response.created`, `response.in_progress`, `response.image_generation_call.in_progress`, `response.image_generation_call.generating`, reasoning/content events) to the client. The system MUST also surface upstream errors that occur before the first SSE chunk as a structured OpenAI error envelope rather than a broken/truncated stream body.
 
 #### Scenario: Partial images are forwarded with stable field names
 
 - **WHEN** the upstream stream emits `response.image_generation_call.partial_image` with `partial_image_b64` and `partial_image_index`
-- **THEN** the client receives `image_generation.partial_image` with `b64_json` set to `partial_image_b64`, the same `partial_image_index`, and the upstream `size`, `quality`, `background`, and `output_format`
+- **THEN** the client receives `image_generation.partial_image` for generation or `image_edit.partial_image` for editing with `b64_json` set to `partial_image_b64`, the same `partial_image_index`, and the upstream `size`, `quality`, `background`, and `output_format`
 
 #### Scenario: Final image completes the stream
 
 - **WHEN** the upstream stream emits `response.output_item.done` with `item.type == "image_generation_call"` and a non-empty `result`
-- **THEN** the client receives `image_generation.completed` with `b64_json`, `revised_prompt`, `size`, `quality`, `background`, and `output_format`, followed by a terminating `[DONE]`-equivalent event
+- **THEN** the client receives `image_generation.completed` for generation or `image_edit.completed` for editing with `b64_json`, `revised_prompt`, `size`, `quality`, `background`, and `output_format`, followed by a terminating `[DONE]`-equivalent event
 
 #### Scenario: Upstream image generation failure becomes a single error event
 
@@ -297,21 +307,6 @@ The Codex-base and `/v1` image generation and edit routes MUST require a valid p
 - **WHEN** an Images request omits the required-capability carrier
 - **THEN** the route retains its existing authentication, validation, account-routing, observability, and response behavior
 
-### Requirement: Internal host selection
-Images generation and edit routes MUST select the first candidate with nonempty registry plan visibility and no suppression, ordered as `gpt-5.6-luna`, `gpt-5.5`. If none qualifies, they MUST use `gpt-5.6-luna`. Public image model IDs MUST remain unchanged.
-
-#### Scenario: Cold registry prefers the current host
-- **WHEN** the registry uses the bootstrap catalog
-- **THEN** the internal model is `gpt-5.6-luna`
-
-#### Scenario: Preferred model unavailable in registry
-- **WHEN** only `gpt-5.5` has registry plan visibility without suppression
-- **THEN** the internal model is `gpt-5.5`
-
-#### Scenario: No candidate qualifies
-- **WHEN** neither candidate has plan visibility without suppression
-- **THEN** the selected host is `gpt-5.6-luna` and existing downstream error handling applies
-
 ### Requirement: Image fan-out preserves completed usage through partial failures
 
 For non-streaming image generations and edits with `n > 1`, the service MUST transfer the single public API-key reservation exactly once using the sum of captured image-tool usage from successful subcalls, even when another subcall fails or the caller cancels. If no subcall succeeds, the reservation MUST be released exactly once. Internal subcalls MUST NOT own that public reservation. Caller cancellation MUST cancel and drain all outstanding subcalls before propagating, including repeated cancellation during cleanup. Request-log rewriting failures MUST NOT prevent completed usage settlement. Unexpected subcall exceptions MUST produce a generic OpenAI error without exposing exception text.
@@ -335,3 +330,18 @@ For non-streaming image generations and edits with `n > 1`, the service MUST tra
 #### Scenario: Unexpected subcall exception
 - **WHEN** an image subcall raises an unexpected exception
 - **THEN** the error response contains a generic internal error and omits the exception text
+
+### Requirement: Completed Images results own trailing event precedence
+
+For non-streaming generation and editing, including fan-out subcalls, the first captured `response.completed` MUST determine the returned image output and captured image-tool usage. The collector MUST drain the remainder of the stream for finalization while ignoring subsequent SSE events. Before a completion is captured, upstream `response.incomplete`, `response.failed`, and `error` MUST retain the existing OpenAI-compatible failure response.
+
+#### Scenario: Incomplete event follows completed image
+
+- **WHEN** a completed image with usage is followed by `response.incomplete`
+- **THEN** the completed image and original usage are returned
+- **AND** the remaining stream is drained before returning
+
+#### Scenario: Incomplete event precedes completion
+
+- **WHEN** an image stream emits `response.incomplete` before any completion
+- **THEN** the existing image-generation failure is returned and the public reservation is released

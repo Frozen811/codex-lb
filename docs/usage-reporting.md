@@ -54,3 +54,25 @@ Open a paused account in **Accounts** to read its current reset-credit count wit
 List badges and expiry times reflect the last cached credit snapshot; background credit polling remains stopped while paused. After a restart, the badge can be absent until a snapshot is available, but the selected-account count can still be read. Weekly reset times likewise come from the last persisted usage sample. A failed count read shows unavailable when no earlier successful value is cached.
 
 *Spec: [rate-limit-reset-credits](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/rate-limit-reset-credits)*
+
+## Upstream filtering and request activity
+
+Request Logs offers an **Upstream** filter when several upstreams are observed or a selection is active. Subscription pool includes failures before account selection. Model sources keep their stable IDs after renaming/deletion; two sources serving the same model remain distinguishable. Multiple choices use OR and combine with other filters. Selection survives URL reload and Reset clears it.
+
+*Spec: [request-log-upstreams](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/request-log-upstreams)*
+
+Appearance can show a **Request heatmap** beside usage quotas instead of weekly credit pace. This choice is local to the browser. The calendar covers six UTC calendar months, excludes warmup and combines folded hourly history with the raw tail. Loading failures have a Retry action.
+
+*Spec: [dashboard-request-activity](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/dashboard-request-activity)*
+
+## Offline tool observations
+
+For existing conversation archives, run `uv run python scripts/analyze_tool_usage.py archive.jsonl archive.jsonl.gz`. It reports names, call/results, explicit structured errors/successes and unknown outcomes. Arguments, result text and headers are omitted. It does not judge model correctness or infer per-tool token usage from request totals. Default correlation is session-scoped when available, otherwise request-scoped; `--single-session` is suitable only for files independently restricted to one conversation. Archive recording remains separately opt-in.
+
+*Spec: [tool-usage-analysis](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/tool-usage-analysis)*
+
+## Reporting and retention limits
+
+Reports reads folded history plus its raw complement and caches identical filter requests briefly. Speed medians cover at most seven days; longer ranges retain totals without those medians. Local benchmarks do not establish provider or production speed. Request-log cleanup is disabled by default. In Settings → Data retention, Save an explicit window to enable it; request logs require at least 30 days and usage history at least 45 days. Clearing the override disables that policy. The hourly scheduler applies runtime changes without restart after dependent data is folded. Rollups preserve totals, while deleted raw details cannot be reconstructed. Conversation archive files have a separate retention policy.
+
+*Specs: [report-aggregation](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/report-aggregation), [data-retention](https://github.com/Frozen811/codex-lb/tree/main/openspec/specs/data-retention)*

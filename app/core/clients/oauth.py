@@ -4,6 +4,8 @@ import base64
 import hashlib
 import logging
 import secrets
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Final
@@ -61,6 +63,16 @@ class OAuthError(Exception):
         self.code = code
         self.message = message
         self.status_code = status_code
+
+
+@asynccontextmanager
+async def _oauth_http_session(session: aiohttp.ClientSession | None) -> AsyncIterator[aiohttp.ClientSession]:
+    try:
+        async with lease_http_session(session) as client_session:
+            yield client_session
+    except (aiohttp.ClientError, TimeoutError) as exc:
+        logger.warning("OAuth transport failed request_id=%s error_type=%s", get_request_id(), type(exc).__name__)
+        raise OAuthError("transport_error", "Unable to connect to the OAuth server. Please try again.") from exc
 
 
 def pkce_challenge(verifier: str) -> str:
@@ -150,7 +162,7 @@ async def exchange_authorization_code(
             logger.warning("OAuth token request failed request_id=%s status=%s", get_request_id(), status)
             raise _oauth_error_from_payload(payload, status)
         return _parse_tokens(payload)
-    async with lease_http_session(session) as client_session:
+    async with _oauth_http_session(session) as client_session:
         async with client_session.post(
             url,
             data=encoded,
@@ -228,7 +240,7 @@ async def request_device_code(
             raise OAuthError("device_auth_failed", f"Device code request failed with status {status}", status)
         payload_data = _validate_device_code_payload(data)
     else:
-        async with lease_http_session(session) as client_session:
+        async with _oauth_http_session(session) as client_session:
             async with client_session.post(url, json=payload, headers=headers, timeout=timeout) as resp:
                 data = await _safe_json(resp)
                 if resp.status >= 400:

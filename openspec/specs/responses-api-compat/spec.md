@@ -12113,3 +12113,69 @@ A local refusal proven to precede request publication and dispatch MUST preserve
 #### Scenario: Cleanup fails
 - **WHEN** exact-match anchor cleanup encounters a transient failure
 - **THEN** the selected public refusal remains intact and existing bounded cleanup retains its denial fence
+
+### Requirement: Native WebSocket bursts preserve bounded output and acknowledgement progress
+
+The service MUST preserve FIFO output from a valid burst of at least 65 native WebSocket messages while the consumer is temporarily delayed. Buffering MUST have a finite event cap and an accumulated payload byte budget that includes UTF-8 text, binary data and interpreted Responses payload copies. A lone large frame MUST retain the existing configured frame-size compatibility. Send acknowledgements MUST continue independently of data consumption. Overflow MUST terminate and finalize the socket once, fail pending sends, and surface a consumer_backpressure failure after accepted output; cancellation, reader failure and close MUST retain terminal ownership and cleanup.
+
+#### Scenario: Burst and send acknowledgement before receive
+
+- **WHEN** 65 valid frames arrive before any receive and a send acknowledgement follows
+- **THEN** the send completes and all 65 frames are received in order without abort
+
+#### Scenario: Payload budget or event cap exceeded
+
+- **WHEN** the consumer stops draining and either bounded capacity is exceeded
+- **THEN** accepted frames precede one consumer_backpressure terminal, pending sends fail and the request is finalized once
+
+### Requirement: Exact CCodex identities retain their upstream fingerprint
+
+The service MUST preserve originator, User-Agent and version for exactly ccodex-internal and ccodex-handoff-worker identities through compatible HTTP and native WebSocket Responses routes, including supported aliases. Unlisted CCodex lookalikes MUST remain non-native. Identity classification MUST NOT override inference transport policy. Package installation MUST require urllib3 2.8.0 or newer.
+
+#### Scenario: Known CCodex identity reaches upstream
+
+- **WHEN** an HTTP or native WebSocket request carries a known CCodex originator or matching User-Agent prefix
+- **THEN** the upstream fingerprint retains those supplied identity headers and the configured transport policy still applies
+
+#### Scenario: Unlisted lookalike remains normalized
+
+- **WHEN** a request carries an unlisted CCodex identity and continuity headers
+- **THEN** it remains non-native and receives the existing upstream fingerprint normalization
+
+### Requirement: Required-owner WebSocket connect errors retain their original envelope
+
+Before response dispatch, a WebSocket connection failure on a required response, file or session account owner MUST preserve the upstream status, error code and message. The connect loop MUST NOT exclude that owner and reselect into a generated owner-unavailable error. Movable requests MUST retain their existing eligible-account failover. Failed attempts MUST release their account stream lease and retain API-key settlement ownership. The equivalent HTTP bridge path MUST preserve the original connect failure.
+
+#### Scenario: A required owner rejects a connection
+- **WHEN** a required owner rejects WebSocket connection with a retryable HTTP 403 or 429
+- **THEN** the client receives the original status, error code and message
+- **AND** no replacement account is attempted and the failed stream lease is released
+
+#### Scenario: An unbound request can move
+- **WHEN** an unbound request receives an account-scoped retryable connection failure and an eligible replacement exists
+- **THEN** the connect loop can select that replacement under its existing attempt budget
+
+#### Scenario: An owner-bound HTTP bridge connection fails
+- **WHEN** an HTTP Responses continuation cannot establish its required owner's upstream WebSocket
+- **THEN** its external error envelope retains the original account-scoped failure
+
+
+### Requirement: Continuation classification consumes preceding tool call occurrences
+
+HTTP bridge classification MUST treat an output as self-contained only when a preceding, unconsumed call of the corresponding protocol has the same nonempty call identifier. Reused identifiers MUST be matched in occurrence order. An unmatched output MUST retain its continuation semantics through request normalization and owner forwarding; it MUST NOT authorize dropping a prior response anchor. Raw string and single-item inputs MUST remain single turns irrespective of serialized length.
+
+#### Scenario: A second output cannot reuse an already consumed call
+- **WHEN** input includes one call and two outputs with its identifier
+- **THEN** the bridge treats the body as a continuation and preserves its required anchor
+
+#### Scenario: Repeated complete pairs remain self-contained
+- **WHEN** input includes repeated call/output pairs with the same identifier
+- **THEN** each output consumes its own preceding call and the complete body remains a full resend
+
+#### Scenario: Protocols do not share call occurrences
+- **WHEN** a function output follows only a computer or custom call with the same identifier
+- **THEN** the body remains a continuation
+
+#### Scenario: Normalization preserves single-turn meaning
+- **WHEN** a raw string near the historical size threshold becomes one message or is internally forwarded
+- **THEN** it remains a single turn and does not authorize removal of a prior anchor

@@ -6,6 +6,7 @@ import {
   DEFAULT_OVERVIEW_TIMEFRAME,
   DashboardOverviewSchema,
   DashboardProjectionsSchema,
+  RequestActivitySchema,
   RequestLogFilterOptionsSchema,
   RequestLogsResponseSchema,
   type ConversationTimeframe,
@@ -21,6 +22,7 @@ export type RequestLogsListFilters = {
   limit?: number;
   offset?: number;
   search?: string;
+  upstreams?: string[];
   accountIds?: string[];
   apiKeyIds?: string[];
   statuses?: string[];
@@ -32,9 +34,11 @@ export type RequestLogsListFilters = {
 };
 
 export type RequestLogFacetFilters = {
+  statuses?: string[];
   timeframe?: Exclude<RequestLogTimeframe, "all">;
   since?: string;
   until?: string;
+  upstreams?: string[];
   accountIds?: string[];
   apiKeyIds?: string[];
   modelOptions?: string[];
@@ -76,6 +80,7 @@ export function getRequestLogs(params: RequestLogsListFilters = {}) {
   if (params.search) {
     query.set("search", params.search);
   }
+  appendMany(query, "upstream", params.upstreams);
   appendMany(query, "accountId", params.accountIds);
   appendMany(query, "apiKeyId", params.apiKeyIds);
   appendMany(query, "status", params.statuses);
@@ -107,6 +112,8 @@ export function getRequestLogOptions(params: RequestLogFacetFilters = {}) {
   if (params.until) {
     query.set("until", params.until);
   }
+  appendMany(query, "status", params.statuses);
+  appendMany(query, "upstream", params.upstreams);
   appendMany(query, "accountId", params.accountIds);
   appendMany(query, "apiKeyId", params.apiKeyIds);
   appendMany(query, "modelOption", params.modelOptions);
@@ -149,4 +156,8 @@ export function getConversationDetails(conversationId: string) {
     : conversationId;
   const encoded = encodeURIComponent(opaqueId);
   return get(`${CONVERSATIONS_PATH}/${encoded}`, ConversationDetailsSchema);
+}
+
+export function getRequestActivity() {
+  return get(`${DASHBOARD_PATH}/request-activity`, RequestActivitySchema);
 }

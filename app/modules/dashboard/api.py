@@ -10,8 +10,10 @@ from app.core.auth.dependencies import (
 )
 from app.core.openai.images import SUPPORTED_IMAGE_MODELS
 from app.core.openai.model_registry import get_model_registry, is_public_model
+from app.core.utils.time import utcnow
 from app.db.session import detach_session_objects, get_background_session
-from app.dependencies import DashboardContext, get_dashboard_context
+from app.dependencies import DashboardContext, RequestLogsContext, get_dashboard_context, get_request_logs_context
+from app.modules.dashboard.activity import RequestActivityResponse, request_activity
 from app.modules.dashboard.schemas import (
     DashboardModelEntry,
     DashboardModelsResponse,
@@ -27,6 +29,17 @@ router = APIRouter(
     tags=["dashboard"],
     dependencies=[Depends(validate_dashboard_session), Depends(set_dashboard_error_format)],
 )
+
+
+@router.get(
+    "/dashboard/request-activity",
+    response_model=RequestActivityResponse,
+    dependencies=[Depends(require_dashboard_permission(Permission.ACCOUNTS_READ))],
+)
+async def get_request_activity(
+    context: RequestLogsContext = Depends(get_request_logs_context),
+) -> RequestActivityResponse:
+    return await request_activity(context.session, utcnow())
 
 
 @router.get(

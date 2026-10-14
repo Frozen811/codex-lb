@@ -1,0 +1,18 @@
+{
+  "openspec\\specs\\account-routing\\spec.md": {
+    "bytes": 205094,
+    "sha256": "b585b96e9959ddf08631bfa2aebeaa2fda3375b37bb268be80c64855fc15976b"
+  },
+  "openspec\\specs\\account-routing\\context.md": {
+    "bytes": 32495,
+    "sha256": "3df815864477064542ec2e837aea7e1931e750c21c05c75f15aa715166029055"
+  },
+  "openspec\\specs\\sticky-session-operations\\spec.md": {
+    "bytes": 115294,
+    "sha256": "1a1ec6352a21542727464b21d11a94beba63cb48b798a7872e4482084723e8d8"
+  },
+  "openspec\\specs\\sticky-session-operations\\context.md": {
+    "bytes": 11989,
+    "sha256": "cfab7c5f42c8b00131c5052ca2c89bcea67f893d71562fdb3095ebb950add79a"
+  }
+}

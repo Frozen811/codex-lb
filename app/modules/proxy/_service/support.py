@@ -112,7 +112,7 @@ _TTFT_OUTPUT_ITEM_TYPES = _PENDING_TOOL_CALL_ITEM_TYPES - {"function_call"}
 
 
 def _responses_input_items_are_self_contained(input_items: Sequence[JsonValue]) -> bool:
-    seen_call_ids_by_type: dict[str, set[str]] = {item_type: set() for item_type in _PENDING_TOOL_CALL_ITEM_TYPES}
+    pending_calls_by_type: dict[str, dict[str, int]] = {item_type: {} for item_type in _PENDING_TOOL_CALL_ITEM_TYPES}
     for item in input_items:
         if not isinstance(item, dict):
             continue
@@ -123,13 +123,16 @@ def _responses_input_items_are_self_contained(input_items: Sequence[JsonValue]) 
         call_id = call_id_value if isinstance(call_id_value, str) and call_id_value else None
         if item_type in _PENDING_TOOL_CALL_ITEM_TYPES:
             if call_id is not None:
-                seen_call_ids_by_type[item_type].add(call_id)
+                pending = pending_calls_by_type[item_type]
+                pending[call_id] = pending.get(call_id, 0) + 1
             continue
         call_item_type = _TOOL_CALL_ITEM_TYPES_BY_OUTPUT_TYPE.get(item_type)
         if call_item_type is None:
             continue
-        if call_id is None or call_id not in seen_call_ids_by_type[call_item_type]:
+        pending = pending_calls_by_type[call_item_type]
+        if call_id is None or pending.get(call_id, 0) == 0:
             return False
+        pending[call_id] -= 1
     return True
 
 

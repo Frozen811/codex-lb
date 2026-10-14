@@ -195,7 +195,7 @@ def test_weekly_pace_recent_burn_counts_delta_across_hour_boundary() -> None:
         },
     )
 
-    assert pace.burn_rate_recent_credits_per_hour == pytest.approx(5_040.0)
+    assert pace.burn_rate_recent_credits_per_hour == pytest.approx(PRO_WEEKLY_CAPACITY_CREDITS * 0.1)
 
 
 def test_weekly_pace_recent_burn_uses_floored_observed_span() -> None:
@@ -210,7 +210,7 @@ def test_weekly_pace_recent_burn_uses_floored_observed_span() -> None:
         },
     )
 
-    assert pace.burn_rate_recent_credits_per_hour == pytest.approx(10_080.0)
+    assert pace.burn_rate_recent_credits_per_hour == pytest.approx(PRO_WEEKLY_CAPACITY_CREDITS * 0.2)
 
 
 def test_weekly_pace_recent_burn_skips_reset_delta() -> None:
@@ -520,15 +520,14 @@ def test_weekly_pace_is_unchanged_by_ewma_tail_cap_under_fleet_burn_floor() -> N
     _assert_close(tail_pace.model_dump(), full_pace.model_dump())
 
 
-def test_weekly_pace_calculates_estimated_full_weekly_limit_cost() -> None:
+def test_weekly_pace_does_not_extrapolate_unmatched_fleet_activity_cost() -> None:
     account_id = "acc-cost"
-    # Used 20% of weekly limit, with $50.0 activity cost
+    # A dashboard timeframe's spend does not identify the quota observation interval.
     summaries = [_summary(account_id, used_percent=20.0, reset_in_hours=30.0)]
     histories = {account_id: [_row(account_id, 20.0, NOW - timedelta(minutes=1))]}
     pace = _build(summaries, histories, activity_cost_usd=50.0)
-    assert pace.used_cost_usd == 50.0
-    # $50.0 / (20.0 / 100.0) = $250.0
-    assert pace.estimated_full_weekly_limit_cost_usd == 250.0
+    assert pace.used_cost_usd is None
+    assert pace.estimated_full_weekly_limit_cost_usd is None
 
 
 def test_weekly_pace_reserves_capacity_without_scaling_observed_burn():

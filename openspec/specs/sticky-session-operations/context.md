@@ -80,3 +80,25 @@ mobile.
 The [policy-excluded owner requirement](spec.md#requirement-policy-excluded-continuity-owners-retire-only-when-durably-unavailable) uses the existing guarded durable retirement operation. Policy exclusion is a selection outcome, not proof that an account is dead. The repository checks current account state, reset horizon and the observed session identity before changing ownership scope.
 
 For example, an unanchored continuation whose owner remains rate-limited for six hours can retire once and select a fresh account when the request has a much shorter budget. An active excluded owner or an owner resetting inside that budget stays bound. Client response anchors, file pins and same-owner-only full-resend proofs retain their ownership restrictions. Existing migrations, defaults and background abandonment grace periods remain applicable; there is no new setting.
+
+
+## Child bridge idle retention on 2026-10-13
+
+See [requirements](spec.md#requirement-child-http-bridge-idle-retention-follows-the-child-affinity-bound). Child sticky row expiration alone did not release a retained socket: thread bridges used the long Codex idle lifetime and prompt-cache bridges used their independent idle setting. Affinity now carries an explicit child idle cap so hard turn-state and process affinity preserve ownership while bounding resource retention.
+
+Example: a short-lived child with a 3600-second cache setting retains an idle bridge for at most 300 seconds; a 120-second child cache setting gives at most 120 seconds. Reuse shortens an existing longer retention policy. Ordinary parent bridges retain their normal policy. Idle pruning continues to protect pending requests, reservations and admission waiters; this cap does not time out an active inference.
+
+No new operator setting or schema is needed. The existing fixed child cap and shorter configured bounds supply the policy. Product-route tests cover creation, reuse, idle pruning and zero remaining account pressure; hard affinity and ordinary parent controls are covered separately. Live-provider and distributed-runtime evidence remain separate from local regression results.
+
+
+## Deferred sticky reallocation, 2026-10-14
+
+Operators can select `after_compaction` through `PUT /api/settings` with `{"stickyReallocationTiming":"after_compaction"}`. GET returns the stored value; an unrelated partial update preserves it. The compatible default is `immediate`. To revert policy, PUT `{"stickyReallocationTiming":"immediate"}`. This batch adds no environment setting or dashboard UI control.
+
+Why this is optional: deferral keeps a warm, nearly exhausted account longer, trading immediate pressure relief for conversation locality. Changing the default would alter existing pool behavior. Timing is a behavior setting stored in the existing dashboard database and resolved through the existing routing snapshot; it is not a deployment-only or incident-debug variable. Public routes prioritize prompt-cache affinity, so changing only the internal sticky-thread flag would leave the requested policy unreachable there.
+
+In deferred mode an active soft owner at 96 percent stays on account A for ordinary HTTP and native WebSocket turns; explicit compact can choose account B at 10 percent. Hard response/file/turn-state ownership still constrains compaction to its owner. Actual exhaustion and existing safe failure recovery continue to use their established paths. An arbitrary synthetic marker is not treated as an explicit compaction boundary.
+
+Revision 20261014_000000_add_sticky_reallocation_timing adds a bounded, non-null column with the historical immediate default. Upgrade/downgrade/upgrade and schema drift are exercised on disposable SQLite, PostgreSQL 16 and MySQL 8.4. Downgrade removes this preference; a later upgrade initializes immediate again. No production migration or deployment was performed.
+
+See [requirements](spec.md) and [verification](../../changes/archive/2026-10-14-repair-five-history-boundary-contracts/verification.md).

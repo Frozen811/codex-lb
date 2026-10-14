@@ -122,6 +122,16 @@ const WeeklyCreditPaceStatusSchema = z.enum(["behind", "on_track", "ahead", "dan
 const WeeklyCreditRunwayStatusSchema = z.enum(["safe", "tight", "runs_dry"]);
 
 const WeeklyCreditPaceSchema = z.object({
+  creditsAreEstimates: z.boolean().optional(),
+  proWeeklyCapacityCredits: z.number().nonnegative().nullable().optional(),
+  accountCostEstimates: z.array(z.object({
+    accountId: z.string(),
+    observedSince: z.iso.datetime({ offset: true }),
+    observedUntil: z.iso.datetime({ offset: true }),
+    observedUsedPercent: z.number().positive(),
+    observedCostUsd: z.number().nonnegative(),
+    estimatedFullWeeklyLimitCostUsd: z.number().nonnegative(),
+  })).optional(),
   totalFullCredits: z.number(),
   totalActualRemainingCredits: z.number(),
   totalExpectedRemainingCredits: z.number(),
@@ -278,6 +288,11 @@ const RequestLogApiKeyOptionSchema = z.object({
 });
 
 export const RequestLogFilterOptionsSchema = z.object({
+  upstreams: z.array(z.object({
+    id: z.string(), type: z.enum(["subscription_pool", "model_source"]),
+    displayName: z.string().nullable(), modelSourceKind: z.string().nullable(),
+    isDeleted: z.boolean(),
+  })).optional().default([]),
   accountIds: z.array(z.string()),
   modelOptions: z.array(RequestLogModelOptionSchema),
   apiKeys: z.array(RequestLogApiKeyOptionSchema),
@@ -288,6 +303,7 @@ const RequestLogTimeframeSchema = z.enum(["all", "1h", "24h", "7d"]);
 export type RequestLogTimeframe = z.infer<typeof RequestLogTimeframeSchema>;
 
 export const FilterStateSchema = z.object({
+  upstreams: z.array(z.string()).optional(),
   search: z.string(),
   timeframe: RequestLogTimeframeSchema,
   accountIds: z.array(z.string()),
@@ -387,3 +403,9 @@ export type ConversationEntry = z.infer<typeof ConversationEntrySchema>;
 export type ConversationsResponse = z.infer<typeof ConversationsResponseSchema>;
 export type ConversationDetails = z.infer<typeof ConversationDetailsSchema>;
 export type ConversationFilterState = z.infer<typeof ConversationFilterStateSchema>;
+
+export const RequestActivitySchema = z.object({
+  startDate: z.string(), endDate: z.string(),
+  days: z.array(z.object({ date: z.string(), requests: z.number().int().nonnegative() })),
+});
+export type RequestActivity = z.infer<typeof RequestActivitySchema>;

@@ -22,6 +22,7 @@ from sqlalchemy.pool import NullPool
 
 from app.core.config.settings import get_settings
 from app.core.utils.shared_future import _await_cleanup_deferring_cancellation
+from app.db.sqlite_connection import FinalizingSQLiteConnection
 from app.db.sqlite_utils import (
     IntegrityCheck,
     SqliteFileIdentity,
@@ -207,7 +208,7 @@ def _create_postgres_async_engine(url: str, *, role: _PostgresPooledEngineRole) 
 def _sqlite_file_async_engine_kwargs() -> dict[str, object]:
     return {
         "poolclass": NullPool,
-        "connect_args": {"timeout": _SQLITE_BUSY_TIMEOUT_SECONDS},
+        "connect_args": {"timeout": _SQLITE_BUSY_TIMEOUT_SECONDS, "factory": FinalizingSQLiteConnection},
     }
 
 

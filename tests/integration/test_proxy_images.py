@@ -13,6 +13,8 @@ import asyncio
 import base64
 import json
 import logging
+import struct
+import zlib
 from collections.abc import AsyncIterator
 from typing import Any, cast
 
@@ -252,18 +254,131 @@ async def test_images_generations_trailing_slash_parity_between_v1_and_codex_ali
 
 
 @pytest.mark.asyncio
-async def test_images_generations_rejects_transparent_background(async_client):
+async def test_images_generations_rejects_transparent_jpeg(async_client):
     response = await async_client.post(
         "/v1/images/generations",
         json={
             "model": "gpt-image-2",
             "prompt": "a red circle",
             "background": "transparent",
+            "output_format": "jpeg",
         },
     )
     assert response.status_code == 400
     body = response.json()
-    assert body["error"]["param"] == "background"
+    assert body["error"]["param"] == "output_format"
+
+
+def _transparent_png() -> bytes:
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return struct.pack("!I", len(data)) + kind + data + struct.pack("!I", zlib.crc32(kind + data))
+
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack("!IIBBBBB", 1, 1, 8, 6, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(b"\x00\xff\x00\x00\x00"))
+        + chunk(b"IEND", b"")
+    )
+
+
+@pytest.mark.parametrize("operation", ["generations", "edits"])
+@pytest.mark.parametrize("prefix", ["/v1", "/backend-api/codex"])
+@pytest.mark.parametrize("slash", ["", "/"])
+@pytest.mark.parametrize("output_format", ["png", "webp", "jpeg"])
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_transparent_image_format_routes_preserve_tool_and_bytes(
+    async_client, monkeypatch, operation, prefix, slash, output_format, streaming
+):
+    await _import_account(async_client, "transparent", "transparent@example.invalid")
+    captured = []
+    image_bytes = _transparent_png() if output_format == "png" else b"RIFF\x10\x00\x00\x00WEBPsynthetic-alpha-fixture"
+    encoded = base64.b64encode(image_bytes).decode()
+
+    async def fake_stream(payload, *args, **kwargs):
+        captured.append(payload)
+        yield _sse(
+            {
+                "type": "response.output_item.done",
+                "output_index": 0,
+                "item": {
+                    "type": "image_generation_call",
+                    "id": "ig_alpha",
+                    "status": "completed",
+                    "result": encoded,
+                    "background": "transparent",
+                    "output_format": output_format,
+                    "size": "1024x1024",
+                    "quality": "low",
+                },
+            }
+        )
+        yield _sse(
+            {
+                "type": "response.completed",
+                "response": {
+                    "id": "resp_alpha",
+                    "object": "response",
+                    "status": "completed",
+                    "output": [],
+                },
+            }
+        )
+
+    async def fresh(self, account, **kwargs):
+        return account
+
+    monkeypatch.setattr(proxy_module, "core_stream_responses", fake_stream)
+    monkeypatch.setattr(proxy_module.ProxyService, "_ensure_fresh_with_budget", fresh)
+    fields = {
+        "model": "gpt-image-2",
+        "prompt": "transparent red pixel",
+        "background": "transparent",
+        "output_format": output_format,
+        "stream": streaming,
+        "quality": "low",
+    }
+    path = f"{prefix}/images/{operation}{slash}"
+    if operation == "generations":
+        response = await async_client.post(path, json=fields)
+    elif prefix == "/backend-api/codex":
+        response = await async_client.post(
+            path,
+            json={
+                **fields,
+                "images": [{"image_url": "data:image/png;base64," + base64.b64encode(_transparent_png()).decode()}],
+            },
+        )
+    else:
+        response = await async_client.post(
+            path,
+            files={"image": ("pixel.png", _transparent_png(), "image/png")},
+            data={key: str(value).lower() if isinstance(value, bool) else value for key, value in fields.items()},
+        )
+    if slash:
+        assert response.status_code == 405, response.text
+        assert response.json()["error"]["type"] == "invalid_request_error"
+        assert captured == []
+        return
+    if output_format == "jpeg":
+        assert response.status_code == 400, response.text
+        assert response.json()["error"]["param"] == "output_format"
+        assert captured == []
+        return
+    assert response.status_code == 200, response.text
+    assert len(captured) == 1
+    tool = captured[0].tools[0]
+    assert tool["background"] == "transparent" and tool["output_format"] == output_format
+    if operation == "edits":
+        assert "data:image/png;base64," in json.dumps(captured[0].input)
+    if streaming:
+        events = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: {")]
+        event_type = "image_edit.completed" if operation == "edits" else "image_generation.completed"
+        completed = next(event for event in events if event["type"] == event_type)
+        assert completed["background"] == "transparent" and completed["output_format"] == output_format
+        returned = completed["b64_json"]
+    else:
+        returned = response.json()["data"][0]["b64_json"]
+    assert base64.b64decode(returned) == image_bytes
 
 
 @pytest.mark.asyncio

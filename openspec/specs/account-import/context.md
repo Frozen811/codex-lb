@@ -48,3 +48,22 @@ Refresh-only warning accounts retain their still-usable access tokens.
 Re-import a repaired token with the same identity and **Import without overwrite**
 disabled to repair its existing slot. When that setting is enabled, importing the
 same identity can intentionally create a separate credential slot instead.
+
+## Headless API authorization and subscription credentials (2026-10-14)
+
+A provider API key uses the existing Model Sources flow rather than a ChatGPT
+subscription account. Add an OpenAI-compatible source with its base URL, API
+key and supported models, then use a codex-lb relay key to request that source's
+model. The source key is encrypted at rest, omitted from list responses and
+sent as the upstream Bearer credential. A disposable source-server test proves
+Responses dispatch without any subscription account. See
+[model-source-routing](../model-source-routing/spec.md) for the owning contract.
+
+An access-only Business/Enterprise credential instead uses the Auth import
+dialog's Access token mode with explicit email and upstream identity. Its
+export/import now preserves metadata and absent refresh/ID tokens. API-key
+authorization does not transfer subscription quota, and neither flow bypasses
+upstream SMS challenges, security enrollment or entitlement requirements.
+Live upstream validity is confirmed by the actual authorized request, not
+inferred from local import acceptance. Example inputs in this context are
+synthetic. See [import requirements](spec.md).

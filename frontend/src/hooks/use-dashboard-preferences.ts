@@ -7,11 +7,16 @@ const ACCOUNT_VIEW_MODE_STORAGE_KEY = "codex-lb-dashboard-account-view-mode";
 const ACCOUNT_LIST_SORT_STORAGE_KEY = "codex-lb-dashboard-account-list-sort";
 const DASHBOARD_REFRESH_STORAGE_KEY = "codex-lb-dashboard-refresh-seconds";
 
+const DISPLAY_MODE_STORAGE_KEY = "codex-lb-dashboard-display-mode";
+export type DashboardDisplayMode = "weeklyPace" | "requestHeatmap";
+
 export type DashboardRefreshSeconds = 5 | 15 | 30 | 60;
 
 export type DashboardAccountViewMode = "cards" | "list" | "compact";
 
 type DashboardPreferencesState = {
+  dashboardDisplayMode: DashboardDisplayMode;
+  setDashboardDisplayMode: (mode: DashboardDisplayMode) => void;
   accountBurnrateEnabled: boolean;
   accountViewMode: DashboardAccountViewMode;
   accountListSort: AccountListSort;
@@ -128,12 +133,19 @@ function persistRefreshSeconds(seconds: DashboardRefreshSeconds): void {
 }
 
 export const useDashboardPreferencesStore = create<DashboardPreferencesState>((set) => ({
+  dashboardDisplayMode: "weeklyPace",
+  setDashboardDisplayMode: (mode) => {
+    if (typeof window !== "undefined") window.localStorage.setItem(DISPLAY_MODE_STORAGE_KEY, mode);
+    set({ dashboardDisplayMode: mode, initialized: true });
+  },
   accountBurnrateEnabled: true,
   accountViewMode: "cards",
   accountListSort: null,
   refreshSeconds: 15,
   initialized: false,
   initializePreferences: () => {
+    const storedDisplayMode = typeof window === "undefined" ? null : window.localStorage.getItem(DISPLAY_MODE_STORAGE_KEY);
+    const dashboardDisplayMode = storedDisplayMode === "requestHeatmap" ? "requestHeatmap" : "weeklyPace";
     const accountBurnrateEnabled = readStoredAccountBurnrateEnabled() ?? true;
     const accountViewMode = readStoredAccountViewMode() ?? "cards";
     const accountListSort = readStoredAccountListSort();
@@ -142,7 +154,7 @@ export const useDashboardPreferencesStore = create<DashboardPreferencesState>((s
     persistAccountViewMode(accountViewMode);
     persistAccountListSort(accountListSort);
     persistRefreshSeconds(refreshSeconds);
-    set({ accountBurnrateEnabled, accountViewMode, accountListSort, refreshSeconds, initialized: true });
+    set({ dashboardDisplayMode, accountBurnrateEnabled, accountViewMode, accountListSort, refreshSeconds, initialized: true });
   },
   setAccountBurnrateEnabled: (enabled) => {
     persistAccountBurnrateEnabled(enabled);

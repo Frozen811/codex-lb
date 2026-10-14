@@ -16,6 +16,19 @@ import {
 import { createDashboardOverview, createDefaultRequestLogs } from "@/test/mocks/factories";
 import { formatCompactAccountId } from "@/utils/account-identifiers";
 
+it("uses only an explicitly supplied Pro capacity reference", () => {
+  const now = new Date("2026-10-14T12:00:00Z");
+  const sample = account({ accountId: "ref", email: "ref@example.invalid", planType: "pro",
+    capacityCreditsSecondary: 36000, remainingCreditsSecondary: 1000,
+    resetAtSecondary: "2026-10-20T12:00:00Z", windowMinutesSecondary: 10080 });
+  for (const missing of [null, 0]) {
+    const pace = buildWeeklyCreditPace([sample], now, missing);
+    expect(pace?.proAccountEquivalentToCoverOverPlan).toBeNull();
+  }
+  const pace = buildWeeklyCreditPace([sample], now, 12000);
+  expect(pace?.proAccountEquivalentToCoverOverPlan).toBeCloseTo((pace?.projectedShortfallCredits ?? 0) / 12000);
+});
+
 function account(overrides: Partial<AccountSummary> & Pick<AccountSummary, "accountId" | "email">): AccountSummary {
   return {
     accountId: overrides.accountId,
@@ -375,6 +388,7 @@ describe("buildWeeklyCreditPace", () => {
     const pace = buildWeeklyCreditPace(
       [weeklyAccount({ accountId: "acc-close", fullCredits: 100_000, remainingCredits: 1_000, timeLeftPercent: 1 })],
       now,
+      50_400, // Explicit API reference fixture, not a runtime default.
     );
 
     expect(pace).not.toBeNull();
@@ -393,6 +407,7 @@ describe("buildWeeklyCreditPace", () => {
     const pace = buildWeeklyCreditPace(
       [weeklyAccount({ accountId: "acc-sustainable", fullCredits: 100_000, remainingCredits: 50_000, timeLeftPercent: 50 })],
       now,
+      50_400, // Explicit API reference fixture, not a runtime default.
     );
 
     expect(pace).not.toBeNull();
@@ -413,6 +428,7 @@ describe("buildWeeklyCreditPace", () => {
         }),
       ],
       now,
+      50_400, // Explicit API reference fixture, not a runtime default.
     );
 
     expect(pace).not.toBeNull();
@@ -434,6 +450,7 @@ describe("buildWeeklyCreditPace", () => {
         }),
       ],
       now,
+      50_400, // Explicit API reference fixture, not a runtime default.
     );
 
     expect(pace).not.toBeNull();
@@ -451,6 +468,7 @@ describe("buildWeeklyCreditPace", () => {
         weeklyAccount({ accountId: "acc-large", fullCredits: 900_000, remainingCredits: 800_000, timeLeftPercent: 80 }),
       ],
       now,
+      50_400, // Explicit API reference fixture, not a runtime default.
     );
 
     expect(pace).not.toBeNull();
@@ -470,6 +488,7 @@ describe("buildWeeklyCreditPace", () => {
     const pace = buildWeeklyCreditPace(
       [weeklyAccount({ accountId: "acc-early", fullCredits: 1_000_000, remainingCredits: 10_000, timeLeftPercent: 80 })],
       now,
+      50_400, // Explicit API reference fixture, not a runtime default.
     );
 
     expect(pace).not.toBeNull();
@@ -494,6 +513,7 @@ describe("buildWeeklyCreditPace", () => {
         weeklyAccount({ accountId: "acc-far", fullCredits: 100_000, remainingCredits: 50_000, timeLeftPercent: 90 }),
       ],
       now,
+      50_400, // Explicit API reference fixture, not a runtime default.
     );
 
     expect(pace).not.toBeNull();
@@ -516,6 +536,7 @@ describe("buildWeeklyCreditPace", () => {
         weeklyAccount({ accountId: "acc-far", fullCredits: 100_000, remainingCredits: 50_000, timeLeftPercent: 90 }),
       ],
       now,
+      50_400, // Explicit API reference fixture, not a runtime default.
     );
 
     expect(pace).not.toBeNull();
@@ -531,6 +552,7 @@ describe("buildWeeklyCreditPace", () => {
         weeklyAccount({ accountId: "empty-later-reset", fullCredits: 1_000, remainingCredits: 0, timeLeftPercent: 90 }),
       ],
       now,
+      50_400, // Explicit API reference fixture, not a runtime default.
     );
 
     expect(pace).not.toBeNull();
@@ -545,6 +567,7 @@ describe("buildWeeklyCreditPace", () => {
         weeklyAccount({ accountId: "large-later", fullCredits: 100_000, remainingCredits: 20_000, timeLeftPercent: 50 }),
       ],
       now,
+      50_400, // Explicit API reference fixture, not a runtime default.
     );
 
     expect(pace).not.toBeNull();
@@ -563,6 +586,7 @@ describe("buildWeeklyCreditPace", () => {
         weeklyAccount({ accountId: "acc-far", fullCredits: 100_000, remainingCredits: 0, timeLeftPercent: 90 }),
       ],
       now,
+      50_400, // Explicit API reference fixture, not a runtime default.
     );
 
     expect(pace).not.toBeNull();
@@ -586,6 +610,7 @@ describe("buildWeeklyCreditPace", () => {
         weeklyAccount({ accountId: "large-later", fullCredits: 100_000, remainingCredits: 0, timeLeftPercent: 50 }),
       ],
       now,
+      50_400, // Explicit API reference fixture, not a runtime default.
     );
 
     expect(pace).not.toBeNull();
@@ -648,6 +673,7 @@ describe("buildWeeklyCreditPace", () => {
         }),
       ],
       liveLikeNow,
+      50_400,
     );
 
     expect(pace).not.toBeNull();
@@ -673,6 +699,7 @@ describe("buildWeeklyCreditPace", () => {
         weeklyAccount({ accountId: "missing-window", fullCredits: 100_000, remainingCredits: 50_000, windowMinutesSecondary: null }),
       ],
       now,
+      50_400, // Explicit API reference fixture, not a runtime default.
     );
 
     expect(pace).toBeNull();

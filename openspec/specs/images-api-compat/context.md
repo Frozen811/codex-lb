@@ -114,3 +114,17 @@ local synthetic origins do not certify live provider tool support or entitlement
 Non-streaming fan-out retains one public reservation; the internal Responses calls receive no reservation of their own. Completed image-tool usage survives a sibling failure or caller cancellation. Pending subcalls are cancelled and drained, including repeated caller cancellation while a child cleans up or settlement hands off to tracked persistence. An empty-success batch releases its reservation once. Model-log rewriting happens after settlement and cannot discard completed usage; unexpected exception text stays out of public errors. See [the fan-out requirement](spec.md#requirement-image-fan-out-preserves-completed-usage-through-partial-failures).
 
 For example, with `n=2`, one completed generation reporting 7 input and 13 output image tokens still charges 20 tokens when the sibling fails with 502 or the caller cancels before it finishes. This does not charge an unfinished subcall or turn cancellation into a successful image response. No additional operator setting is needed.
+
+## Transparent image output (UP-PR-2593)
+
+The shared validator now admits transparent PNG and WebP for generation and editing, including GPT Image 2 family models. Format capability is the deciding constraint: JPEG has no alpha, so it fails before inference with param=output_format. Input fidelity and size rules remain in force. Tool settings and returned bytes pass through unchanged; there is no background removal or image conversion.
+
+For example, POST /v1/images/generations with model=gpt-image-2, background=transparent and output_format=png sends those settings to image_generation. Generation streams use image_generation.completed; edit streams use image_edit.completed. Public edits use multipart uploads; native Codex edits use JSON images/image_url data URLs. Existing trailing slash routes retain their 405 OpenAI envelope. The regression fixture contains a real one-pixel transparent PNG and synthetic WebP bytes to prove pass-through; live provider alpha correctness is a separate check. Normative behavior is in [spec.md](spec.md).
+
+## Completed result precedence and five-row verification (2026-10-14)
+
+The non-streaming adapter drains a provider stream after its first completion so request logging and persistence can finish. That completion owns the image output and tool usage; late SSE events cannot replace it. For example, a completed Flare image with 7 input and 13 output tokens followed by response.incomplete remains a successful image with 20 total tokens. An incomplete event before completion keeps the existing error and reservation-release behavior. This also applies to each fan-out child.
+
+Image 2.5 public IDs remain in the image_generation tool; the host follows the existing compatible Sol/Astra/5.5 policy. The contradictory duplicate Luna requirement has been removed without changing runtime host selection or account probes. No new configuration or persistence schema is introduced.
+
+Local tests cover generation/edit aliases, both 2.5 models, partial-failure/cancellation settlement and bounded route observations. Provider transport is synthetic; live vendor acceptance, Desktop, hosted CI and production remain separate. See the archived repair-five-image-stream-contracts change for exact evidence and the five selected registry rows.

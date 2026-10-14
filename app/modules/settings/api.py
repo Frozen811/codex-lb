@@ -193,6 +193,7 @@ def _dashboard_settings_response(settings, *, principal: DashboardPrincipal) -> 
     ]
     return DashboardSettingsResponse(
         sticky_threads_enabled=settings.sticky_threads_enabled,
+        sticky_reallocation_timing=settings.sticky_reallocation_timing,
         upstream_stream_transport=settings.upstream_stream_transport,
         prohibit_fast_mode=settings.prohibit_fast_mode,
         http_downstream_transport_policy=settings.http_downstream_transport_policy,
@@ -1253,6 +1254,7 @@ async def update_settings(
                     else current.show_reset_credit_expiry_badge
                 ),
                 routing_strategy=payload.routing_strategy or current.routing_strategy,
+                sticky_reallocation_timing=payload.sticky_reallocation_timing or current.sticky_reallocation_timing,
                 subagent_account_preference=(
                     payload.subagent_account_preference or current.subagent_account_preference
                 ),
@@ -1519,6 +1521,7 @@ async def update_settings(
         field_name
         for field_name in (
             "sticky_threads_enabled",
+            "sticky_reallocation_timing",
             "upstream_stream_transport",
             "prohibit_fast_mode",
             "http_downstream_transport_policy",

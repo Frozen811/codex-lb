@@ -3638,13 +3638,15 @@ def _effective_http_bridge_idle_ttl_seconds(
     prompt_cache_idle_ttl_seconds: float | None = None,
 ) -> float:
     if affinity.kind == StickySessionKind.CODEX_SESSION or affinity.codex_session_source == "thread_header":
-        # The DB row is bounded soft locality, but a live thread bridge owns
-        # upstream socket history and therefore receives the Codex continuity
-        # lifetime once created.
-        return max(idle_ttl_seconds, codex_idle_ttl_seconds)
-    if affinity.kind == StickySessionKind.PROMPT_CACHE and prompt_cache_idle_ttl_seconds is not None:
-        return prompt_cache_idle_ttl_seconds
-    return idle_ttl_seconds
+        # A live thread bridge owns upstream socket history.
+        effective_ttl = max(idle_ttl_seconds, codex_idle_ttl_seconds)
+    elif affinity.kind == StickySessionKind.PROMPT_CACHE and prompt_cache_idle_ttl_seconds is not None:
+        effective_ttl = prompt_cache_idle_ttl_seconds
+    else:
+        effective_ttl = idle_ttl_seconds
+    if affinity.subagent_bridge_idle_ttl_seconds is not None:
+        effective_ttl = min(effective_ttl, float(affinity.subagent_bridge_idle_ttl_seconds))
+    return effective_ttl
 
 
 def _http_bridge_eviction_priority(session: _HTTPBridgeSession) -> tuple[int, float]:

@@ -65,7 +65,8 @@ _NATIVE_EVENT_LINE_LIMIT = 24 * 1024 * 1024
 # the shared reader hostage.
 _NATIVE_STREAM_QUEUE_LIMIT = 4096
 _NATIVE_STREAM_QUEUE_BYTES_LIMIT = 32 * 1024 * 1024
-_NATIVE_WEBSOCKET_MESSAGE_QUEUE_LIMIT = 64
+_NATIVE_WEBSOCKET_MESSAGE_QUEUE_LIMIT = 4096
+_NATIVE_WEBSOCKET_MESSAGE_QUEUE_BYTES_LIMIT = 32 * 1024 * 1024
 _NATIVE_CANCEL_TIMEOUT_SECONDS = 2.0
 _NATIVE_WEBSOCKET_COMMAND_TIMEOUT_SECONDS = 30.0
 
@@ -223,6 +224,23 @@ class NativeWebSocketMessage:
     event_type: str | None = None
     payload: dict[str, JsonValue] | None = None
     routing: NativeWebSocketRoutingMetadata | None = None
+
+
+def _websocket_message_size(message: NativeWebSocketMessage) -> int:
+    size = len(message.data) if message.data is not None else 0
+    if message.text is not None:
+        copies = 2 if message.responses_interpreted else 1
+        size += copies * len(message.text.encode("utf-8", errors="surrogatepass"))
+    if message.close_reason is not None:
+        size += len(message.close_reason.encode("utf-8", errors="surrogatepass"))
+    if message.event_type is not None:
+        size += len(message.event_type.encode("utf-8"))
+    if message.routing is not None:
+        if message.routing.payload_response_id is not None:
+            size += len(message.routing.payload_response_id.encode("utf-8", errors="surrogatepass"))
+        if message.routing.sequence_number is not None:
+            size += len(str(message.routing.sequence_number))
+    return size
 
 
 class NativeEgressClient(Protocol):
@@ -467,6 +485,7 @@ class NativeEgressWebSocket:
         self._messages: asyncio.Queue[NativeWebSocketMessage | BaseException] = asyncio.Queue(
             maxsize=_NATIVE_WEBSOCKET_MESSAGE_QUEUE_LIMIT
         )
+        self._queued_message_bytes = 0
         self._pending: dict[str, asyncio.Future[None]] = {}
         self._command_sequence = 0
         # Reassembly buffer for chunked websocket text IPC
@@ -500,6 +519,7 @@ class NativeEgressWebSocket:
         item = await self._messages.get()
         if isinstance(item, BaseException):
             raise item
+        self._queued_message_bytes -= _websocket_message_size(item)
         return item
 
     async def close(self, code: int = 1000, reason: str = "") -> None:
@@ -727,12 +747,19 @@ class NativeEgressWebSocket:
             raise NativeEgressProtocolError(f"native websocket {event_type} event interrupted a chunked text message")
 
     def _queue_message(self, message: NativeWebSocketMessage) -> None:
+        size = _websocket_message_size(message)
         try:
+            # A lone large frame retains the transport's configured frame cap.
+            # Bound accumulated output without blocking the pump's send ACKs.
+            if (
+                size
+                and not self._messages.empty()
+                and (self._queued_message_bytes + size > _NATIVE_WEBSOCKET_MESSAGE_QUEUE_BYTES_LIMIT)
+            ):
+                raise asyncio.QueueFull
             self._messages.put_nowait(message)
+            self._queued_message_bytes += size
         except asyncio.QueueFull as exc:
-            while not self._messages.empty():
-                with contextlib.suppress(asyncio.QueueEmpty):
-                    self._messages.get_nowait()
             raise NativeEgressTransportError(
                 "native websocket consumer exceeded the bounded message queue",
                 failure_phase="consumer_backpressure",

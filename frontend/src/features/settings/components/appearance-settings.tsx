@@ -54,6 +54,8 @@ const QUOTA_DISPLAY_OPTIONS: {
 
 export function AppearanceSettings() {
   const { t } = useTranslation();
+  const dashboardDisplayMode = useDashboardPreferencesStore((s) => s.dashboardDisplayMode);
+  const setDashboardDisplayMode = useDashboardPreferencesStore((s) => s.setDashboardDisplayMode);
   const preference = useThemeStore((s) => s.preference);
   const setTheme = useThemeStore((s) => s.setTheme);
   const timeFormat = useTimeFormatStore((s) => s.timeFormat);
@@ -83,6 +85,18 @@ export function AppearanceSettings() {
         </div>
 
         <div className="divide-y rounded-lg border">
+          <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div><p className="text-sm font-medium">{t("settings.appearance.activity.label")}</p>
+              <p className="text-xs text-muted-foreground">{t("settings.appearance.activity.description")}</p></div>
+            <div className="flex gap-1 rounded-lg border p-1">
+              {(["weeklyPace", "requestHeatmap"] as const).map((mode) => (
+                <button key={mode} type="button" aria-pressed={dashboardDisplayMode === mode}
+                  onClick={() => setDashboardDisplayMode(mode)}
+                  className={cn("rounded-md px-3 py-1.5 text-xs", dashboardDisplayMode === mode && "bg-muted")}
+                >{t(`settings.appearance.activity.${mode}`)}</button>
+              ))}
+            </div>
+          </div>
           <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-medium">{t("settings.appearance.theme.label")}</p>

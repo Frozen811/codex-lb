@@ -115,3 +115,22 @@ describe("useDashboardPreferencesStore", () => {
     expect(window.localStorage.getItem("codex-lb-dashboard-account-list-sort")).toBeNull();
   });
 });
+
+
+describe("local dashboard display mode", () => {
+  beforeEach(() => { installLocalStorageMock(); vi.resetModules(); });
+  it("defaults invalid saved modes to weekly pace", async () => {
+    window.localStorage.setItem("codex-lb-dashboard-display-mode", "invalid");
+    const { useDashboardPreferencesStore } = await import("@/hooks/use-dashboard-preferences");
+    useDashboardPreferencesStore.getState().initializePreferences();
+    expect(useDashboardPreferencesStore.getState().dashboardDisplayMode).toBe("weeklyPace");
+  });
+  it("persists and restores the heatmap locally", async () => {
+    const { useDashboardPreferencesStore } = await import("@/hooks/use-dashboard-preferences");
+    useDashboardPreferencesStore.getState().setDashboardDisplayMode("requestHeatmap");
+    expect(window.localStorage.getItem("codex-lb-dashboard-display-mode")).toBe("requestHeatmap");
+    useDashboardPreferencesStore.setState({ dashboardDisplayMode: "weeklyPace" });
+    useDashboardPreferencesStore.getState().initializePreferences();
+    expect(useDashboardPreferencesStore.getState().dashboardDisplayMode).toBe("requestHeatmap");
+  });
+});

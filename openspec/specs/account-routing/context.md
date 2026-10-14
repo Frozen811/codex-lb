@@ -424,3 +424,14 @@ The fork adds a single forward revision on its verified reset-threshold head. Le
 Fresh owner authorization retains strict revoked-credential handling and usable reauth warning behavior for manual warm-up. Selection retries are bounded at eight to let local and persisted invalidation echoes settle, with final current-owner refusal and complete lease cleanup under continuing churn. Foreground ranking ignores unavailable peers when choosing the best health tier but retains their hard-block evidence for canonical backoff fallback.
 
 Code and tests are adapted from NikitaMGrimm's upstream PR #1528 at caf31b77a4ef85047459635e956fdd62f7fbd7ce; aaravrav is credited there for complementary reserve presentation. No old migration or prior archived evidence is rewritten. Local verification is separate from live providers, server backends and publication. See [requirements](spec.md).
+
+
+## Account placement verification on 2026-10-13
+
+See [requirements](spec.md) for strict route and fresh child placement contracts. A model routing header now reaches HTTP Responses, compact, native WebSocket and HTTP bridge selection. Its account identity is read inside the repository session, so teardown cannot invalidate ORM fields. Strict routing remains subordinate to required stored-object/file ownership and API-key scope; a disagreement is a named refusal before dispatch.
+
+Example: a configured route maps gpt-5.1 to A, while a request header maps it to B. Eligible B serves the request. A previous response owned by A combined with that B override instead reports model_account_owner_conflict. A paused B reports model_account_unavailable, preserving local capacity error codes when capacity is the actual refusal.
+
+Child diversification is advisory and off by default. Codex thread affinity carries proof of a fresh account-neutral child; the bridge's follow_up label based on headers does not disprove that proof. An established child mapping or required owner wins, and lack of an eligible alternate falls back within the same deadline. Generic /v1/responses retains its deliberate non-Codex affinity policy.
+
+Probe recovery and revoked-token retirement were verified through local SQLite and transport regressions. Probe evidence is the existing successful HTTP-status plus available-usage contract; tests do not attest provider terminal completion, real Desktop, native server databases or distributed deployment. Full verification is in the archived repair-five-account-placement-contracts change.

@@ -1490,6 +1490,9 @@ class DashboardSettings(Base):
         server_default=text("'off'"),
         nullable=False,
     )
+    sticky_reallocation_timing: Mapped[str] = mapped_column(
+        String(32), default="immediate", server_default=text("'immediate'"), nullable=False
+    )
     relative_availability_power: Mapped[float] = mapped_column(
         Float,
         default=2.0,

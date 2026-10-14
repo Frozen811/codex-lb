@@ -217,6 +217,12 @@ def validate_image_request_parameters(
             param="output_format",
         )
 
+    if background == "transparent" and output_format == "jpeg":
+        raise _images_invalid(
+            "Transparent backgrounds require output_format='png' or 'webp'.",
+            param="output_format",
+        )
+
     if not 0 <= output_compression <= 100:
         raise _images_invalid(
             "output_compression must be between 0 and 100",
@@ -241,11 +247,6 @@ def validate_image_request_parameters(
             raise _images_invalid(
                 f"Invalid quality '{quality}' for gpt-image-2. Expected one of: low, medium, high, auto.",
                 param="quality",
-            )
-        if background == "transparent":
-            raise _images_invalid(
-                "background='transparent' is not supported by gpt-image-2",
-                param="background",
             )
         if input_fidelity is not None:
             raise _images_invalid(

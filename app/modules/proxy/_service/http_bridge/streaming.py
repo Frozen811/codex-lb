@@ -257,6 +257,7 @@ from app.modules.proxy._service.warmup import (
     _WarmupUsageSnapshot as _WarmupUsageSnapshot,
 )
 from app.modules.proxy.affinity import (
+    _affinity_with_deferred_reallocation,
     _AffinityPolicy,
     _codex_backend_identity,
     _extract_model_class,
@@ -280,6 +281,7 @@ from app.modules.proxy.durable_bridge_runtime import http_bridge_owner_process_e
 from app.modules.proxy.helpers import (
     _normalize_error_code,
 )
+from app.modules.proxy.load_balancer import effective_routing_tunables
 from app.modules.proxy.replay_safety import (
     AccountNeutralReplayProjection,
     project_responses_input_for_account_neutral_fresh_replay,
@@ -1594,6 +1596,9 @@ class _HTTPBridgeStreamingMixin:
             api_key=api_key,
         )
         inbound_affinity_observation = AffinityObservation.from_policy(affinity)
+        affinity = _affinity_with_deferred_reallocation(
+            affinity, defer=effective_routing_tunables(dashboard_settings).defer_sticky_budget_reallocation
+        )
         _maybe_log_proxy_request_shape(
             "stream_http_bridge",
             payload,

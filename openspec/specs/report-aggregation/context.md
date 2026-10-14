@@ -10,3 +10,7 @@ For measured performance, regression evidence, screenshots and rollout constrain
 ## Independent dense report verification (2026-10-04)
 
 A seven-day API fixture contains 543,000 valid speed samples. Raw and folded totals and daily medians agree; exact short-window medians still read retained raw samples. This Windows SQLite run measured 21.416 s raw, 7.811 s folded and 0.015 s cached. These measurements do not guarantee milliseconds or performance on the reporter's ARM server. For example, first token 125 ms, visible output 500 ms, terminal 1,000 ms, settlement 3,000 ms and 50 output tokens including 30 reasoning tokens produce TTFT 125 ms and 40 TPS. Totals survive raw retention, while exact speed evidence depends on retained raw samples. See [verification](../../changes/archive/2026-10-04-verify-sqlite-history-reports-transcript/verification.md).
+
+## Independent reporting evidence (2026-10-14)
+
+Thirty thousand disposable SQLite requests exercise the real Reports API before folding and after raw retention. Totals, daily results and warmup exclusions remain identical. The report cache coalesces identical requests, bounds distinct computations, releases on cancellation/failure and skips expensive speed medians for ranges over seven days. Local synthetic timing is not a production throughput guarantee. Archived raw logs cannot restore per-request speed details once retention removes them. See the observability batch verification for the exact measurements and PostgreSQL residual.

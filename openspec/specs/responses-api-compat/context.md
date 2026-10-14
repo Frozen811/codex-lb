@@ -706,3 +706,31 @@ The [client-anchor contract](spec.md#requirement-proven-dead-client-anchors-rece
 The [submit-time tombstone contract](spec.md#requirement-submit-time-abandonment-tombstones-retire-exact-proxy-anchors) handles a remote abandonment verdict arriving after planning. It retires the exact rejected live and durable carrier, preserves the initial 404 through outer recovery, and keeps the tombstone for delta-only refusal until replacement continuity succeeds. The undispatched request has no operation to reset for transparent replay. Successor anchors, client-supplied anchors, existing cleanup retry fences and cancellation ownership remain protected.
 
 The regression evidence uses disposable SQLite, synthetic upstream adapters, all public HTTP bridge paths and slash aliases, both native WebSocket paths and existing raw HTTP controls. Keyed tests enable real API-key enforcement, settle all four reservations and charge only the two successful turns. This does not certify live Desktop/provider behavior, native PostgreSQL/MySQL races, distributed rollout or hosted CI/production. Community reference implementations: [UP-PR-2423](https://github.com/Soju06/codex-lb/pull/2423) and [UP-PR-2467](https://github.com/Soju06/codex-lb/pull/2467).
+
+## Native burst buffering and CCodex identity (2026-10-14)
+
+The native socket pump must keep draining helper control events while downstream receive is temporarily late. Its decoded-message queue now admits up to 4096 events with a 32 MiB accumulated payload budget, charging UTF-8 text and the interpreted payload copy plus routing metadata. A lone large message retains the existing transport frame limit; this is a payload budget, not a claim about total RSS or Python object overhead. The finite event count bounds empty-message overhead. Reassembly remains under the existing helper frame contract.
+
+For example, 65 small deltas followed by a send ACK complete the send before receive starts, then all deltas arrive in order. True overflow aborts the request once and fails pending sends; accepted output remains ahead of the terminal error. Waiting for consumer capacity in the pump was rejected because it would also delay ACKs. Reader failure, cancellation and peer/local close retain existing finalization.
+
+CCodex identity remains an exact allowlist of ccodex-internal and ccodex-handoff-worker plus matching slash-delimited User-Agent prefixes. Unknown lookalikes are normalized; identity does not override HTTP/WS policy. HTTP canonical/slash paths and both native WS paths are covered. The package floor is now urllib3>=2.8.0, matching the existing lock. Tests use fake upstream inference, not live CCodex/helper deployment. Requirements are in [spec.md](spec.md).
+
+
+## Required-owner connect failures and native stream help (2026-10-14)
+
+The [required-owner connect requirement](spec.md#requirement-required-owner-websocket-connect-errors-retain-their-original-envelope) preserves the account's actual connection failure. For example, a previous-response owner returning usage_limit_reached with HTTP 429 now surfaces that envelope instead of being excluded and then reported as a generated owner-unavailable HTTP 502. File owners, account-bound replays and hard turn-state owners use the same constraint. Ordinary soft preferences can still fail over; there is no new same-account retry or operator setting. Classification and stream-lease cleanup keep their existing owners.
+
+Coverage includes public/native WebSocket paths, their existing unsupported trailing-slash refusals, and all HTTP bridge canonical/slash paths. The bridge's existing required-owner connection policy is independently verified. Tests use disposable SQLite and fake upstream opens; live clients, provider credentials, distributed execution and hosted CI remain separate.
+
+The stream normalizer now exposes its documentation through __doc__, inspect and pydoc. Disabling SDK event enforcement preserves vendor events without disabling shared reasoning-summary, error and terminal normalization. OpenAI-shaped backend requests can still enable SDK enforcement, and native quota events still use the pooled snapshot. Removing string-only documentation nodes leaves the entire module's executable AST identical to its initial version. urllib3's existing >=2.8.0 package floor and lock are independently confirmed in a locally built wheel; image scans and public artifacts are not established by that metadata check.
+
+
+## Five history and recovery records, 2026-10-14
+
+The bounded batch owns UP-ISSUE-2269, UP-ISSUE-1942, UP-ISSUE-568, UP-ISSUE-986 and UP-ISSUE-1924. Continuation classification now consumes matching call occurrences, separately for function, custom, apply-patch and computer protocols. For example, call A / output A / output A needs prior context; two complete call/output pairs remain a full resend. No request bytes are changed by classification.
+
+History slimming still replaces only heavy historical artifacts, preserves uploaded file references and item order, and rejects a request that remains too large. The broad history-omission design in source issue568 remains reverted; its upstream closure explicitly treats that proposal as obsolete. Fake-provider routes verify files, identities, current suffix, HTTP/native WebSocket size envelopes and bounded eventless termination.
+
+For issue1924 the original plain-inline-image affinity diagnosis was rejected in the maintainer comments. The accepted fork contract independently verifies both HTTP-status429 and first-event quota errors with inline images and retained encrypted reasoning/compaction. The existing ciphertext-only exception preserves ciphertext unchanged after validating the rest of the request. It does not authorize a new continuation, file or existing dispatch owner to move. Live provider/Desktop cache billing and a deployed relay chain remain outside local evidence.
+
+See [requirements](spec.md), [sticky timing context](../sticky-session-operations/context.md) and [verification](../../changes/archive/2026-10-14-repair-five-history-boundary-contracts/verification.md).

@@ -54,6 +54,7 @@ class RoutingTunables:
     inflight_penalty_pct: float = DEFAULT_INFLIGHT_PENALTY_PCT
     lease_token_weight: float = DEFAULT_LEASE_TOKEN_WEIGHT
     lease_ttl_seconds: float = DEFAULT_LEASE_TTL_SECONDS
+    defer_sticky_budget_reallocation: bool = False
 
 
 def runtime_pressure_percent(runtime: RuntimeState, tunables: RoutingTunables) -> float:
@@ -89,6 +90,8 @@ def resolve_routing_tunables(
         inflight_penalty_pct=float(pick("proxy_account_inflight_penalty_pct", DEFAULT_INFLIGHT_PENALTY_PCT)),
         lease_token_weight=float(pick("proxy_account_lease_token_weight", DEFAULT_LEASE_TOKEN_WEIGHT)),
         lease_ttl_seconds=float(pick("proxy_account_lease_ttl_seconds", DEFAULT_LEASE_TTL_SECONDS)),
+        defer_sticky_budget_reallocation=getattr(dashboard_settings, "sticky_reallocation_timing", "immediate")
+        == "after_compaction",
     )
 
 

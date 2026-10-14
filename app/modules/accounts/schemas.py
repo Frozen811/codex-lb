@@ -111,6 +111,7 @@ class AccountSummary(DashboardModel):
     last_refresh_at: datetime | None = None
     usage_refreshed_at: datetime | None = Field(default=None, exclude=True)
     capacity_credits_primary: float | None = None
+    credits_are_estimates: bool = True
     remaining_credits_primary: float | None = None
     capacity_credits_secondary: float | None = None
     remaining_credits_secondary: float | None = None
@@ -308,6 +309,13 @@ class CodexAuthJson(DashboardModel):
     )
     tokens: CodexAuthTokens
     last_refresh: str = Field(serialization_alias="last_refresh", validation_alias="last_refresh")
+    email: str | None = None
+    plan_type: str | None = Field(default=None, serialization_alias="plan_type", validation_alias="plan_type")
+    workspace_id: str | None = Field(default=None, serialization_alias="workspace_id", validation_alias="workspace_id")
+    workspace_label: str | None = Field(
+        default=None, serialization_alias="workspace_label", validation_alias="workspace_label"
+    )
+    seat_type: str | None = Field(default=None, serialization_alias="seat_type", validation_alias="seat_type")
 
 
 class AccountAuthExportTokens(DashboardModel):

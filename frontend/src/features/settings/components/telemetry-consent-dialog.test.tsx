@@ -171,6 +171,30 @@ describe("TelemetryConsentDialog", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  it("shows a failed decision and allows retry without remembering dismissal", async () => {
+    const user = userEvent.setup();
+    let attempts = 0;
+    server.use(
+      http.get("/api/settings/telemetry", () => HttpResponse.json(undecidedConsent())),
+      http.put("/api/settings/telemetry", () => {
+        attempts += 1;
+        return attempts === 1
+          ? HttpResponse.json({ error: { code: "save_failed", message: "Consent save unavailable" } }, { status: 503 })
+          : HttpResponse.json(createTelemetryConsent({ state: "disabled", source: "persisted", active: false }));
+      }),
+    );
+
+    renderWithProviders(<TelemetryConsentDialog />);
+    await user.click(await screen.findByRole("button", { name: "Disable telemetry" }));
+    expect(await screen.findByText("Consent save unavailable")).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(localStorage.getItem(DISMISSED_STORAGE_KEY)).toBeNull();
+    expect(screen.getByRole("button", { name: "Keep enabled" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Disable telemetry" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(attempts).toBe(2);
+  });
+
   it("stays hidden when the response carries no preview envelope", async () => {
     server.use(
       http.get("/api/settings/telemetry", () =>

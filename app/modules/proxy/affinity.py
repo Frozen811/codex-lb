@@ -109,6 +109,8 @@ class _AffinityPolicy:
     subagent_parent_selection_key: str | None = None
     subagent_parent_response_marker_key: str | None = None
     response_bound_thread_marker_key: str | None = None
+    # Idle retention only; never changes account ownership or active turns.
+    subagent_bridge_idle_ttl_seconds: int | None = None
 
     @property
     def selection_key(self) -> str | None:
@@ -192,6 +194,14 @@ class _AffinityPolicy:
         # raw miss cannot manufacture or rebind a mapping. The caller also
         # deliberately omits any broader process seed in this exact-owner path.
         return None, StickySessionKind.CODEX_SESSION, False, sticky_max_age_seconds, sticky_source, legacy_sticky_key
+
+
+def _affinity_with_deferred_reallocation(
+    policy: _AffinityPolicy, *, defer: bool, compaction: bool = False
+) -> _AffinityPolicy:
+    if not defer or policy.kind not in {StickySessionKind.PROMPT_CACHE, StickySessionKind.STICKY_THREAD}:
+        return policy
+    return replace(policy, reallocate_sticky=compaction)
 
 
 def _codex_session_selection_key(key: str) -> str:
@@ -947,6 +957,10 @@ def _sticky_key_for_responses_request(
         and _request_allows_unavailable_legacy_owner_abandonment(payload)
     ):
         policy = replace(policy, abandon_unavailable_legacy_owner=True)
-    policy = replace(policy, prompt_cache_derivation_outcome=resolution.outcome)
+    policy = replace(
+        policy,
+        prompt_cache_derivation_outcome=resolution.outcome,
+        subagent_bridge_idle_ttl_seconds=effective_max_age_seconds if _is_subagent_headers(headers) else None,
+    )
     policy = _affinity_with_payload_continuity(policy, payload)
     return _with_subagent_lineage(policy, payload, headers)

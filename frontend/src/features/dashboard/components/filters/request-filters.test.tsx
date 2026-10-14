@@ -156,3 +156,21 @@ describe("RequestFilters conversation badge", () => {
     expect(span).toHaveClass("truncate");
   });
 });
+
+
+describe("upstream facet visibility", () => {
+  const upstreamOptions = [{ value: "subscription_pool", label: "Subscription pool" }];
+  it("stays hidden for a single unselected upstream", () => {
+    renderFilters({}, [], { upstreamOptions, onUpstreamChange: vi.fn() });
+    expect(screen.queryByRole("button", { name: "Upstream" })).not.toBeInTheDocument();
+  });
+  it("retains the control for an active historical selection", async () => {
+    const onUpstreamChange = vi.fn();
+    renderFilters({ upstreams: ["src-gone"] }, [], { upstreamOptions: [{ value: "src-gone", label: "Deleted model source · src-gone" }], onUpstreamChange });
+    const button = screen.getByRole("button", { name: "Deleted model source · src-gone" });
+    expect(button).toBeVisible();
+    await userEvent.click(button);
+    await userEvent.click(screen.getByRole("menuitemcheckbox", { name: "Deleted model source · src-gone" }));
+    expect(onUpstreamChange).toHaveBeenCalledWith([]);
+  });
+});

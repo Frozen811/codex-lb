@@ -24,6 +24,18 @@ from app.core.openai.images import (
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("model", ["gpt-image-2", "gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "gpt-image-1.5"])
+@pytest.mark.parametrize("output_format", ["png", "webp", "jpeg"])
+def test_transparent_background_format_matrix(model: str, output_format: str) -> None:
+    kwargs = {"model": model, "background": "transparent", "output_format": output_format}
+    if output_format == "jpeg":
+        with pytest.raises(ClientPayloadError) as failure:
+            _validate_default(**kwargs)
+        assert failure.value.param == "output_format"
+    else:
+        _validate_default(**kwargs)
+
+
 class TestV1ImagesGenerationsRequest:
     def test_minimal_request_defaults_apply(self) -> None:
         req = V1ImagesGenerationsRequest.model_validate({"model": "gpt-image-2", "prompt": "a red circle"})
@@ -223,9 +235,9 @@ class TestValidateImageRequestParameters:
 
     @pytest.mark.parametrize(
         "background,expect_ok",
-        [("auto", True), ("opaque", True), ("transparent", False), ("plaid", False)],
+        [("auto", True), ("opaque", True), ("transparent", True), ("plaid", False)],
     )
-    def test_gpt_image_2_rejects_transparent_background(self, background: str, expect_ok: bool) -> None:
+    def test_gpt_image_2_background_validation(self, background: str, expect_ok: bool) -> None:
         if expect_ok:
             _validate_default(background=background)
         else:

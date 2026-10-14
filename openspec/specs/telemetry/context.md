@@ -239,3 +239,14 @@ Client preview evidence covers persisted raw CLI/Desktop aliases, unknown and
 missing groups, and actual HTTP Responses/Chat traffic through request logging.
 The normative mapping table is in [spec.md](spec.md); unknown private user-agent
 names remain local and contribute only to `other`.
+
+## Consent dialog failures (2026-10-14)
+
+The consent dialog keeps the short category/exclusion summary, initially collapsed
+exact envelope and equally styled actions. A request failure is shown inline as
+an accessible alert as well as through the existing notification path. For example,
+a rejected disable request leaves both decisions available; a retry may then
+succeed. A failure does not write the browser dismissal marker or consent state.
+Escape still records only browser dismissal, which skips future dialog-preview
+aggregation for that browser. No consent default, payload field or backend policy
+changes. See the [owning requirements](spec.md).

@@ -91,7 +91,7 @@ describe("SessionSettings", () => {
     await user.type(input, "8760");
 
     expect(
-      screen.getByText(/Lifetimes over 30 days keep admin sessions valid for a long time/i),
+      screen.getByText(/Long lifetimes require permitted local access/i),
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Save lifetime" }));
@@ -100,5 +100,15 @@ describe("SessionSettings", () => {
       ...baseUpdatePayload,
       dashboardSessionTtlSeconds: 31536000,
     });
+  });
+
+  it("explains the remote limit for the long lifetime from discussion 1820", async () => {
+    const user = userEvent.setup();
+    render(<SessionSettings settings={baseSettings} busy={false} onSave={vi.fn()} />);
+    await user.clear(screen.getByLabelText("Dashboard session lifetime"));
+    await user.type(screen.getByLabelText("Dashboard session lifetime"), "8760000");
+
+    expect(screen.getByText(/LAN, remote or proxy access normally uses a 12-hour session/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Existing sessions keep their original expiry/)).not.toHaveLength(0);
   });
 });

@@ -56,3 +56,12 @@ Authentication attempt writes, OAuth flow persistence, fingerprint verification 
 Lease writes still judge expiry using the database execution clock after waiting. Admission does not grant a new TTL to an expired lease. PostgreSQL and in-memory SQLite retain their concurrency behavior, and external SQLite processes still require the existing bounded lock retry policy.
 
 Reclamation registers both the abandoned teardown and its connection-cleanup task before waiting. Caller cancellation is deferred until interruption/invalidation and late-close callback registration finish. A failed interrupt does not prove a permanent lock; invalidation is still attempted and its failure is reported. The cleanup registry remains drainable at shutdown. No process restart, production repair or guaranteed native-driver recovery follows from these local checks.
+
+
+## Traceback-retained SQLite RETURNING cursors (2026-10-14)
+
+The [retained-cursor teardown requirement](spec.md#requirement-cancelled-sqlite-writes-release-traceback-retained-cursors) addresses a different failure from a merely slow session close. For example, cancellation during INSERT RETURNING can leave the native cursor in a retained exception frame. Closing the native connection alone can then leave the writer slot held until garbage collection.
+
+File-backed request and background engines now use a connection factory that weakly tracks the cursors SQLAlchemy creates. Cursor creation and cleanup remain on the existing aiosqlite worker. Cleanup attempts every live cursor, then the native connection, even if one cursor raises; the first error remains visible. Weak references avoid extending statement lifetime. In-memory engine construction, other backends, rollback and cancellation ownership retain their existing paths.
+
+The terminal batcher in this fork owns a timed-out append until shutdown rather than cancelling at its observation deadline. Regression coverage therefore exercises its real close/drain cancellation, keeps the commit traceback alive, and verifies an independent writer, incomplete-spool settlement, late-append refusal and leader acquisition for rows_v1 and chunks_v2. These local file-SQLite results do not certify native uvloop timing, other backend execution, distributed races or production.

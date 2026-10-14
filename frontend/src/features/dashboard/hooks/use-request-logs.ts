@@ -13,6 +13,7 @@ import { FilterStateSchema, type FilterState } from "@/features/dashboard/schema
 const DEFAULT_FILTER_STATE: FilterState = {
   search: "",
   timeframe: "all",
+  upstreams: [],
   accountIds: [],
   apiKeyIds: [],
   modelOptions: [],
@@ -26,6 +27,7 @@ export function requestLogFiltersApplied(filters: FilterState): boolean {
   return (
     filters.search.trim() !== "" ||
     filters.timeframe !== DEFAULT_FILTER_STATE.timeframe ||
+    (filters.upstreams?.length ?? 0) > 0 ||
     filters.accountIds.length > 0 ||
     filters.apiKeyIds.length > 0 ||
     filters.modelOptions.length > 0 ||
@@ -37,6 +39,7 @@ export function requestLogFiltersApplied(filters: FilterState): boolean {
 const REQUEST_LOG_PARAM_KEYS = [
   "search",
   "timeframe",
+  "upstream",
   "accountId",
   "apiKeyId",
   "modelOption",
@@ -58,6 +61,7 @@ function parseFilterState(params: URLSearchParams): FilterState {
   const candidate = {
     search: params.get("search") ?? "",
     timeframe: params.get("timeframe") ?? "all",
+    upstreams: params.getAll("upstream"),
     accountIds: params.getAll("accountId"),
     apiKeyIds: params.getAll("apiKeyId"),
     modelOptions: params.getAll("modelOption"),
@@ -83,6 +87,9 @@ function writeFilterState(state: FilterState, base?: URLSearchParams): URLSearch
   }
   if (state.timeframe !== "all") {
     params.set("timeframe", state.timeframe);
+  }
+  for (const value of state.upstreams ?? []) {
+    params.append("upstream", value);
   }
   for (const value of state.accountIds) {
     params.append("accountId", value);
@@ -141,6 +148,7 @@ export function useRequestLogs(options: UseRequestLogsOptions = {}) {
       search: filters.search || undefined,
       limit: filters.limit,
       offset: filters.offset,
+      upstreams: filters.upstreams,
       accountIds: filters.accountIds,
       apiKeyIds: filters.apiKeyIds,
       statuses: filters.statuses,
@@ -153,11 +161,13 @@ export function useRequestLogs(options: UseRequestLogsOptions = {}) {
   const facetFilters = useMemo<RequestLogFacetFilters>(
     () => ({
       timeframe,
+      statuses: filters.statuses,
+      upstreams: filters.upstreams,
       accountIds: filters.accountIds,
       apiKeyIds: filters.apiKeyIds,
       modelOptions: filters.modelOptions,
     }),
-    [filters.accountIds, filters.apiKeyIds, filters.modelOptions, timeframe],
+    [filters.upstreams, filters.statuses, filters.accountIds, filters.apiKeyIds, filters.modelOptions, timeframe],
   );
 
   const {

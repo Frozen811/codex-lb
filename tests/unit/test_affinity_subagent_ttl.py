@@ -5,6 +5,7 @@ import pytest
 from app.core.openai.requests import ResponsesCompactRequest, ResponsesRequest
 from app.db.models import StickySessionKind
 from app.modules.proxy._service.compact import _sticky_key_for_compact_request
+from app.modules.proxy._service.http_bridge.helpers import _effective_http_bridge_idle_ttl_seconds
 from app.modules.proxy.affinity import (
     SUBAGENT_PROMPT_CACHE_MAX_AGE_SECONDS,
     _effective_prompt_cache_max_age_seconds,
@@ -13,6 +14,37 @@ from app.modules.proxy.affinity import (
 )
 
 pytestmark = pytest.mark.unit
+
+
+@pytest.mark.parametrize(
+    ("headers", "configured", "expected"),
+    [
+        ({"x-parent-session-id": "parent"}, 3600, 300),
+        ({"x-openai-subagent": "true", "x-codex-turn-state": "turn"}, 3600, 300),
+        ({"x-codex-parent-thread-id": "parent", "session-id": "process"}, 120, 120),
+        ({"x-openai-subagent": "true"}, 60, 60),
+        ({"x-openai-subagent": "false"}, 3600, 3600),
+        ({"thread-id": "ordinary", "session-id": "process"}, 3600, 1800),
+    ],
+)
+def test_child_idle_cap_preserves_hard_affinity_and_parent_defaults(headers, configured, expected):
+    policy = _sticky_key_for_responses_request(
+        ResponsesRequest(model="gpt-5", input="hi", instructions=""),
+        headers,
+        codex_session_affinity=True,
+        openai_cache_affinity=True,
+        openai_cache_affinity_max_age_seconds=configured,
+        sticky_threads_enabled=False,
+    )
+    assert (
+        _effective_http_bridge_idle_ttl_seconds(
+            affinity=policy,
+            idle_ttl_seconds=120,
+            codex_idle_ttl_seconds=1800,
+            prompt_cache_idle_ttl_seconds=3600,
+        )
+        == expected
+    )
 
 
 def test_is_subagent_headers_detection() -> None:

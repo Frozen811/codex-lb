@@ -1820,7 +1820,12 @@ class ProxyService(
                 required_continuity = required_preferred_account and preferred_account_is_continuity_owner
                 single_account_routing_id: str | None = None
                 target_id, target_err = await resolve_model_account_override(
-                    model, headers, self._repo_factory, excluded_account_ids_set, scoped_account_ids
+                    model,
+                    headers,
+                    self._repo_factory,
+                    excluded_account_ids_set,
+                    scoped_account_ids,
+                    required_account_id=preferred_account_id if required_preferred_account else None,
                 )
                 if target_err is not None:
                     return target_err
@@ -1959,6 +1964,13 @@ class ProxyService(
                             preferred_selection.error_code,
                             preferred_selection.error_message,
                         )
+                        if target_id is not None and preferred_selection.error_code in (
+                            None,
+                            "no_accounts",
+                            "preferred_account_unavailable",
+                            "no_eligible_accounts",
+                        ):
+                            preferred_selection.error_code = "model_account_unavailable"
                         return preferred_selection
                 selection = await self._load_balancer.select_account(
                     dashboard_settings=settings,  # C2-3 resilience toggles

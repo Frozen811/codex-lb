@@ -59,6 +59,8 @@ from app.modules.accounts.usage_time_rollup_read import (
     read_hourly_window,
     sum_demand_window,
 )
+from app.modules.request_logs.schemas import RequestLogUpstreamOption
+from app.modules.request_logs.upstreams import SUBSCRIPTION_POOL, resolve_upstream_options
 
 
 @dataclass(frozen=True, slots=True)
@@ -1299,6 +1301,7 @@ class RequestLogsRepository:
         error_codes_in: list[str] | None = None,
         error_codes_excluding: list[str] | None = None,
         *,
+        upstreams: list[str] | None = None,
         cache_mode: str = "since",
         timeframe: str | None = None,
         include_sensitive_metadata: bool = True,
@@ -1308,6 +1311,7 @@ class RequestLogsRepository:
         since = _naive_utc(since) if since is not None else None
         until = _naive_utc(until) if until is not None else None
         filters = self._build_filters(
+            upstreams=upstreams,
             search=search,
             since=since,
             until=until,
@@ -1344,7 +1348,7 @@ class RequestLogsRepository:
             return RequestLogsResult(logs=logs, total=total, aggregated_cost_usd=aggregated_cost_usd)
 
         demand_params: _DemandCountParams | None = None
-        if search is None and not error_codes_in and not error_codes_excluding:
+        if search is None and not upstreams and not error_codes_in and not error_codes_excluding:
             demand_params = _DemandCountParams(
                 since=since,
                 until=until,
@@ -1367,6 +1371,7 @@ class RequestLogsRepository:
             window_identity,
             until,
             conversation_id,
+            tuple(sorted(set(upstreams or ()))),
             tuple(account_ids or ()),
             tuple(api_key_ids or ()),
             tuple(model_options or ()),
@@ -1520,8 +1525,13 @@ class RequestLogsRepository:
         model_options: list[tuple[str, str | None]] | None = None,
         models: list[str] | None = None,
         reasoning_efforts: list[str] | None = None,
+        *,
+        upstreams: list[str] | None = None,
     ) -> tuple[list[str], list[tuple[str, str | None]], list[str], list[tuple[str, str | None]]]:
+        since = _naive_utc(since) if since is not None else None
+        until = _naive_utc(until) if until is not None else None
         filters = self._build_filters(
+            upstreams=upstreams,
             since=since,
             until=until,
             account_ids=account_ids,
@@ -1537,6 +1547,7 @@ class RequestLogsRepository:
             exclude_soft_deleted=True,
         )
         api_key_facet_filters = self._build_filters(
+            upstreams=upstreams,
             since=since,
             until=until,
             account_ids=account_ids,
@@ -1552,7 +1563,9 @@ class RequestLogsRepository:
             exclude_soft_deleted=True,
         )
 
-        unfiltered = not any((since, until, account_ids, api_key_ids, model_options, models, reasoning_efforts))
+        unfiltered = not any(
+            (since, until, upstreams, account_ids, api_key_ids, model_options, models, reasoning_efforts)
+        )
         if unfiltered:
             # PostgreSQL has no loose index scan: with no user filters each
             # DISTINCT below is a full pass over request_logs, four times per
@@ -1599,6 +1612,70 @@ class RequestLogsRepository:
         api_key_ids = [row[0] for row in api_key_rows.all() if row[0]]
         status_values = [(row[0], row[1]) for row in status_rows.all() if row[0]]
         return account_ids, model_options, api_key_ids, status_values
+
+    async def list_upstream_options(
+        self,
+        *,
+        since: datetime | None = None,
+        until: datetime | None = None,
+        account_ids: list[str] | None = None,
+        api_key_ids: list[str] | None = None,
+        model_options: list[tuple[str, str | None]] | None = None,
+        models: list[str] | None = None,
+        reasoning_efforts: list[str] | None = None,
+        include_success: bool = True,
+        include_cancelled: bool = True,
+        include_error_other: bool = True,
+        error_codes_in: list[str] | None = None,
+        error_codes_excluding: list[str] | None = None,
+    ) -> list[RequestLogUpstreamOption]:
+        filters = self._build_filters(
+            since=_naive_utc(since) if since is not None else None,
+            until=_naive_utc(until) if until is not None else None,
+            account_ids=account_ids,
+            api_key_ids=api_key_ids,
+            model_options=model_options,
+            models=models,
+            reasoning_efforts=reasoning_efforts,
+            exclude_soft_deleted=True,
+            include_success=include_success,
+            include_cancelled=include_cancelled,
+            include_error_other=include_error_other,
+            error_codes_in=error_codes_in,
+            error_codes_excluding=error_codes_excluding,
+        )
+        unfiltered = not any(
+            (
+                since,
+                until,
+                account_ids,
+                api_key_ids,
+                model_options,
+                models,
+                reasoning_efforts,
+                not include_success,
+                not include_cancelled,
+                not include_error_other,
+                error_codes_in,
+                error_codes_excluding,
+            )
+        )
+        if unfiltered:
+            source_ids = await self._distinct_skip_scan(RequestLog.model_source_id, filters.conditions)
+        else:
+            rows = await self._session.execute(
+                select(RequestLog.model_source_id)
+                .where(*filters.conditions, RequestLog.model_source_id.is_not(None))
+                .distinct()
+                .order_by(RequestLog.model_source_id)
+            )
+            source_ids = [value for value in rows.scalars() if value is not None]
+        has_subscription = (
+            await self._session.execute(
+                select(RequestLog.id).where(*filters.conditions, RequestLog.model_source_id.is_(None)).limit(1)
+            )
+        ).scalar_one_or_none() is not None
+        return await resolve_upstream_options(self._session, source_ids, has_subscription=has_subscription)
 
     async def _distinct_skip_scan(
         self,
@@ -1705,6 +1782,7 @@ class RequestLogsRepository:
     def _build_filters(
         self,
         *,
+        upstreams: list[str] | None = None,
         search: str | None = None,
         since: datetime | None = None,
         until: datetime | None = None,
@@ -1725,6 +1803,12 @@ class RequestLogsRepository:
         include_api_key_identity: bool = True,
     ) -> _RequestLogFilters:
         conditions = []
+        if upstreams:
+            source_ids = [value for value in upstreams if value != SUBSCRIPTION_POOL]
+            upstream_conditions = [RequestLog.model_source_id.in_(source_ids)] if source_ids else []
+            if SUBSCRIPTION_POOL in upstreams:
+                upstream_conditions.append(RequestLog.model_source_id.is_(None))
+            conditions.append(or_(*upstream_conditions))
         if exclude_soft_deleted:
             conditions.append(RequestLog.deleted_at.is_(None))
         if since is not None:

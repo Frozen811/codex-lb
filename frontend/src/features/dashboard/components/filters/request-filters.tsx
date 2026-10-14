@@ -10,6 +10,8 @@ import type { FilterState } from "@/features/dashboard/schemas";
 
 export type RequestFiltersProps = {
   filters: FilterState;
+  upstreamOptions?: MultiSelectOption[];
+  onUpstreamChange?: (values: string[]) => void;
   accountOptions: MultiSelectOption[];
   apiKeyOptions: MultiSelectOption[];
   modelOptions: MultiSelectOption[];
@@ -28,6 +30,8 @@ export type RequestFiltersProps = {
 
 export function RequestFilters({
   filters,
+  upstreamOptions = [],
+  onUpstreamChange,
   accountOptions,
   apiKeyOptions,
   modelOptions,
@@ -61,6 +65,10 @@ export function RequestFilters({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
+        {onUpstreamChange && (upstreamOptions.length > 1 || (filters.upstreams?.length ?? 0) > 0) ? (
+          <MultiSelectFilter label={t("dashboard.filters.upstream")}
+            values={filters.upstreams ?? []} options={upstreamOptions} onChange={onUpstreamChange} />
+        ) : null}
         <MultiSelectFilter
           label={t("dashboard.filters.accounts")}
           values={filters.accountIds}

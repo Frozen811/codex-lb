@@ -1,0 +1,74 @@
+{
+  "date": "2026-10-14",
+  "timezone": "Europe/Kiev",
+  "initial_head": "cfc939cc69e6534996365a348b74eaf414283f34",
+  "requested_count": 5,
+  "selected": [
+    {
+      "id": "UP-ISSUE-2420",
+      "initial_status": "НЕ ПРОВЕРЕНО",
+      "status": "ИСПРАВЛЕНО ЛОКАЛЬНО / ЗАКРЫТО",
+      "row": "| [UP-ISSUE-2420](https://github.com/Soju06/codex-lb/issues/2420) | bug(accounts): Hard-coded Pro and Pro Lite credit capacities disagree with observed quota consumption, distorting pooled credit reporting | РЕШЕНО | ИСПРАВЛЕНО ЛОКАЛЬНО / ЗАКРЫТО | §98: Pro Lite/Pro weekly estimates 9000/36000; mixed pool45000/9000=20%, API estimates metadata. Community estimates, не provider entitlement. [Verification](openspec/changes/archive/2026-10-14-repair-five-quota-estimate-contracts/verification.md). Только local scope; hosted/public/production отдельно. |"
+    },
+    {
+      "id": "UP-ISSUE-2557",
+      "initial_status": "НЕ ПРОВЕРЕНО",
+      "status": "ИСПРАВЛЕНО ЛОКАЛЬНО / ЗАКРЫТО",
+      "row": "| [UP-ISSUE-2557](https://github.com/Soju06/codex-lb/issues/2557) | bug(accounts): plan capacity constants are unmeasured; every weekly value is 5h × 33.6 | OPEN; updated 2026-10-02T05:19:28Z | ИСПРАВЛЕНО ЛОКАЛЬНО / ЗАКРЫТО | §98: Independent window estimates, finite nonnegative overrides, dynamic API Pro reference; frontend numeric duplicates removed. Existing override process-local/programmatic; persisted UI не добавлялся. [Verification](openspec/changes/archive/2026-10-14-repair-five-quota-estimate-contracts/verification.md). Только local scope; hosted/public/production отдельно. |"
+    },
+    {
+      "id": "UP-ISSUE-1793",
+      "initial_status": "НЕ ПРОВЕРЕНО",
+      "status": "ИСПРАВЛЕНО ЛОКАЛЬНО / ЗАКРЫТО",
+      "row": "| [UP-ISSUE-1793](https://github.com/Soju06/codex-lb/issues/1793) | feat: weekly limits estimation in $ | РЕШЕНО | ИСПРАВЛЕНО ЛОКАЛЬНО / ЗАКРЫТО | §98: Per-account matched quota/cost intervals, 1d/30d/projections parity, unknown/reset guards; UI bounded101 rows. Legacy pooled USD=null; historical trend отдельно. [Verification](openspec/changes/archive/2026-10-14-repair-five-quota-estimate-contracts/verification.md). Только local scope; hosted/public/production отдельно. |"
+    },
+    {
+      "id": "UP-DISC-1551",
+      "initial_status": "НЕ ПРОВЕРЕНО",
+      "status": "ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО",
+      "row": "| [UP-DISC-1551](https://github.com/Soju06/codex-lb/discussions/1551) | #1551: Price estimate bug? | Раздел 11, L1201 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §98: Existing Luna pricing independently verified: current/dated, cached input, long context, reasoning once; 8 HTTP route/alias cases inspect actual DB costs. Historical non-null costs не переписывались. [Verification](openspec/changes/archive/2026-10-14-repair-five-quota-estimate-contracts/verification.md). Только local scope; hosted/public/production отдельно. |"
+    },
+    {
+      "id": "UP-DISC-864",
+      "initial_status": "НЕ ПРОВЕРЕНО",
+      "status": "ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО",
+      "row": "| [UP-DISC-864](https://github.com/Soju06/codex-lb/discussions/864) | #864: 7 free accounts > 1 plus — intentional? | Раздел 11, L1284 | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §98: Existing observed30d Free semantics verified through dashboard:7 Free accounts остаются monthly и не добавляют weekly capacity/runway. Live subscription-value comparison не заявляется. [Verification](openspec/changes/archive/2026-10-14-repair-five-quota-estimate-contracts/verification.md). Только local scope; hosted/public/production отдельно. |"
+    }
+  ],
+  "other_source_rows_byte_identical": 354,
+  "initial_dirty_count": 126,
+  "unrelated_dirty_files_byte_identical": 120,
+  "shared_dirty_paths_intentionally_edited": [
+    "frontend/src/i18n/locales/en.json",
+    "frontend/src/i18n/locales/ko.json",
+    "frontend/src/i18n/locales/zh-CN.json",
+    "issues-check.md",
+    "openspec/specs/frontend-architecture/context.md",
+    "openspec/specs/frontend-architecture/spec.md"
+  ],
+  "junit": {
+    "backend-final.xml": {
+      "tests": 296,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 1
+    },
+    "routing-final.xml": {
+      "tests": 439,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "frontend-final.xml": {
+      "tests": 131,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "final_browser_passes": 3,
+  "final_distinct_passes": 868,
+  "final_skips": 1,
+  "publication": "No commit, push, PR, merge, release or deployment",
+  "evidence_directory": "C:\\Users\\ext\\AppData\\Local\\Temp\\codex-lb-five-quota-20261014"
+}

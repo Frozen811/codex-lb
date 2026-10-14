@@ -35,6 +35,11 @@ const BASE_PACE: WeeklyCreditPace = {
 };
 
 describe("WeeklyCreditsPaceCard", () => {
+  it("omits a Pro equivalent when the API supplies no reference capacity", () => {
+    render(<WeeklyCreditsPaceCard pace={{ ...BASE_PACE, proWeeklyCapacityCredits: null,
+      proAccountEquivalentToCoverOverPlan: null, proAccountsToCoverOverPlan: null }} />);
+    expect(screen.queryByText("Add capacity")).not.toBeInTheDocument();
+  });
   it("renders weekly pace percentages and separates schedule gap from forecast shortfall", () => {
     render(<WeeklyCreditsPaceCard pace={BASE_PACE} />);
 
@@ -122,6 +127,7 @@ describe("WeeklyCreditsPaceCard", () => {
           proAccountEquivalentToCoverOverPlan: null,
           proAccountsToCoverOverPlan: null,
           forecastBurnRateCreditsPerHour: 0,
+          proWeeklyCapacityCredits: 12_000,
           scheduledBurnRateCreditsPerHour: 1_032,
           status: "ahead",
         }}
@@ -133,7 +139,7 @@ describe("WeeklyCreditsPaceCard", () => {
     expect(screen.queryByText("3h to return to schedule")).not.toBeInTheDocument();
     expect(screen.queryByText("Throttle")).not.toBeInTheDocument();
     expect(screen.getByText("Add capacity")).toBeInTheDocument();
-    expect(screen.getByText("0.061x Pro weekly pool (~1 account)")).toBeInTheDocument();
+    expect(screen.getByText("0.26x Pro weekly pool (~1 account)")).toBeInTheDocument();
     expect(screen.getByText("36% over planned usage")).toBeInTheDocument();
     expect(screen.getByText("3.1K credits over planned usage now")).toBeInTheDocument();
     expect(screen.getByText("No weekly shortfall projected at recent pace")).toBeInTheDocument();
@@ -464,7 +470,7 @@ describe("WeeklyCreditsPaceCard runway layout", () => {
     expect(screen.getByText(/at ~6K\/h/)).toBeInTheDocument();
   });
 
-  it("renders estimated 100% weekly limit cost when present", () => {
+  it("renders account-scoped API-price equivalents and explains uncertainty", () => {
     render(
       <WeeklyCreditsPaceCard
         pace={{
@@ -472,12 +478,24 @@ describe("WeeklyCreditsPaceCard runway layout", () => {
           actualUsedPercent: 20,
           usedCostUsd: 50,
           estimatedFullWeeklyLimitCostUsd: 250,
+          accountCostEstimates: [{
+            accountId: "example-account",
+            observedSince: "2026-10-14T10:00:00Z",
+            observedUntil: "2026-10-14T12:00:00Z",
+            observedUsedPercent: 10,
+            observedCostUsd: 4,
+            estimatedFullWeeklyLimitCostUsd: 40,
+          }],
         }}
       />,
     );
 
     const costElement = screen.getByTestId("weekly-estimated-limit-cost");
     expect(costElement).toBeInTheDocument();
-    expect(costElement).toHaveTextContent("Est. 100% weekly limit: $250.00 ($50.00 used at 20%)");
+    expect(costElement).toHaveTextContent("Account example-account: estimated full weekly API-price equivalent $40.00");
+    expect(costElement).toHaveTextContent("$4.00 over 10 percentage points");
+    expect(costElement).toHaveTextContent("Not a guaranteed allowance");
+    expect(costElement).not.toHaveTextContent("$250");
+    expect(screen.getByText(/Credits are estimates/)).toBeInTheDocument();
   });
 });

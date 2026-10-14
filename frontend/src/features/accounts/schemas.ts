@@ -200,9 +200,9 @@ const AccountOpenCodeAuthExportAccountSchema = z.object({
 });
 
 const CodexAuthTokensSchema = z.object({
-  id_token: z.string(),
+  id_token: z.string().nullish(),
   access_token: z.string(),
-  refresh_token: z.string(),
+  refresh_token: z.string().nullish(),
   account_id: z.string().nullable().optional(),
 });
 
@@ -211,12 +211,17 @@ const CodexAuthJsonSchema = z.object({
   OPENAI_API_KEY: z.string().nullable().optional(),
   tokens: CodexAuthTokensSchema,
   last_refresh: z.string(),
+  email: z.string().nullish(),
+  plan_type: z.string().nullish(),
+  workspace_id: z.string().nullish(),
+  workspace_label: z.string().nullish(),
+  seat_type: z.string().nullish(),
 });
 
 const AccountAuthExportTokensSchema = z.object({
-  idToken: z.string(),
+  idToken: z.string().nullish(),
   accessToken: z.string(),
-  refreshToken: z.string(),
+  refreshToken: z.string().nullish(),
   expiresAtMs: z.number().int().nonnegative(),
 });
 

@@ -1073,6 +1073,7 @@ describe("DashboardPage", () => {
     expect(updateFilters).toHaveBeenCalledWith({
       search: "",
       timeframe: "all",
+      upstreams: [],
       accountIds: [],
       apiKeyIds: [],
       modelOptions: [],

@@ -360,14 +360,26 @@ The dashboard SHALL show weekly quota runway when account weekly capacity credit
 
 ### Requirement: Dashboard displays estimated dollar value of full weekly limits
 
-The dashboard weekly pace card SHALL expose an estimated financial value in USD for the full (100%) weekly limits, derived from the actual weekly limit used percentage and the estimated API cost of used tokens.
+Dashboard overview and projections SHALL expose equivalent per-account full-week
+USD estimates based on matched cost and increasing usage-percent observations
+inside one current weekly reset epoch. The estimate SHALL equal interval cost
+times 100 divided by the interval's usage percentage-point change. It MUST NOT
+use pooled usage percentages or dashboard timeframe activity totals. Unknown
+costs, resets, non-monotonic samples, insufficient observations or zero changes
+SHALL suppress an estimate. The UI SHALL label estimates by account and explain
+that they are API-price equivalents rather than guaranteed allowances. Legacy
+fleet dollar estimate fields SHALL remain null.
+The account estimate list SHALL use bounded internal scrolling when it exceeds
+the card's visible list area.
 
-#### Scenario: Weekly pace card displays estimated full weekly limits value
-- **GIVEN** a non-zero weekly quota used percentage
-- **AND** a non-zero estimated token cost in USD
-- **WHEN** the weekly pace card renders
-- **THEN** it displays the estimated full 100% weekly limit value in USD
-- **AND** it shows the current cost used and percentage as context
+#### Scenario: Timeframe-independent account estimate
+- **WHEN** one account consumes 10 percentage points and 4 USD between matched observations
+- **THEN** both endpoints estimate its full weekly API-price equivalent as 40 USD
+- **AND** choosing a different overview timeframe leaves that estimate unchanged
+
+#### Scenario: Large account pool
+- **WHEN** the card receives 101 account estimates
+- **THEN** the list remains bounded and its last estimate can be reached by scrolling
 
 ### Requirement: Account weekly trend planned line
 
@@ -4411,3 +4423,70 @@ Request tables SHALL retain their local horizontal scrolling.
 - **AND** a sparkline has not yet adopted the responsive container's new width
 - **THEN** the chart remains within that container
 - **AND** the document does not gain horizontal overflow
+
+### Requirement: Dashboard TOTP accepts password-manager input
+
+The dashboard login TOTP field SHALL expose one-time-code autocomplete, a numeric
+input mode and a stable accessible label and name. A six-digit replacement input
+event SHALL populate the field and submit verification once without requiring a
+clipboard paste. Outside pointer or focus interaction SHALL NOT cancel login.
+
+#### Scenario: Password manager replaces the input value
+
+- **WHEN** a password manager delivers six ASCII digits through a replacement input event
+- **THEN** the dashboard submits exactly one verification request containing those digits
+- **AND** an outside interaction does not log out the pending session
+
+### Requirement: Fullscreen account controls announce the available action
+
+The dashboard account fullscreen toggle SHALL expose a localized accessible name
+for entering fullscreen in normal mode and exiting fullscreen in fullscreen mode.
+Its pressed state SHALL reflect the active URL-backed fullscreen state.
+
+#### Scenario: Exit fullscreen is discoverable by accessible name
+
+- **WHEN** an operator enables fullscreen accounts
+- **THEN** the toggle is pressed and named with the localized exit-fullscreen action
+- **AND** activating it removes fullscreen without resetting other dashboard filters
+
+### Requirement: Session lifetime settings explain locality limits
+
+For a configured password-session lifetime above 30 days, the settings view SHALL
+explain that long lifetimes require permitted local access, LAN/remote or proxy
+access normally receives 12 hours, and changed settings apply to newly issued
+sessions while existing cookies retain their original expiry.
+
+#### Scenario: Long LAN session setting has an explicit policy explanation
+
+- **WHEN** an operator enters a session lifetime greater than 720 hours
+- **THEN** the settings view explains the locality restriction and 12-hour remote limit
+- **AND** it explains that previously issued sessions retain their expiry
+
+### Requirement: API-owned Pro reference capacity
+
+Weekly pace responses SHALL expose the current Pro weekly estimate. The frontend
+SHALL use that value for Pro-account equivalents and MUST NOT embed another Pro
+capacity constant. Missing or zero reference capacity SHALL suppress equivalents.
+
+#### Scenario: Operator overrides Pro capacity
+- **WHEN** a valid Pro weekly override is active
+- **THEN** backend and frontend equivalents use that override on the next request
+
+
+### Requirement: Request-log upstream selection is URL-backed and historically identifiable
+The dashboard SHALL expose an Upstream multiselect when multiple observed upstreams exist or a selection is active. Stable IDs SHALL persist in the URL, reset SHALL clear them and reset pagination, and deleted sources SHALL have localized fallbacks. Duplicate current names SHALL be disambiguated with source IDs. Source-routed rows SHALL have compact badges and details SHALL retain full source ID/kind. Older API responses without upstream options SHALL remain usable.
+
+#### Scenario: Historical source selection survives reload
+- **WHEN** a deleted model source is selected and the page reloads
+- **THEN** its stable upstream filter and localized identity are retained
+- **AND** resetting filters removes the selection
+
+
+### Requirement: Account credential identity text stays within the viewport
+
+Account list/detail and credential export dialogs MUST contain long account names, email addresses and upstream identifiers at mobile and desktop widths. Long identity strings MUST wrap or truncate within their own content boundaries without widening the document or making export actions unreachable. Credential export dialogs MUST constrain their height to the viewport and allow scrolling when their content exceeds that height.
+
+#### Scenario: Long identity in account export
+- **WHEN** the operator views and exports an account with a long email and upstream identifier at a 390px viewport
+- **THEN** the document has no horizontal overflow
+- **AND** the export dialog's download and close actions remain reachable.

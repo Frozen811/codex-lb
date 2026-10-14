@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
+from math import isfinite
 from typing import Iterable, Mapping
 
 from app.core.plan_types import normalize_account_plan_type
@@ -34,8 +35,10 @@ PLAN_CAPACITY_CREDITS_SECONDARY = {
     "business": 7560.0,
     "team": 7560.0,
     "edu": 7560.0,
-    "pro": 50400.0,
-    "prolite": 37800.0,
+    # Independent completed-week estimates; not 5h capacity times 168/5.
+    # Sources and uncertainty: account-quota-presentation/context.md.
+    "pro": 36000.0,
+    "prolite": 9000.0,
     "enterprise": 50400.0,
 }
 
@@ -191,13 +194,15 @@ _PLAN_CAPACITY_OVERRIDES: dict[tuple[str, str], float] = {}
 
 
 def set_plan_capacity_override(plan_type: str, window: str, capacity: float) -> None:
-    """Set an in-memory capacity override for a specific plan and window."""
+    """Set a finite, nonnegative estimate for one plan and quota window."""
     normalized_plan = normalize_account_plan_type(plan_type)
     if not normalized_plan:
         raise ValueError(f"Invalid plan type: {plan_type}")
     window_key = _normalize_window_key(window)
     if window_key not in ("primary", "secondary", "monthly"):
         raise ValueError(f"Invalid window: {window}")
+    if isinstance(capacity, bool) or not isinstance(capacity, (int, float)) or not isfinite(capacity):
+        raise ValueError("Capacity must be a finite number")
     if capacity < 0:
         raise ValueError(f"Capacity cannot be negative: {capacity}")
     _PLAN_CAPACITY_OVERRIDES[(normalized_plan, window_key)] = float(capacity)

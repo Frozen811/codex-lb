@@ -1645,3 +1645,56 @@ For an unanchored request without file ownership or a same-owner-only full-resen
 #### Scenario: Account-owned input cannot abandon its owner
 - **WHEN** the request carries a response anchor, file pin or a durable same-owner-only resend proof
 - **THEN** policy conflict cannot retire the owner or dispatch to an alternate account
+
+
+### Requirement: Child HTTP bridge idle retention follows the child affinity bound
+
+HTTP bridge sessions for requests carrying recognized subagent lineage SHALL retain an idle socket and stream lease for at most the effective child affinity TTL, capped at 300 seconds. A shorter configured retention or affinity TTL MUST remain shorter. Hard turn-state or process affinity MUST NOT bypass this idle cap. The cap MUST apply to both creation and reuse, MUST NOT interrupt an active request, and MUST NOT weaken stored-object account ownership. Requests without recognized child lineage SHALL keep their ordinary retention policy.
+
+#### Scenario: Child thread caps long bridge retention
+- **WHEN** a child thread would otherwise retain an idle bridge for 1800 seconds
+- **THEN** its effective idle retention is at most 300 seconds
+
+#### Scenario: Shorter policy remains shorter
+- **WHEN** the configured child affinity or bridge retention is below 300 seconds
+- **THEN** the effective bridge idle retention does not exceed the shorter bound
+
+#### Scenario: Reuse adopts the child bound
+- **WHEN** a child request reuses a compatible bridge with a longer idle lifetime
+- **THEN** the retained bridge idle lifetime is shortened to the child bound
+
+#### Scenario: Parent retention remains ordinary
+- **WHEN** a request has no recognized subagent lineage
+- **THEN** ordinary Codex and prompt-cache bridge retention remains applicable
+
+
+### Requirement: Opt-in sticky budget reallocation waits for explicit compaction
+
+The settings API MUST persist `stickyReallocationTiming` as `immediate` or `after_compaction`, reject other values and preserve the stored mode when updates omit it. New and historical rows MUST default to `immediate`. This timing policy MUST gate the pressure-triggered reallocation scenarios of the typed sticky-session requirement. In `after_compaction` mode, ordinary Responses turns using soft prompt-cache or sticky-thread affinity MUST retain an eligible mapped account despite sticky budget pressure. Explicit compact requests MUST permit pressure-based reallocation to an eligible healthier account. Hard response, file and turn-state ownership MUST remain authoritative, including at compaction. Actual owner unavailability and safe pre-visible failure recovery MUST retain their existing rules. Default `immediate` mode MUST retain the existing pressure behavior.
+
+#### Scenario: Ordinary sticky-thread turn retains its pressured owner
+- **WHEN** an ordinary turn uses deferred soft-affinity mode and its active owner exceeds the sticky pressure threshold
+- **AND** another eligible account has lower pressure
+- **THEN** the turn stays on the existing owner and does not rebind the mapping
+
+#### Scenario: Explicit compact can move a soft sticky thread
+- **WHEN** the same soft sticky thread in deferred mode sends an explicit compact request
+- **AND** its owner exceeds the sticky pressure threshold while another account is below it
+- **THEN** compact selects the healthier account and updates the soft mapping
+
+#### Scenario: Hard compaction ownership is preserved
+- **WHEN** compact carries a required response, file or turn-state owner
+- **THEN** that owner constrains selection and the soft policy does not override it
+
+#### Scenario: Default prompt-cache routing retains immediate pressure behavior
+- **WHEN** a request uses default immediate timing
+- **THEN** the existing pressure-reallocation policy remains in effect
+
+#### Scenario: Timing updates are validated and survive partial changes
+- **WHEN** an operator selects `after_compaction`, then updates unrelated settings
+- **THEN** the selected mode persists
+- **AND** an invalid timing value is rejected without changing the stored mode
+
+#### Scenario: Historical rows keep compatible routing during upgrade
+- **WHEN** a database containing existing settings upgrades to the timing revision
+- **THEN** existing rows receive `immediate` and retain all unrelated setting values

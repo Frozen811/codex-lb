@@ -1086,6 +1086,7 @@ async def _resolve_upstream_route_for_account(
 async def _select_account_with_budget_for_stream(proxy: Any, deadline: float, **kwargs: Any) -> AccountSelection:
     selector = proxy._select_account_with_budget_compatible
     optional_kwargs = (
+        "headers",
         "require_security_work_authorized",
         "lease_kind",
         "estimated_lease_tokens",

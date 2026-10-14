@@ -46,3 +46,7 @@ The scheduler always starts and re-resolves the effective retention at the top o
 ## Example
 
 An operator upgrading with `CODEX_LB_REQUEST_LOG_RETENTION_DAYS=90` still in `.env.local` sees the startup warning naming it, opens Settings → Advanced → Data retention (effective value 0 = disabled, input empty), and stores 30. Within one scheduler tick the leader prunes request logs older than 30 days — no restart. With a fold watermark at `now − 24h`, a row requested 31 days ago is deleted (older than cutoff, below watermark), while a row requested 2 hours ago is kept at any retention setting (above the watermark, unfolded).
+
+## Request log retention operator example (2026-10-14)
+
+The dashboard Data retention card controls pruning; unconfigured/null or 0 disables it. A 30-day or 90-day preset only updates the form until Save. Request-log settings accept 0 or 30..3650 days; usage history accepts0 or45..3650days. The hourly leader-gated scheduler rereads runtime settings without a restart. Pruning waits for dependent folds, preserves aggregate totals and leaves conversations/API-key reservations intact. Conversation archive files use their separate policy. Example: saving requestLogRetentionOverrideDays=30 permits bounded pruning of eligible old raw logs at a subsequent tick; setting null restores disabled state.

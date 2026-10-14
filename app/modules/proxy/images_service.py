@@ -861,6 +861,10 @@ async def collect_responses_stream_for_images(
     terminal_error: OpenAIErrorEnvelope | None = None
 
     async for line in upstream:
+        # Completion owns both output and usage. Keep draining for upstream
+        # finalization without allowing any later SSE event to replace it.
+        if final_response is not None:
+            continue
         if not line:
             continue
         if line.strip() == "data: [DONE]":
@@ -895,7 +899,7 @@ async def collect_responses_stream_for_images(
                 fallback_items.append(dict(item))
             continue
 
-        if event_type == _UPSTREAM_RESPONSE_COMPLETED_EVENT and final_response is None:
+        if event_type == _UPSTREAM_RESPONSE_COMPLETED_EVENT:
             response_value = payload.get("response")
             base: dict[str, JsonValue]
             if is_json_mapping(response_value):
@@ -935,13 +939,6 @@ async def collect_responses_stream_for_images(
             break
 
         if event_type == _UPSTREAM_RESPONSE_FAILED_EVENT:
-            # Once a successful ``response.completed`` is captured, ignore
-            # any trailing transport-level failure events: they cannot
-            # invalidate an already-received image result. Without this
-            # guard a late ``response.failed`` could turn a successful
-            # 200 envelope into a spurious 502.
-            if final_response is not None:
-                continue
             response_value = payload.get("response")
             error_value: JsonValue | None = None
             if is_json_mapping(response_value):
@@ -965,11 +962,6 @@ async def collect_responses_stream_for_images(
             break
 
         if event_type == _UPSTREAM_ERROR_EVENT:
-            # Same rationale as the ``response.failed`` branch above:
-            # ignore late error events once a complete response has
-            # already been captured.
-            if final_response is not None:
-                continue
             error_value = payload.get("error")
             if is_json_mapping(error_value):
                 code = error_value.get("code")

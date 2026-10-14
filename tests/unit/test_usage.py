@@ -49,9 +49,9 @@ def test_capacity_for_plan():
     assert capacity_for_plan("plus", "5h") is not None
     assert capacity_for_plan("plus", "7d") is not None
     assert capacity_for_plan("prolite", "5h") == pytest.approx(1125.0)
-    assert capacity_for_plan("prolite", "7d") == pytest.approx(37800.0)
+    assert capacity_for_plan("prolite", "7d") == pytest.approx(9000.0)
     assert capacity_for_plan("self_serve_business_prolite", "5h") == pytest.approx(1125.0)
-    assert capacity_for_plan("self_serve_business_prolite", "7d") == pytest.approx(37800.0)
+    assert capacity_for_plan("self_serve_business_prolite", "7d") == pytest.approx(9000.0)
     assert capacity_for_plan("unknown", "5h") is None
 
 
@@ -61,7 +61,7 @@ def test_plan_capacity_overrides():
         assert get_plan_capacity_overrides() == {}
 
         # Default prolite capacity
-        assert capacity_for_plan("prolite", "secondary") == pytest.approx(37800.0)
+        assert capacity_for_plan("prolite", "secondary") == pytest.approx(9000.0)
 
         # Set override for prolite secondary
         set_plan_capacity_override("prolite", "secondary", 25000.0)
@@ -83,8 +83,8 @@ def test_plan_capacity_overrides():
 
         # Clear restores defaults
         clear_plan_capacity_overrides()
-        assert capacity_for_plan("prolite", "secondary") == pytest.approx(37800.0)
-        assert capacity_for_plan("pro", "secondary") == pytest.approx(50400.0)
+        assert capacity_for_plan("prolite", "secondary") == pytest.approx(9000.0)
+        assert capacity_for_plan("pro", "secondary") == pytest.approx(36000.0)
     finally:
         clear_plan_capacity_overrides()
 

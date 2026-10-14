@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Iterable, Mapping
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -10,8 +10,12 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from app.db.models import Account
     from app.modules.accounts.repository import AccountsRepository
+    from app.modules.api_keys.service import ApiKeyData
+    from app.modules.proxy.repo_bundle import ProxyRepoFactory
 
+from app.core.clients.proxy import ProxyResponseError
 from app.modules.proxy.load_balancer import AccountSelection
+from app.modules.proxy.selection_errors import selection_failure_response
 
 logger = logging.getLogger(__name__)
 
@@ -239,6 +243,8 @@ async def resolve_model_account_override(
     repo_factory: Any,
     excluded_accounts: set[str],
     scoped_accounts: set[str] | None,
+    *,
+    required_account_id: str | None = None,
 ) -> tuple[str | None, AccountSelection | None]:
     if not model:
         return None, None
@@ -247,23 +253,58 @@ async def resolve_model_account_override(
         return None, None
     async with repo_factory() as repos:
         all_pool_accounts = await repos.accounts.list_accounts()
-    target = find_matching_account(target_spec, all_pool_accounts)
-    if target is None:
+        target = find_matching_account(target_spec, all_pool_accounts)
+        # Repository teardown expires ORM rows. Only scalar identity escapes.
+        target_id = target.id if target is not None else None
+    if target_id is None:
         return None, AccountSelection(
             account=None,
             error_message=f"Configured strict model routing account '{target_spec}' for model '{model}' does not exist",
             error_code="model_account_not_found",
         )
-    if target.id in excluded_accounts:
+    if target_id in excluded_accounts:
         return None, AccountSelection(
             account=None,
             error_message=f"Strict model routing target account '{target_spec}' for model '{model}' is unavailable",
             error_code="model_account_unavailable",
         )
-    if scoped_accounts is not None and target.id not in scoped_accounts:
+    if scoped_accounts is not None and target_id not in scoped_accounts:
         return None, AccountSelection(
             account=None,
             error_message=f"Strict model routing target account '{target_spec}' is outside the API key account scope",
             error_code="model_account_scope_mismatch",
         )
-    return target.id, None
+    if required_account_id is not None and target_id != required_account_id:
+        return None, AccountSelection(
+            account=None,
+            error_message="Strict model routing conflicts with the required request owner",
+            error_code="model_account_owner_conflict",
+        )
+    return target_id, None
+
+
+async def strict_model_bridge_preference(
+    model: str | None,
+    headers: Mapping[str, str],
+    repo_factory: ProxyRepoFactory,
+    api_key: ApiKeyData | None,
+    preferred_account_id: str | None,
+    fallback: bool,
+    required_owner: bool,
+    excluded_accounts: Collection[str] | None,
+) -> tuple[str | None, bool]:
+    scoped_accounts = (
+        set(api_key.assigned_account_ids) if api_key is not None and api_key.account_assignment_scope_enabled else None
+    )
+    target, error = await resolve_model_account_override(
+        model,
+        headers,
+        repo_factory,
+        set(excluded_accounts or ()),
+        scoped_accounts,
+        required_account_id=preferred_account_id if required_owner or not fallback else None,
+    )
+    if error is not None:
+        status, payload = selection_failure_response(error)
+        raise ProxyResponseError(status, payload)
+    return (target, False) if target is not None else (preferred_account_id, fallback)

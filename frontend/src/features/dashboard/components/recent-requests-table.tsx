@@ -434,6 +434,8 @@ export function RecentRequestsTable({
                     ) : (
                       accountLabel
                     )}
+                    {request.modelSourceId ? <div><Badge variant="outline" className="mt-1 max-w-full truncate text-[10px]"
+                      title={`${request.modelSourceId} · ${request.modelSourceKind ?? ""}`}>{t("dashboard.filters.modelSource")}</Badge></div> : null}
                   </TableCell> : null}
                   {isColumnVisible("plan") ? <TableCell className="align-top">
                     {planType ? (

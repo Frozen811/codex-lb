@@ -8,6 +8,7 @@ from app.modules.shared.schemas import DashboardModel
 
 
 class UsageWindow(DashboardModel):
+    credits_are_estimates: bool = True
     remaining_percent: float
     capacity_credits: float
     remaining_credits: float
@@ -38,6 +39,7 @@ class UsageSummaryResponse(DashboardModel):
 
 
 class UsageHistoryItem(DashboardModel):
+    credits_are_estimates: bool = True
     account_id: str
     remaining_percent_avg: float | None = None
     capacity_credits: float

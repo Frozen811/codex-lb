@@ -1,0 +1,36 @@
+{
+  "initial_head": "cfc939cc69e6534996365a348b74eaf414283f34",
+  "selected_count": 5,
+  "selected_ids": [
+    "UP-ISSUE-2418",
+    "UP-ISSUE-1946",
+    "UP-PR-2464",
+    "UP-PR-2377",
+    "UP-DISC-1820"
+  ],
+  "before_rows": {
+    "UP-ISSUE-2418": "| [UP-ISSUE-2418](https://github.com/Soju06/codex-lb/issues/2418) | bug(frontend): Apple Passwords TOTP autofill does not populate Chrome verification dialog | РЕШЕНО | НЕ ПРОВЕРЕНО | — |",
+    "UP-ISSUE-1946": "| [UP-ISSUE-1946](https://github.com/Soju06/codex-lb/issues/1946) | UI account section bug | РЕШЕНО | НЕ ПРОВЕРЕНО | — |",
+    "UP-PR-2464": "| [UP-PR-2464](https://github.com/Soju06/codex-lb/pull/2464) | PR #2464: feat(ui): add compact and fullscreen dashboard account views | Раздел 12, L1358 | НЕ ПРОВЕРЕНО | — |",
+    "UP-PR-2377": "| [UP-PR-2377](https://github.com/Soju06/codex-lb/pull/2377) | PR #2377: fix(dashboard): calm the telemetry consent dialog | Раздел 12, L1379 | НЕ ПРОВЕРЕНО | — |",
+    "UP-DISC-1820": "| [UP-DISC-1820](https://github.com/Soju06/codex-lb/discussions/1820) | #1820: Is \"Dashboard session lifetime\" working? | Раздел 11, L1254 | НЕ ПРОВЕРЕНО | — |"
+  },
+  "saved_rows": {
+    "UP-ISSUE-2418": "| [UP-ISSUE-2418](https://github.com/Soju06/codex-lb/issues/2418) | bug(frontend): Apple Passwords TOTP autofill does not populate Chrome verification dialog | РЕШЕНО | ЧАСТИЧНО ПРОВЕРЕНО | §97: Existing OTP attributes/outside protection и native replacement-input подтверждены component + Chromium, одна verification без paste. macOS Chrome + Apple Passwords extension остаётся открытым; runtime OTP не менялся. [Verification](openspec/changes/archive/2026-10-14-repair-five-dashboard-interaction-contracts/verification.md). Только локальный scope; hosted/public/production отдельно. |",
+    "UP-ISSUE-1946": "| [UP-ISSUE-1946](https://github.com/Soju06/codex-lb/issues/1946) | UI account section bug | РЕШЕНО | ПРОВЕРЕНО / ЗАКРЫТО ЛОКАЛЬНО | §97: Existing bounded account list:31 длинная synthetic identity,320/768/1440px,document overflow=0,internal scroll,last-row selection и Add account вне scroller PASS. Layout change не потребовался. [Verification](openspec/changes/archive/2026-10-14-repair-five-dashboard-interaction-contracts/verification.md). Только локальный scope; hosted/public/production отдельно. |",
+    "UP-PR-2464": "| [UP-PR-2464](https://github.com/Soju06/codex-lb/pull/2464) | PR #2464: feat(ui): add compact and fullscreen dashboard account views | Раздел 12, L1358 | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | §97: Добавлены3 отсутствующих labels в en/ko/zh-CN; accessible exit fullscreen исправлен. Compact asc/desc/reset,stable column membership/connected nodes,persistence,reload и URL filters PASS. [Verification](openspec/changes/archive/2026-10-14-repair-five-dashboard-interaction-contracts/verification.md). Только локальный scope; hosted/public/production отдельно. |",
+    "UP-PR-2377": "| [UP-PR-2377](https://github.com/Soju06/codex-lb/pull/2377) | PR #2377: fix(dashboard): calm the telemetry consent dialog | Раздел 12, L1379 | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | §97: Inline accessible error при failed consent save и краткая summary copy в3 locales. Equal actions,collapsed exact preview,retry,Escape persistence и skipped repeat aggregation PASS; backend consent policy не менялась. [Verification](openspec/changes/archive/2026-10-14-repair-five-dashboard-interaction-contracts/verification.md). Только локальный scope; hosted/public/production отдельно. |",
+    "UP-DISC-1820": "| [UP-DISC-1820](https://github.com/Soju06/codex-lb/discussions/1820) | #1820: Is \"Dashboard session lifetime\" working? | Раздел 11, L1254 | ИСПРАВЛЕНО / ЗАКРЫТО ЛОКАЛЬНО | §97: Пояснены locality policy,12h LAN/remote/proxy cap и existing-cookie expiry в3 locales. Real auth API:876000/8760000h persistence,captured loopback/LAN Max-Age+absolute expiry,reuse before/401 after PASS. Бессрочные LAN sessions не добавлялись. [Verification](openspec/changes/archive/2026-10-14-repair-five-dashboard-interaction-contracts/verification.md). Только локальный scope; hosted/public/production отдельно. |"
+  },
+  "source_rows_total": 359,
+  "unselected_source_rows_preserved": 354,
+  "initial_dirty_files": 102,
+  "unrelated_dirty_files_byte_identical": 101,
+  "queue": {
+    "local_closures": 222,
+    "partial": 9,
+    "not_applicable": 2,
+    "unverified": 126
+  },
+  "unrelated_changed": []
+}
