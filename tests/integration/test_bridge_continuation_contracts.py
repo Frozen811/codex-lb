@@ -22,6 +22,7 @@ from app.modules.proxy._service.http_bridge import helpers as bridge_helpers
 from app.modules.proxy._service.http_bridge import retry_circuit
 from app.modules.proxy._service.http_bridge import streaming as bridge_streaming
 from tests.integration.model_source_helpers import _enable_api_key_auth
+from tests.integration.test_api_keys_api import _settle_account_import_invalidations
 from tests.integration.test_http_responses_bridge import (
     _cleanup_http_bridge_sessions as cleanup_http_bridge_sessions,  # noqa: F401
 )
@@ -69,6 +70,7 @@ async def bridge_origin(async_client, app_instance, monkeypatch):
     _install_proxy_settings(monkeypatch, app_settings=settings, dashboard_settings=dashboard)
     monkeypatch.setattr(proxy_api, "get_settings", lambda: settings)
     monkeypatch.setattr(proxy_service, "_HTTP_BRIDGE_STARTUP_KEEPALIVE_GRACE_SECONDS", 0.01)
+    await _settle_account_import_invalidations()
     state = _BridgeOrigin(owner_id=owner)
 
     async def upstream(request):

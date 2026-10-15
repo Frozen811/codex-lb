@@ -27,6 +27,7 @@ from app.modules.proxy._service.realtime_live import (
 )
 from app.modules.proxy.affinity import _codex_backend_identity, _codex_session_selection_key
 from app.modules.usage.repository import UsageRepository
+from tests.integration.test_api_keys_api import _settle_account_import_invalidations
 
 pytestmark = pytest.mark.integration
 
@@ -1893,7 +1894,9 @@ async def test_codex_endpoint_uses_prompt_cache_sticky_kind(async_client, monkey
     monkeypatch.setattr(proxy_module, "core_stream_responses", fake_stream)
 
     payload = {"model": "gpt-5.1", "instructions": "hi", "input": [], "stream": True, "prompt_cache_key": "pck_abc"}
-    await async_client.post("/backend-api/codex/responses", json=payload)
+    await _settle_account_import_invalidations()
+    response = await async_client.post("/backend-api/codex/responses", json=payload)
+    assert response.status_code == 200 and "response.completed" in response.text, response.text
     assert seen == ["acc_kind_a"]
 
     async with SessionLocal() as session:
