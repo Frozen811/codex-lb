@@ -8,6 +8,7 @@ import pytest
 from app.core.types import JsonValue
 from app.dependencies import get_proxy_service_for_app
 from app.modules.proxy import service as proxy_module
+from tests.integration.test_api_keys_api import _settle_account_import_invalidations
 from tests.integration.test_http_responses_bridge import (
     _get_account,
     _import_account,
@@ -32,6 +33,7 @@ async def test_http_bridge_no_manifest_async_recovery(
 ) -> None:
     _install_bridge_settings_with_limits(monkeypatch, enabled=True, instance_id="instance-a")
     owner_id = await _import_account(async_client, "acc_async_owner", "async-owner@example.com")
+    await _settle_account_import_invalidations()
     owner = await _get_account(owner_id)
     call = {"type": call_type, "call_id": "async_1", "name": "slow", "async": True}
     call["arguments" if call_type == "function_call" else "input"] = "{}"
@@ -122,6 +124,7 @@ async def test_http_bridge_no_manifest_async_recovery(
     if continuation != "same-owner":
         pause = await async_client.post(f"/api/accounts/{owner_id}/pause")
         assert pause.status_code == 200, pause.text
+    await _settle_account_import_invalidations()
     _install_bridge_settings_with_limits(monkeypatch, enabled=True, instance_id="instance-b")
     del app_instance.state.proxy_service
     recovering_service = get_proxy_service_for_app(app_instance)

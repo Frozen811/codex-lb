@@ -28,7 +28,6 @@ def test_historical_catalog_migration_upgrade_replay_and_rollback(tmp_path):
             connection.execute(text(_SOURCE), {"secret": b"synthetic-preserved-secret"})
             connection.execute(text(_MODEL))
         run_upgrade(url, REVISION, bootstrap_legacy=False)
-        assert check_schema_drift(url) == ()
         with engine.connect() as connection:
             assert tuple(
                 connection.execute(
@@ -39,6 +38,8 @@ def test_historical_catalog_migration_upgrade_replay_and_rollback(tmp_path):
                 0,
                 1,
             )
+        run_upgrade(url, "head", bootstrap_legacy=False)
+        assert check_schema_drift(url) == ()
         command.stamp(_build_alembic_config(url), PARENT)
         run_upgrade(url, REVISION, bootstrap_legacy=False)
         command.downgrade(_build_alembic_config(url), PARENT)
@@ -49,6 +50,7 @@ def test_historical_catalog_migration_upgrade_replay_and_rollback(tmp_path):
             )
             assert connection.execute(text("SELECT is_enabled FROM model_source_models")).scalar() == 0
         run_upgrade(url, REVISION, bootstrap_legacy=False)
+        run_upgrade(url, "head", bootstrap_legacy=False)
         assert check_schema_drift(url) == ()
     finally:
         engine.dispose()
@@ -70,6 +72,7 @@ async def test_server_catalog_migration_backfill_replay_and_rollback(db_setup):
         await session.execute(text(_MODEL))
         await session.commit()
     await to_thread.run_sync(lambda: run_upgrade(url, REVISION, bootstrap_legacy=False))
+    await to_thread.run_sync(lambda: run_upgrade(url, "head", bootstrap_legacy=False))
     assert await to_thread.run_sync(lambda: check_schema_drift(url)) == ()
     async with SessionLocal() as session:
         source = (
@@ -82,4 +85,5 @@ async def test_server_catalog_migration_backfill_replay_and_rollback(db_setup):
     await to_thread.run_sync(lambda: run_upgrade(url, REVISION, bootstrap_legacy=False))
     await to_thread.run_sync(lambda: command.downgrade(_build_alembic_config(url), PARENT))
     await to_thread.run_sync(lambda: run_upgrade(url, REVISION, bootstrap_legacy=False))
+    await to_thread.run_sync(lambda: run_upgrade(url, "head", bootstrap_legacy=False))
     assert await to_thread.run_sync(lambda: check_schema_drift(url)) == ()

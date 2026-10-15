@@ -50,6 +50,7 @@ from app.modules.proxy._service import observability as proxy_observability_modu
 from app.modules.proxy.account_cache import get_account_selection_cache
 from app.modules.usage import updater as usage_updater_module
 from app.modules.usage.repository import UsageRepository
+from tests.integration.test_api_keys_api import _settle_account_import_invalidations
 
 pytestmark = pytest.mark.integration
 
@@ -1600,6 +1601,7 @@ async def _run_stream_status_pool_walk(
     """
     for slug, email in zip(_STREAM_CAPACITY_500_ACCOUNTS, ("streamcapwalka", "streamcapwalkb"), strict=True):
         await _import_account(async_client, slug, f"{email}@example.com")
+    await _settle_account_import_invalidations()
 
     seen_account_ids: list[str | None] = []
 

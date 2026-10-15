@@ -30,12 +30,14 @@ from app.core.crypto import TokenEncryptor, get_or_create_key
 from app.core.utils.time import utcnow
 from app.db.models import Account, RequestLog, RuntimeSentinel
 from app.db.session import SessionLocal
+from app.dependencies import get_proxy_service_for_app
 from app.modules.proxy import service as proxy_service
 from app.modules.telemetry import api as telemetry_api
 from app.modules.telemetry import sender as telemetry_sender
 from app.modules.telemetry.consent import TelemetryConsentStore
 from app.modules.telemetry.schemas import TelemetryOptOut, TelemetrySnapshot
 from app.modules.telemetry.sender import TelemetrySender
+from tests.integration.test_api_keys_api import _settle_account_import_invalidations
 from tests.integration.test_proxy_chat_completions import _make_auth_json
 
 pytestmark = pytest.mark.integration
@@ -206,7 +208,7 @@ async def test_persisted_client_groups_reach_real_preview(async_client, monkeypa
     ],
 )
 async def test_proxy_client_useragent_persists_into_telemetry_preview(
-    async_client, monkeypatch, path, stream, useragent, family
+    async_client, app_instance, monkeypatch, path, stream, useragent, family
 ):
     monkeypatch.delenv("CODEX_LB_TELEMETRY_ENABLED", raising=False)
     get_settings.cache_clear()
@@ -221,6 +223,7 @@ async def test_proxy_client_useragent_persists_into_telemetry_preview(
         },
     )
     assert imported.status_code == 200
+    await _settle_account_import_invalidations()
     requests = []
 
     async def upstream(request):
@@ -270,6 +273,7 @@ async def test_proxy_client_useragent_persists_into_telemetry_preview(
         response = await async_client.post(path, headers={"User-Agent": useragent}, json=payload)
         assert response.status_code == 200, response.text
         assert len(requests) == 1
+    assert await get_proxy_service_for_app(app_instance).drain_persistence_tasks(timeout_seconds=5)
     async with SessionLocal() as session:
         log = (await session.execute(select(RequestLog))).scalar_one()
         assert log.useragent == useragent
